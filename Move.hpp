@@ -7,11 +7,25 @@ struct Move
 {
     Square fromSquare;
     Square toSquare;
-    Piece piece;        // piece that is moved
-    Piece promoteTo;    // select target piece after promotion
-    bool isCapture = false;
-    bool isCastling = false;
+    Piece piece : 4;            // piece that is moved
+    Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
+    bool isCapture : 1;
+    bool isEnPassant : 1;
+    bool isCastling : 1;        // only valid if piece is king
+
+    Move() = default;
+    Move(const Move&) = default;
+    Move& operator = (const Move&) = default;
+
+    // valid move does not mean it's a legal move for a given position
+    // use Position::IsMoveLegal() to fully validate a move
+    bool IsValid() const
+    {
+        return fromSquare.IsValid() && toSquare.IsValid();
+    }
 };
+
+static_assert(sizeof(Move) <= 4, "Invalid Move size");
 
 class MoveList
 {

@@ -50,7 +50,6 @@ struct SidePosition
     Bitboard king = 0;
 
     CastlingRights castlingRights;
-    Square enPassantSquare;
 };
 
 inline Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -91,6 +90,9 @@ public:
     // convert move to string
     std::string MoveToString(const Move& move) const;
 
+    // parse move from string
+    Move MoveFromString(const std::string& str) const;
+
     // set piece on given square
     void SetPieceAtSquare(const Square square, Piece piece, Color color);
 
@@ -107,8 +109,12 @@ public:
     
     void GenerateMoveList(MoveList& outMoveList) const;
 
-    // check if move is valid
+    // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;
+
+    // Check if a valid pseudomove is legal. This is a vull validity test, it includes checks/checkmates.
+    // NOTE: It's assumed that provided move is a valid move, otherwise the function will assert
+    bool IsMoveLegal(const Move& move) const;
 
     // apply a move
     bool DoMove(const Move& move);
@@ -124,7 +130,8 @@ private:
 
     SidePosition mWhites;
     SidePosition mBlacks;
-
+    Square mEnPassantSquare;
     Color mSideToMove : 1;
+    uint32_t mHalfMoveCount;
     uint32_t mMoveCount;
 };
