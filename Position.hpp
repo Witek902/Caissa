@@ -37,12 +37,12 @@ struct SidePosition
     Bitboard& GetPieceBitBoard(Piece piece);
     const Bitboard& GetPieceBitBoard(Piece piece) const;
 
-    __forceinline Bitboard Occupied() const
+    INLINE Bitboard Occupied() const
     {
         return (pawns | knights) | (bishops | rooks) | (queens | king);
     }
 
-    __forceinline Bitboard OccupiedExcludingKing() const
+    INLINE Bitboard OccupiedExcludingKing() const
     {
         return (pawns | knights) | (bishops | rooks) | queens;
     }

@@ -2,6 +2,8 @@
 #include "Position.hpp"
 #include "Move.hpp"
 
+#include <chrono>
+
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
 
@@ -874,7 +876,7 @@ void RunTests()
             TEST_EXPECT(Perft(pos, 2) == 1486u);
             TEST_EXPECT(Perft(pos, 3) == 62379u);
             TEST_EXPECT(Perft(pos, 4) == 2103487u);
-            //TEST_EXPECT(Perft(pos, 5) == 89941194u);
+            TEST_EXPECT(Perft(pos, 5) == 89941194u);
         }
 
         // Position 6
@@ -884,7 +886,9 @@ void RunTests()
             TEST_EXPECT(Perft(pos, 2) == 2079u);
             TEST_EXPECT(Perft(pos, 3) == 89890u);
             TEST_EXPECT(Perft(pos, 4) == 3894594u);
-            //TEST_EXPECT(Perft(pos, 5) == 164075551u);
+            TEST_EXPECT(Perft(pos, 5) == 164075551u);
+            //TEST_EXPECT(Perft(pos, 6) == 6923051137llu);
+            //TEST_EXPECT(Perft(pos, 7) == 287188994746llu);
         }
     }
 }
@@ -893,8 +897,21 @@ int main()
 {
     InitBitboards();
 
+    // Position 6
+    {
+        const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
+
+        auto start = std::chrono::high_resolution_clock::now();
+        TEST_EXPECT(Perft(pos, 4) == 3894594u);
+        //TEST_EXPECT(Perft(pos, 5) == 164075551u);
+        auto finish = std::chrono::high_resolution_clock::now();
+
+        std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
+    }
+
     RunTests();
 
+    /*
     Position position("rnbqkbnr/pppppppp/8/P2R4/8/2QB1B2/PPP1PPPP/1N2K1NR w kq - 0 1");
 
     std::cout << position.Print();
@@ -906,6 +923,7 @@ int main()
     {
         std::cout << position.MoveToString(moveList.GetMove(i)) << " ";
     }
+    */
 
     return 0;
 }

@@ -74,6 +74,18 @@ Bitboard Position::GetAttackedSquares(Color side) const
 
     const int32_t pawnDirection = side == Color::White ? 1 : -1;
 
+    if (side == Color::White)
+    {
+        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
+        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
+    }
+    else
+    {
+        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
+        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
+    }
+
+    /*
     currentSide.pawns.Iterate([&](uint32_t fromIndex)
     {
         const Square fromSquare(fromIndex);
@@ -94,25 +106,23 @@ Bitboard Position::GetAttackedSquares(Color side) const
             bitboard |= Square(fromSquare.Index() + pawnDirection * 8 + 1).Bitboard();
         }
     });
+    */
 
     currentSide.knights.Iterate([&](uint32_t fromIndex)
     {
         bitboard |= Bitboard::GetKnightAttacks(Square(fromIndex));
     });
 
-    currentSide.rooks.Iterate([&](uint32_t fromIndex)
+    const Bitboard rooks = currentSide.rooks | currentSide.queens;
+    const Bitboard bishops = currentSide.bishops | currentSide.queens;
+
+    rooks.Iterate([&](uint32_t fromIndex)
     {
         bitboard |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares);
     });
 
-    currentSide.bishops.Iterate([&](uint32_t fromIndex)
+    bishops.Iterate([&](uint32_t fromIndex)
     {
-        bitboard |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares);
-    });
-
-    currentSide.queens.Iterate([&](uint32_t fromIndex)
-    {
-        bitboard |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares);
         bitboard |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares);
     });
 

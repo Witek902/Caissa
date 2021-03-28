@@ -13,11 +13,7 @@ struct Move
     bool isEnPassant : 1;       // is en passant capture
     bool isCastling : 1;        // only valid if piece is king
 
-    Move()
-    {
-        memset(this, 0xFF, sizeof(Move));
-    }
-
+    Move() = default;
     Move(const Move&) = default;
     Move& operator = (const Move&) = default;
 
