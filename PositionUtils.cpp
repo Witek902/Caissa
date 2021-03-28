@@ -359,10 +359,14 @@ std::string Position::Print() const
 
 std::string Position::MoveToString(const Move& move) const
 {
-    assert(move.piece != Piece::None);
+    ASSERT(move.piece != Piece::None);
 
     std::string str;
 
+    str += move.fromSquare.ToString();
+    str += move.toSquare.ToString();
+
+    /*
     if (move.piece == Piece::Pawn)
     {
         str = move.toSquare.ToString();
@@ -418,6 +422,7 @@ std::string Position::MoveToString(const Move& move) const
 
     // TODO! check / checkmate
     // TODO! disambiguation
+    */
 
     return str;
 }
@@ -491,7 +496,7 @@ Move Position::MoveFromString(const std::string& str) const
 
 bool Position::IsMoveValid(const Move& move) const
 {
-    assert(move.IsValid());
+    ASSERT(move.IsValid());
 
     if (move.fromSquare == move.toSquare)
     {

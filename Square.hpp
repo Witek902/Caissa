@@ -21,24 +21,26 @@ enum SquareName : uint32_t
 class Square
 {
 public:
+    static constexpr uint32_t NumSquares = 64;
+
     Square() : mIndex(0xFF) { }
 
     Square(uint32_t value)
         : mIndex(static_cast<uint8_t>(value))
     {
-        assert(value < 64u);
+        ASSERT(value < 64u);
     }
 
     Square(SquareName name)
         : mIndex(static_cast<uint8_t>(name))
     {
-        assert(mIndex < 64u);
+        ASSERT(mIndex < 64u);
     }
 
     Square(uint8_t file, uint8_t rank)
     {
-        assert(file < 8u);
-        assert(rank < 8u);
+        ASSERT(file < 8u);
+        ASSERT(rank < 8u);
         mIndex = file + (rank * 8u);
     }
 
@@ -79,6 +81,5 @@ public:
         return mIndex < 64;
     }
 
-private:
     uint8_t mIndex;
 };

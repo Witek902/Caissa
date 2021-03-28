@@ -154,6 +154,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Bitboard.hpp" />
+    <ClInclude Include="Common.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />

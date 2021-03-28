@@ -13,6 +13,11 @@ enum class Color : uint8_t
     Black,
 };
 
+inline Color GetOppositeColor(Color color)
+{
+    return Color((uint32_t)color ^ 1);
+}
+
 enum CastlingRights : uint8_t
 {
     CastlingRights_ShortCastleAllowed = 1 << 0,
@@ -55,16 +60,16 @@ struct SidePosition
 inline Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
 {
     uint32_t index = (uint32_t)piece;
-    assert(index >= (uint32_t)Piece::Pawn);
-    assert(index <= (uint32_t)Piece::King);
+    ASSERT(index >= (uint32_t)Piece::Pawn);
+    ASSERT(index <= (uint32_t)Piece::King);
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
 
 inline const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 {
     uint32_t index = (uint32_t)piece;
-    assert(index >= (uint32_t)Piece::Pawn);
-    assert(index <= (uint32_t)Piece::King);
+    ASSERT(index >= (uint32_t)Piece::Pawn);
+    ASSERT(index <= (uint32_t)Piece::King);
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
 
@@ -99,10 +104,8 @@ public:
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
 
-    // <1 - whites are checked
-    // >0 - blacks are checked
-    // =0 - not check
-    int IsCheck() const;
+    // check if given side is in check
+    bool IsInCheck(Color sideColor) const;
 
     // evaluate board
     float Evaluate() const;
@@ -119,6 +122,9 @@ public:
     // apply a move
     bool DoMove(const Move& move);
 
+    // get bitboard of attacked squares
+    Bitboard GetAttackedSquares(Color side) const;
+
 private:
 
     void GeneratePawnMoveList(MoveList& outMoveList) const;
@@ -127,6 +133,8 @@ private:
     void GenerateBishopMoveList(MoveList& outMoveList) const;
     void GenerateQueenMoveList(MoveList& outMoveList) const;
     void GenerateKingMoveList(MoveList& outMoveList) const;
+
+    void ClearRookCastlingRights(const Square affectedSquare);
 
     SidePosition mWhites;
     SidePosition mBlacks;

@@ -5,6 +5,46 @@
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
 
+
+uint64_t Perft(const Position& position, uint32_t depth, bool print = true)
+{
+    if (print)
+    {
+        std::cout << "Running Perft... depth=" << depth << std::endl;
+    }
+
+    MoveList moveList;
+    position.GenerateMoveList(moveList);
+
+    uint64_t nodes = 0;
+    for (uint32_t i = 0; i < moveList.Size(); i++)
+    {
+        const Move& move = moveList.GetMove(i);
+
+        Position child = position;
+        if (!child.DoMove(move))
+        {
+            continue;
+        }
+
+        uint64_t numChildNodes = depth == 1 ? 1 : Perft(child, depth - 1, false);
+
+        if (print)
+        {
+            std::cout << position.MoveToString(move) << ": " << numChildNodes << std::endl;
+        }
+
+        nodes += numChildNodes;
+    }
+
+    if (print)
+    {
+        std::cout << "Total nodes: " << nodes << std::endl;
+    }
+
+    return nodes;
+}
+
 void RunTests()
 {
     const char* initPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -285,7 +325,44 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e3 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
+        }
+
+        // move pawn (invalid, blocked)
+        {
+            Position pos("rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            const Move move = pos.MoveFromString("e2e4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_e2);
+            TEST_EXPECT(move.toSquare == Square_e4);
+            TEST_EXPECT(move.piece == Piece::Pawn);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(!pos.IsMoveValid(move));
+        }
+
+        // move pawn (invalid, blocked)
+        {
+            Position pos("rnbqkbnr/pppp1ppp/8/8/4p3/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            const Move move = pos.MoveFromString("e2e4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_e2);
+            TEST_EXPECT(move.toSquare == Square_e4);
+            TEST_EXPECT(move.piece == Piece::Pawn);
+            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(!pos.IsMoveValid(move));
+        }
+
+        // move pawn (invalid, blocked)
+        {
+            Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
+            const Move move = pos.MoveFromString("f7f5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_f7);
+            TEST_EXPECT(move.toSquare == Square_f5);
+            TEST_EXPECT(move.piece == Piece::Pawn);
+            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // pawn capture
@@ -302,7 +379,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/p1pppppp/8/1P6/8/8/PP1PPPPP/RNBQKBNR w KQkq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/p1pppppp/8/1P6/8/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1");
         }
 
         // en passant capture
@@ -319,7 +396,21 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pp1ppppp/2P5/8/8/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pp1ppppp/2P5/8/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
+        }
+
+        // can't en passant own pawn
+        {
+            Position pos("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d3 0 1");
+            const Move move = pos.MoveFromString("e2d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_e2);
+            TEST_EXPECT(move.toSquare == Square_d3);
+            TEST_EXPECT(move.piece == Piece::Pawn);
+            TEST_EXPECT(move.isCapture == true);
+            TEST_EXPECT(move.isEnPassant == true);
+            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move pawn (invalid promotion)
@@ -348,7 +439,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "1k3Q2/8/8/8/8/8/8/4K3 w - - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "1k3Q2/8/8/8/8/8/8/4K3 b - - 0 1");
         }
 
         // move knight (valid)
@@ -363,7 +454,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 w - - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 0 1");
         }
 
         // move knight (valid capture)
@@ -378,7 +469,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 w - - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 0 1");
         }
 
         // castling, whites, king side
@@ -394,7 +485,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 w kq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 b kq - 0 1");
         }
 
         // castling, whites, king side, no rights
@@ -423,7 +514,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/2KR1BNR w kq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/2KR1BNR b kq - 0 1");
         }
 
         // castling, whites, queen side, no rights
@@ -452,7 +543,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbq1rk1/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQ - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbq1rk1/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
         }
 
         // castling, blacks, king side, no rights
@@ -481,7 +572,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "2kr1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQ - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "2kr1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
         }
 
         // castling, blacks, queen side, no rights
@@ -491,6 +582,32 @@ void RunTests()
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.fromSquare == Square_e8);
             TEST_EXPECT(move.toSquare == Square_c8);
+            TEST_EXPECT(move.piece == Piece::King);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(!pos.IsMoveValid(move));
+        }
+
+        // illegal castling, whites, king side, king in check
+        {
+            Position pos("4k3/4r3/8/8/8/8/8/R3K2R w KQ - 0 1");
+            const Move move = pos.MoveFromString("e1g1");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_e1);
+            TEST_EXPECT(move.toSquare == Square_g1);
+            TEST_EXPECT(move.piece == Piece::King);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(!pos.IsMoveValid(move));
+        }
+
+        // illegal castling, whites, king side, king crossing check
+        {
+            Position pos("4kr2/8/8/8/8/8/8/R3K2R w KQ - 0 1");
+            const Move move = pos.MoveFromString("e1g1");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_e1);
+            TEST_EXPECT(move.toSquare == Square_g1);
             TEST_EXPECT(move.piece == Piece::King);
             TEST_EXPECT(move.isCapture == false);
             TEST_EXPECT(move.isCastling == true);
@@ -510,7 +627,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R w Kkq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R b Kkq - 0 1");
         }
 
         // move rook, loose castling rights
@@ -526,7 +643,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/R3K1R1 w Qkq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/R3K1R1 b Qkq - 0 1");
         }
 
         // move rook, loose castling rights
@@ -542,7 +659,7 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "1r2k2r/8/8/8/8/8/8/R3K2R b KQk - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "1r2k2r/8/8/8/8/8/8/R3K2R w KQk - 0 1");
         }
 
         // move rook, loose castling rights
@@ -558,13 +675,224 @@ void RunTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k1r1/8/8/8/8/8/8/R3K2R b KQq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "r3k1r1/8/8/8/8/8/8/R3K2R w KQq - 0 1");
+        }
+
+        // move king to close opponent's king (illegal move)
+        {
+            Position pos("7K/8/5k2/8/8/8/8/8 w - - 0 1");
+            const Move move = pos.MoveFromString("h8g7");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_h8);
+            TEST_EXPECT(move.toSquare == Square_g7);
+            TEST_EXPECT(move.piece == Piece::King);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(pos.IsMoveValid(move));
+            TEST_EXPECT(!pos.IsMoveLegal(move));
+        }
+
+        // pin
+        {
+            Position pos("k7/8/q7/8/R7/8/8/K7 w - - 0 1");
+            const Move move = pos.MoveFromString("a4b4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.fromSquare == Square_a4);
+            TEST_EXPECT(move.toSquare == Square_b4);
+            TEST_EXPECT(move.piece == Piece::Rook);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(pos.IsMoveValid(move));
+            TEST_EXPECT(!pos.IsMoveLegal(move));
+        }
+    }
+
+    {
+        const Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 1) == 18u);
+    }
+
+    {
+        const Position pos("rnbqkbnr/1ppppppp/p7/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 2) == 511u);
+    }
+
+    {
+        const Position pos("rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 3) == 11959u);
+    }
+
+    {
+        const Position pos("rnb1kbnr/pp1ppppp/1qp5/1P6/8/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 1) == 21u);
+    }
+
+    {
+        const Position pos("rnbqkbnr/pp1ppppp/2p5/1P6/8/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 2) == 458u);
+    }
+
+    {
+        const Position pos("rnbqkbnr/pp1ppppp/2p5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 3) == 10257u);
+    }
+
+    {
+        const Position pos("rnbqkbnr/pppppppp/8/8/1P6/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
+        TEST_EXPECT(Perft(pos, 4) == 216145u);
+    }
+
+    // Perft
+    {
+        // initial position
+        {
+            const Position pos(initPositionFEN);
+            TEST_EXPECT(Perft(pos, 1) == 20u);
+            TEST_EXPECT(Perft(pos, 2) == 400u);
+            TEST_EXPECT(Perft(pos, 3) == 8902u);
+            TEST_EXPECT(Perft(pos, 4) == 197281u);
+            TEST_EXPECT(Perft(pos, 5) == 4865609u);
+            //TEST_EXPECT(Perft(pos, 6) == 119060324u);
+        }
+
+        // kings only
+        {
+            const Position pos("2k2K2/8/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 4) == 848u);
+            TEST_EXPECT(Perft(pos, 6) == 29724u);
+        }
+
+        // kings + knight vs. king
+        {
+            const Position pos("2k2K2/5N2/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 2) == 41u);
+            TEST_EXPECT(Perft(pos, 4) == 2293u);
+            TEST_EXPECT(Perft(pos, 6) == 130360u);
+        }
+
+        // kings + rook vs. king
+        {
+            const Position pos("2k2K2/5R2/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 17u);
+            TEST_EXPECT(Perft(pos, 2) == 53u);
+            TEST_EXPECT(Perft(pos, 4) == 3917u);
+            TEST_EXPECT(Perft(pos, 6) == 338276u);
+        }
+
+        // kings + bishop vs. king
+        {
+            const Position pos("2k2K2/5B2/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 2) == 58u);
+            TEST_EXPECT(Perft(pos, 4) == 4269u);
+            TEST_EXPECT(Perft(pos, 6) == 314405u);
+        }
+
+        // kings + pawn vs. king
+        {
+            const Position pos("2k3K1/4P3/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 2) == 33u);
+            TEST_EXPECT(Perft(pos, 4) == 2007u);
+            TEST_EXPECT(Perft(pos, 6) == 136531u);
+        }
+
+        // castlings
+        {
+            const Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 26u);
+            TEST_EXPECT(Perft(pos, 2) == 568u);
+            //TEST_EXPECT(Perft(pos, 4) == 314346u);
+        }
+
+        // kings + 2 queens
+        {
+            const Position pos("q3k2q/8/8/8/8/8/8/Q3K2Q w - - 0 1");
+            TEST_EXPECT(Perft(pos, 2) == 1040u);
+            TEST_EXPECT(Perft(pos, 4) == 979543u);
+            //TEST_EXPECT(Perft(pos, 6) == 923005707u);
+        }
+
+        // max moves
+        {
+            const Position pos("R6R/3Q4/1Q4Q1/4Q3/2Q4Q/Q4Q2/pp1Q4/kBNN1KB1 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 218u);
+        }
+
+        // discovered double check via en passant
+        {
+            const Position pos("8/6p1/7k/7P/5B1R/8/8/7K b - - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 2u);
+            TEST_EXPECT(Perft(pos, 2) == 35u);
+            TEST_EXPECT(Perft(pos, 3) == 134u);
+        }
+
+        // Kiwipete
+        {
+            const Position pos("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 40u);
+        }
+
+        // Kiwipete
+        {
+            const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BK2R b KQkq - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 44u);
+            TEST_EXPECT(Perft(pos, 2) == 1733u);
+        }
+
+        // Position 2 - Kiwipete
+        {
+            const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 48u);
+            TEST_EXPECT(Perft(pos, 2) == 2039u);
+            TEST_EXPECT(Perft(pos, 3) == 97862u);
+            TEST_EXPECT(Perft(pos, 4) == 4085603u);
+        }
+
+        // Position 3
+        {
+            const Position pos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 14u);
+            TEST_EXPECT(Perft(pos, 2) == 191u);
+            TEST_EXPECT(Perft(pos, 3) == 2812u);
+            TEST_EXPECT(Perft(pos, 4) == 43238u);
+            //TEST_EXPECT(Perft(pos, 5) == 674624u);
+        }
+
+        // Position 4
+        {
+            const Position pos("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
+            TEST_EXPECT(Perft(pos, 1) == 6u);
+            TEST_EXPECT(Perft(pos, 2) == 264u);
+            TEST_EXPECT(Perft(pos, 3) == 9467u);
+            TEST_EXPECT(Perft(pos, 4) == 422333u);
+            //TEST_EXPECT(Perft(pos, 5) == 15833292u);
+        }
+
+        // Position 5
+        {
+            const Position pos("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+            TEST_EXPECT(Perft(pos, 1) == 44u);
+            TEST_EXPECT(Perft(pos, 2) == 1486u);
+            TEST_EXPECT(Perft(pos, 3) == 62379u);
+            TEST_EXPECT(Perft(pos, 4) == 2103487u);
+            //TEST_EXPECT(Perft(pos, 5) == 89941194u);
+        }
+
+        // Position 6
+        {
+            const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
+            TEST_EXPECT(Perft(pos, 1) == 46u);
+            TEST_EXPECT(Perft(pos, 2) == 2079u);
+            TEST_EXPECT(Perft(pos, 3) == 89890u);
+            TEST_EXPECT(Perft(pos, 4) == 3894594u);
+            //TEST_EXPECT(Perft(pos, 5) == 164075551u);
         }
     }
 }
 
 int main()
 {
+    InitBitboards();
+
     RunTests();
 
     Position position("rnbqkbnr/pppppppp/8/P2R4/8/2QB1B2/PPP1PPPP/1N2K1NR w kq - 0 1");
@@ -578,4 +906,6 @@ int main()
     {
         std::cout << position.MoveToString(moveList.GetMove(i)) << " ";
     }
+
+    return 0;
 }

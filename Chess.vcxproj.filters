@@ -47,5 +47,8 @@
     <ClInclude Include="Bitboard.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Common.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -10,10 +10,14 @@ struct Move
     Piece piece : 4;            // piece that is moved
     Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
     bool isCapture : 1;
-    bool isEnPassant : 1;
+    bool isEnPassant : 1;       // is en passant capture
     bool isCastling : 1;        // only valid if piece is king
 
-    Move() = default;
+    Move()
+    {
+        memset(this, 0xFF, sizeof(Move));
+    }
+
     Move(const Move&) = default;
     Move& operator = (const Move&) = default;
 
@@ -25,6 +29,7 @@ struct Move
     }
 };
 
+
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
 
 class MoveList
@@ -33,20 +38,21 @@ class MoveList
 
 public:
 
-    // https://chess.stackexchange.com/questions/4490/maximum-possible-movement-in-a-turn
-    static constexpr uint32_t MaxMoves = 216;
+    static constexpr uint32_t MaxMoves = 255;
 
     uint32_t Size() const { return mNumMoves; }
-    const Move& GetMove(uint32_t index) const { assert(index < mNumMoves); return mMoves[index]; }
+    const Move& GetMove(uint32_t index) const { ASSERT(index < mNumMoves); return mMoves[index]; }
 
 private:
 
     Move& PushMove()
     {
-        assert(mNumMoves < MaxMoves);
+        ASSERT(mNumMoves < MaxMoves);
         return mMoves[mNumMoves++];
     }
 
     uint32_t mNumMoves = 0;
     Move mMoves[MaxMoves];
 };
+
+static_assert(sizeof(Move) <= 1024, "Invalid Move size");

@@ -12,6 +12,8 @@ enum class Piece : uint8_t
     Rook,
     Queen,
     King,
+
+    Invalid = 0xFF
 };
 
 inline char PieceToChar(Piece p, bool upperCase = true)

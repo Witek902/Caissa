@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Common.hpp"
+
 #include <inttypes.h>
 #include <assert.h>
 #include <string>
@@ -10,6 +12,7 @@ struct Bitboard
 {
     uint64_t value;
 
+    Bitboard() = default;
     __forceinline Bitboard(uint64_t value) : value(value) {}
     __forceinline Bitboard(const Bitboard& other) = default;
     __forceinline Bitboard& operator = (const Bitboard& other) = default;
@@ -38,13 +41,13 @@ struct Bitboard
 
     __forceinline static Bitboard RankBitboard(uint32_t rank)
     {
-        assert(rank < 8u);
+        ASSERT(rank < 8u);
         return 0xFFull << (8u * rank);
     }
 
     __forceinline static Bitboard FileBitboard(uint32_t file)
     {
-        assert(file < 8u);
+        ASSERT(file < 8u);
         return 0x0101010101010101ull << file;
     }
 
@@ -53,7 +56,11 @@ struct Bitboard
         return static_cast<uint32_t>(__popcnt64(value));
     }
 
-    static Bitboard GenerateRookAttacks(const Square& rookSquare, const Bitboard occupiedBitboard);
+    static Bitboard GetKingAttacks(const Square& knightSquare);
+    static Bitboard GetKnightAttacks(const Square& knightSquare);
 
+    static Bitboard GenerateRookAttacks(const Square& rookSquare, const Bitboard occupiedBitboard);
     static Bitboard GenerateBishopAttacks(const Square& bishopSquare, const Bitboard occupiedBitboard);
 };
+
+void InitBitboards();
