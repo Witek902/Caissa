@@ -6,17 +6,7 @@
 #include "Bitboard.hpp"
 #include "Piece.hpp"
 #include "Square.hpp"
-
-enum class Color : uint8_t
-{
-    White,
-    Black,
-};
-
-inline Color GetOppositeColor(Color color)
-{
-    return Color((uint32_t)color ^ 1);
-}
+#include "Color.hpp"
 
 enum CastlingRights : uint8_t
 {
@@ -76,6 +66,8 @@ inline const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 struct Move;
 class MoveList;
 
+#define MOVE_GEN_ONLY_CAPTURES 1
+
 // class representing whole board state
 class Position
 {
@@ -101,16 +93,16 @@ public:
     // set piece on given square
     void SetPieceAtSquare(const Square square, Piece piece, Color color);
 
+    // get board hash
+    uint64_t GetHash() const;
+
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
 
     // check if given side is in check
     bool IsInCheck(Color sideColor) const;
-
-    // evaluate board
-    float Evaluate() const;
     
-    void GenerateMoveList(MoveList& outMoveList) const;
+    void GenerateMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
 
     // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;
@@ -125,14 +117,21 @@ public:
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
 
+    // get color to move
+    Color GetSideToMove() const { return mSideToMove; }
+
 private:
 
-    void GeneratePawnMoveList(MoveList& outMoveList) const;
-    void GenerateKnightMoveList(MoveList& outMoveList) const;
-    void GenerateRookMoveList(MoveList& outMoveList) const;
-    void GenerateBishopMoveList(MoveList& outMoveList) const;
-    void GenerateQueenMoveList(MoveList& outMoveList) const;
-    void GenerateKingMoveList(MoveList& outMoveList) const;
+    friend class Search;
+
+    void PushMove(const Move move, MoveList& outMoveList) const;
+
+    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateRookMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
@@ -140,6 +139,6 @@ private:
     SidePosition mBlacks;
     Square mEnPassantSquare;
     Color mSideToMove : 1;
-    uint32_t mHalfMoveCount;
-    uint32_t mMoveCount;
+    uint16_t mHalfMoveCount;
+    uint16_t mMoveCount;
 };

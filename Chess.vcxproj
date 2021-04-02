@@ -221,14 +221,17 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
+    <ClCompile Include="Search.cpp" />
     <ClCompile Include="Square.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Bitboard.hpp" />
+    <ClInclude Include="Color.hpp" />
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
+    <ClInclude Include="Search.hpp" />
     <ClInclude Include="Square.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

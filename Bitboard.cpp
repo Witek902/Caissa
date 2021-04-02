@@ -146,44 +146,6 @@ Bitboard Bitboard::GetKnightAttacks(const Square knightSquare)
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)
 {
-    uint64_t bitboard = 0u;
-
-    const uint8_t f = square.File();
-    const uint8_t r = square.Rank();
-
-    uint32_t file, rank;
-
-    for (file = f + 1; file < 8u; ++file) // go right
-    {
-        const uint64_t mask = 1ull << (r * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (file = f; file-- > 0u; ) // go left
-    {
-        const uint64_t mask = 1ull << (r * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (rank = r + 1; rank < 8u; ++rank) // go up
-    {
-        const uint64_t mask = 1ull << (rank * 8 + f);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (rank = r; rank-- > 0u; ) // go down
-    {
-        const uint64_t mask = 1ull << (rank * 8 + f);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    return bitboard;
-
-    /*
     uint32_t blockerIndexN;
     uint64_t bitboardN = GetRay(square, RayDir::North);
     if (Bitboard(bitboardN & blockers).BitScanForward(blockerIndexN))
@@ -213,51 +175,10 @@ Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard block
     }
 
     return bitboardN | bitboardS | bitboardE | bitboardW;
-    */
 }
 
 Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blockers)
 {
-    /*
-    uint64_t bitboard = 0u;
-
-    const uint8_t f = square.File();
-    const uint8_t r = square.Rank();
-
-    uint32_t file, rank;
-
-    for (file = f + 1, rank = r + 1; (file < 8u) && (rank < 8u); ++file, ++rank) // go up-right
-    {
-        const uint64_t mask = 1ull << (rank * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (file = f, rank = r + 1; (file-- > 0u) && (rank < 8u); ++rank) // go up-left
-    {
-        const uint64_t mask = 1ull << (rank * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (file = f + 1, rank = r; (file < 8u) && (rank-- > 0u); ++file) // go down-right
-    {
-        const uint64_t mask = 1ull << (rank * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    for (file = f, rank = r; (file-- > 0u) && (rank-- > 0u); ) // go down-left
-    {
-        const uint64_t mask = 1ull << (rank * 8 + file);
-        bitboard |= mask;
-        if (blockers.value & mask) break;
-    }
-
-    return bitboard;
-    */
-
-
     uint32_t blockerIndexNW;
     uint64_t bitboardNW = GetRay(square, RayDir::NorthWest);
     if (Bitboard(bitboardNW & blockers).BitScanForward(blockerIndexNW))

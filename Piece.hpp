@@ -1,7 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include <inttypes.h>
 #include <string>
+
+#include "Color.hpp"
 
 enum class Piece : uint8_t
 {
@@ -35,6 +37,23 @@ inline char PieceToChar(Piece p, bool upperCase = true)
     }
 
     return c;
+}
+
+inline std::string PieceToUnicodeFancy(Piece p, Color color)
+{
+    std::string str;
+
+    switch (p)
+    {
+    case Piece::Pawn:   str = color == Color::White ? "♙" : "♟︎"; break;
+    case Piece::Knight: str = color == Color::White ? "♘" : "♞"; break;
+    case Piece::Bishop: str = color == Color::White ? "♗" : "♝"; break;
+    case Piece::Rook:   str = color == Color::White ? "♖" : "♜"; break;
+    case Piece::Queen:  str = color == Color::White ? "♕" : "♛"; break;
+    case Piece::King:   str = color == Color::White ? "♔" : "♚"; break;
+    }
+
+    return str;
 }
 
 inline bool CharToPiece(const char ch, Piece& outPiece)

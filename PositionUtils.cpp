@@ -7,6 +7,45 @@ Position::Position(const std::string& fenString)
     FromFEN(fenString);
 }
 
+INLINE void HashCombine(uint64_t& seed, const uint64_t v)
+{
+    std::hash<uint64_t> hasher;
+    const std::size_t kMul = 0x9ddfea08eb382d69ULL;
+    std::size_t a = (hasher(v) ^ seed) * kMul;
+    a ^= (a >> 47);
+    std::size_t b = (seed ^ a) * kMul;
+    b ^= (b >> 47);
+    seed = b * kMul;
+}
+
+uint64_t Position::GetHash() const
+{
+    uint64_t h = 0x880355f21e6d1965ULL;
+    HashCombine(h, mWhites.pawns);
+    HashCombine(h, mWhites.knights);
+    HashCombine(h, mWhites.bishops);
+    HashCombine(h, mWhites.rooks);
+    HashCombine(h, mWhites.queens);
+    HashCombine(h, mWhites.king);
+    HashCombine(h, mBlacks.pawns);
+    HashCombine(h, mBlacks.knights);
+    HashCombine(h, mBlacks.bishops);
+    HashCombine(h, mBlacks.rooks);
+    HashCombine(h, mBlacks.queens);
+    HashCombine(h, mBlacks.king);
+
+    uint64_t flags =
+        (uint64_t)mWhites.castlingRights |
+        ((uint64_t)mBlacks.castlingRights << 2) |
+        ((uint64_t)mEnPassantSquare.Index() << 4) |
+        ((uint64_t)mSideToMove << 10) |
+        ((uint64_t)mHalfMoveCount << 11) |
+        ((uint64_t)mMoveCount << 27);
+    HashCombine(h, flags);
+
+    return h;
+}
+
 bool Position::IsValid() const
 {
     // validate piece counts

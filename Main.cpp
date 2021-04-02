@@ -1,12 +1,14 @@
 #include <iostream>
 #include "Position.hpp"
 #include "Move.hpp"
+#include "Search.hpp"
 
 #include <chrono>
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
 
+static const char* initPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 uint64_t Perft(const Position& position, uint32_t depth, bool print = true)
 {
@@ -49,8 +51,6 @@ uint64_t Perft(const Position& position, uint32_t depth, bool print = true)
 
 void RunTests()
 {
-    const char* initPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
     // empty board
     TEST_EXPECT(!Position().IsValid());
 
@@ -897,7 +897,7 @@ int main()
 {
     InitBitboards();
 
-    // Position 6
+    /*
     {
         const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
 
@@ -908,20 +908,83 @@ int main()
 
         std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
     }
+    */
 
-    RunTests();
+    //RunTests();
+
+    //Position position(initPositionFEN);
+    //Position position("2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1"); // mate in 3
+    Position position("1r6/R3Qppk/1qp5/1pNpP1Pp/1P1P2b1/2P5/5P1K/R7 w - - 0 1"); // mate in 7
+    //Position position("k7/8/8/8/6N1/7R/8/4K3 w - - 0 1"); // mate in 9
+    //Position position("r1bqr1k1/3n1ppp/p2p1b2/3N1PP1/1p1B1P2/1P6/1PP1Q2P/2KR2R1 w - - 0 1");
+    //Position position("r1b1r1k1/1pqn1pbp/p2pp1p1/P7/1n1NPP1Q/2NBBR2/1PP3PP/R6K w - - 0 1");
+    //Position position("rnbqkb1r/pppp1ppp/5n2/4p3/4PP2/2N5/PPPP2PP/R1BQKBNR b KQkq - 0 1"); // Vienna Gambit
+    //Position position("rnbqkbnr/ppp1pppp/8/8/2pP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1"); // Queen's Gambit Accepted
+    //Position position("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"); // king's pawn opening
+    //Position position("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1"); // queen's pawn opening
+    //Position position("3k4/6R1/6R1/8/8/8/8/4K3 w - - 0 1"); // mate in 2
+    //Position position("rnb2r1k/pp2p2p/2pp2p1/q2P1p2/8/1Pb2NP1/PB2PPBP/R2Q1RK1 w - - 0 1");
+
+    Search search;
+    Move bestMove;
+    Search::ScoreType score = search.DoSearch(position, bestMove);
 
     /*
-    Position position("rnbqkbnr/pppppppp/8/P2R4/8/2QB1B2/PPP1PPPP/1N2K1NR w kq - 0 1");
-
-    std::cout << position.Print();
-
-    MoveList moveList;
-    position.GenerateMoveList(moveList);
-
-    for (uint32_t i = 0; i < moveList.Size(); ++i)
+    for (;;)
     {
-        std::cout << position.MoveToString(moveList.GetMove(i)) << " ";
+        std::cout << position.Print() << std::endl;
+
+        Move move;
+        for (;;)
+        {
+            std::string moveStr;
+            std::cout << "Type move: ";
+            std::cin >> moveStr;
+
+            move = position.MoveFromString(moveStr);
+            if (!move.IsValid())
+            {
+                std::cout << "Invalid move!" << std::endl;
+                continue;
+            }
+
+            Position posAfterMove = position;
+            if (!posAfterMove.IsMoveLegal(move))
+            {
+                std::cout << "Illegal move!" << std::endl;
+                continue;
+            }
+
+            break;
+        }
+
+        {
+            const bool moveOK = position.DoMove(move);
+            ASSERT(moveOK);
+        }
+
+        std::cout << position.Print() << std::endl;
+
+        Search search;
+        Move bestMove;
+        Search::ScoreType score = search.DoSearch(position, bestMove);
+
+        if (score <= Search::CheckmateValue)
+        {
+            std::cout << "Whites win!" << std::endl;
+            return 0;
+        }
+
+        if (score >= -Search::CheckmateValue)
+        {
+            std::cout << "Blacks win!" << std::endl;
+            return 0;
+        }
+
+        {
+            const bool moveOK = position.DoMove(bestMove);
+            ASSERT(moveOK);
+        }
     }
     */
 
