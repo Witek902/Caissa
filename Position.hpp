@@ -19,8 +19,6 @@ enum CastlingRights : uint8_t
 // class representing one side's pieces state
 struct SidePosition
 {
-    SidePosition();
-
     Piece GetPieceAtSquare(const Square sqare) const;
     void SetPieceAtSquare(const Square square, Piece piece);
 
@@ -43,8 +41,6 @@ struct SidePosition
     Bitboard rooks = 0;
     Bitboard queens = 0;
     Bitboard king = 0;
-
-    CastlingRights castlingRights;
 };
 
 inline Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -138,7 +134,11 @@ private:
     SidePosition mWhites;
     SidePosition mBlacks;
     Square mEnPassantSquare;
-    Color mSideToMove : 1;
+    CastlingRights mWhitesCastlingRights;
+    CastlingRights mBlacksCastlingRights;
+    Color mSideToMove;
     uint16_t mHalfMoveCount;
     uint16_t mMoveCount;
 };
+
+static_assert(sizeof(Position) == 104, "Invalid position size");

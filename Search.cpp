@@ -39,7 +39,7 @@ Search::ScoreType Search::Evaluate(const Position& position)
     const Bitboard blacksGuardedPieces = blackAttackedSquares & blackOccupiedSquares;
     value += c_guardBonus * ((int32_t)whitesGuardedPieces.Count() - (int32_t)blacksGuardedPieces.Count());
 
-    value += c_castlingRightsBonus * ((int32_t)__popcnt16(position.mWhites.castlingRights) - (int32_t)__popcnt16(position.mBlacks.castlingRights));
+    value += c_castlingRightsBonus * ((int32_t)__popcnt16(position.mWhitesCastlingRights) - (int32_t)__popcnt16(position.mBlacksCastlingRights));
 
     return value;
 }

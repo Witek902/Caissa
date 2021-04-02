@@ -3,40 +3,43 @@
 #include "Square.hpp"
 #include <assert.h>
 
+// "C++ nonstandard extension: nameless struct"
+#pragma warning(disable : 4201)
+
 struct Move
 {
-    Square fromSquare;
-    Square toSquare;
-    Piece piece : 4;            // piece that is moved
-    Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
-    bool isCapture : 1;
-    bool isEnPassant : 1;       // is en passant capture
-    bool isCastling : 1;        // only valid if piece is king
+    union
+    {
+        struct
+        {
+            Square fromSquare;
+            Square toSquare;
+            Piece piece;                // piece that is moved
+            Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
+            bool isCapture : 1;
+            bool isEnPassant : 1;       // is en passant capture
+            bool isCastling : 1;        // only valid if piece is king
+        };
 
-    INLINE Move() = default;
+        uint32_t value;
+    };
+
+    INLINE Move() : value(0u) { }
     INLINE Move(const Move&) = default;
     INLINE Move& operator = (const Move&) = default;
 
-    INLINE bool operator == (const Move& rhs)
+    INLINE bool operator == (const Move& rhs) const
     {
-        return
-            fromSquare == rhs.fromSquare &&
-            toSquare == rhs.toSquare &&
-            piece == rhs.piece &&
-            promoteTo == rhs.promoteTo &&
-            isCapture == rhs.isCapture &&
-            isEnPassant == rhs.isEnPassant &&
-            isCastling == rhs.isCastling;
+        return value == rhs.value;
     }
 
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
     bool IsValid() const
     {
-        return fromSquare.IsValid() && toSquare.IsValid();
+        return value != 0u;
     }
 };
-
 
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
 

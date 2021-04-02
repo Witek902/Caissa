@@ -2,10 +2,6 @@
 #include "Move.hpp"
 #include "Bitboard.hpp"
 
-SidePosition::SidePosition()
-    : castlingRights(CastlingRights_All)
-{}
-
 void SidePosition::SetPieceAtSquare(const Square square, Piece piece)
 {
     const uint64_t mask = square.Bitboard();
@@ -48,6 +44,8 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 
 Position::Position()
     : mSideToMove(Color::White)
+    , mWhitesCastlingRights(CastlingRights_All)
+    , mBlacksCastlingRights(CastlingRights_All)
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
 {}
@@ -418,6 +416,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     const int32_t kingFileOffsets[numKingOffsets] = { 0, 1, 1, 1, 0, -1, -1, -1 };
     const int32_t kingRankOffsets[numKingOffsets] = { 1, 1, 0, -1, -1, -1, 0, 1 };
 
+    const CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
     const SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
     const SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
 
@@ -453,7 +452,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         PushMove(move, outMoveList);
     });
 
-    if (!onlyCaptures && (currentSide.castlingRights & CastlingRights_All))
+    if (!onlyCaptures && (currentSideCastlingRights & CastlingRights_All))
     {
         const Bitboard opponentAttacks = GetAttackedSquares(GetOppositeColor(mSideToMove));
 
@@ -466,7 +465,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         // king can't be in check
         if ((currentSide.king & opponentAttacks) == 0u)
         {
-            if ((currentSide.castlingRights & CastlingRights_LongCastleAllowed) &&
+            if ((currentSideCastlingRights & CastlingRights_LongCastleAllowed) &&
                 ((occupiedSquares & longCastleCrossedSquares) == 0u) &&
                 ((opponentAttacks & longCastleKingCrossedSquares) == 0u))
             {
@@ -481,7 +480,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 PushMove(move, outMoveList);
             }
 
-            if ((currentSide.castlingRights & CastlingRights_ShortCastleAllowed) &&
+            if ((currentSideCastlingRights & CastlingRights_ShortCastleAllowed) &&
                 ((occupiedSquares & shortCastleCrossedSquares) == 0u) &&
                 ((opponentAttacks & shortCastleKingCrossedSquares) == 0u))
             {
@@ -543,10 +542,10 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
 {
     switch (affectedSquare.mIndex)
     {
-    case Square_a1: mWhites.castlingRights = CastlingRights(mWhites.castlingRights & ~CastlingRights_LongCastleAllowed); break;
-    case Square_h1: mWhites.castlingRights = CastlingRights(mWhites.castlingRights & ~CastlingRights_ShortCastleAllowed); break;
-    case Square_a8: mBlacks.castlingRights = CastlingRights(mBlacks.castlingRights & ~CastlingRights_LongCastleAllowed); break;
-    case Square_h8: mBlacks.castlingRights = CastlingRights(mBlacks.castlingRights & ~CastlingRights_ShortCastleAllowed); break;
+    case Square_a1: mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_LongCastleAllowed); break;
+    case Square_h1: mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_ShortCastleAllowed); break;
+    case Square_a8: mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_LongCastleAllowed); break;
+    case Square_h8: mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_ShortCastleAllowed); break;
     };
 }
 
@@ -642,7 +641,8 @@ bool Position::DoMove(const Move& move)
         }
 
         // clear all castling rights after moving a king
-        currentSide.castlingRights = CastlingRights(0);
+        CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+        currentSideCastlingRights = CastlingRights(0);
     }
 
     // clear specific castling right after moving a rook

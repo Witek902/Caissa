@@ -35,8 +35,8 @@ uint64_t Position::GetHash() const
     HashCombine(h, mBlacks.king);
 
     uint64_t flags =
-        (uint64_t)mWhites.castlingRights |
-        ((uint64_t)mBlacks.castlingRights << 2) |
+        (uint64_t)mWhitesCastlingRights |
+        ((uint64_t)mBlacksCastlingRights << 2) |
         ((uint64_t)mEnPassantSquare.Index() << 4) |
         ((uint64_t)mSideToMove << 10) |
         ((uint64_t)mHalfMoveCount << 11) |
@@ -79,7 +79,7 @@ bool Position::IsValid() const
         }
     }
 
-    if (mWhites.castlingRights & CastlingRights_ShortCastleAllowed)
+    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)
     {
         if (((mWhites.king & Bitboard(1ull << Square_e1)) == 0) ||
             ((mWhites.rooks & Bitboard(1ull << Square_h1)) == 0))
@@ -87,7 +87,7 @@ bool Position::IsValid() const
             return false;
         }
     }
-    if (mWhites.castlingRights & CastlingRights_LongCastleAllowed)
+    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)
     {
         if (((mWhites.king & Bitboard(1ull << Square_e1)) == 0) ||
             ((mWhites.rooks & Bitboard(1ull << Square_a1)) == 0))
@@ -96,7 +96,7 @@ bool Position::IsValid() const
         }
     }
 
-    if (mBlacks.castlingRights & CastlingRights_ShortCastleAllowed)
+    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)
     {
         if (((mBlacks.king & Bitboard(1ull << Square_e8)) == 0) ||
             ((mBlacks.rooks & Bitboard(1ull << Square_h8)) == 0))
@@ -104,7 +104,7 @@ bool Position::IsValid() const
             return false;
         }
     }
-    if (mBlacks.castlingRights & CastlingRights_LongCastleAllowed)
+    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)
     {
         if (((mBlacks.king & Bitboard(1ull << Square_e8)) == 0) ||
             ((mBlacks.rooks & Bitboard(1ull << Square_a8)) == 0))
@@ -205,23 +205,23 @@ bool Position::FromFEN(const std::string& fenString)
 
     // castling rights
     {
-        mWhites.castlingRights = (CastlingRights)0;
-        mBlacks.castlingRights = (CastlingRights)0;
+        mWhitesCastlingRights = (CastlingRights)0;
+        mBlacksCastlingRights = (CastlingRights)0;
         for (p += 2; *p != ' '; ++p)
         {
             switch (*p)
             {
             case 'K':
-                mWhites.castlingRights = CastlingRights(mWhites.castlingRights | CastlingRights_ShortCastleAllowed);
+                mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_ShortCastleAllowed);
                 break;
             case 'Q':
-                mWhites.castlingRights = CastlingRights(mWhites.castlingRights | CastlingRights_LongCastleAllowed);
+                mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_LongCastleAllowed);
                 break;
             case 'k':
-                mBlacks.castlingRights = CastlingRights(mBlacks.castlingRights | CastlingRights_ShortCastleAllowed);
+                mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_ShortCastleAllowed);
                 break;
             case 'q':
-                mBlacks.castlingRights = CastlingRights(mBlacks.castlingRights | CastlingRights_LongCastleAllowed);
+                mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_LongCastleAllowed);
                 break;
             case '-':
                 break;
@@ -322,10 +322,10 @@ std::string Position::ToFEN() const
     {
         bool anyCastlingRights = false;
         str += ' ';
-        if (mWhites.castlingRights & CastlingRights_ShortCastleAllowed) str += 'K', anyCastlingRights = true;
-        if (mWhites.castlingRights & CastlingRights_LongCastleAllowed) str += 'Q', anyCastlingRights = true;
-        if (mBlacks.castlingRights & CastlingRights_ShortCastleAllowed) str += 'k', anyCastlingRights = true;
-        if (mBlacks.castlingRights & CastlingRights_LongCastleAllowed) str += 'q', anyCastlingRights = true;
+        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) str += 'K', anyCastlingRights = true;
+        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) str += 'Q', anyCastlingRights = true;
+        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) str += 'k', anyCastlingRights = true;
+        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) str += 'q', anyCastlingRights = true;
         if (!anyCastlingRights) str += '-';
     }
 
