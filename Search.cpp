@@ -46,7 +46,7 @@ Search::ScoreType Search::Evaluate(const Position& position)
 
 Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 {
-    uint16_t maxDepth = 11u;
+    uint16_t maxDepth = 8u;
 
     ScoreType score;
 

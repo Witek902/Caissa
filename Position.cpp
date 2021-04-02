@@ -32,16 +32,16 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 {
     ASSERT(square.IsValid());
 
-    uint32_t pieceIndex = 0;
+    const Bitboard squareBitboard = square.Bitboard();
 
-    pieceIndex |= ((pawns >> square.Index()) & 1) * (uint32_t)Piece::Pawn;
-    pieceIndex |= ((knights >> square.Index()) & 1) * (uint32_t)Piece::Knight;
-    pieceIndex |= ((bishops >> square.Index()) & 1) * (uint32_t)Piece::Bishop;
-    pieceIndex |= ((rooks >> square.Index()) & 1) * (uint32_t)Piece::Rook;
-    pieceIndex |= ((queens >> square.Index()) & 1) * (uint32_t)Piece::Queen;
-    pieceIndex |= ((king >> square.Index()) & 1) * (uint32_t)Piece::King;
+    if (pawns & squareBitboard)     return Piece::Pawn;
+    if (knights & squareBitboard)   return Piece::Knight;
+    if (bishops & squareBitboard)   return Piece::Bishop;
+    if (rooks & squareBitboard)     return Piece::Rook;
+    if (queens & squareBitboard)    return Piece::Queen;
+    if (king & squareBitboard)      return Piece::King;
 
-    return (Piece)pieceIndex;
+    return Piece::None;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -123,6 +123,16 @@ void Position::GenerateMoveList(MoveList& outMoveList, uint32_t flags) const
 
 static const int32_t c_MvvLvaScoreBaseValue = 10000000;
 
+static const int32_t c_PromotionScores[] =
+{
+    0,          // none
+    0,          // pawn
+    9000000,    // knight
+    1,          // bishop
+    1,          // rook
+    9000001,    // queen
+};
+
 static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
 {
     return c_MvvLvaScoreBaseValue + 10 * (int32_t)capturedPiece - (int32_t)attackingPiece;
@@ -145,6 +155,13 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
         score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
     }
 
+    if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
+    {
+        const uint32_t pieceIndex = (uint32_t)move.promoteTo;
+        ASSERT(pieceIndex > 1 && pieceIndex < 6);
+        score += c_PromotionScores[pieceIndex];
+    }
+
     outMoveList.PushMove(move, score);
 }
 
@@ -164,8 +181,6 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
     {
         if (fromSquare.Rank() == pawnFinalRank)
         {
-            // TODO promotion to rook/bishop should have very low priority when sorting moves
-            // or not generate it at all if it wouldn't lead to stallmate?
             const Piece promotionList[] = { Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop };
             for (const Piece promoteTo : promotionList)
             {
@@ -200,33 +215,6 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         // there should be no pawn in first or last rank
         ASSERT(fromSquare.Rank() > 0u && fromSquare.Rank() < 7u);
 
-        if (!onlyCaptures)
-        {
-            // can move forward only to non-occupied squares
-            if ((occupiedSquares & squareForward.Bitboard()) == 0u)
-            {
-                generatePawnMove(fromSquare, squareForward, false, false);
-
-                if (fromSquare.Rank() == pawnStartingRank) // move by two ranks
-                {
-                    const Square twoSquaresForward(fromSquare.Index() + pawnDirection * 16); // two ranks up
-
-                    // can move forward only to non-occupied squares
-                    if ((occupiedSquares & twoSquaresForward.Bitboard()) == 0u)
-                    {
-                        Move move;
-                        move.fromSquare = fromSquare;
-                        move.toSquare = twoSquaresForward;
-                        move.piece = Piece::Pawn;
-                        move.promoteTo = Piece::None;
-                        move.isCapture = false;
-                        move.isEnPassant = false;
-                        PushMove(move, outMoveList);
-                    }
-                }
-            }
-        }
-
         // capture on the left
         if (fromSquare.File() > 0u)
         {
@@ -252,6 +240,33 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
             if (toSquare == mEnPassantSquare && toSquare.Rank() == enPassantRank)
             {
                 generatePawnMove(fromSquare, toSquare, true, true);
+            }
+        }
+
+        if (!onlyCaptures)
+        {
+            // can move forward only to non-occupied squares
+            if ((occupiedSquares & squareForward.Bitboard()) == 0u)
+            {
+                generatePawnMove(fromSquare, squareForward, false, false);
+
+                if (fromSquare.Rank() == pawnStartingRank) // move by two ranks
+                {
+                    const Square twoSquaresForward(fromSquare.Index() + pawnDirection * 16); // two ranks up
+
+                    // can move forward only to non-occupied squares
+                    if ((occupiedSquares & twoSquaresForward.Bitboard()) == 0u)
+                    {
+                        Move move;
+                        move.fromSquare = fromSquare;
+                        move.toSquare = twoSquaresForward;
+                        move.piece = Piece::Pawn;
+                        move.promoteTo = Piece::None;
+                        move.isCapture = false;
+                        move.isEnPassant = false;
+                        PushMove(move, outMoveList);
+                    }
+                }
             }
         }
     });
