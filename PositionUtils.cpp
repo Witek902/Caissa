@@ -537,6 +537,12 @@ bool Position::IsMoveValid(const Move& move) const
         return false;
     }
 
+    if (move.isEnPassant && move.piece != Piece::Pawn)
+    {
+        fprintf(stderr, "IsMoveValid: Only pawn can do en passant capture");
+        return false;
+    }
+
     MoveList moveList;
 
     if (move.piece == Piece::Pawn)

@@ -218,7 +218,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Bitboard.cpp" />
+    <ClCompile Include="Evaluate.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="Move.cpp" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
@@ -228,6 +230,7 @@
     <ClInclude Include="Bitboard.hpp" />
     <ClInclude Include="Color.hpp" />
     <ClInclude Include="Common.hpp" />
+    <ClInclude Include="Evaluate.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />

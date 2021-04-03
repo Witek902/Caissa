@@ -1,6 +1,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "Bitboard.hpp"
+#include "Evaluate.hpp"
 
 #include <random>
 
@@ -216,21 +217,31 @@ static const int32_t c_PromotionScores[] =
     0,          // none
     0,          // pawn
     9000000,    // knight
-    1,          // bishop
-    1,          // rook
+    1000,       // bishop
+    1000,       // rook
     9000001,    // queen
+};
+
+static const int16_t c_PieceValues[] =
+{
+    0,      // none
+    100,    // pawn
+    320,    // knight
+    330,    // bishop
+    500,    // rook
+    900,    // queen
 };
 
 static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
 {
-    return c_MvvLvaScoreBaseValue + 10 * (int32_t)capturedPiece - (int32_t)attackingPiece;
+    return c_MvvLvaScoreBaseValue + 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
 }
 
 void Position::PushMove(const Move move, MoveList& outMoveList) const
 {
     int32_t score = 0;
 
-    if (move.piece == Piece::Pawn && move.isEnPassant)
+    if (move.isEnPassant)
     {
         score += c_MvvLvaScoreBaseValue;
     }
@@ -241,6 +252,10 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
         const Piece attackingPiece = move.piece;
         const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
         score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
+    }
+    else
+    {
+        score += ScoreQuietMove(move, mSideToMove);
     }
 
     if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
@@ -350,8 +365,6 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
                         move.toSquare = twoSquaresForward;
                         move.piece = Piece::Pawn;
                         move.promoteTo = Piece::None;
-                        move.isCapture = false;
-                        move.isEnPassant = false;
                         PushMove(move, outMoveList);
                     }
                 }
@@ -538,7 +551,6 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         move.toSquare = targetSquare;
         move.piece = Piece::King;
         move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
-        move.isCastling = false;
         PushMove(move, outMoveList);
     });
 
@@ -565,7 +577,6 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 move.fromSquare = square;
                 move.toSquare = Square(2u, square.Rank());
                 move.piece = Piece::King;
-                move.isCapture = false;
                 move.isCastling = true;
                 PushMove(move, outMoveList);
             }
@@ -580,7 +591,6 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 move.fromSquare = square;
                 move.toSquare = Square(6u, square.Rank());
                 move.piece = Piece::King;
-                move.isCapture = false;
                 move.isCastling = true;
                 PushMove(move, outMoveList);
             }
@@ -659,14 +669,13 @@ bool Position::DoMove(const Move& move)
     SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
 
     const Bitboard occupiedSquares = mWhites.Occupied() | mBlacks.Occupied();
-    const bool isEnPassant = move.piece == Piece::Pawn && move.isEnPassant; // TODO remove piece check
 
     // move piece
     RemovePiece(move.fromSquare, move.piece, mSideToMove);
 
     if (move.isCapture)
     {
-        if (!isEnPassant)
+        if (!move.isEnPassant)
         {
             const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
             RemovePiece(move.toSquare, capturedPiece, GetOppositeColor(mSideToMove));
@@ -680,7 +689,7 @@ bool Position::DoMove(const Move& move)
     const bool isPromotion = move.piece == Piece::Pawn && move.promoteTo != Piece::None;
     SetPiece(move.toSquare, isPromotion ? move.promoteTo : move.piece, mSideToMove);
 
-    if (isEnPassant)
+    if (move.isEnPassant)
     {
         Square captureSquare;
         if (move.toSquare.Rank() == 5)  captureSquare = Square(move.toSquare.File(), 4u);

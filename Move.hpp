@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Square.hpp"
-#include <assert.h>
+#include "Piece.hpp"
+
+#include <iostream>
 
 // "C++ nonstandard extension: nameless struct"
 #pragma warning(disable : 4201)
@@ -39,6 +41,8 @@ struct Move
     {
         return value != 0u;
     }
+
+    std::string ToString() const;
 };
 
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
@@ -83,6 +87,14 @@ public:
         }
 
         return moves[index].move;
+    }
+
+    void Print()
+    {
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            std::cout << moves[i].move.ToString() << " " << moves[i].score << std::endl;
+        }
     }
 
 private:

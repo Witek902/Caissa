@@ -1,48 +1,10 @@
 #include "Search.hpp"
 #include "Move.hpp"
+#include "Evaluate.hpp"
 
 #include <iostream>
 #include <string>
 #include <chrono>
-
-static constexpr int32_t c_kingValue            = 1000;
-static constexpr int32_t c_queenValue           = 900;
-static constexpr int32_t c_rookValue            = 500;
-static constexpr int32_t c_bishopValue          = 330;
-static constexpr int32_t c_knightValue          = 320;
-static constexpr int32_t c_pawnValue            = 100;
-
-static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_mobilityBonus        = 20;
-static constexpr int32_t c_guardBonus           = 10;
-
-Search::ScoreType Search::Evaluate(const Position& position)
-{
-    ScoreType value = 0;
-
-    value += c_queenValue * ((int32_t)position.mWhites.queens.Count() - (int32_t)position.mBlacks.queens.Count());
-    value += c_rookValue * ((int32_t)position.mWhites.rooks.Count() - (int32_t)position.mBlacks.rooks.Count());
-    value += c_bishopValue * ((int32_t)position.mWhites.bishops.Count() - (int32_t)position.mBlacks.bishops.Count());
-    value += c_knightValue * ((int32_t)position.mWhites.knights.Count() - (int32_t)position.mBlacks.knights.Count());
-    value += c_pawnValue * ((int32_t)position.mWhites.pawns.Count() - (int32_t)position.mBlacks.pawns.Count());
-
-    const Bitboard whiteAttackedSquares = position.GetAttackedSquares(Color::White);
-    const Bitboard blackAttackedSquares = position.GetAttackedSquares(Color::Black);
-    const Bitboard whiteOccupiedSquares = position.mWhites.Occupied();
-    const Bitboard blackOccupiedSquares = position.mBlacks.Occupied();
-
-    const Bitboard whitesMobility = whiteAttackedSquares & ~whiteOccupiedSquares;
-    const Bitboard blacksMobility = blackAttackedSquares & ~blackOccupiedSquares;
-    value += c_mobilityBonus * ((int32_t)whitesMobility.Count() - (int32_t)blacksMobility.Count());
-
-    const Bitboard whitesGuardedPieces = whiteAttackedSquares & whiteOccupiedSquares;
-    const Bitboard blacksGuardedPieces = blackAttackedSquares & blackOccupiedSquares;
-    value += c_guardBonus * ((int32_t)whitesGuardedPieces.Count() - (int32_t)blacksGuardedPieces.Count());
-
-    value += c_castlingRightsBonus * ((int32_t)__popcnt16(position.mWhitesCastlingRights) - (int32_t)__popcnt16(position.mBlacksCastlingRights));
-
-    return value;
-}
 
 Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 {
@@ -54,6 +16,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
     pvTable.clear();
     memset(searchHistory, 0, sizeof(searchHistory));
+    memset(killerMoves, 0, sizeof(killerMoves));
 
     for (uint16_t depth = 1; depth <= maxDepth; ++depth)
     {
@@ -125,13 +88,8 @@ static INLINE int32_t ColorMultiplier(Color color)
     return color == Color::White ? 1 : -1;
 }
 
-void Search::FindPvMove(const uint64_t positionHash, MoveList& moves)
+void Search::FindPvMove(const uint64_t positionHash, MoveList& moves) const
 {
-    if (moves.numMoves <= 1u)
-    {
-        return;
-    }
-
     const auto iter = pvTable.find(positionHash);
     if (iter == pvTable.end())
     {
@@ -149,13 +107,8 @@ void Search::FindPvMove(const uint64_t positionHash, MoveList& moves)
     }
 }
 
-void Search::FindHistoryMoves(Color color, MoveList& moves)
+void Search::FindHistoryMoves(Color color, MoveList& moves) const
 {
-    if (moves.numMoves <= 1u)
-    {
-        return;
-    }
-
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         const Move move = moves.moves[i].move;
@@ -169,6 +122,22 @@ void Search::FindHistoryMoves(Color color, MoveList& moves)
             const uint64_t score = searchHistory[(uint32_t)color][pieceIndex][move.toSquare.Index()];
             const int64_t finalScore = moves.moves[i].score + score;
             moves.moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
+        }
+    }
+}
+
+void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
+{
+    ASSERT(depth < MaxSearchDepth);
+
+    for (uint32_t i = 0; i < NumKillerMoves; ++i)
+    {
+        if (moves.moves[i].score < INT32_MAX)
+        {
+            if (moves.moves[i].move == killerMoves[depth][i])
+            {
+                moves.moves[i].score += 100000 - i;
+            }
         }
     }
 }
@@ -234,7 +203,11 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
 
     MoveList moves;
     param.position->GenerateMoveList(moves, MOVE_GEN_ONLY_CAPTURES);
-    FindPvMove(param.positionHash, moves);
+
+    if (moves.numMoves > 1u)
+    {
+        FindPvMove(param.positionHash, moves);
+    }
 
     Move bestMove;
     ScoreType alpha = std::max(score, param.alpha);
@@ -308,14 +281,24 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
 
     MoveList moves;
     param.position->GenerateMoveList(moves);
-    FindHistoryMoves(param.color, moves);
-    FindPvMove(param.positionHash, moves);
+
+    if (moves.numMoves > 1u)
+    {
+        FindHistoryMoves(param.color, moves);
+        FindPvMove(param.positionHash, moves);
+        FindKillerMoves(param.depth, moves);
+    }
 
     Move bestMove;
     ScoreType oldAlpha = param.alpha;
     ScoreType alpha = param.alpha;
     ScoreType beta = param.beta;
     uint32_t numLegalMoves = 0;
+
+    //if (param.depth == 4)
+    //{
+    //    moves.Print();
+    //}
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -349,7 +332,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
                 ASSERT(pieceIndex < 6u);
 
                 const uint32_t historyBonus = param.maxDepth - param.depth;
-                searchHistory[(uint32_t)param.color][pieceIndex][move.toSquare.Index()] += historyBonus * historyBonus;
+                searchHistory[(uint32_t)param.color][pieceIndex][move.toSquare.Index()] += historyBonus;
             }
         }
 
@@ -358,6 +341,15 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
             // for move ordering stats
             ctx.fh++;
             if (numLegalMoves == 1u) ctx.fhf++;
+
+            if (!move.isCapture)
+            {
+                for (uint32_t i = NumKillerMoves - 1; i-- > 0u; )
+                {
+                    killerMoves[param.depth][i] = killerMoves[param.depth][i - i];
+                }
+                killerMoves[param.depth][0] = move;
+            }
 
             break;
         }

@@ -17,8 +17,6 @@ public:
 
     ScoreType DoSearch(const Position& position, Move& outBestMove);
 
-    static ScoreType Evaluate(const Position& position);
-
 private:
 
     struct NegaMaxParam
@@ -53,12 +51,16 @@ private:
 
     uint64_t searchHistory[2][6][64];
 
+    static constexpr uint32_t NumKillerMoves = 2;
+    Move killerMoves[MaxSearchDepth][NumKillerMoves];
+
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
     ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx, Move* outBestMove = nullptr);
 
     // check if one of generated moves is in PV table
-    void FindPvMove(const uint64_t positionHash, MoveList& moves);
-    void FindHistoryMoves(Color color, MoveList& moves);
+    void FindPvMove(const uint64_t positionHash, MoveList& moves) const;
+    void FindHistoryMoves(Color color, MoveList& moves) const;
+    void FindKillerMoves(uint32_t depth, MoveList& moves) const;
 
     static bool IsRepetition(const NegaMaxParam& param);
 

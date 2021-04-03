@@ -119,6 +119,12 @@ public:
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
 
+    const SidePosition& Whites() const { return mWhites; }
+    const SidePosition& Blacks() const { return mBlacks; }
+
+    CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
+    CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
+
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
