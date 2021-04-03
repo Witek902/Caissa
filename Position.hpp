@@ -20,7 +20,6 @@ enum CastlingRights : uint8_t
 struct SidePosition
 {
     Piece GetPieceAtSquare(const Square sqare) const;
-    void SetPieceAtSquare(const Square square, Piece piece);
 
     Bitboard& GetPieceBitBoard(Piece piece);
     const Bitboard& GetPieceBitBoard(Piece piece) const;
@@ -43,7 +42,7 @@ struct SidePosition
     Bitboard king = 0;
 };
 
-inline Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
+INLINE Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
 {
     uint32_t index = (uint32_t)piece;
     ASSERT(index >= (uint32_t)Piece::Pawn);
@@ -51,7 +50,7 @@ inline Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
 
-inline const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
+INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 {
     uint32_t index = (uint32_t)piece;
     ASSERT(index >= (uint32_t)Piece::Pawn);
@@ -86,11 +85,15 @@ public:
     // parse move from string
     Move MoveFromString(const std::string& str) const;
 
-    // set piece on given square
-    void SetPieceAtSquare(const Square square, Piece piece, Color color);
+    // set piece on given square (square is expected to be empty)
+    void SetPiece(const Square square, const Piece piece, const Color color);
 
-    // get board hash
-    uint64_t GetHash() const;
+    // remove piece on given square
+    void RemovePiece(const Square square, const Piece piece, const Color color);
+
+    // update en passant square
+    void SetEnPassantSquare(const Square square);
+    void ClearEnPassantSquare();
 
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
@@ -110,11 +113,17 @@ public:
     // apply a move
     bool DoMove(const Move& move);
 
+    // compute (SLOW) Zobrist hash
+    uint64_t ComputeHash() const;
+
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
 
+    // get board hash
+    INLINE uint64_t GetHash() const { return mHash; }
+
     // get color to move
-    Color GetSideToMove() const { return mSideToMove; }
+    INLINE Color GetSideToMove() const { return mSideToMove; }
 
 private:
 
@@ -131,14 +140,28 @@ private:
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
+    // bitboards
     SidePosition mWhites;
     SidePosition mBlacks;
+
+    // whole position hash (including flags below)
+    uint64_t mHash;
+
+    // who's next move?
+    Color mSideToMove;
+
+    // en passant target square
     Square mEnPassantSquare;
+
     CastlingRights mWhitesCastlingRights;
     CastlingRights mBlacksCastlingRights;
-    Color mSideToMove;
+
     uint16_t mHalfMoveCount;
     uint16_t mMoveCount;
 };
 
-static_assert(sizeof(Position) == 104, "Invalid position size");
+
+
+static_assert(sizeof(Position) == 112, "Invalid position size");
+
+void InitZobristHash();

@@ -2,26 +2,66 @@
 #include "Move.hpp"
 #include "Bitboard.hpp"
 
-void SidePosition::SetPieceAtSquare(const Square square, Piece piece)
+#include <random>
+
+static uint64_t s_BlackToMoveHash;
+static uint64_t s_PiecePositionHash[2][6][64];
+static uint64_t s_CastlingRightsHash[2][2];
+static uint64_t s_EnPassantFileHash[8];
+
+void InitZobristHash()
 {
-    const uint64_t mask = square.Bitboard();
+    std::mt19937_64 mt(0x06db3aa64a37b526LLU);
+    std::uniform_int_distribution<uint64_t> distr;
 
-    pawns &= ~mask;
-    knights &= ~mask;
-    bishops &= ~mask;
-    rooks &= ~mask;
-    queens &= ~mask;
-    king &= ~mask;
+    s_BlackToMoveHash = distr(mt);
 
-    switch (piece)
+    for (uint32_t color = 0; color < 2; ++color)
     {
-    case Piece::Pawn:   pawns |= mask;      break;
-    case Piece::Knight: knights |= mask;    break;
-    case Piece::Bishop: bishops |= mask;    break;
-    case Piece::Rook:   rooks |= mask;      break;
-    case Piece::Queen:  queens |= mask;     break;
-    case Piece::King:   king |= mask;       break;
+        for (uint32_t piece = 0; piece < 6; ++piece)
+        {
+            for (uint32_t square = 0; square < 64; ++square)
+            {
+                s_PiecePositionHash[color][piece][square] = distr(mt);
+            }
+        }
     }
+
+    for (uint32_t file = 0; file < 8; ++file)
+    {
+        s_EnPassantFileHash[file] = distr(mt);
+    }
+
+    s_CastlingRightsHash[0][0] = distr(mt);
+    s_CastlingRightsHash[0][1] = distr(mt);
+    s_CastlingRightsHash[1][0] = distr(mt);
+    s_CastlingRightsHash[1][1] = distr(mt);
+}
+
+uint64_t Position::ComputeHash() const
+{
+    uint64_t hash = mSideToMove == Color::Black ? s_BlackToMoveHash : 0llu;
+
+    for (uint32_t color = 0; color < 2; ++color)
+    {
+        const SidePosition& pos = color == 0u ? mWhites : mBlacks;
+
+        pos.pawns.Iterate([&](uint32_t square)      { hash ^= s_PiecePositionHash[color][0][square]; });
+        pos.knights.Iterate([&](uint32_t square)    { hash ^= s_PiecePositionHash[color][1][square]; });
+        pos.bishops.Iterate([&](uint32_t square)    { hash ^= s_PiecePositionHash[color][2][square]; });
+        pos.rooks.Iterate([&](uint32_t square)      { hash ^= s_PiecePositionHash[color][3][square]; });
+        pos.queens.Iterate([&](uint32_t square)     { hash ^= s_PiecePositionHash[color][4][square]; });
+        pos.king.Iterate([&](uint32_t square)       { hash ^= s_PiecePositionHash[color][5][square]; });
+    }
+
+    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= s_CastlingRightsHash[0][0];
+    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= s_CastlingRightsHash[0][1];
+    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= s_CastlingRightsHash[1][0];
+    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= s_CastlingRightsHash[1][1];
+
+    if (mEnPassantSquare.IsValid()) hash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
+
+    return hash;
 }
 
 Piece SidePosition::GetPieceAtSquare(const Square square) const
@@ -43,19 +83,69 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Position::Position()
-    : mSideToMove(Color::White)
+    : mHash(0)
+    , mSideToMove(Color::White)
     , mWhitesCastlingRights(CastlingRights_All)
     , mBlacksCastlingRights(CastlingRights_All)
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
 {}
 
-void Position::SetPieceAtSquare(const Square square, Piece piece, Color color)
+void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
-    ASSERT(square.IsValid());
-
+    const Bitboard mask = square.Bitboard();
     SidePosition& pos = color == Color::White ? mWhites : mBlacks;
-    pos.SetPieceAtSquare(square, piece);
+
+    ASSERT((pos.pawns & mask) == 0);
+    ASSERT((pos.knights & mask) == 0);
+    ASSERT((pos.bishops & mask) == 0);
+    ASSERT((pos.rooks & mask) == 0);
+    ASSERT((pos.queens & mask) == 0);
+    ASSERT((pos.king & mask) == 0);
+
+    const uint32_t colorIndex = (uint32_t)color;
+    const uint32_t pieceIndex = (uint32_t)piece - 1;
+    mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
+
+    pos.GetPieceBitBoard(piece) |= mask;
+}
+
+void Position::RemovePiece(const Square square, const Piece piece, const Color color)
+{
+    const Bitboard mask = square.Bitboard();
+    SidePosition& pos = color == Color::White ? mWhites : mBlacks;
+    Bitboard& targetBitboard = pos.GetPieceBitBoard(piece);
+
+    const uint32_t colorIndex = (uint32_t)color;
+    const uint32_t pieceIndex = (uint32_t)piece - 1;
+    mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
+
+    ASSERT((targetBitboard & mask) == mask);
+    targetBitboard &= ~mask;
+}
+
+void Position::SetEnPassantSquare(const Square square)
+{
+    if (mEnPassantSquare.IsValid())
+    {
+        mHash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
+    }
+    if (square.IsValid())
+    {
+        mHash ^= s_EnPassantFileHash[square.File()];
+    }
+
+    mEnPassantSquare = square;
+}
+
+void Position::ClearEnPassantSquare()
+{
+    if (mEnPassantSquare.IsValid())
+    {
+        mHash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
+    }
+
+    mEnPassantSquare = Square();
 }
 
 Bitboard Position::GetAttackedSquares(Color side) const
@@ -542,10 +632,22 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
 {
     switch (affectedSquare.mIndex)
     {
-    case Square_a1: mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_LongCastleAllowed); break;
-    case Square_h1: mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_ShortCastleAllowed); break;
-    case Square_a8: mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_LongCastleAllowed); break;
-    case Square_h8: mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_ShortCastleAllowed); break;
+    case Square_h1:
+        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= s_CastlingRightsHash[0][0];
+        mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_ShortCastleAllowed);
+        break;
+    case Square_a1:
+        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= s_CastlingRightsHash[0][1];
+        mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_LongCastleAllowed);
+        break;
+    case Square_h8:
+        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= s_CastlingRightsHash[1][0];
+        mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_ShortCastleAllowed);
+        break;
+    case Square_a8:
+        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= s_CastlingRightsHash[1][1];
+        mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_LongCastleAllowed);
+        break;
     };
 }
 
@@ -554,94 +656,76 @@ bool Position::DoMove(const Move& move)
     ASSERT(IsMoveValid(move));  // move must be valid
     ASSERT(IsValid());          // board position must be valid
 
-    SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
     SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
 
     const Bitboard occupiedSquares = mWhites.Occupied() | mBlacks.Occupied();
+    const bool isEnPassant = move.piece == Piece::Pawn && move.isEnPassant; // TODO remove piece check
 
     // move piece
-    Bitboard& pieceBitboard = currentSide.GetPieceBitBoard(move.piece);
-    ASSERT(pieceBitboard & move.fromSquare.Bitboard()); // expected moved piece
-    pieceBitboard &= ~move.fromSquare.Bitboard();
-
-    // handle promotion by updating different bitboard
-    const bool isPromotion = move.piece == Piece::Pawn && move.promoteTo != Piece::None;
-    Bitboard& targetPieceBitboard = isPromotion ? currentSide.GetPieceBitBoard(move.promoteTo) : pieceBitboard;
-    targetPieceBitboard |= move.toSquare.Bitboard();
+    RemovePiece(move.fromSquare, move.piece, mSideToMove);
 
     if (move.isCapture)
     {
-        if (move.piece != Piece::Pawn || !move.isEnPassant)
+        if (!isEnPassant)
         {
-            ASSERT(opponentSide.Occupied() & move.toSquare.Bitboard());
+            const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
+            RemovePiece(move.toSquare, capturedPiece, GetOppositeColor(mSideToMove));
         }
-        opponentSide.SetPieceAtSquare(move.toSquare, Piece::None);
 
         // clear specific castling right after capturing a rook
         ClearRookCastlingRights(move.toSquare);
     }
 
-    if (move.piece == Piece::Pawn && move.isEnPassant)
+    // move piece
+    const bool isPromotion = move.piece == Piece::Pawn && move.promoteTo != Piece::None;
+    SetPiece(move.toSquare, isPromotion ? move.promoteTo : move.piece, mSideToMove);
+
+    if (isEnPassant)
     {
         Square captureSquare;
         if (move.toSquare.Rank() == 5)  captureSquare = Square(move.toSquare.File(), 4u);
         if (move.toSquare.Rank() == 2)  captureSquare = Square(move.toSquare.File(), 3u);
         ASSERT(captureSquare.IsValid());
 
-        ASSERT(opponentSide.pawns & captureSquare.Bitboard()); // expected pawn
-        opponentSide.pawns &= ~captureSquare.Bitboard();
+        RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
     }
 
-    if (move.piece == Piece::Pawn)
-    {
-        mEnPassantSquare = ExtractEnPassantSquareFromMove(move);
-    }
-    else
-    {
-        mEnPassantSquare = Square();
-    }
+    SetEnPassantSquare(move.piece == Piece::Pawn ? ExtractEnPassantSquareFromMove(move) : Square());
 
     if (move.piece == Piece::King)
     {
         if (move.isCastling)
         {
-            Bitboard& rooksBitboard = currentSide.rooks;
-
             ASSERT(move.fromSquare.Rank() == 0 || move.fromSquare.Rank() == 7);
             ASSERT(move.fromSquare.Rank() == move.toSquare.Rank());
+
+            Square oldRookSquare, newRookSquare;
 
             // short castle
             if (move.fromSquare.File() == 4u && move.toSquare.File() == 6u)
             {
-                const Square oldRookSquare(7u, move.fromSquare.Rank());
-                const Square newRookSquare(5u, move.fromSquare.Rank());
-
-                ASSERT((rooksBitboard & oldRookSquare.Bitboard()) == oldRookSquare.Bitboard());
-                ASSERT((occupiedSquares & newRookSquare.Bitboard()) == 0u);
-
-                rooksBitboard &= ~oldRookSquare.Bitboard();
-                rooksBitboard |= newRookSquare.Bitboard();
+                oldRookSquare = Square(7u, move.fromSquare.Rank());
+                newRookSquare = Square(5u, move.fromSquare.Rank());
             }
             // long castle
             else if (move.fromSquare.File() == 4u && move.toSquare.File() == 2u)
             {
-                const Square oldRookSquare(0u, move.fromSquare.Rank());
-                const Square newRookSquare(3u, move.fromSquare.Rank());
-
-                ASSERT((rooksBitboard & oldRookSquare.Bitboard()) == oldRookSquare.Bitboard());
-                ASSERT((occupiedSquares & newRookSquare.Bitboard()) == 0u);
-
-                rooksBitboard &= ~oldRookSquare.Bitboard();
-                rooksBitboard |= newRookSquare.Bitboard();
+                oldRookSquare = Square(0u, move.fromSquare.Rank());
+                newRookSquare = Square(3u, move.fromSquare.Rank());
             }
             else // invalid castle
             {
                 ASSERT(false);
             }
+
+            RemovePiece(oldRookSquare, Piece::Rook, mSideToMove);
+            SetPiece(newRookSquare, Piece::Rook, mSideToMove);
         }
 
         // clear all castling rights after moving a king
         CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+        if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= s_CastlingRightsHash[(uint32_t)mSideToMove][0];
+        if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= s_CastlingRightsHash[(uint32_t)mSideToMove][1];
         currentSideCastlingRights = CastlingRights(0);
     }
 
@@ -651,11 +735,15 @@ bool Position::DoMove(const Move& move)
         ClearRookCastlingRights(move.fromSquare);
     }
 
-    ASSERT(IsValid());  // board position after the move must be valid
-
     const Color prevToMove = mSideToMove;
 
     mSideToMove = GetOppositeColor(mSideToMove);
+    mHash ^= s_BlackToMoveHash;
+
+    ASSERT(IsValid());  // board position after the move must be valid
+
+    // validate hash
+    ASSERT(ComputeHash() == GetHash());
 
     // can't be in check after move
     return !IsInCheck(prevToMove);
