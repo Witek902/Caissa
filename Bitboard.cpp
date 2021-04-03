@@ -4,6 +4,7 @@
 
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
+static Bitboard gRookAttacksBitboard[Square::NumSquares];
 static Bitboard gRaysBitboard[Square::NumSquares][8];
 
 std::string Bitboard::Print() const
@@ -118,11 +119,24 @@ static void InitKnightAttacks()
     }
 }
 
+static void InitRookAttacks()
+{
+    for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
+    {
+        const Square square(squareIndex);
+
+        gRookAttacksBitboard[squareIndex] =
+            Bitboard::RankBitboard(square.Rank()) |
+            Bitboard::FileBitboard(square.File());
+    }
+}
+
 void InitBitboards()
 {
     InitRays();
     InitKingAttacks();
     InitKnightAttacks();
+    InitRookAttacks();
 }
 
 Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
@@ -132,16 +146,22 @@ Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
     return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
 }
 
-Bitboard Bitboard::GetKingAttacks(const Square kingSquare)
+Bitboard Bitboard::GetKingAttacks(const Square square)
 {
-    ASSERT(kingSquare.IsValid());
-    return gKingAttacksBitboard[kingSquare.Index()];
+    ASSERT(square.IsValid());
+    return gKingAttacksBitboard[square.Index()];
 }
 
-Bitboard Bitboard::GetKnightAttacks(const Square knightSquare)
+Bitboard Bitboard::GetKnightAttacks(const Square square)
 {
-    ASSERT(knightSquare.IsValid());
-    return gKnightAttacksBitboard[knightSquare.Index()];
+    ASSERT(square.IsValid());
+    return gKnightAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetRookAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gRookAttacksBitboard[square.Index()];
 }
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)

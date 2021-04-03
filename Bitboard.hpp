@@ -132,8 +132,9 @@ struct Bitboard
 
     static Bitboard GetRay(const Square square, const RayDir dir);
 
-    static Bitboard GetKingAttacks(const Square knightSquare);
-    static Bitboard GetKnightAttacks(const Square knightSquare);
+    static Bitboard GetKingAttacks(const Square square);
+    static Bitboard GetKnightAttacks(const Square square);
+    static Bitboard GetRookAttacks(const Square square);
 
     static Bitboard GenerateRookAttacks(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks(const Square square, const Bitboard blockers);

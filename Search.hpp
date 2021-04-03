@@ -51,7 +51,7 @@ private:
 
     uint64_t searchHistory[2][6][64];
 
-    static constexpr uint32_t NumKillerMoves = 2;
+    static constexpr uint32_t NumKillerMoves = 4;
     Move killerMoves[MaxSearchDepth][NumKillerMoves];
 
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);

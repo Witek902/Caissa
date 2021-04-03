@@ -9,22 +9,25 @@ static constexpr int32_t c_knightValue          = 320;
 static constexpr int32_t c_pawnValue            = 100;
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_mobilityBonus        = 20;
+static constexpr int32_t c_mobilityBonus        = 15;
 static constexpr int32_t c_guardBonus           = 10;
 
-static const int8_t c_PawnTable[] =
+namespace PieceSquareTables
 {
-    55, 60, 65, 70, 70, 65, 60, 55,
+
+static const int8_t Pawn[] =
+{
+     0,  0,  0,  0,  0,  0,  0,  0,
     50, 50, 50, 50, 50, 50, 50, 50,
-    20, 20, 30, 40, 40, 30, 20, 20,
-    5,  5, 10, 30, 30, 10,  5,  5,
-    0,  0,  0, 25, 25,  0,  0,  0,
-    5, -5,-10,  0,  0,-10, -5,  5,
-    5, 10, 10,-30,-30, 10, 10,  5,
-    0,  0,  0,  0,  0,  0,  0,  0,
+    10, 10, 20, 30, 30, 20, 10, 10,
+     5,  5, 10, 25, 25, 10,  5,  5,
+     0,  0,  0, 20, 20,  0,  0,  0,
+     5, -5,-10,  0,  0,-10, -5,  5,
+     5, 10, 10,-20,-20, 10, 10,  5,
+     0,  0,  0,  0,  0,  0,  0,  0,
 };
 
-static const int8_t c_KnightTable[] =
+static const int8_t Knight[] =
 {
     -50,-40,-30,-30,-30,-30,-40,-50,
     -40,-20,  0,  0,  0,  0,-20,-40,
@@ -33,10 +36,10 @@ static const int8_t c_KnightTable[] =
     -30,  0, 15, 20, 20, 15,  0,-30,
     -30,  5, 10, 15, 15, 10,  5,-30,
     -40,-20,  0,  5,  5,  0,-20,-40,
-    -50,-30,-20,-30,-30,-20,-30,-50,
+    -50,-40,-30,-30,-30,-30,-40,-50,
 };
 
-static const int8_t c_BishopTable[] =
+static const int8_t Bishop[] =
 {
     -20,-10,-10,-10,-10,-10,-10,-20,
     -10,  0,  0,  0,  0,  0,  0,-10,
@@ -48,19 +51,43 @@ static const int8_t c_BishopTable[] =
     -20,-10,-40,-10,-10,-40,-10,-20,
 };
 
-static const int8_t c_KingTable_MiddleGame[] =
+static const int8_t Rook[] =
 {
-    -30, -40, -40, -50, -50, -40, -40, -30,
-    -30, -40, -40, -50, -50, -40, -40, -30,
-    -30, -40, -40, -50, -50, -40, -40, -30,
-    -30, -40, -40, -50, -50, -40, -40, -30,
-    -20, -30, -30, -40, -40, -30, -30, -20,
-    -10, -20, -20, -20, -20, -20, -20, -10, 
-     20,  20,   0,   0,   0,   0,  20,  20,
-     20,  30,  10,   0,   0,  10,  30,  20,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     5, 10, 10, 10, 10, 10, 10,  5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+     0,  0,  0,  5,  5,  0,  0,  0,
 };
 
-static const int8_t c_KingTable_EndGame[] =
+static const int8_t Queen[] =
+{
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5,  5,  5,  5,  0,-10,
+     -5,  0,  5,  5,  5,  5,  0, -5,
+      0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20,
+};
+
+static const int8_t King_MiddleGame[] =
+{
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -20,-30,-30,-40,-40,-30,-30,-20,
+    -10,-20,-20,-20,-20,-20,-20,-10,
+     20, 20,  0,  0,  0,  0, 20, 20,
+     20, 30, 10,  0,  0, 10, 30, 20,
+};
+
+static const int8_t King_EndGame[] =
 {
     -50,-40,-30,-20,-20,-30,-40,-50,
     -30,-20,-10,  0,  0,-10,-20,-30,
@@ -71,6 +98,8 @@ static const int8_t c_KingTable_EndGame[] =
     -30,-30,  0,  0,  0,  0,-30,-30,
     -50,-30,-30,-30,-30,-30,-30,-50,
 };
+
+} // namespace PieceSquareTables
 
 static uint32_t FlipRank(uint32_t square)
 {
@@ -99,9 +128,11 @@ int32_t ScoreQuietMove(const Move& move, const Color color)
 
     switch (move.piece)
     {
-    case Piece::Pawn:   score = c_PawnTable[toSquare] - c_PawnTable[fromSquare]; break;
-    case Piece::Knight: score = c_KnightTable[toSquare] - c_KnightTable[fromSquare]; break;
-    case Piece::Bishop: score = c_BishopTable[toSquare] - c_BishopTable[fromSquare]; break;
+    case Piece::Pawn:   score = PieceSquareTables::Pawn[toSquare]   - PieceSquareTables::Pawn[fromSquare];      break;
+    case Piece::Knight: score = PieceSquareTables::Knight[toSquare] - PieceSquareTables::Knight[fromSquare];    break;
+    case Piece::Bishop: score = PieceSquareTables::Bishop[toSquare] - PieceSquareTables::Bishop[fromSquare];    break;
+    case Piece::Rook:   score = PieceSquareTables::Rook[toSquare]   - PieceSquareTables::Rook[fromSquare];      break;
+    case Piece::Queen:  score = PieceSquareTables::Queen[toSquare]  - PieceSquareTables::Queen[fromSquare];     break;
     }
 
     return std::max(0, score);
@@ -149,39 +180,77 @@ int32_t Evaluate(const Position& position)
         {
             square = FlipRank(square);
             ASSERT(square < 64);
-            pieceSquareValue += c_PawnTable[square];
+            pieceSquareValue += PieceSquareTables::Pawn[square];
         });
         position.Blacks().pawns.Iterate([&](uint32_t square)
         {
             ASSERT(square < 64);
-            pieceSquareValue -= c_PawnTable[square];
+            pieceSquareValue -= PieceSquareTables::Pawn[square];
         });
 
         position.Whites().knights.Iterate([&](uint32_t square)
         {
             square = FlipRank(square);
             ASSERT(square < 64);
-            pieceSquareValue += c_KnightTable[square];
+            pieceSquareValue += PieceSquareTables::Knight[square];
         });
         position.Blacks().knights.Iterate([&](uint32_t square)
         {
             ASSERT(square < 64);
-            pieceSquareValue -= c_KnightTable[square];
+            pieceSquareValue -= PieceSquareTables::Knight[square];
         });
 
         position.Whites().bishops.Iterate([&](uint32_t square)
         {
             square = FlipRank(square);
             ASSERT(square < 64);
-            pieceSquareValue += c_BishopTable[square];
+            pieceSquareValue += PieceSquareTables::Bishop[square];
         });
         position.Blacks().bishops.Iterate([&](uint32_t square)
         {
             ASSERT(square < 64);
-            pieceSquareValue -= c_BishopTable[square];
+            pieceSquareValue -= PieceSquareTables::Bishop[square];
         });
 
-        value += pieceSquareValue / 5;
+        position.Whites().rooks.Iterate([&](uint32_t square)
+        {
+            square = FlipRank(square);
+            ASSERT(square < 64);
+            pieceSquareValue += PieceSquareTables::Rook[square];
+        });
+        position.Blacks().rooks.Iterate([&](uint32_t square)
+        {
+            ASSERT(square < 64);
+            pieceSquareValue -= PieceSquareTables::Rook[square];
+        });
+
+        position.Whites().queens.Iterate([&](uint32_t square)
+        {
+            square = FlipRank(square);
+            ASSERT(square < 64);
+            pieceSquareValue += PieceSquareTables::Queen[square];
+        });
+        position.Blacks().queens.Iterate([&](uint32_t square)
+        {
+            ASSERT(square < 64);
+            pieceSquareValue -= PieceSquareTables::Queen[square];
+        });
+
+        position.Whites().king.Iterate([&](uint32_t square)
+        {
+            square = FlipRank(square);
+            ASSERT(square < 64);
+            // TODO smooth blending?
+            pieceSquareValue += whiteOccupiedSquares.Count() < 8 ? PieceSquareTables::King_EndGame[square] : PieceSquareTables::King_MiddleGame[square];
+        });
+        position.Blacks().king.Iterate([&](uint32_t square)
+        {
+            ASSERT(square < 64);
+            // TODO smooth blending?
+            pieceSquareValue -= blackOccupiedSquares.Count() < 8 ? PieceSquareTables::King_EndGame[square] : PieceSquareTables::King_MiddleGame[square];
+        });
+
+        value += pieceSquareValue;
     }
 
     return value;

@@ -295,7 +295,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
     ScoreType beta = param.beta;
     uint32_t numLegalMoves = 0;
 
-    //if (param.depth == 4)
+    //if (param.depth == 0)
     //{
     //    moves.Print();
     //}
@@ -344,9 +344,9 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
 
             if (!move.isCapture)
             {
-                for (uint32_t i = NumKillerMoves - 1; i-- > 0u; )
+                for (uint32_t j = NumKillerMoves; j-- > 1u; )
                 {
-                    killerMoves[param.depth][i] = killerMoves[param.depth][i - i];
+                    killerMoves[param.depth][j] = killerMoves[param.depth][j - 1];
                 }
                 killerMoves[param.depth][0] = move;
             }

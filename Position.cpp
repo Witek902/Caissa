@@ -241,14 +241,14 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
 {
     int32_t score = 0;
 
+    const SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
+
     if (move.isEnPassant)
     {
         score += c_MvvLvaScoreBaseValue;
     }
     else if (move.isCapture)
     {
-        const SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
-
         const Piece attackingPiece = move.piece;
         const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
         score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
@@ -256,6 +256,18 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
     else
     {
         score += ScoreQuietMove(move, mSideToMove);
+
+        const Bitboard opponentPieces = opponentSide.Occupied();
+
+        //// bonus for threats
+        //if (move.piece == Piece::Rook)
+        //{
+        //    score -= (opponentPieces & Bitboard::GetRookAttacks(move.toSquare)).Count();
+        //}
+        //else if (move.piece == Piece::King)
+        //{
+        //    score -= (opponentPieces & Bitboard::GetKingAttacks(move.toSquare)).Count();
+        //}
     }
 
     if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
