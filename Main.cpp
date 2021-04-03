@@ -913,12 +913,12 @@ int main()
 
     //RunTests();
 
-    //Position position(initPositionFEN);
+    Position position(initPositionFEN);
     //Position position("2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1"); // mate in 3
     //Position position("1r6/R3Qppk/1qp5/1pNpP1Pp/1P1P2b1/2P5/5P1K/R7 w - - 0 1"); // mate in 7
     //Position position("r6k/3P4/4P3/5P2/p7/1p6/2p5/5RK1 w - - 0 1"); // mate in 9, promotion
     //Position position("k7/8/8/8/6N1/7R/8/4K3 w - - 0 1"); // mate in 9
-    Position position("r4rk1/3nppbp/bq1p1np1/2pP4/8/2N2NPP/PP2PPB1/R1BQR1K1 b - - 1 12");
+    //Position position("r4rk1/3nppbp/bq1p1np1/2pP4/8/2N2NPP/PP2PPB1/R1BQR1K1 b - - 1 12");
     //Position position("r1bqr1k1/3n1ppp/p2p1b2/3N1PP1/1p1B1P2/1P6/1PP1Q2P/2KR2R1 w - - 0 1");
     //Position position("r1b1r1k1/1pqn1pbp/p2pp1p1/P7/1n1NPP1Q/2NBBR2/1PP3PP/R6K w - - 0 1");
     //Position position("rnbqkb1r/pppp1ppp/5n2/4p3/4PP2/2N5/PPPP2PP/R1BQKBNR b KQkq - 0 1"); // Vienna Gambit
@@ -928,6 +928,7 @@ int main()
     //Position position("3k4/6R1/6R1/8/8/8/8/4K3 w - - 0 1"); // mate in 2
     //Position position("rnb2r1k/pp2p2p/2pp2p1/q2P1p2/8/1Pb2NP1/PB2PPBP/R2Q1RK1 w - - 0 1");
 
+    /*
     {
         Search search;
         Move bestMove;
@@ -935,8 +936,9 @@ int main()
         position.DoMove(bestMove);
         search.DoSearch(position, bestMove);
     }
+    */
 
-    /*
+    Search search;
     for (;;)
     {
         std::cout << position.Print() << std::endl;
@@ -972,7 +974,6 @@ int main()
 
         std::cout << position.Print() << std::endl;
 
-        Search search;
         Move bestMove;
         Search::ScoreType score = search.DoSearch(position, bestMove);
 
@@ -993,7 +994,6 @@ int main()
             ASSERT(moveOK);
         }
     }
-    */
 
     return 0;
 }
