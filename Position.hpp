@@ -122,14 +122,17 @@ public:
     const SidePosition& Whites() const { return mWhites; }
     const SidePosition& Blacks() const { return mBlacks; }
 
-    CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
-    CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
+    INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
+    INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
+
+    INLINE Bitboard GetAttackedByWhites() const { return mAttackedByWhites; }
+    INLINE Bitboard GetAttackedByBlacks() const { return mAttackedByBlacks; }
 
 private:
 
@@ -146,12 +149,11 @@ private:
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
+    // BOARD STATE & FLAGS
+
     // bitboards
     SidePosition mWhites;
     SidePosition mBlacks;
-
-    // whole position hash (including flags below)
-    uint64_t mHash;
 
     // who's next move?
     Color mSideToMove;
@@ -164,10 +166,15 @@ private:
 
     uint16_t mHalfMoveCount;
     uint16_t mMoveCount;
+
+    // METADATA
+
+    uint64_t mHash; // whole position hash
+
+    Bitboard mAttackedByWhites;
+    Bitboard mAttackedByBlacks;
 };
 
-
-
-static_assert(sizeof(Position) == 112, "Invalid position size");
+static_assert(sizeof(Position) == 128, "Invalid position size");
 
 void InitZobristHash();

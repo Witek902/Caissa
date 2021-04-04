@@ -935,8 +935,6 @@ int main()
         Search search;
         Move bestMove;
         search.DoSearch(position, bestMove);
-        position.DoMove(bestMove);
-        //search.DoSearch(position, bestMove);
     }
     */
 

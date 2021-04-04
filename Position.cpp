@@ -613,10 +613,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = sideColor == Color::White ? mWhites : mBlacks;
-    const Color opponentColor = sideColor == Color::White ? Color::Black : Color::White;
-
-    const Bitboard attackedSquares = GetAttackedSquares(opponentColor);
-
+    const Bitboard attackedSquares = sideColor == Color::White ? mAttackedByBlacks : mAttackedByWhites;
     return currentSide.king & attackedSquares;
 }
 
@@ -760,6 +757,9 @@ bool Position::DoMove(const Move& move)
 
     mSideToMove = GetOppositeColor(mSideToMove);
     mHash ^= s_BlackToMoveHash;
+
+    mAttackedByWhites = GetAttackedSquares(Color::White);
+    mAttackedByBlacks = GetAttackedSquares(Color::Black);
 
     ASSERT(IsValid());  // board position after the move must be valid
 

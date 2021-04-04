@@ -15,9 +15,13 @@ public:
 
     static constexpr int32_t MaxSearchDepth = 64;
 
+    Search();
+
     ScoreType DoSearch(const Position& position, Move& outBestMove);
 
 private:
+
+    Search(const Search&) = delete;
 
     struct NegaMaxParam
     {
@@ -42,16 +46,17 @@ private:
 
     struct PvTableEntry
     {
+        uint64_t positionHash = 0;
         Move move;
-        int32_t score;
-        uint32_t depth;
     };
 
-    std::unordered_map<uint64_t, PvTableEntry> pvTable;
+    // TODO adjust size depending on depth?
+    static constexpr uint32_t PvTableSize = 4 * 1024 * 1024;
+    std::vector<PvTableEntry> pvTable;
 
     uint64_t searchHistory[2][6][64];
 
-    static constexpr uint32_t NumKillerMoves = 4;
+    static constexpr uint32_t NumKillerMoves = 3;
     Move killerMoves[MaxSearchDepth][NumKillerMoves];
 
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
@@ -64,5 +69,5 @@ private:
 
     static bool IsRepetition(const NegaMaxParam& param);
 
-    void UpdatePvEntry(uint32_t depth, uint64_t positionHash, const Move move, int32_t score);
+    void UpdatePvEntry(uint64_t positionHash, const Move move);
 };

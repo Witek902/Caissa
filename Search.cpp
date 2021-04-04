@@ -6,11 +6,16 @@
 #include <string>
 #include <chrono>
 
+Search::Search()
+{
+    pvTable.resize(PvTableSize);
+}
+
 Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 {
     uint16_t maxDepth = 8u;
 
-    ScoreType score;
+    ScoreType score = 0;
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -33,8 +38,8 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
         score = NegaMax(param, context, &outBestMove);
 
-        std::cout << "depth: " << depth << ", ";
-        std::cout << "best: " << position.MoveToString(outBestMove) << ", ";
+        std::cout << "depth " << depth << ", ";
+        std::cout << "best " << position.MoveToString(outBestMove) << ", ";
 
         uint32_t pvLength = depth;
         if (score > -CheckmateValue - 1000)
@@ -76,9 +81,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
     auto finish = std::chrono::high_resolution_clock::now();
     std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
-
-
-    std::cout << "PV table entries: " << pvTable.size() << std::endl;
+    std::cout << "Best move:    " << position.MoveToString(outBestMove) << std::endl;
 
     return score;
 }
@@ -90,13 +93,18 @@ static INLINE int32_t ColorMultiplier(Color color)
 
 void Search::FindPvMove(const uint64_t positionHash, MoveList& moves) const
 {
-    const auto iter = pvTable.find(positionHash);
-    if (iter == pvTable.end())
+    const PvTableEntry& entry = pvTable[positionHash % PvTableSize];
+    if (entry.positionHash != positionHash)
     {
         return;
     }
 
-    const Move pvMove = iter->second.move;
+    const Move pvMove = entry.move;
+    if (!entry.move.IsValid())
+    {
+        return;
+    }
+
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         if (moves.moves[i].move == pvMove)
@@ -142,20 +150,11 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
     }
 }
 
-void Search::UpdatePvEntry(uint32_t depth, uint64_t positionHash, const Move move, int32_t score)
+void Search::UpdatePvEntry(uint64_t positionHash, const Move move)
 {
-    const auto iter = pvTable.find(positionHash);
-    if (iter != pvTable.end())
-    {
-        PvTableEntry& entry = iter->second;
-        if (score > entry.score)
-        {
-            entry.move = move;
-            return;
-        }
-    }
+    PvTableEntry& entry = pvTable[positionHash % PvTableSize];
 
-    pvTable[positionHash] = { move, score, depth };
+    entry = { positionHash, move };
 }
 
 bool Search::IsRepetition(const NegaMaxParam& param)
@@ -253,7 +252,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
     if (alpha != oldAlpha)
     {
         ASSERT(bestMove.IsValid());
-        UpdatePvEntry(UINT32_MAX, param.positionHash, bestMove, alpha);
+        UpdatePvEntry(param.positionHash, bestMove);
     }
 
     return alpha;
@@ -284,8 +283,8 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
 
     if (moves.numMoves > 1u)
     {
-        FindHistoryMoves(param.color, moves);
         FindPvMove(param.positionHash, moves);
+        FindHistoryMoves(param.color, moves);
         FindKillerMoves(param.depth, moves);
     }
 
@@ -370,7 +369,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
     if (alpha != oldAlpha)
     {
         ASSERT(bestMove.IsValid());
-        UpdatePvEntry(param.depth, param.positionHash, bestMove, alpha);
+        UpdatePvEntry(param.positionHash, bestMove);
 
         if (outBestMove)
         {

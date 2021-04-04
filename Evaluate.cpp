@@ -148,8 +148,8 @@ int32_t Evaluate(const Position& position)
     value += c_knightValue * ((int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count());
     value += c_pawnValue * ((int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count());
 
-    const Bitboard whiteAttackedSquares = position.GetAttackedSquares(Color::White);
-    const Bitboard blackAttackedSquares = position.GetAttackedSquares(Color::Black);
+    const Bitboard whiteAttackedSquares = position.GetAttackedByWhites();
+    const Bitboard blackAttackedSquares = position.GetAttackedByBlacks();
     const Bitboard whiteOccupiedSquares = position.Whites().Occupied();
     const Bitboard blackOccupiedSquares = position.Blacks().Occupied();
 
