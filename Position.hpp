@@ -59,6 +59,7 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 }
 
 struct Move;
+struct PackedMove;
 class MoveList;
 
 #define MOVE_GEN_ONLY_CAPTURES 1
@@ -84,6 +85,9 @@ public:
 
     // parse move from string
     Move MoveFromString(const std::string& str) const;
+
+    // parse move from packed move
+    Move MoveFromPacked(const PackedMove& packedMove) const;
 
     // set piece on given square (square is expected to be empty)
     void SetPiece(const Square square, const Piece piece, const Color color);

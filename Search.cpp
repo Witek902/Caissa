@@ -8,7 +8,6 @@
 
 Search::Search()
 {
-    pvTable.resize(PvTableSize);
 }
 
 Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
@@ -19,12 +18,18 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    pvTable.clear();
-    memset(searchHistory, 0, sizeof(searchHistory));
-    memset(killerMoves, 0, sizeof(killerMoves));
+    transpositionTable.clear();
+    transpositionTable.resize(TranspositionTableSize);
+
+    prevPvArrayLength = 0;
+    memset(pvArray, 0, sizeof(pvArray));
+    memset(pvLengths, 0, sizeof(pvLengths));
 
     for (uint16_t depth = 1; depth <= maxDepth; ++depth)
     {
+        memset(searchHistory, 0, sizeof(searchHistory));
+        memset(killerMoves, 0, sizeof(killerMoves));
+
         NegaMaxParam param;
         param.position = &position;
         param.positionHash = position.GetHash();
@@ -36,45 +41,50 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
         SearchContext context;
 
-        score = NegaMax(param, context, &outBestMove);
+        score = NegaMax(param, context);
 
-        std::cout << "depth " << depth << ", ";
-        std::cout << "best " << position.MoveToString(outBestMove) << ", ";
+        uint16_t pvLength = pvLengths[0];
 
-        uint32_t pvLength = depth;
+        if (pvLength > 0)
+        {
+            outBestMove = position.MoveFromPacked(pvArray[0][0]);
+            ASSERT(outBestMove.IsValid());
+        }
+
+        std::cout << "depth " << depth << " ";
+
         if (score > -CheckmateValue - 1000)
         {
-            pvLength = -CheckmateValue - score;
-            std::cout << "val: Blacks Mate in " << pvLength;
+            std::cout << "mate " << pvLength;
         }
         else if (score < CheckmateValue + 1000)
         {
-            pvLength = score - CheckmateValue;
-            std::cout << "val: Whites Mate in " << pvLength;
+            std::cout << "mate " << pvLength;
         }
         else
         {
-            std::cout << "val: " << (float)score / 100.0f;
+            std::cout << "val " << (float)score / 100.0f;
         }
-        std::cout << ", nodes: " << context.nodes << " (" << context.quiescenceNodes << "q)";
-        std::cout << ", ordering: " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%";
+        std::cout << " nodes " << context.nodes << " (" << context.quiescenceNodes << "q)";
+        std::cout << " (ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%)";
 
-        /*
-        std::cout << ", PV: ";
+        std::cout << " pv ";
         {
+            prevPvArrayLength = pvLength;
+
             // reconstruct moves path
             Position iteratedPosition = position;
             for (uint32_t i = 0; i < pvLength; ++i)
             {
-                const auto iter = pvTable.find(iteratedPosition.GetHash());
-                ASSERT(iter != pvTable.end());
-                const Move move = iter->second;
+                const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
+                ASSERT(move.IsValid());
+
+                prevPvArray[i] = { iteratedPosition.GetHash(), move };
                 std::cout << iteratedPosition.MoveToString(move) << " ";
                 const bool moveLegal = iteratedPosition.DoMove(move);
                 ASSERT(moveLegal);
             }
         }
-        */
 
         std::cout << std::endl;
     }
@@ -91,25 +101,33 @@ static INLINE int32_t ColorMultiplier(Color color)
     return color == Color::White ? 1 : -1;
 }
 
-void Search::FindPvMove(const uint64_t positionHash, MoveList& moves) const
+void Search::FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const
 {
-    const PvTableEntry& entry = pvTable[positionHash % PvTableSize];
-    if (entry.positionHash != positionHash)
+    ASSERT(depth < MaxSearchDepth);
+
+    Move pvMove;
+    if (depth < prevPvArrayLength && positionHash == prevPvArray[depth].positionHash)
     {
-        return;
+        pvMove = prevPvArray[depth].move;
     }
 
-    const Move pvMove = entry.move;
-    if (!entry.move.IsValid())
+    Move ttMove;
+    const PvTableEntry& entry = transpositionTable[positionHash % TranspositionTableSize];
+    if (entry.positionHash == positionHash)
     {
-        return;
+        ttMove = entry.move;
     }
 
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
-        if (moves.moves[i].move == pvMove)
+        if (pvMove.IsValid() && moves.moves[i].move == pvMove)
         {
             moves.moves[i].score = INT32_MAX;
+            break;
+        }
+        else if (ttMove.IsValid() && moves.moves[i].move == ttMove)
+        {
+            moves.moves[i].score = INT32_MAX - 1;
             break;
         }
     }
@@ -122,7 +140,7 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
         const Move move = moves.moves[i].move;
         ASSERT(move.IsValid());
 
-        if (moves.moves[i].score < INT32_MAX)
+        if (moves.moves[i].score < INT32_MAX - 1000000)
         {
             const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
             ASSERT(pieceIndex < 6u);
@@ -140,7 +158,7 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
 
     for (uint32_t i = 0; i < NumKillerMoves; ++i)
     {
-        if (moves.moves[i].score < INT32_MAX)
+        if (moves.moves[i].score < INT32_MAX - 1000000)
         {
             if (moves.moves[i].move == killerMoves[depth][i])
             {
@@ -150,11 +168,25 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
     }
 }
 
-void Search::UpdatePvEntry(uint64_t positionHash, const Move move)
+void Search::UpdateTtEntry(uint64_t positionHash, const Move move, int32_t alpha)
 {
-    PvTableEntry& entry = pvTable[positionHash % PvTableSize];
+    PvTableEntry& entry = transpositionTable[positionHash % TranspositionTableSize];
 
-    entry = { positionHash, move };
+    if (entry.score <= alpha)
+    {
+        entry = { positionHash, move, alpha };
+    }
+}
+
+void Search::UpdatePvArray(uint32_t depth, const Move move)
+{
+    const uint16_t childPvLength = pvLengths[depth + 1];
+    pvArray[depth][depth] = move;
+    for (uint32_t j = depth + 1; j < childPvLength; ++j)
+    {
+        pvArray[depth][j] = pvArray[depth + 1][j];
+    }
+    pvLengths[depth] = childPvLength;
 }
 
 bool Search::IsRepetition(const NegaMaxParam& param)
@@ -185,8 +217,6 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
         return 0;
     }
 
-    // TODO max quiescence depth?
-
     ScoreType score = ColorMultiplier(param.color) * Evaluate(*param.position);
 
     if (score >= param.beta)
@@ -205,12 +235,11 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
 
     if (moves.numMoves > 1u)
     {
-        FindPvMove(param.positionHash, moves);
+        FindPvMove(param.depth, param.positionHash, moves);
     }
 
     Move bestMove;
     ScoreType alpha = std::max(score, param.alpha);
-    ScoreType oldAlpha = alpha;
     ScoreType beta = param.beta;
     uint32_t numLegalMoves = 0;
 
@@ -238,6 +267,8 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
         {
             alpha = score;
             bestMove = move;
+
+            UpdateTtEntry(param.positionHash, move, alpha);
         }
 
         if (score >= beta)
@@ -249,18 +280,14 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
         }
     }
 
-    if (alpha != oldAlpha)
-    {
-        ASSERT(bestMove.IsValid());
-        UpdatePvEntry(param.positionHash, bestMove);
-    }
-
     return alpha;
 }
 
-Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx, Move* outBestMove)
+Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
 {
     ASSERT(param.positionHash);
+
+    pvLengths[param.depth] = param.depth;
 
     if (param.depth >= param.maxDepth)
     {
@@ -283,21 +310,15 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
 
     if (moves.numMoves > 1u)
     {
-        FindPvMove(param.positionHash, moves);
+        FindPvMove(param.depth, param.positionHash, moves);
         FindHistoryMoves(param.color, moves);
         FindKillerMoves(param.depth, moves);
     }
 
     Move bestMove;
-    ScoreType oldAlpha = param.alpha;
     ScoreType alpha = param.alpha;
     ScoreType beta = param.beta;
     uint32_t numLegalMoves = 0;
-
-    //if (param.depth == 0)
-    //{
-    //    moves.Print();
-    //}
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -313,17 +334,22 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
         numLegalMoves++;
         ctx.nodes++;
 
+        // first move is PV move
+        const bool isPvNode = param.maxDepth > 3 && numLegalMoves == 1u;
+
         childNodeParam.position = &childPosition;
         childNodeParam.positionHash = childPosition.GetHash();
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
-
         const ScoreType score = -NegaMax(childNodeParam, ctx);
 
         if (score > alpha)
         {
             bestMove = move;
             alpha = score;
+
+            UpdateTtEntry(param.positionHash, move, alpha);
+            UpdatePvArray(param.depth, move);
 
             if (!move.isCapture && !(move.piece==Piece::Pawn && move.isEnPassant))
             {
@@ -363,17 +389,6 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx,
         else // stalemate
         {
             return 0;
-        }
-    }
-
-    if (alpha != oldAlpha)
-    {
-        ASSERT(bestMove.IsValid());
-        UpdatePvEntry(param.positionHash, bestMove);
-
-        if (outBestMove)
-        {
-            *outBestMove = bestMove;
         }
     }
 

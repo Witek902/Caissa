@@ -447,7 +447,22 @@ static bool IsMoveCastling(const Square& from, const Square& to)
     return false;
 }
 
-// parse move from string
+Move Position::MoveFromPacked(const PackedMove& packedMove) const
+{
+    MoveList moves;
+    GenerateMoveList(moves);
+
+    for (uint32_t i = 0; i < moves.Size(); ++i)
+    {
+        if (moves.moves[i].move == packedMove)
+        {
+            return moves.moves[i].move;
+        }
+    }
+
+    return Move();
+}
+
 Move Position::MoveFromString(const std::string& str) const
 {
     if (str.length() < 4)

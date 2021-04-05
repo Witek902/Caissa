@@ -48,11 +48,26 @@ private:
     {
         uint64_t positionHash = 0;
         Move move;
+        int32_t score = INT32_MIN;
     };
 
+    struct PvLineEntry
+    {
+        uint64_t positionHash;
+        Move move;
+    };
+
+    // principial variation moves tracking for current search
+    PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
+    uint16_t pvLengths[MaxSearchDepth];
+
+    // principial variation line from previous iterative deepening search
+    uint16_t prevPvArrayLength;
+    PvLineEntry prevPvArray[MaxSearchDepth];
+
     // TODO adjust size depending on depth?
-    static constexpr uint32_t PvTableSize = 4 * 1024 * 1024;
-    std::vector<PvTableEntry> pvTable;
+    static constexpr uint32_t TranspositionTableSize = 4 * 1024 * 1024;
+    std::vector<PvTableEntry> transpositionTable;
 
     uint64_t searchHistory[2][6][64];
 
@@ -60,14 +75,18 @@ private:
     Move killerMoves[MaxSearchDepth][NumKillerMoves];
 
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
-    ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx, Move* outBestMove = nullptr);
+    ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx);
 
     // check if one of generated moves is in PV table
-    void FindPvMove(const uint64_t positionHash, MoveList& moves) const;
+    void FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const;
     void FindHistoryMoves(Color color, MoveList& moves) const;
     void FindKillerMoves(uint32_t depth, MoveList& moves) const;
 
     static bool IsRepetition(const NegaMaxParam& param);
 
-    void UpdatePvEntry(uint64_t positionHash, const Move move);
+    // update principal variation line
+    void UpdatePvArray(uint32_t depth, const Move move);
+
+    // uptdate transposition table entry
+    void UpdateTtEntry(uint64_t positionHash, const Move move, int32_t alpha);
 };

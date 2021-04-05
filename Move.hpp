@@ -8,6 +8,30 @@
 // "C++ nonstandard extension: nameless struct"
 #pragma warning(disable : 4201)
 
+struct Move;
+
+struct PackedMove
+{
+    union
+    {
+        struct
+        {
+            Square fromSquare;
+            Square toSquare;
+        };
+
+        uint16_t value;
+    };
+
+    INLINE PackedMove() : value(0u) { }
+    INLINE PackedMove(const PackedMove&) = default;
+    INLINE PackedMove& operator = (const PackedMove&) = default;
+
+    PackedMove(const Move& rhs);
+};
+
+static_assert(sizeof(PackedMove) <= 4, "Invalid Move size");
+
 struct Move
 {
     union
@@ -30,9 +54,14 @@ struct Move
     INLINE Move(const Move&) = default;
     INLINE Move& operator = (const Move&) = default;
 
-    INLINE bool operator == (const Move& rhs) const
+    INLINE bool operator == (const Move rhs) const
     {
         return value == rhs.value;
+    }
+
+    INLINE bool operator == (const PackedMove rhs) const
+    {
+        return (value & 0xFFFF) == rhs.value;
     }
 
     // valid move does not mean it's a legal move for a given position
@@ -44,6 +73,11 @@ struct Move
 
     std::string ToString() const;
 };
+
+INLINE PackedMove::PackedMove(const Move& rhs)
+{
+    value = static_cast<uint16_t>(rhs.value);
+}
 
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
 
