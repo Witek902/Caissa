@@ -16,23 +16,20 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
     ScoreType score = 0;
 
-    auto start = std::chrono::high_resolution_clock::now();
-
-    transpositionTable.clear();
-    transpositionTable.resize(TranspositionTableSize);
-
     prevPvArrayLength = 0;
     memset(pvArray, 0, sizeof(pvArray));
     memset(pvLengths, 0, sizeof(pvLengths));
 
     for (uint16_t depth = 1; depth <= maxDepth; ++depth)
     {
+        transpositionTable.clear();
+        transpositionTable.resize(TranspositionTableSize);
+
         memset(searchHistory, 0, sizeof(searchHistory));
         memset(killerMoves, 0, sizeof(killerMoves));
 
         NegaMaxParam param;
         param.position = &position;
-        param.positionHash = position.GetHash();
         param.depth = 0u;
         param.maxDepth = depth;
         param.alpha = -InfValue;
@@ -41,7 +38,11 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
 
         SearchContext context;
 
-        score = NegaMax(param, context);
+        auto start = std::chrono::high_resolution_clock::now();
+        {
+            score = NegaMax(param, context);
+        }
+        auto finish = std::chrono::high_resolution_clock::now();
 
         uint16_t pvLength = pvLengths[0];
 
@@ -52,6 +53,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
         }
 
         std::cout << "depth " << depth << " ";
+        std::cout << "time " << (std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0) << " ";
 
         if (score > -CheckmateValue - 1000)
         {
@@ -67,6 +69,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
         }
         std::cout << " nodes " << context.nodes << " (" << context.quiescenceNodes << "q)";
         std::cout << " (ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%)";
+        std::cout << " ttHit " << context.ttHits;
 
         std::cout << " pv ";
         {
@@ -89,8 +92,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
         std::cout << std::endl;
     }
 
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
+
     std::cout << "Best move:    " << position.MoveToString(outBestMove) << std::endl;
 
     return score;
@@ -111,23 +113,11 @@ void Search::FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& m
         pvMove = prevPvArray[depth].move;
     }
 
-    Move ttMove;
-    const PvTableEntry& entry = transpositionTable[positionHash % TranspositionTableSize];
-    if (entry.positionHash == positionHash)
-    {
-        ttMove = entry.move;
-    }
-
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         if (pvMove.IsValid() && moves.moves[i].move == pvMove)
         {
             moves.moves[i].score = INT32_MAX;
-            break;
-        }
-        else if (ttMove.IsValid() && moves.moves[i].move == ttMove)
-        {
-            moves.moves[i].score = INT32_MAX - 1;
             break;
         }
     }
@@ -140,15 +130,12 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
         const Move move = moves.moves[i].move;
         ASSERT(move.IsValid());
 
-        if (moves.moves[i].score < INT32_MAX - 1000000)
-        {
-            const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
-            ASSERT(pieceIndex < 6u);
+        const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
+        ASSERT(pieceIndex < 6u);
 
-            const uint64_t score = searchHistory[(uint32_t)color][pieceIndex][move.toSquare.Index()];
-            const int64_t finalScore = moves.moves[i].score + score;
-            moves.moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
-        }
+        const uint64_t score = searchHistory[(uint32_t)color][pieceIndex][move.toSquare.Index()];
+        const int64_t finalScore = moves.moves[i].score + score;
+        moves.moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
     }
 }
 
@@ -156,25 +143,15 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
 {
     ASSERT(depth < MaxSearchDepth);
 
-    for (uint32_t i = 0; i < NumKillerMoves; ++i)
+    for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
-        if (moves.moves[i].score < INT32_MAX - 1000000)
+        for (uint32_t j = 0; j < NumKillerMoves; ++j)
         {
-            if (moves.moves[i].move == killerMoves[depth][i])
+            if (moves.moves[i].move == killerMoves[depth][j])
             {
-                moves.moves[i].score += 100000 - i;
+                moves.moves[i].score += 100000 - j;
             }
         }
-    }
-}
-
-void Search::UpdateTtEntry(uint64_t positionHash, const Move move, int32_t alpha)
-{
-    PvTableEntry& entry = transpositionTable[positionHash % TranspositionTableSize];
-
-    if (entry.score <= alpha)
-    {
-        entry = { positionHash, move, alpha };
     }
 }
 
@@ -195,7 +172,7 @@ bool Search::IsRepetition(const NegaMaxParam& param)
     while (parentParam)
     {
         ASSERT(parentParam->position);
-        if (parentParam->positionHash == param.positionHash)
+        if (parentParam->position->GetHash() == param.position->GetHash())
         {
             // TODO double check (in case of hash collision)
             return true;
@@ -210,13 +187,6 @@ bool Search::IsRepetition(const NegaMaxParam& param)
 
 Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx)
 {
-    ASSERT(param.positionHash);
-
-    if (IsRepetition(param))
-    {
-        return 0;
-    }
-
     ScoreType score = ColorMultiplier(param.color) * Evaluate(*param.position);
 
     if (score >= param.beta)
@@ -235,7 +205,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
 
     if (moves.numMoves > 1u)
     {
-        FindPvMove(param.depth, param.positionHash, moves);
+        FindPvMove(param.depth, param.position->GetHash(), moves);
     }
 
     Move bestMove;
@@ -258,7 +228,6 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
         numLegalMoves++;
 
         childNodeParam.position = &childPosition;
-        childNodeParam.positionHash = childPosition.GetHash();
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
         score = -QuiescenceNegaMax(childNodeParam, ctx);
@@ -267,8 +236,6 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
         {
             alpha = score;
             bestMove = move;
-
-            UpdateTtEntry(param.positionHash, move, alpha);
         }
 
         if (score >= beta)
@@ -285,18 +252,53 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
 
 Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
 {
-    ASSERT(param.positionHash);
-
     pvLengths[param.depth] = param.depth;
-
-    if (param.depth >= param.maxDepth)
-    {
-        return QuiescenceNegaMax(param, ctx);
-    }
 
     if (IsRepetition(param))
     {
         return 0;
+    }
+
+    const ScoreType oldAlpha = param.alpha;
+    ScoreType alpha = param.alpha;
+    ScoreType beta = param.beta;
+
+    // transposition table lookup
+    Move ttMove;
+    TranspositionTableEntry& ttEntry = transpositionTable[param.position->GetHash() % TranspositionTableSize];
+    {
+        if (ttEntry.positionHash == param.position->GetHash() && ttEntry.flag != TranspositionTableEntry::Flag_Invalid)
+        {
+            if (ttEntry.depth <= param.depth)
+            {
+                ctx.ttHits++;
+
+                if (ttEntry.flag == TranspositionTableEntry::Flag_Exact)
+                {
+                    return ttEntry.score;
+                }
+                else if (ttEntry.flag == TranspositionTableEntry::Flag_LowerBound)
+                {
+                    alpha = std::max(alpha, ttEntry.score);
+                }
+                else if (ttEntry.flag == TranspositionTableEntry::Flag_UpperBound)
+                {
+                    beta = std::min(beta, ttEntry.score);
+                }
+
+                if (alpha >= beta)
+                {
+                    return alpha;
+                }
+
+                ttMove = ttEntry.move;
+            }
+        }
+    }
+
+    if (param.depth >= param.maxDepth)
+    {
+        return QuiescenceNegaMax(param, ctx);
     }
 
     NegaMaxParam childNodeParam;
@@ -310,15 +312,27 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
 
     if (moves.numMoves > 1u)
     {
-        FindPvMove(param.depth, param.positionHash, moves);
         FindHistoryMoves(param.color, moves);
         FindKillerMoves(param.depth, moves);
+
+        FindPvMove(param.depth, param.position->GetHash(), moves);
+
+        if (ttMove.IsValid())
+        {
+            for (uint32_t i = 0; i < moves.numMoves; ++i)
+            {
+                if (moves.moves[i].move == ttMove)
+                {
+                    moves.moves[i].score = INT32_MAX - 1;
+                    break;
+                }
+            }
+        }
     }
 
     Move bestMove;
-    ScoreType alpha = param.alpha;
-    ScoreType beta = param.beta;
     uint32_t numLegalMoves = 0;
+    bool betaCutoff = false;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -331,27 +345,29 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             continue;
         }
 
+        // store any best move, in case of we never improve alpha in this loop,
+        // so we can write anything into transposition table
+        if (numLegalMoves == 0)
+        {
+            bestMove = move;
+        }
+
         numLegalMoves++;
         ctx.nodes++;
 
-        // first move is PV move
-        const bool isPvNode = param.maxDepth > 3 && numLegalMoves == 1u;
-
         childNodeParam.position = &childPosition;
-        childNodeParam.positionHash = childPosition.GetHash();
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
         const ScoreType score = -NegaMax(childNodeParam, ctx);
 
-        if (score > alpha)
+        if (score > alpha) // new best move found
         {
             bestMove = move;
             alpha = score;
 
-            UpdateTtEntry(param.positionHash, move, alpha);
             UpdatePvArray(param.depth, move);
 
-            if (!move.isCapture && !(move.piece==Piece::Pawn && move.isEnPassant))
+            if (!move.isCapture && !(move.piece == Piece::Pawn && move.isEnPassant))
             {
                 const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
                 ASSERT(pieceIndex < 6u);
@@ -361,7 +377,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             }
         }
 
-        if (score >= beta)
+        if (score >= beta) // beta cutoff
         {
             // for move ordering stats
             ctx.fh++;
@@ -376,6 +392,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
                 killerMoves[param.depth][0] = move;
             }
 
+            betaCutoff = true;
             break;
         }
     }
@@ -390,6 +407,20 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
         {
             return 0;
         }
+    }
+
+    {
+        TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
+        if (alpha <= oldAlpha)
+        {
+            flag = TranspositionTableEntry::Flag_UpperBound;
+        }
+        else if (betaCutoff)
+        {
+            flag = TranspositionTableEntry::Flag_LowerBound;
+        }
+
+        ttEntry = { param.position->GetHash(), bestMove, alpha, param.depth, flag };
     }
 
     ASSERT(alpha > CheckmateValue && alpha < -CheckmateValue);

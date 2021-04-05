@@ -135,6 +135,7 @@ struct Bitboard
     static Bitboard GetKingAttacks(const Square square);
     static Bitboard GetKnightAttacks(const Square square);
     static Bitboard GetRookAttacks(const Square square);
+    static Bitboard GetBishopAttacks(const Square square);
 
     static Bitboard GenerateRookAttacks(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks(const Square square, const Bitboard blockers);

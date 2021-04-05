@@ -5,6 +5,7 @@
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
 static Bitboard gRookAttacksBitboard[Square::NumSquares];
+static Bitboard gBishopAttacksBitboard[Square::NumSquares];
 static Bitboard gRaysBitboard[Square::NumSquares][8];
 
 std::string Bitboard::Print() const
@@ -131,12 +132,27 @@ static void InitRookAttacks()
     }
 }
 
+static void InitBishopAttacks()
+{
+    for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
+    {
+        const Square square(squareIndex);
+
+        gBishopAttacksBitboard[squareIndex] =
+            Bitboard::GetRay(square, RayDir::NorthEast) |
+            Bitboard::GetRay(square, RayDir::NorthWest) |
+            Bitboard::GetRay(square, RayDir::SouthEast) |
+            Bitboard::GetRay(square, RayDir::SouthWest);
+    }
+}
+
 void InitBitboards()
 {
     InitRays();
     InitKingAttacks();
     InitKnightAttacks();
     InitRookAttacks();
+    InitBishopAttacks();
 }
 
 Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
@@ -162,6 +178,12 @@ Bitboard Bitboard::GetRookAttacks(const Square square)
 {
     ASSERT(square.IsValid());
     return gRookAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetBishopAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gBishopAttacksBitboard[square.Index()];
 }
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)

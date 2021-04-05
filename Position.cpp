@@ -257,17 +257,17 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
     {
         score += ScoreQuietMove(move, mSideToMove);
 
-        const Bitboard opponentPieces = opponentSide.Occupied();
-
         //// bonus for threats
-        //if (move.piece == Piece::Rook)
-        //{
-        //    score -= (opponentPieces & Bitboard::GetRookAttacks(move.toSquare)).Count();
-        //}
-        //else if (move.piece == Piece::King)
-        //{
-        //    score -= (opponentPieces & Bitboard::GetKingAttacks(move.toSquare)).Count();
-        //}
+        {
+            Bitboard attacked = 0;
+            if (move.piece == Piece::King)          attacked = Bitboard::GetKingAttacks(move.toSquare);
+            else if (move.piece == Piece::Knight)   attacked = Bitboard::GetKnightAttacks(move.toSquare);
+            else if (move.piece == Piece::Rook)     attacked = Bitboard::GetRookAttacks(move.toSquare);
+            else if (move.piece == Piece::Bishop)   attacked = Bitboard::GetBishopAttacks(move.toSquare);
+            else if (move.piece == Piece::Queen)    attacked = Bitboard::GetRookAttacks(move.toSquare) | Bitboard::GetBishopAttacks(move.toSquare);
+            // TODO pawns
+            score += (opponentSide.Occupied() & attacked) != 0;
+        }
     }
 
     if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)

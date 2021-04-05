@@ -5,6 +5,25 @@
 
 #include <unordered_map>
 
+
+
+struct TranspositionTableEntry
+{
+    enum Flags : uint8_t
+    {
+        Flag_Invalid,
+        Flag_Exact,
+        Flag_LowerBound,
+        Flag_UpperBound,
+    };
+
+    uint64_t positionHash;
+    Move move;
+    int32_t score = INT32_MIN;
+    uint16_t depth = 0;
+    Flags flag = Flag_Invalid;
+};
+
 class Search
 {
 public:
@@ -27,7 +46,6 @@ private:
     {
         const Position* position = nullptr;
         const NegaMaxParam* parentParam = nullptr;
-        uint64_t positionHash = 0;
         uint16_t depth;
         uint16_t maxDepth;
         ScoreType alpha;
@@ -41,14 +59,7 @@ private:
         uint64_t fhf = 0;
         uint64_t nodes = 0;
         uint64_t quiescenceNodes = 0;
-        Move moves[MaxSearchDepth];
-    };
-
-    struct PvTableEntry
-    {
-        uint64_t positionHash = 0;
-        Move move;
-        int32_t score = INT32_MIN;
+        uint64_t ttHits = 0;
     };
 
     struct PvLineEntry
@@ -65,9 +76,8 @@ private:
     uint16_t prevPvArrayLength;
     PvLineEntry prevPvArray[MaxSearchDepth];
 
-    // TODO adjust size depending on depth?
     static constexpr uint32_t TranspositionTableSize = 4 * 1024 * 1024;
-    std::vector<PvTableEntry> transpositionTable;
+    std::vector<TranspositionTableEntry> transpositionTable;
 
     uint64_t searchHistory[2][6][64];
 
@@ -86,7 +96,4 @@ private:
 
     // update principal variation line
     void UpdatePvArray(uint32_t depth, const Move move);
-
-    // uptdate transposition table entry
-    void UpdateTtEntry(uint64_t positionHash, const Move move, int32_t alpha);
 };
