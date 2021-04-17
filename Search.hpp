@@ -24,6 +24,12 @@ struct TranspositionTableEntry
     Flags flag = Flag_Invalid;
 };
 
+struct SearchParam
+{
+    uint16_t maxDepth = 8;
+    bool debugLog = true;
+};
+
 class Search
 {
 public:
@@ -36,7 +42,12 @@ public:
 
     Search();
 
-    ScoreType DoSearch(const Position& position, Move& outBestMove);
+    ScoreType DoSearch(const Position& position, Move& outBestMove, const SearchParam& param);
+
+    void RecordBoardPosition(const Position& position);
+
+    // check if a position was repeated 2 times
+    bool IsPositionRepeated(const Position& position, uint32_t repetitionCount = 2u) const;
 
 private:
 
@@ -68,6 +79,14 @@ private:
         Move move;
     };
 
+    struct GameHistoryPosition
+    {
+        Position pos;           // board position
+        uint32_t count = 0;     // how many times it occurred during the game
+    };
+
+    using GameHistoryPositionEntry = std::vector<GameHistoryPosition>;
+
     // principial variation moves tracking for current search
     PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
     uint16_t pvLengths[MaxSearchDepth];
@@ -84,6 +103,8 @@ private:
     static constexpr uint32_t NumKillerMoves = 3;
     Move killerMoves[MaxSearchDepth][NumKillerMoves];
 
+    std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
+
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
     ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx);
 
@@ -92,7 +113,8 @@ private:
     void FindHistoryMoves(Color color, MoveList& moves) const;
     void FindKillerMoves(uint32_t depth, MoveList& moves) const;
 
-    static bool IsRepetition(const NegaMaxParam& param);
+    // check for repetition in the searched node
+    bool IsRepetition(const NegaMaxParam& param) const;
 
     // update principal variation line
     void UpdatePvArray(uint32_t depth, const Move move);

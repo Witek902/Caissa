@@ -7,6 +7,28 @@ Position::Position(const std::string& fenString)
     FromFEN(fenString);
 }
 
+bool Position::operator == (const Position& rhs) const
+{
+    const bool result =
+        mWhites == rhs.mWhites &&
+        mBlacks == rhs.mBlacks &&
+        mSideToMove == rhs.mSideToMove &&
+        mEnPassantSquare == rhs.mEnPassantSquare &&
+        mWhitesCastlingRights == rhs.mWhitesCastlingRights &&
+        mBlacksCastlingRights == rhs.mBlacksCastlingRights &&
+        mHalfMoveCount == rhs.mHalfMoveCount &&
+        mMoveCount == rhs.mMoveCount;
+
+    if (result)
+    {
+        ASSERT(mHash == rhs.mHash);
+        ASSERT(mAttackedByWhites == rhs.mAttackedByWhites);
+        ASSERT(mAttackedByBlacks == rhs.mAttackedByBlacks);
+    }
+
+    return result;
+}
+
 bool Position::IsValid() const
 {
     // validate piece counts
@@ -366,12 +388,14 @@ std::string Position::MoveToString(const Move& move) const
 {
     ASSERT(move.piece != Piece::None);
 
+    Position afterMove(*this);
+    if (!afterMove.DoMove(move))
+    {
+        return "illegal move";
+    }
+
     std::string str;
 
-    str += move.fromSquare.ToString();
-    str += move.toSquare.ToString();
-
-    /*
     if (move.piece == Piece::Pawn)
     {
         str = move.toSquare.ToString();
@@ -425,9 +449,13 @@ std::string Position::MoveToString(const Move& move) const
         str += " e.p.";
     }
 
-    // TODO! check / checkmate
+    if (afterMove.IsInCheck(afterMove.GetSideToMove()))
+    {
+        str += '+';
+    }
+
+    // TODO! checkmate
     // TODO! disambiguation
-    */
 
     return str;
 }

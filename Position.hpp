@@ -34,6 +34,17 @@ struct SidePosition
         return (pawns | knights) | (bishops | rooks) | queens;
     }
 
+    bool operator == (const SidePosition& rhs) const
+    {
+        return
+            pawns == rhs.pawns &&
+            knights == rhs.knights &&
+            bishops == rhs.bishops &&
+            rooks == rhs.rooks &&
+            queens == rhs.queens &&
+            king == rhs.king;
+    }
+
     Bitboard pawns = 0;
     Bitboard knights = 0;
     Bitboard bishops = 0;
@@ -69,7 +80,11 @@ class Position
 {
 public:
     Position();
+    Position(const Position&) = default;
     Position(const std::string& fenString);
+
+    // compare position (not hash)
+    bool operator == (const Position& rhs) const;
 
     // load position from Forsyth–Edwards Notation
     bool FromFEN(const std::string& fenString);

@@ -10,17 +10,61 @@ Search::Search()
 {
 }
 
-Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
+void Search::RecordBoardPosition(const Position& position)
 {
-    uint16_t maxDepth = 8u;
+    GameHistoryPositionEntry& entry = historyGamePositions[position.GetHash()];
 
+    for (GameHistoryPosition& historyPosition : entry)
+    {
+        if (historyPosition.pos == position)
+        {
+            historyPosition.count++;
+            return;
+        }
+    }
+
+    entry.push_back({ position, 1u });
+}
+
+bool Search::IsPositionRepeated(const Position& position, uint32_t repetitionCount) const
+{
+    const auto iter = historyGamePositions.find(position.GetHash());
+    if (iter == historyGamePositions.end())
+    {
+        return false;
+    }
+
+    const GameHistoryPositionEntry& entry = iter->second;
+
+    for (const GameHistoryPosition& historyPosition : entry)
+    {
+        if (historyPosition.pos == position)
+        {
+            return historyPosition.count >= repetitionCount;
+        }
+    }
+
+    return false;
+}
+
+Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, const SearchParam& searchParam)
+{
     ScoreType score = 0;
 
     prevPvArrayLength = 0;
     memset(pvArray, 0, sizeof(pvArray));
     memset(pvLengths, 0, sizeof(pvLengths));
 
-    for (uint16_t depth = 1; depth <= maxDepth; ++depth)
+    int32_t aspirationWindow = 400;
+    const int32_t minAspirationWindow = 10;
+    const uint32_t aspirationSearchStartDepth = 5;
+
+    int32_t alpha = -InfValue;
+    int32_t beta  =  InfValue;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (uint16_t depth = 1; depth <= searchParam.maxDepth; ++depth)
     {
         transpositionTable.clear();
         transpositionTable.resize(TranspositionTableSize);
@@ -28,21 +72,47 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
         memset(searchHistory, 0, sizeof(searchHistory));
         memset(killerMoves, 0, sizeof(killerMoves));
 
-        NegaMaxParam param;
-        param.position = &position;
-        param.depth = 0u;
-        param.maxDepth = depth;
-        param.alpha = -InfValue;
-        param.beta = InfValue;
-        param.color = position.GetSideToMove();
+        NegaMaxParam negaMaxParam;
+        negaMaxParam.position = &position;
+        negaMaxParam.depth = 0u;
+        negaMaxParam.maxDepth = depth;
+        negaMaxParam.alpha = alpha;
+        negaMaxParam.beta = beta;
+        negaMaxParam.color = position.GetSideToMove();
 
         SearchContext context;
 
-        auto start = std::chrono::high_resolution_clock::now();
+        score = NegaMax(negaMaxParam, context);
+
+        if (searchParam.debugLog)
         {
-            score = NegaMax(param, context);
+            std::cout << "depth " << depth << " ";
+            std::cout << "window " << aspirationWindow << " ";
         }
-        auto finish = std::chrono::high_resolution_clock::now();
+
+        // out of aspiration window, redo the search in full score range
+        if (score <= alpha || score >= beta)
+        {
+            if (searchParam.debugLog)
+            {
+                std::cout << "out of the aspiration window: alpha=" << alpha << " beta=" << beta << " score=" << score << std::endl;
+            }
+            aspirationWindow *= 2;
+            alpha -= aspirationWindow;
+            beta += aspirationWindow;
+            depth--;
+            continue;
+        }
+
+        const bool isMate = (score > -CheckmateValue - 1000) || (score < CheckmateValue + 1000);
+
+        if (depth >= aspirationSearchStartDepth)
+        {
+            alpha = score - aspirationWindow;
+            beta = score + aspirationWindow;
+            aspirationWindow = (aspirationWindow + minAspirationWindow + 1) / 2; // narrow aspiration window
+            ASSERT(aspirationWindow >= minAspirationWindow);
+        }
 
         uint16_t pvLength = pvLengths[0];
 
@@ -52,48 +122,52 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove)
             ASSERT(outBestMove.IsValid());
         }
 
-        std::cout << "depth " << depth << " ";
-        std::cout << "time " << (std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0) << " ";
-
-        if (score > -CheckmateValue - 1000)
+        if (searchParam.debugLog)
         {
-            std::cout << "mate " << pvLength;
-        }
-        else if (score < CheckmateValue + 1000)
-        {
-            std::cout << "mate " << pvLength;
-        }
-        else
-        {
-            std::cout << "val " << (float)score / 100.0f;
-        }
-        std::cout << " nodes " << context.nodes << " (" << context.quiescenceNodes << "q)";
-        std::cout << " (ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%)";
-        std::cout << " ttHit " << context.ttHits;
-
-        std::cout << " pv ";
-        {
-            prevPvArrayLength = pvLength;
-
-            // reconstruct moves path
-            Position iteratedPosition = position;
-            for (uint32_t i = 0; i < pvLength; ++i)
+            if (isMate)
             {
-                const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
-                ASSERT(move.IsValid());
-
-                prevPvArray[i] = { iteratedPosition.GetHash(), move };
-                std::cout << iteratedPosition.MoveToString(move) << " ";
-                const bool moveLegal = iteratedPosition.DoMove(move);
-                ASSERT(moveLegal);
+                std::cout << "mate " << pvLength;
             }
-        }
+            else
+            {
+                std::cout << "val " << (float)score / 100.0f;
+            }
+            std::cout << " nodes " << context.nodes << " (" << context.quiescenceNodes << "q)";
+            std::cout << " (ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%)";
+            std::cout << " ttHit " << context.ttHits;
 
-        std::cout << std::endl;
+            std::cout << " pv ";
+            {
+                prevPvArrayLength = pvLength;
+
+                // reconstruct moves path
+                Position iteratedPosition = position;
+                for (uint32_t i = 0; i < pvLength; ++i)
+                {
+                    const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
+                    ASSERT(move.IsValid());
+
+                    prevPvArray[i] = { iteratedPosition.GetHash(), move };
+                    std::cout << iteratedPosition.MoveToString(move) << " ";
+                    const bool moveLegal = iteratedPosition.DoMove(move);
+                    ASSERT(moveLegal);
+                }
+            }
+
+            std::cout << std::endl;
+        }
     }
 
+    if (searchParam.debugLog)
+    {
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::cout << "Elapsed time: " << (std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0) << std::endl;
 
-    std::cout << "Best move:    " << position.MoveToString(outBestMove) << std::endl;
+        if (outBestMove.IsValid())
+        {
+            std::cout << "Best move:    " << outBestMove.ToString() << " (" << position.MoveToString(outBestMove) << ")" << std::endl;
+        }
+    }
 
     return score;
 }
@@ -166,7 +240,7 @@ void Search::UpdatePvArray(uint32_t depth, const Move move)
     pvLengths[depth] = childPvLength;
 }
 
-bool Search::IsRepetition(const NegaMaxParam& param)
+bool Search::IsRepetition(const NegaMaxParam& param) const
 {
     const NegaMaxParam* parentParam = param.parentParam;
     while (parentParam)
@@ -182,11 +256,16 @@ bool Search::IsRepetition(const NegaMaxParam& param)
         parentParam = parentParam->parentParam;
     }
 
-    return false;
+    return IsPositionRepeated(*param.position);
 }
 
 Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx)
 {
+    if (IsRepetition(param))
+    {
+        return 0;
+    }
+
     ScoreType score = ColorMultiplier(param.color) * Evaluate(*param.position);
 
     if (score >= param.beta)
@@ -329,6 +408,11 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             }
         }
     }
+
+    //if (param.depth == 0)
+    //{
+    //    moves.Print();
+    //}
 
     Move bestMove;
     uint32_t numLegalMoves = 0;
