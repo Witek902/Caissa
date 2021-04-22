@@ -18,15 +18,17 @@ struct TranspositionTableEntry
     };
 
     uint64_t positionHash;
-    Move move;
     int32_t score = INT32_MIN;
-    uint16_t depth = 0;
+    PackedMove move;
+    uint8_t depth = 0;
     Flags flag = Flag_Invalid;
 };
 
+static_assert(sizeof(TranspositionTableEntry) == 16, "TT entry is too big");
+
 struct SearchParam
 {
-    uint16_t maxDepth = 8;
+    uint8_t maxDepth = 8;
     bool debugLog = true;
 };
 
@@ -35,7 +37,7 @@ class Search
 public:
 
     using ScoreType = int32_t;
-    static constexpr int32_t CheckmateValue = -1000000;
+    static constexpr int32_t CheckmateValue = 100000;
     static constexpr int32_t InfValue       = 10000000;
 
     static constexpr int32_t MaxSearchDepth = 64;
@@ -57,8 +59,8 @@ private:
     {
         const Position* position = nullptr;
         const NegaMaxParam* parentParam = nullptr;
-        uint16_t depth;
-        uint16_t maxDepth;
+        uint8_t depth;
+        uint8_t maxDepth;
         ScoreType alpha;
         ScoreType beta;
         Color color;
@@ -95,7 +97,7 @@ private:
     uint16_t prevPvArrayLength;
     PvLineEntry prevPvArray[MaxSearchDepth];
 
-    static constexpr uint32_t TranspositionTableSize = 4 * 1024 * 1024;
+    static constexpr uint32_t TranspositionTableSize = 32 * 1024 * 1024;
     std::vector<TranspositionTableEntry> transpositionTable;
 
     uint64_t searchHistory[2][6][64];
@@ -107,6 +109,8 @@ private:
 
     ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
     ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx);
+
+    void PrefetchTranspositionTableEntry(const Position& position) const;
 
     // check if one of generated moves is in PV table
     void FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const;

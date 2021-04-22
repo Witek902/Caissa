@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <chrono>
+#include <intrin.h>
 
 Search::Search()
 {
@@ -52,23 +53,23 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
     ScoreType score = 0;
 
     prevPvArrayLength = 0;
-    memset(pvArray, 0, sizeof(pvArray));
-    memset(pvLengths, 0, sizeof(pvLengths));
+
+    transpositionTable.clear();
+    transpositionTable.resize(TranspositionTableSize);
 
     int32_t aspirationWindow = 400;
-    const int32_t minAspirationWindow = 10;
-    const uint32_t aspirationSearchStartDepth = 5;
+    const int32_t minAspirationWindow = 40;
+    const uint32_t aspirationSearchStartDepth = 20;
 
     int32_t alpha = -InfValue;
     int32_t beta  =  InfValue;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    for (uint16_t depth = 1; depth <= searchParam.maxDepth; ++depth)
+    for (uint8_t depth = 1; depth <= searchParam.maxDepth; ++depth)
     {
-        transpositionTable.clear();
-        transpositionTable.resize(TranspositionTableSize);
-
+        memset(pvArray, 0, sizeof(pvArray));
+        memset(pvLengths, 0, sizeof(pvLengths));
         memset(searchHistory, 0, sizeof(searchHistory));
         memset(killerMoves, 0, sizeof(killerMoves));
 
@@ -86,7 +87,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
 
         if (searchParam.debugLog)
         {
-            std::cout << "depth " << depth << " ";
+            std::cout << "depth " << (uint32_t)depth << " ";
             std::cout << "window " << aspirationWindow << " ";
         }
 
@@ -104,7 +105,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
             continue;
         }
 
-        const bool isMate = (score > -CheckmateValue - 1000) || (score < CheckmateValue + 1000);
+        const bool isMate = (score > CheckmateValue - 1000) || (score < -CheckmateValue + 1000);
 
         if (depth >= aspirationSearchStartDepth)
         {
@@ -329,6 +330,12 @@ Search::ScoreType Search::QuiescenceNegaMax(const NegaMaxParam& param, SearchCon
     return alpha;
 }
 
+void Search::PrefetchTranspositionTableEntry(const Position& position) const
+{
+    const TranspositionTableEntry& ttEntry = transpositionTable[position.GetHash() % TranspositionTableSize];
+    _mm_prefetch(reinterpret_cast<const char*>(&ttEntry), _MM_HINT_T0);
+}
+
 Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
 {
     pvLengths[param.depth] = param.depth;
@@ -338,17 +345,19 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
         return 0;
     }
 
+    const uint16_t inversedDepth = param.maxDepth - param.depth;
+
     const ScoreType oldAlpha = param.alpha;
     ScoreType alpha = param.alpha;
     ScoreType beta = param.beta;
 
     // transposition table lookup
-    Move ttMove;
+    PackedMove ttMove;
     TranspositionTableEntry& ttEntry = transpositionTable[param.position->GetHash() % TranspositionTableSize];
     {
         if (ttEntry.positionHash == param.position->GetHash() && ttEntry.flag != TranspositionTableEntry::Flag_Invalid)
         {
-            if (ttEntry.depth <= param.depth)
+            if (ttEntry.depth >= inversedDepth)
             {
                 ctx.ttHits++;
 
@@ -369,9 +378,9 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
                 {
                     return alpha;
                 }
-
-                ttMove = ttEntry.move;
             }
+
+            ttMove = ttEntry.move;
         }
     }
 
@@ -409,6 +418,29 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
         }
     }
 
+    // mate distance prunning
+    {
+        int32_t matingValue = CheckmateValue - param.depth;
+        if (matingValue < beta)
+        {
+            beta = matingValue;
+            if (alpha >= matingValue)
+            {
+                return matingValue;
+            }
+        }
+
+        matingValue = -CheckmateValue + param.depth;
+        if (matingValue > alpha)
+        {
+            alpha = matingValue;
+            if (beta <= matingValue)
+            {
+                return matingValue;
+            }
+        }
+    }
+
     //if (param.depth == 0)
     //{
     //    moves.Print();
@@ -417,6 +449,13 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
     Move bestMove;
     uint32_t numLegalMoves = 0;
     bool betaCutoff = false;
+
+    const uint32_t lateMovePrunningDepthTreshold = 5;
+    uint32_t numMovesToSearch = moves.Size();
+    //if (param.depth >= lateMovePrunningDepthTreshold && numMovesToSearch > 1)
+    //{
+    //    numMovesToSearch = std::max(1u, numMovesToSearch / (2 + param.depth - lateMovePrunningDepthTreshold));
+    //}
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -429,6 +468,8 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             continue;
         }
 
+        PrefetchTranspositionTableEntry(childPosition);
+
         // store any best move, in case of we never improve alpha in this loop,
         // so we can write anything into transposition table
         if (numLegalMoves == 0)
@@ -439,10 +480,30 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
         numLegalMoves++;
         ctx.nodes++;
 
-        childNodeParam.position = &childPosition;
-        childNodeParam.alpha = -beta;
-        childNodeParam.beta = -alpha;
-        const ScoreType score = -NegaMax(childNodeParam, ctx);
+        ScoreType score;
+        {
+            childNodeParam.position = &childPosition;
+
+            if (numLegalMoves == 1)
+            {
+                childNodeParam.alpha = -beta;
+                childNodeParam.beta = -alpha;
+                score = -NegaMax(childNodeParam, ctx);
+            }
+            else // Principal Variation Search
+            {
+                childNodeParam.alpha = -alpha - 1;
+                childNodeParam.beta = -alpha;
+                score = -NegaMax(childNodeParam, ctx);
+
+                if (score > alpha && score < beta)
+                {
+                    childNodeParam.alpha = -beta;
+                    childNodeParam.beta = -alpha;
+                    score = -NegaMax(childNodeParam, ctx);
+                }
+            }
+        }
 
         if (score > alpha) // new best move found
         {
@@ -457,7 +518,7 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
                 ASSERT(pieceIndex < 6u);
 
                 const uint32_t historyBonus = param.maxDepth - param.depth;
-                searchHistory[(uint32_t)param.color][pieceIndex][move.toSquare.Index()] += historyBonus;
+                searchHistory[(uint32_t)param.color][pieceIndex][move.toSquare.Index()] += historyBonus * historyBonus;
             }
         }
 
@@ -479,19 +540,26 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             betaCutoff = true;
             break;
         }
+
+        if (numLegalMoves >= numMovesToSearch)
+        {
+            break;
+        }
     }
 
     if (numLegalMoves == 0u)
     {
         if (param.position->IsInCheck(param.color)) // checkmate
         {
-            return CheckmateValue + param.depth;
+            return -CheckmateValue + param.depth;
         }
         else // stalemate
         {
             return 0;
         }
     }
+
+    ASSERT(bestMove.IsValid());
 
     {
         TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
@@ -504,10 +572,10 @@ Search::ScoreType Search::NegaMax(const NegaMaxParam& param, SearchContext& ctx)
             flag = TranspositionTableEntry::Flag_LowerBound;
         }
 
-        ttEntry = { param.position->GetHash(), bestMove, alpha, param.depth, flag };
+        ttEntry = { param.position->GetHash(), alpha, bestMove, (uint8_t)inversedDepth, flag };
     }
 
-    ASSERT(alpha > CheckmateValue && alpha < -CheckmateValue);
+    ASSERT(alpha > -CheckmateValue && alpha < CheckmateValue);
 
     return alpha;
 }

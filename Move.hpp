@@ -28,6 +28,13 @@ struct PackedMove
     INLINE PackedMove& operator = (const PackedMove&) = default;
 
     PackedMove(const Move& rhs);
+
+    // valid move does not mean it's a legal move for a given position
+    // use Position::IsMoveLegal() to fully validate a move
+    bool IsValid() const
+    {
+        return value != 0u;
+    }
 };
 
 static_assert(sizeof(PackedMove) <= 4, "Invalid Move size");
@@ -121,6 +128,19 @@ public:
         }
 
         return moves[index].move;
+    }
+
+    bool HasMove(const PackedMove move) const
+    {
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            if (moves[i].move == move)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void Print()

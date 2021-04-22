@@ -398,7 +398,13 @@ std::string Position::MoveToString(const Move& move) const
 
     if (move.piece == Piece::Pawn)
     {
-        str = move.toSquare.ToString();
+        if (move.isCapture)
+        {
+            str += move.fromSquare.ToString();
+            str += 'x';
+        }
+
+        str += move.toSquare.ToString();
         if (move.toSquare.Rank() == 7u && move.promoteTo != Piece::None)
         {
             str += "=";

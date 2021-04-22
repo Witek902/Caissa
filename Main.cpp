@@ -765,7 +765,7 @@ void RunTests()
             TEST_EXPECT(Perft(pos, 2) == 400u);
             TEST_EXPECT(Perft(pos, 3) == 8902u);
             TEST_EXPECT(Perft(pos, 4) == 197281u);
-            TEST_EXPECT(Perft(pos, 5) == 4865609u);
+            //TEST_EXPECT(Perft(pos, 5) == 4865609u);
             //TEST_EXPECT(Perft(pos, 6) == 119060324u);
         }
 
@@ -888,7 +888,7 @@ void RunTests()
             TEST_EXPECT(Perft(pos, 2) == 1486u);
             TEST_EXPECT(Perft(pos, 3) == 62379u);
             TEST_EXPECT(Perft(pos, 4) == 2103487u);
-            TEST_EXPECT(Perft(pos, 5) == 89941194u);
+            //TEST_EXPECT(Perft(pos, 5) == 89941194u);
         }
 
         // Position 6
@@ -898,7 +898,7 @@ void RunTests()
             TEST_EXPECT(Perft(pos, 2) == 2079u);
             TEST_EXPECT(Perft(pos, 3) == 89890u);
             TEST_EXPECT(Perft(pos, 4) == 3894594u);
-            TEST_EXPECT(Perft(pos, 5) == 164075551u);
+            //TEST_EXPECT(Perft(pos, 5) == 164075551u);
             //TEST_EXPECT(Perft(pos, 6) == 6923051137llu);
             //TEST_EXPECT(Perft(pos, 7) == 287188994746llu);
         }
@@ -912,7 +912,11 @@ bool RunSearchTests()
 
     std::vector<TestCaseType> testVector =
     {
+        // K v KP
+        { "8/6k1/8/8/8/8/P7/7K w - - 0 1", { "a4" } },
+
         // K v KQ
+        { "8/8/8/3k4/8/8/8/3KQ3 w - - 0 1", { "Qe7" } }, // mate in 7
         { "k7/8/8/8/8/8/8/K5Q1 w - - 0 1", { "Qg7" } },
         { "8/8/8/4k3/8/8/1K6/Q7 w - - 0 1", { "Qf1", "Qa6" } },
 
@@ -985,8 +989,8 @@ bool RunSearchTests()
         TEST_EXPECT(position.IsValid());
 
         SearchParam searchParam;
-        searchParam.debugLog = true;
-        searchParam.maxDepth = 20;
+        searchParam.debugLog = false;
+        searchParam.maxDepth = 8;
 
         Move foundMove;
         search.DoSearch(position, foundMove, searchParam);
@@ -1025,6 +1029,23 @@ bool RunSearchTests()
     std::cout << "Failed: " << (testVector.size() - success) << std::endl;
 
     return success == testVector.size();
+}
+
+void RunSearchPerfTest()
+{
+    Search search;
+
+    //const Position position("2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1");
+    //const Position position("8/8/8/3k4/8/8/8/3KQ3 w - - 0 1");
+    const Position position("r4r1k/1p2p1b1/2ppb2p/p1Pn1pnq/N1NP2pP/1P2P1P1/P1Q1BP2/2RRB1K1 w - - 1 25");
+    TEST_EXPECT(position.IsValid());
+
+    SearchParam searchParam;
+    searchParam.debugLog = true;
+    searchParam.maxDepth = 9;
+
+    Move foundMove;
+    search.DoSearch(position, foundMove, searchParam);
 }
 
 void SelfMatch()
@@ -1145,12 +1166,13 @@ int main()
     InitBitboards(); 
     InitZobristHash();
 
-    //RunPerft();
-    //RunTests();
-    //RunSearchTests();
+    RunTests();
+    RunPerft();
+    RunSearchTests();
+    RunSearchPerfTest();
     //SelfMatch();
 
-    PlayGame();
+   // PlayGame();
 
     return 0;
 }
