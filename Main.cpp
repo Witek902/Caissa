@@ -54,8 +54,8 @@ void RunPerft()
     const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
 
     auto start = std::chrono::high_resolution_clock::now();
-    TEST_EXPECT(Perft(pos, 4) == 3894594u);
-    //TEST_EXPECT(Perft(pos, 5) == 164075551u);
+    //TEST_EXPECT(Perft(pos, 4) == 3894594u);
+    TEST_EXPECT(Perft(pos, 5) == 164075551u);
     auto finish = std::chrono::high_resolution_clock::now();
 
     std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
@@ -1166,9 +1166,9 @@ int main()
     InitBitboards(); 
     InitZobristHash();
 
-    RunTests();
-    RunPerft();
-    RunSearchTests();
+    //RunTests();
+    //RunPerft();
+    //RunSearchTests();
     RunSearchPerfTest();
     //SelfMatch();
 

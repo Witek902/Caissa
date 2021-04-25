@@ -78,7 +78,7 @@ struct Bitboard
         return 0x0101010101010101ull << file;
     }
 
-    INLINE static Bitboard ShiftRight(Bitboard board, uint32_t num)
+    INLINE static constexpr Bitboard ShiftRight(Bitboard board, uint32_t num)
     {
         for (uint32_t i = 0; i < num; i++)
         {
@@ -88,7 +88,7 @@ struct Bitboard
     }
 
 
-    INLINE static Bitboard ShiftLeft(Bitboard board, uint32_t num)
+    INLINE static constexpr Bitboard ShiftLeft(Bitboard board, uint32_t num)
     {
         for (uint32_t i = 0; i < num; i++)
         {
@@ -139,6 +139,9 @@ struct Bitboard
 
     static Bitboard GenerateRookAttacks(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks(const Square square, const Bitboard blockers);
+
+    static Bitboard GenerateRookAttacks_Slow(const Square square, const Bitboard blockers);
+    static Bitboard GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers);
 };
 
 void InitBitboards();
