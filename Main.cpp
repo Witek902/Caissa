@@ -4,6 +4,11 @@
 #include "Search.hpp"
 
 #include <chrono>
+#include <mutex>
+
+#include "ThreadPool.hpp"
+
+using namespace threadpool;
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
@@ -932,21 +937,6 @@ bool RunSearchTests()
 
         { "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", { "Qg3" } }, // mate in 3
 
-        //Position position("1r6/R3Qppk/1qp5/1pNpP1Pp/1P1P2b1/2P5/5P1K/R7 w - - 0 1"); // mate in 7
-        //Position position("r6k/3P4/4P3/5P2/p7/1p6/2p5/5RK1 w - - 0 1"); // mate in 9, promotion
-        //Position position("8/2R5/8/6p1/8/5pk1/1r6/3K4 w - - 0 1"); // mate in 14
-        //Position position("k7/8/8/8/6N1/7R/8/4K3 w - - 0 1"); // mate in 9
-        //Position position("r4rk1/3nppbp/bq1p1np1/2pP4/8/2N2NPP/PP2PPB1/R1BQR1K1 b - - 1 12");
-        //Position position("8/4r3/6p1/2R1ppk1/8/6PK/8/8 b - - 0 1");
-        //Position position("r1bqr1k1/3n1ppp/p2p1b2/3N1PP1/1p1B1P2/1P6/1PP1Q2P/2KR2R1 w - - 0 1");
-        //Position position("r1b1r1k1/1pqn1pbp/p2pp1p1/P7/1n1NPP1Q/2NBBR2/1PP3PP/R6K w - - 0 1");
-        //Position position("rnbqkb1r/pppp1ppp/5n2/4p3/4PP2/2N5/PPPP2PP/R1BQKBNR b KQkq - 0 1"); // Vienna Gambit
-        //Position position("rnbqkbnr/ppp1pppp/8/8/2pP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1"); // Queen's Gambit Accepted
-        //Position position("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"); // king's pawn opening
-        //Position position("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1"); // queen's pawn opening
-        //Position position("3k4/6R1/6R1/8/8/8/8/4K3 w - - 0 1"); // mate in 2
-        //Position position("rnb2r1k/pp2p2p/2pp2p1/q2P1p2/8/1Pb2NP1/PB2PPBP/R2Q1RK1 w - - 0 1");
-
         // Bratko-Kopec test suite (1982)
         { "1k1r4/pp1b1R2/3q2pp/4p3/2B5/4Q3/PPP2B2/2K5 b - - 0 1", { "Qd1+" } },
         { "3r1k2/4npp1/1ppr3p/p6P/P2PPPP1/1NR5/5K2/2R5 w - - 0 1", { "d5" } },
@@ -974,54 +964,69 @@ bool RunSearchTests()
         { "r2qnrnk/p2b2b1/1p1p2pp/2pPpp2/1PP1P3/PRNBB3/3QNPPP/5RK1 w - - 0 1", { "f4" } },
     };
 
-    Search search;
-
+    std::mutex mutex;
     uint32_t success = 0;
 
-    for (const auto& iter : testVector)
+    Waitable waitable;
     {
-        const char* fenStr = iter.first;
-        const BestMovesType& bestMoves = iter.second;
+        TaskBuilder taskBuilder(waitable);
 
-        std::cout << "Search test: " << fenStr << std::endl;
-
-        const Position position(fenStr);
-        TEST_EXPECT(position.IsValid());
-
-        SearchParam searchParam;
-        searchParam.debugLog = false;
-        searchParam.maxDepth = 8;
-
-        Move foundMove;
-        search.DoSearch(position, foundMove, searchParam);
-
-        if (!foundMove.IsValid())
+        for (const auto& iter : testVector)
         {
-            std::cout << "-- FAILURE -- No move found!" << std::endl;
-            continue;
-        }
-
-        const std::string foundMoveStr = position.MoveToString(foundMove);
-        bool correctMoveFound = false;
-        for (const char* bestMoveStr : bestMoves)
-        {
-            if (foundMoveStr == bestMoveStr)
+            taskBuilder.Task("SearchTest", [&iter, &mutex, &success](const TaskContext&)
             {
-                correctMoveFound = true;
-            }
-        }
+                Search search;
 
-        if (!correctMoveFound)
-        {
-            std::cout << "-- FAILURE -- Wrong move found! expected: ";
-            for (const char* bestMoveStr : bestMoves) std::cout << bestMoveStr << " ";
-            std::cout << "found: " << foundMoveStr << std::endl;
-            continue;
-        }
+                const char* fenStr = iter.first;
+                const BestMovesType& bestMoves = iter.second;
 
-        std::cout << "Success. Found valid move: " << foundMoveStr << std::endl;
-        success++;
+                const Position position(fenStr);
+                TEST_EXPECT(position.IsValid());
+
+                SearchParam searchParam;
+                searchParam.debugLog = false;
+                searchParam.transpositionTableSize = 8 * 1024 * 1024;
+                searchParam.maxDepth = 12;
+
+                Move foundMove;
+                search.DoSearch(position, foundMove, searchParam);
+
+                if (!foundMove.IsValid())
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    std::cout << "[FAILURE] No move found! position: " << fenStr << std::endl;
+                    return;
+                }
+
+                const std::string foundMoveStr = position.MoveToString(foundMove);
+                bool correctMoveFound = false;
+                for (const char* bestMoveStr : bestMoves)
+                {
+                    if (foundMoveStr == bestMoveStr)
+                    {
+                        correctMoveFound = true;
+                    }
+                }
+
+                if (!correctMoveFound)
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    std::cout << "[FAILURE] Wrong move found! expected: ";
+                    for (const char* bestMoveStr : bestMoves) std::cout << bestMoveStr << " ";
+                    std::cout << "found: " << foundMoveStr << " position: " << fenStr << std::endl;
+                    return;
+                }
+
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    std::cout << "[SUCCESS] Found valid move: " << foundMoveStr << std::endl;
+                    success++;
+                }
+            });
+        }
     }
+
+    waitable.Wait();
 
     std::cout << "Move test summary:" << std::endl;
     std::cout << "Test cases: " << testVector.size() << std::endl;
@@ -1035,14 +1040,18 @@ void RunSearchPerfTest()
 {
     Search search;
 
-    //const Position position("2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1");
+    //const Position position("k7/3Q4/pp6/8/8/1q3PPP/5PPP/7K w - - 0 1"); // repetition
+    //const Position position("r2q1r1k/pb3p1p/2n1p2Q/5p2/8/3B2N1/PP3PPP/R3R1K1 w - - 0 1");
+    const Position position("r1k4r/ppp1bq1p/2n1N3/6B1/3p2Q1/8/PPP2PPP/R5K1 w - - 0 1"); // mate in 6
+    //const Position position("1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1"); // Lucena
+    //const Position position("8/6k1/8/8/8/8/P7/7K w - - 0 1");
     //const Position position("8/8/8/3k4/8/8/8/3KQ3 w - - 0 1");
-    const Position position("r4r1k/1p2p1b1/2ppb2p/p1Pn1pnq/N1NP2pP/1P2P1P1/P1Q1BP2/2RRB1K1 w - - 1 25");
+    //const Position position("r4r1k/1p2p1b1/2ppb2p/p1Pn1pnq/N1NP2pP/1P2P1P1/P1Q1BP2/2RRB1K1 w - - 1 25");
     TEST_EXPECT(position.IsValid());
 
     SearchParam searchParam;
     searchParam.debugLog = true;
-    searchParam.maxDepth = 9;
+    searchParam.maxDepth = 5;
 
     Move foundMove;
     search.DoSearch(position, foundMove, searchParam);

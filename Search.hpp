@@ -28,6 +28,7 @@ static_assert(sizeof(TranspositionTableEntry) == 16, "TT entry is too big");
 
 struct SearchParam
 {
+    uint32_t transpositionTableSize = 32 * 1024 * 1024;
     uint8_t maxDepth = 8;
     bool debugLog = true;
 };
@@ -55,15 +56,16 @@ private:
 
     Search(const Search&) = delete;
 
-    struct NegaMaxParam
+    struct NodeInfo
     {
         const Position* position = nullptr;
-        const NegaMaxParam* parentParam = nullptr;
+        const NodeInfo* parentNode = nullptr;
         uint8_t depth;
         uint8_t maxDepth;
         ScoreType alpha;
         ScoreType beta;
         Color color;
+        bool isPvNode = false;
     };
     
     struct SearchContext
@@ -72,6 +74,7 @@ private:
         uint64_t fhf = 0;
         uint64_t nodes = 0;
         uint64_t quiescenceNodes = 0;
+        uint64_t pseudoMovesPerNode = 0;
         uint64_t ttHits = 0;
     };
 
@@ -97,29 +100,34 @@ private:
     uint16_t prevPvArrayLength;
     PvLineEntry prevPvArray[MaxSearchDepth];
 
-    static constexpr uint32_t TranspositionTableSize = 32 * 1024 * 1024;
     std::vector<TranspositionTableEntry> transpositionTable;
 
-    uint64_t searchHistory[2][6][64];
+    uint32_t searchHistory[2][6][64];
 
     static constexpr uint32_t NumKillerMoves = 3;
     Move killerMoves[MaxSearchDepth][NumKillerMoves];
 
     std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
 
-    ScoreType QuiescenceNegaMax(const NegaMaxParam& param, SearchContext& ctx);
-    ScoreType NegaMax(const NegaMaxParam& param, SearchContext& ctx);
+    ScoreType QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx);
+    ScoreType NegaMax(const NodeInfo& node, SearchContext& ctx);
 
+    TranspositionTableEntry* ReadTranspositionTable(const Position& position);
+    void WriteTranspositionTable(const TranspositionTableEntry& entry);
     void PrefetchTranspositionTableEntry(const Position& position) const;
 
     // check if one of generated moves is in PV table
-    void FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const;
+    const Move FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const;
     void FindHistoryMoves(Color color, MoveList& moves) const;
     void FindKillerMoves(uint32_t depth, MoveList& moves) const;
 
+    int32_t PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t beta);
+
     // check for repetition in the searched node
-    bool IsRepetition(const NegaMaxParam& param) const;
+    bool IsRepetition(const NodeInfo& node) const;
 
     // update principal variation line
     void UpdatePvArray(uint32_t depth, const Move move);
+
+    void UpdateSearchHistory(const NodeInfo& node, const Move move);
 };

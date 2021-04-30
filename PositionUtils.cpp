@@ -435,10 +435,39 @@ std::string Position::MoveToString(const Move& move) const
             {
                 const SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
                 const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.piece);
-                
-                if (movedPieceBitboard.Count() > 1u)
+
+                bool ambiguous = false;
                 {
-                    str += move.fromSquare.ToString();
+                    MoveList moves;
+                    GenerateMoveList(moves);
+
+                    for (uint32_t i = 0; i < moves.numMoves; ++i)
+                    {
+                        const Move& otherMove = moves.moves[i].move;
+                        if (otherMove.piece == move.piece &&
+                            otherMove.toSquare == move.toSquare &&
+                            otherMove.fromSquare != move.fromSquare)
+                        {
+                            ambiguous = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (ambiguous)
+                {
+                    if ((movedPieceBitboard & Bitboard::RankBitboard(move.fromSquare.Rank())).Count() > 1)
+                    {
+                        str += 'a' + move.fromSquare.File();
+                    }
+                    else if ((movedPieceBitboard & Bitboard::FileBitboard(move.fromSquare.File())).Count() > 1)
+                    {
+                        str += '1' + move.fromSquare.Rank();
+                    }
+                    else
+                    {
+                        str += move.fromSquare.ToString();
+                    }
                 }
             }
 
@@ -461,7 +490,6 @@ std::string Position::MoveToString(const Move& move) const
     }
 
     // TODO! checkmate
-    // TODO! disambiguation
 
     return str;
 }

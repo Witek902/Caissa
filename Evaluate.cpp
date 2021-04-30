@@ -138,6 +138,41 @@ int32_t ScoreQuietMove(const Move& move, const Color color)
     return std::max(0, score);
 }
 
+bool CheckInsufficientMaterial(const Position& position)
+{
+    if (position.Whites().queens.Count() > 0 || position.Blacks().queens.Count() > 0 ||
+        position.Whites().rooks.Count() > 0 || position.Blacks().rooks.Count() > 0 ||
+        position.Whites().pawns.Count() > 0 || position.Blacks().pawns.Count() > 0)
+    {
+        return false;
+    }
+
+    // king and bishop vs. king
+    if (position.Whites().knights.Count() == 0 && position.Blacks().knights.Count() == 0)
+    {
+        if ((position.Whites().bishops.Count() == 0 && position.Blacks().bishops.Count() <= 1) ||
+            (position.Whites().bishops.Count() <= 1 && position.Blacks().bishops.Count() == 0))
+        {
+            return true;
+        }
+    }
+
+
+    // king and knight vs. king
+    if (position.Whites().bishops.Count() == 0 && position.Blacks().bishops.Count() == 0)
+    {
+        if ((position.Whites().knights.Count() == 0 && position.Blacks().knights.Count() <= 1) ||
+            (position.Whites().knights.Count() <= 1 && position.Blacks().knights.Count() == 0))
+        {
+            return true;
+        }
+    }
+
+    // TODO: king and bishop versus king and bishop with the bishops on the same color ==> draw
+
+    return false;
+}
+
 int32_t Evaluate(const Position& position)
 {
     int32_t value = 0;
@@ -165,11 +200,11 @@ int32_t Evaluate(const Position& position)
 
     if (whiteAttackedSquares & position.Blacks().king)
     {
-        value += 80;
+        value += 50;
     }
     if (blackAttackedSquares & position.Whites().king)
     {
-        value -= 80;
+        value -= 50;
     }
 
     // piece square tables
