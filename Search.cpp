@@ -64,10 +64,10 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
     int32_t alpha = -InfValue;
     int32_t beta  =  InfValue;
 
-    auto start = std::chrono::high_resolution_clock::now();
-
     for (uint32_t depth = 1; depth <= searchParam.maxDepth; ++depth)
     {
+        auto startTime = std::chrono::high_resolution_clock::now();
+
         memset(pvArray, 0, sizeof(pvArray));
         memset(pvLengths, 0, sizeof(pvLengths));
         memset(searchHistory, 0, sizeof(searchHistory));
@@ -118,10 +118,13 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
             ASSERT(outBestMove.IsValid());
         }
 
+        auto endTime = std::chrono::high_resolution_clock::now();
+
         if (searchParam.debugLog)
         {
             std::cout << "info";
             std::cout << " depth " << (uint32_t)depth;
+            std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
             if (isMate)
             {
                 std::cout << " score mate " << (pvLength+1)/2;
@@ -156,19 +159,6 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
             std::cout << std::endl;
         }
     }
-
-    /*
-    if (searchParam.debugLog)
-    {
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::cout << "Elapsed time: " << (std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0) << std::endl;
-
-        if (outBestMove.IsValid())
-        {
-            std::cout << "Best move:    " << outBestMove.ToString() << " (" << position.MoveToString(outBestMove) << ")" << std::endl;
-        }
-    }
-    */
 
     return score;
 }
