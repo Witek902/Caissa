@@ -416,6 +416,24 @@ Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
     return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
 }
 
+Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
+{
+    Bitboard bitboard;
+
+    if (color == Color::White)
+    {
+        bitboard = (square.Bitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
+        bitboard |= (square.Bitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
+    }
+    else
+    {
+        bitboard = (square.Bitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
+        bitboard |= (square.Bitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
+    }
+
+    return bitboard;
+}
+
 Bitboard Bitboard::GetKingAttacks(const Square square)
 {
     ASSERT(square.IsValid());

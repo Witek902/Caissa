@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
+#include "Color.hpp"
 
 #include <inttypes.h>
 #include <assert.h>
@@ -132,6 +133,7 @@ struct Bitboard
 
     static Bitboard GetRay(const Square square, const RayDir dir);
 
+    static Bitboard GetPawnAttacks(const Square square, const Color color);
     static Bitboard GetKingAttacks(const Square square);
     static Bitboard GetKnightAttacks(const Square square);
     static Bitboard GetRookAttacks(const Square square);

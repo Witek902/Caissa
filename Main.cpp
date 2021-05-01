@@ -1136,6 +1136,8 @@ int main()
     InitZobristHash();
 
     //RunTests();
+
+    //RunTests();
     //RunPerft();
     //RunSearchTests();
     //RunSearchPerfTest();

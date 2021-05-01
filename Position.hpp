@@ -34,6 +34,14 @@ struct SidePosition
         return (pawns | knights) | (bishops | rooks) | queens;
     }
 
+    INLINE Square GetKingSquare() const
+    {
+        unsigned long kingSquareIndex;
+        const bool kingSquareFound = _BitScanForward64(&kingSquareIndex, king);
+        ASSERT(kingSquareFound);
+        return Square(kingSquareIndex);
+    }
+
     bool operator == (const SidePosition& rhs) const
     {
         return
@@ -119,6 +127,9 @@ public:
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
 
+    // check if given square is visible by any other piece
+    bool IsSquareVisible(const Square square, const Color sideColor) const;
+
     // check if given side is in check
     bool IsInCheck(Color sideColor) const;
     
@@ -154,9 +165,6 @@ public:
 
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
-
-    INLINE Bitboard GetAttackedByWhites() const { return mAttackedByWhites; }
-    INLINE Bitboard GetAttackedByBlacks() const { return mAttackedByBlacks; }
 
 private:
 
@@ -194,11 +202,8 @@ private:
     // METADATA
 
     uint64_t mHash; // whole position hash
-
-    Bitboard mAttackedByWhites;
-    Bitboard mAttackedByBlacks;
 };
 
-static_assert(sizeof(Position) == 128, "Invalid position size");
+static_assert(sizeof(Position) == 112, "Invalid position size");
 
 void InitZobristHash();

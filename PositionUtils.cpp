@@ -22,8 +22,6 @@ bool Position::operator == (const Position& rhs) const
     if (result)
     {
         ASSERT(mHash == rhs.mHash);
-        ASSERT(mAttackedByWhites == rhs.mAttackedByWhites);
-        ASSERT(mAttackedByBlacks == rhs.mAttackedByBlacks);
     }
 
     return result;
@@ -246,8 +244,6 @@ bool Position::FromFEN(const std::string& fenString)
     //printf("\n(full) move number: %s\n", ++p);
 
     mHash = ComputeHash();
-    mAttackedByWhites = GetAttackedSquares(Color::White);
-    mAttackedByBlacks = GetAttackedSquares(Color::Black);
 
     return IsValid();
 }

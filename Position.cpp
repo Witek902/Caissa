@@ -158,17 +158,18 @@ Bitboard Position::GetAttackedSquares(Color side) const
 
     Bitboard bitboard{ 0 };
 
-    const int32_t pawnDirection = side == Color::White ? 1 : -1;
-
-    if (side == Color::White)
+    if (currentSide.pawns)
     {
-        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
-        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
-    }
-    else
-    {
-        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
-        bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
+        if (side == Color::White)
+        {
+            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
+            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
+        }
+        else
+        {
+            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
+            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
+        }
     }
 
     currentSide.knights.Iterate([&](uint32_t fromIndex)
@@ -612,11 +613,44 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     }
 }
 
+bool Position::IsSquareVisible(const Square square, const Color sideColor) const
+{
+    const SidePosition& side = sideColor == Color::White ? mWhites : mBlacks;
+    const Bitboard occupiedSquares = mWhites.Occupied() | mBlacks.Occupied();
+
+    Bitboard bitboard = Bitboard::GetKingAttacks(square) & side.king;
+
+    if (side.knights)
+    {
+        bitboard |= Bitboard::GetKnightAttacks(square) & side.knights;
+    }
+
+    if (side.rooks | side.queens)
+    {
+        bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens);
+    }
+
+    if (side.bishops | side.queens)
+    {
+        bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens);
+    }
+
+    if (side.pawns)
+    {
+        bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns;
+    }
+
+    return bitboard != 0;
+}
+
 bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = sideColor == Color::White ? mWhites : mBlacks;
-    const Bitboard attackedSquares = sideColor == Color::White ? mAttackedByBlacks : mAttackedByWhites;
-    return currentSide.king & attackedSquares;
+
+    unsigned long kingSquareIndex;
+    _BitScanForward64(&kingSquareIndex, currentSide.king);
+
+    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(sideColor));
 }
 
 bool Position::IsMoveLegal(const Move& move) const
@@ -624,10 +658,7 @@ bool Position::IsMoveLegal(const Move& move) const
     ASSERT(IsMoveValid(move));
 
     Position positionAfterMove{ *this };
-    positionAfterMove.DoMove(move);
-
-    // can't be in check after move
-    return !positionAfterMove.IsInCheck(mSideToMove);
+    return positionAfterMove.DoMove(move);
 }
 
 static Square ExtractEnPassantSquareFromMove(const Move& move)
@@ -759,9 +790,6 @@ bool Position::DoMove(const Move& move)
 
     mSideToMove = GetOppositeColor(mSideToMove);
     mHash ^= s_BlackToMoveHash;
-
-    mAttackedByWhites = GetAttackedSquares(Color::White);
-    mAttackedByBlacks = GetAttackedSquares(Color::Black);
 
     ASSERT(IsValid());  // board position after the move must be valid
 
