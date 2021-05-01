@@ -28,8 +28,8 @@ static_assert(sizeof(TranspositionTableEntry) == 16, "TT entry is too big");
 
 struct SearchParam
 {
-    uint32_t transpositionTableSize = 32 * 1024 * 1024;
-    uint8_t maxDepth = 8;
+    uint32_t transpositionTableSize = 16 * 1024 * 1024;
+    uint32_t maxDepth = 8;
     bool debugLog = true;
 };
 

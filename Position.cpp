@@ -5,6 +5,8 @@
 
 #include <random>
 
+const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 static uint64_t s_BlackToMoveHash;
 static uint64_t s_PiecePositionHash[2][6][64];
 static uint64_t s_CastlingRightsHash[2][2];

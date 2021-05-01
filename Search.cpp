@@ -66,7 +66,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    for (uint8_t depth = 1; depth <= searchParam.maxDepth; ++depth)
+    for (uint32_t depth = 1; depth <= searchParam.maxDepth; ++depth)
     {
         memset(pvArray, 0, sizeof(pvArray));
         memset(pvLengths, 0, sizeof(pvLengths));
@@ -77,7 +77,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
         rootNode.position = &position;
         rootNode.depth = 0u;
         rootNode.isPvNode = true;
-        rootNode.maxDepth = depth;
+        rootNode.maxDepth = (uint8_t)depth;
         rootNode.alpha = alpha;
         rootNode.beta = beta;
         rootNode.color = position.GetSideToMove();
@@ -86,18 +86,12 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
 
         score = NegaMax(rootNode, context);
 
-        if (searchParam.debugLog)
-        {
-            std::cout << "depth " << (uint32_t)depth << " ";
-            std::cout << "window " << aspirationWindow << " ";
-        }
-
         // out of aspiration window, redo the search in full score range
         if (score <= alpha || score >= beta)
         {
             if (searchParam.debugLog)
             {
-                std::cout << "out of the aspiration window: alpha=" << alpha << " beta=" << beta << " score=" << score << std::endl;
+                //std::cout << "out of the aspiration window: alpha=" << alpha << " beta=" << beta << " score=" << score << std::endl;
             }
             aspirationWindow *= 2;
             alpha -= aspirationWindow;
@@ -126,18 +120,20 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
 
         if (searchParam.debugLog)
         {
+            std::cout << "info";
+            std::cout << " depth " << (uint32_t)depth;
             if (isMate)
             {
-                std::cout << "mate " << pvLength;
+                std::cout << " score mate " << (pvLength+1)/2;
             }
             else
             {
-                std::cout << "val " << (float)score / 100.0f;
+                std::cout << " score cp " << score;
             }
-            std::cout << " nodes " << context.nodes << " (" << context.quiescenceNodes << "q)";
-            std::cout << " ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%";
-            std::cout << " branching " << ((float)context.pseudoMovesPerNode / (float)context.nodes);
-            std::cout << " ttHit " << context.ttHits;
+            std::cout << " nodes " << context.nodes;
+            //std::cout << " ordering " << (context.fh > 0 ? 100.0f * (float)context.fhf / (float)context.fh : 0.0f) << "%";
+            //std::cout << " branching " << ((float)context.pseudoMovesPerNode / (float)context.nodes);
+            //std::cout << " ttHit " << context.ttHits;
 
             std::cout << " pv ";
             {
@@ -151,7 +147,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
                     ASSERT(move.IsValid());
 
                     prevPvArray[i] = { iteratedPosition.GetHash(), move };
-                    std::cout << iteratedPosition.MoveToString(move) << " ";
+                    std::cout << move.ToString() << " ";
                     const bool moveLegal = iteratedPosition.DoMove(move);
                     ASSERT(moveLegal);
                 }
@@ -161,6 +157,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
         }
     }
 
+    /*
     if (searchParam.debugLog)
     {
         auto finish = std::chrono::high_resolution_clock::now();
@@ -171,6 +168,7 @@ Search::ScoreType Search::DoSearch(const Position& position, Move& outBestMove, 
             std::cout << "Best move:    " << outBestMove.ToString() << " (" << position.MoveToString(outBestMove) << ")" << std::endl;
         }
     }
+    */
 
     return score;
 }

@@ -229,6 +229,7 @@
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="Square.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
+    <ClCompile Include="UCI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Bitboard.hpp" />
@@ -241,6 +242,7 @@
     <ClInclude Include="Search.hpp" />
     <ClInclude Include="Square.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
+    <ClInclude Include="UCI.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

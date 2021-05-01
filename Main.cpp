@@ -2,6 +2,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "Search.hpp"
+#include "UCI.hpp"
 
 #include <chrono>
 #include <mutex>
@@ -13,54 +14,13 @@ using namespace threadpool;
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
 
-static const char* initPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
-uint64_t Perft(const Position& position, uint32_t depth, bool print = true)
-{
-    if (print)
-    {
-        std::cout << "Running Perft... depth=" << depth << std::endl;
-    }
-
-    MoveList moveList;
-    position.GenerateMoveList(moveList);
-
-    uint64_t nodes = 0;
-    for (uint32_t i = 0; i < moveList.Size(); i++)
-    {
-        const Move& move = moveList.GetMove(i);
-
-        Position child = position;
-        if (!child.DoMove(move))
-        {
-            continue;
-        }
-
-        uint64_t numChildNodes = depth == 1 ? 1 : Perft(child, depth - 1, false);
-
-        if (print)
-        {
-            std::cout << move.ToString() << ": " << numChildNodes << std::endl;
-        }
-
-        nodes += numChildNodes;
-    }
-
-    if (print)
-    {
-        std::cout << "Total nodes: " << nodes << std::endl;
-    }
-
-    return nodes;
-}
-
 void RunPerft()
 {
     const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
 
     auto start = std::chrono::high_resolution_clock::now();
-    //TEST_EXPECT(Perft(pos, 4) == 3894594u);
-    TEST_EXPECT(Perft(pos, 5) == 164075551u);
+    //TEST_EXPECT(pos.Perft(4) == 3894594u);
+    TEST_EXPECT(pos.Perft(5) == 164075551u);
     auto finish = std::chrono::high_resolution_clock::now();
 
     std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
@@ -74,7 +34,7 @@ void RunTests()
     // FEN parsing
     {
         // initial position
-        TEST_EXPECT(Position().FromFEN(initPositionFEN));
+        TEST_EXPECT(Position().FromFEN(Position::InitPositionFEN));
 
         // only kings
         TEST_EXPECT(Position().FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 0 1"));
@@ -99,8 +59,8 @@ void RunTests()
 
     // FEN printing
     {
-        Position pos(initPositionFEN);
-        TEST_EXPECT(pos.ToFEN() == initPositionFEN);
+        Position pos(Position::InitPositionFEN);
+        TEST_EXPECT(pos.ToFEN() == Position::InitPositionFEN);
     }
 
     // king moves
@@ -300,7 +260,7 @@ void RunTests()
 
     // moves from starting position
     {
-        Position pos(initPositionFEN);
+        Position pos(Position::InitPositionFEN);
         MoveList moveList; pos.GenerateMoveList(moveList);
         TEST_EXPECT(moveList.Size() == 20u);
     }
@@ -309,7 +269,7 @@ void RunTests()
     {
         // move (invalid)
         {
-            Position pos(initPositionFEN);
+            Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e3e4");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(!pos.IsMoveValid(move));
@@ -317,7 +277,7 @@ void RunTests()
 
         // move pawn (invalid)
         {
-            Position pos(initPositionFEN);
+            Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e2e2");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(!pos.IsMoveValid(move));
@@ -325,7 +285,7 @@ void RunTests()
 
         // move pawn (invalid)
         {
-            Position pos(initPositionFEN);
+            Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e2f3");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(!pos.IsMoveValid(move));
@@ -333,7 +293,7 @@ void RunTests()
 
         // move pawn (valid)
         {
-            Position pos(initPositionFEN);
+            Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e2e4");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.fromSquare == Square_e2);
@@ -728,184 +688,184 @@ void RunTests()
 
     {
         const Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 1) == 18u);
+        TEST_EXPECT(pos.Perft(1) == 18u);
     }
 
     {
         const Position pos("rnbqkbnr/1ppppppp/p7/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 2) == 511u);
+        TEST_EXPECT(pos.Perft(2) == 511u);
     }
 
     {
         const Position pos("rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 3) == 11959u);
+        TEST_EXPECT(pos.Perft(3) == 11959u);
     }
 
     {
         const Position pos("rnb1kbnr/pp1ppppp/1qp5/1P6/8/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 1) == 21u);
+        TEST_EXPECT(pos.Perft(1) == 21u);
     }
 
     {
         const Position pos("rnbqkbnr/pp1ppppp/2p5/1P6/8/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 2) == 458u);
+        TEST_EXPECT(pos.Perft(2) == 458u);
     }
 
     {
         const Position pos("rnbqkbnr/pp1ppppp/2p5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 3) == 10257u);
+        TEST_EXPECT(pos.Perft(3) == 10257u);
     }
 
     {
         const Position pos("rnbqkbnr/pppppppp/8/8/1P6/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(Perft(pos, 4) == 216145u);
+        TEST_EXPECT(pos.Perft(4) == 216145u);
     }
 
     // Perft
     {
         // initial position
         {
-            const Position pos(initPositionFEN);
-            TEST_EXPECT(Perft(pos, 1) == 20u);
-            TEST_EXPECT(Perft(pos, 2) == 400u);
-            TEST_EXPECT(Perft(pos, 3) == 8902u);
-            TEST_EXPECT(Perft(pos, 4) == 197281u);
-            //TEST_EXPECT(Perft(pos, 5) == 4865609u);
-            //TEST_EXPECT(Perft(pos, 6) == 119060324u);
+            const Position pos(Position::InitPositionFEN);
+            TEST_EXPECT(pos.Perft(1) == 20u);
+            TEST_EXPECT(pos.Perft(2) == 400u);
+            TEST_EXPECT(pos.Perft(3) == 8902u);
+            TEST_EXPECT(pos.Perft(4) == 197281u);
+            //TEST_EXPECT(pos.Perft(5) == 4865609u);
+            //TEST_EXPECT(pos.Perft(6) == 119060324u);
         }
 
         // kings only
         {
             const Position pos("2k2K2/8/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 4) == 848u);
-            TEST_EXPECT(Perft(pos, 6) == 29724u);
+            TEST_EXPECT(pos.Perft(4) == 848u);
+            TEST_EXPECT(pos.Perft(6) == 29724u);
         }
 
         // kings + knight vs. king
         {
             const Position pos("2k2K2/5N2/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 2) == 41u);
-            TEST_EXPECT(Perft(pos, 4) == 2293u);
-            TEST_EXPECT(Perft(pos, 6) == 130360u);
+            TEST_EXPECT(pos.Perft(2) == 41u);
+            TEST_EXPECT(pos.Perft(4) == 2293u);
+            TEST_EXPECT(pos.Perft(6) == 130360u);
         }
 
         // kings + rook vs. king
         {
             const Position pos("2k2K2/5R2/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 17u);
-            TEST_EXPECT(Perft(pos, 2) == 53u);
-            TEST_EXPECT(Perft(pos, 4) == 3917u);
-            TEST_EXPECT(Perft(pos, 6) == 338276u);
+            TEST_EXPECT(pos.Perft(1) == 17u);
+            TEST_EXPECT(pos.Perft(2) == 53u);
+            TEST_EXPECT(pos.Perft(4) == 3917u);
+            TEST_EXPECT(pos.Perft(6) == 338276u);
         }
 
         // kings + bishop vs. king
         {
             const Position pos("2k2K2/5B2/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 2) == 58u);
-            TEST_EXPECT(Perft(pos, 4) == 4269u);
-            TEST_EXPECT(Perft(pos, 6) == 314405u);
+            TEST_EXPECT(pos.Perft(2) == 58u);
+            TEST_EXPECT(pos.Perft(4) == 4269u);
+            TEST_EXPECT(pos.Perft(6) == 314405u);
         }
 
         // kings + pawn vs. king
         {
             const Position pos("2k3K1/4P3/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 2) == 33u);
-            TEST_EXPECT(Perft(pos, 4) == 2007u);
-            TEST_EXPECT(Perft(pos, 6) == 136531u);
+            TEST_EXPECT(pos.Perft(2) == 33u);
+            TEST_EXPECT(pos.Perft(4) == 2007u);
+            TEST_EXPECT(pos.Perft(6) == 136531u);
         }
 
         // castlings
         {
             const Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 26u);
-            TEST_EXPECT(Perft(pos, 2) == 568u);
-            //TEST_EXPECT(Perft(pos, 4) == 314346u);
+            TEST_EXPECT(pos.Perft(1) == 26u);
+            TEST_EXPECT(pos.Perft(2) == 568u);
+            //TEST_EXPECT(pos.Perft(4) == 314346u);
         }
 
         // kings + 2 queens
         {
             const Position pos("q3k2q/8/8/8/8/8/8/Q3K2Q w - - 0 1");
-            TEST_EXPECT(Perft(pos, 2) == 1040u);
-            TEST_EXPECT(Perft(pos, 4) == 979543u);
-            //TEST_EXPECT(Perft(pos, 6) == 923005707u);
+            TEST_EXPECT(pos.Perft(2) == 1040u);
+            TEST_EXPECT(pos.Perft(4) == 979543u);
+            //TEST_EXPECT(pos.Perft(6) == 923005707u);
         }
 
         // max moves
         {
             const Position pos("R6R/3Q4/1Q4Q1/4Q3/2Q4Q/Q4Q2/pp1Q4/kBNN1KB1 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 218u);
+            TEST_EXPECT(pos.Perft(1) == 218u);
         }
 
         // discovered double check via en passant
         {
             const Position pos("8/6p1/7k/7P/5B1R/8/8/7K b - - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 2u);
-            TEST_EXPECT(Perft(pos, 2) == 35u);
-            TEST_EXPECT(Perft(pos, 3) == 134u);
+            TEST_EXPECT(pos.Perft(1) == 2u);
+            TEST_EXPECT(pos.Perft(2) == 35u);
+            TEST_EXPECT(pos.Perft(3) == 134u);
         }
 
         // Kiwipete
         {
             const Position pos("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 40u);
+            TEST_EXPECT(pos.Perft(1) == 40u);
         }
 
         // Kiwipete
         {
             const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BK2R b KQkq - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 44u);
-            TEST_EXPECT(Perft(pos, 2) == 1733u);
+            TEST_EXPECT(pos.Perft(1) == 44u);
+            TEST_EXPECT(pos.Perft(2) == 1733u);
         }
 
         // Position 2 - Kiwipete
         {
             const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 48u);
-            TEST_EXPECT(Perft(pos, 2) == 2039u);
-            TEST_EXPECT(Perft(pos, 3) == 97862u);
-            TEST_EXPECT(Perft(pos, 4) == 4085603u);
+            TEST_EXPECT(pos.Perft(1) == 48u);
+            TEST_EXPECT(pos.Perft(2) == 2039u);
+            TEST_EXPECT(pos.Perft(3) == 97862u);
+            TEST_EXPECT(pos.Perft(4) == 4085603u);
         }
 
         // Position 3
         {
             const Position pos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 14u);
-            TEST_EXPECT(Perft(pos, 2) == 191u);
-            TEST_EXPECT(Perft(pos, 3) == 2812u);
-            TEST_EXPECT(Perft(pos, 4) == 43238u);
-            //TEST_EXPECT(Perft(pos, 5) == 674624u);
+            TEST_EXPECT(pos.Perft(1) == 14u);
+            TEST_EXPECT(pos.Perft(2) == 191u);
+            TEST_EXPECT(pos.Perft(3) == 2812u);
+            TEST_EXPECT(pos.Perft(4) == 43238u);
+            //TEST_EXPECT(pos.Perft(5) == 674624u);
         }
 
         // Position 4
         {
             const Position pos("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
-            TEST_EXPECT(Perft(pos, 1) == 6u);
-            TEST_EXPECT(Perft(pos, 2) == 264u);
-            TEST_EXPECT(Perft(pos, 3) == 9467u);
-            TEST_EXPECT(Perft(pos, 4) == 422333u);
-            //TEST_EXPECT(Perft(pos, 5) == 15833292u);
+            TEST_EXPECT(pos.Perft(1) == 6u);
+            TEST_EXPECT(pos.Perft(2) == 264u);
+            TEST_EXPECT(pos.Perft(3) == 9467u);
+            TEST_EXPECT(pos.Perft(4) == 422333u);
+            //TEST_EXPECT(pos.Perft(5) == 15833292u);
         }
 
         // Position 5
         {
             const Position pos("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
-            TEST_EXPECT(Perft(pos, 1) == 44u);
-            TEST_EXPECT(Perft(pos, 2) == 1486u);
-            TEST_EXPECT(Perft(pos, 3) == 62379u);
-            TEST_EXPECT(Perft(pos, 4) == 2103487u);
-            //TEST_EXPECT(Perft(pos, 5) == 89941194u);
+            TEST_EXPECT(pos.Perft(1) == 44u);
+            TEST_EXPECT(pos.Perft(2) == 1486u);
+            TEST_EXPECT(pos.Perft(3) == 62379u);
+            TEST_EXPECT(pos.Perft(4) == 2103487u);
+            //TEST_EXPECT(pos.Perft(5) == 89941194u);
         }
 
         // Position 6
         {
             const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
-            TEST_EXPECT(Perft(pos, 1) == 46u);
-            TEST_EXPECT(Perft(pos, 2) == 2079u);
-            TEST_EXPECT(Perft(pos, 3) == 89890u);
-            TEST_EXPECT(Perft(pos, 4) == 3894594u);
-            //TEST_EXPECT(Perft(pos, 5) == 164075551u);
-            //TEST_EXPECT(Perft(pos, 6) == 6923051137llu);
-            //TEST_EXPECT(Perft(pos, 7) == 287188994746llu);
+            TEST_EXPECT(pos.Perft(1) == 46u);
+            TEST_EXPECT(pos.Perft(2) == 2079u);
+            TEST_EXPECT(pos.Perft(3) == 89890u);
+            TEST_EXPECT(pos.Perft(4) == 3894594u);
+            //TEST_EXPECT(pos.Perft(5) == 164075551u);
+            //TEST_EXPECT(pos.Perft(6) == 6923051137llu);
+            //TEST_EXPECT(pos.Perft(7) == 287188994746llu);
         }
     }
 }
@@ -1059,7 +1019,7 @@ void RunSearchPerfTest()
 
 void SelfMatch()
 {
-    Position position(initPositionFEN);
+    Position position(Position::InitPositionFEN);
 
     Search search;
 
@@ -1100,7 +1060,7 @@ void SelfMatch()
 
 void PlayGame()
 {
-    Position position(initPositionFEN);
+    Position position(Position::InitPositionFEN);
 
     Search search;
     for (;;)
@@ -1178,10 +1138,16 @@ int main()
     //RunTests();
     //RunPerft();
     //RunSearchTests();
-    RunSearchPerfTest();
+    //RunSearchPerfTest();
     //SelfMatch();
 
    // PlayGame();
 
-    return 0;
+    bool uciLoopResult = false;
+    {
+        UniversalChessInterface uci;
+        uciLoopResult = uci.Loop();
+    }
+
+    return uciLoopResult ? 0 : 1;
 }

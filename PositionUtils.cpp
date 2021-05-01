@@ -101,6 +101,8 @@ bool Position::IsValid() const
 
 bool Position::FromFEN(const std::string& fenString)
 {
+    *this = Position();
+
     int numSpaces = 0;
     int numRows = 1;
     for (const char p : fenString)
@@ -691,4 +693,43 @@ bool Position::IsMoveValid(const Move& move) const
     }
 
     return isMoveValid;
+}
+
+uint64_t Position::Perft(uint32_t depth, bool print) const
+{
+    if (print)
+    {
+        std::cout << "Running Perft... depth=" << depth << std::endl;
+    }
+
+    MoveList moveList;
+    GenerateMoveList(moveList);
+
+    uint64_t nodes = 0;
+    for (uint32_t i = 0; i < moveList.Size(); i++)
+    {
+        const Move& move = moveList.GetMove(i);
+
+        Position child = *this;
+        if (!child.DoMove(move))
+        {
+            continue;
+        }
+
+        uint64_t numChildNodes = depth == 1 ? 1 : child.Perft(depth - 1, false);
+
+        if (print)
+        {
+            std::cout << move.ToString() << ": " << numChildNodes << std::endl;
+        }
+
+        nodes += numChildNodes;
+    }
+
+    if (print)
+    {
+        std::cout << "Total nodes: " << nodes << std::endl;
+    }
+
+    return nodes;
 }

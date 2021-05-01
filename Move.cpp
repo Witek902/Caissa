@@ -9,5 +9,10 @@ std::string Move::ToString() const
     str += fromSquare.ToString();
     str += toSquare.ToString();
 
+    if (promoteTo != Piece::None)
+    {
+        str += PieceToChar(promoteTo);
+    }
+
     return str;
 }

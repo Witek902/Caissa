@@ -79,6 +79,8 @@ class MoveList;
 class Position
 {
 public:
+    static const char* InitPositionFEN;
+
     Position();
     Position(const Position&) = default;
     Position(const std::string& fenString);
@@ -137,6 +139,9 @@ public:
 
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
+
+    // run performance test
+    uint64_t Perft(uint32_t depth, bool print = true) const;
 
     const SidePosition& Whites() const { return mWhites; }
     const SidePosition& Blacks() const { return mBlacks; }
