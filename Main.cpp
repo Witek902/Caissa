@@ -945,11 +945,16 @@ bool RunSearchTests()
 
                 SearchParam searchParam;
                 searchParam.debugLog = false;
-                searchParam.transpositionTableSize = 8 * 1024 * 1024;
-                searchParam.maxDepth = 12;
+                searchParam.maxDepth = 10;
+
+                SearchResult searchResult;
+                search.DoSearch(position, searchParam, searchResult);
 
                 Move foundMove;
-                search.DoSearch(position, foundMove, searchParam);
+                if (!searchResult[0].moves.empty())
+                {
+                    foundMove = searchResult[0].moves[0];
+                }
 
                 if (!foundMove.IsValid())
                 {
@@ -1001,8 +1006,8 @@ void RunSearchPerfTest()
     Search search;
 
     //const Position position("k7/3Q4/pp6/8/8/1q3PPP/5PPP/7K w - - 0 1"); // repetition
-    //const Position position("r2q1r1k/pb3p1p/2n1p2Q/5p2/8/3B2N1/PP3PPP/R3R1K1 w - - 0 1");
-    const Position position("r1k4r/ppp1bq1p/2n1N3/6B1/3p2Q1/8/PPP2PPP/R5K1 w - - 0 1"); // mate in 6
+    const Position position("r2q1r1k/pb3p1p/2n1p2Q/5p2/8/3B2N1/PP3PPP/R3R1K1 w - - 0 1");
+    //const Position position("r1k4r/ppp1bq1p/2n1N3/6B1/3p2Q1/8/PPP2PPP/R5K1 w - - 0 1"); // mate in 6
     //const Position position("1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1"); // Lucena
     //const Position position("8/6k1/8/8/8/8/P7/7K w - - 0 1");
     //const Position position("8/8/8/3k4/8/8/8/3KQ3 w - - 0 1");
@@ -1011,10 +1016,13 @@ void RunSearchPerfTest()
 
     SearchParam searchParam;
     searchParam.debugLog = true;
-    searchParam.maxDepth = 5;
+    searchParam.maxDepth = 8;
+    searchParam.numPvLines = 1;
 
-    Move foundMove;
-    search.DoSearch(position, foundMove, searchParam);
+    SearchResult searchResult;
+    search.DoSearch(position, searchParam, searchResult);
+    search.DoSearch(position, searchParam, searchResult);
+    search.DoSearch(position, searchParam, searchResult);
 }
 
 void SelfMatch()
@@ -1033,11 +1041,19 @@ void SelfMatch()
         searchParam.debugLog = true;
         searchParam.maxDepth = 12;
 
+        SearchResult searchResult;
+        search.DoSearch(position, searchParam, searchResult);
+
         Move bestMove;
-        const Search::ScoreType score = search.DoSearch(position, bestMove, searchParam);
+        if (!searchResult[0].moves.empty())
+        {
+            bestMove = searchResult[0].moves[0];
+        }
 
         if (!bestMove.IsValid())
         {
+            int32_t score = searchResult[0].score;
+
             if (score > 0)
             {
                 std::cout << "WHITES WON!" << std::endl;
@@ -1058,78 +1074,6 @@ void SelfMatch()
     }
 }
 
-void PlayGame()
-{
-    Position position(Position::InitPositionFEN);
-
-    Search search;
-    for (;;)
-    {
-        std::cout << position.Print() << std::endl;
-
-        Move move;
-        for (;;)
-        {
-            std::string moveStr;
-            std::cout << "Type move: ";
-            std::cin >> moveStr;
-
-            move = position.MoveFromString(moveStr);
-            if (!move.IsValid())
-            {
-                std::cout << "Invalid move!" << std::endl;
-                continue;
-            }
-
-            if (!position.IsMoveValid(move))
-            {
-                std::cout << "Invalid move!" << std::endl;
-                continue;
-            }
-
-            Position posAfterMove = position;
-            if (!posAfterMove.IsMoveLegal(move))
-            {
-                std::cout << "Illegal move!" << std::endl;
-                continue;
-            }
-
-            break;
-        }
-
-        {
-            const bool moveOK = position.DoMove(move);
-            ASSERT(moveOK);
-        }
-
-        std::cout << position.Print() << std::endl;
-
-        SearchParam searchParam;
-        searchParam.debugLog = true;
-        searchParam.maxDepth = 8;
-
-        Move bestMove;
-        Search::ScoreType score = search.DoSearch(position, bestMove, searchParam);
-
-        if (score <= Search::CheckmateValue)
-        {
-            std::cout << "Whites win!" << std::endl;
-            return;
-        }
-
-        if (score >= -Search::CheckmateValue)
-        {
-            std::cout << "Blacks win!" << std::endl;
-            return;
-        }
-
-        {
-            const bool moveOK = position.DoMove(bestMove);
-            ASSERT(moveOK);
-        }
-    }
-}
-
 int main()
 {
     InitBitboards(); 
@@ -1139,11 +1083,9 @@ int main()
 
     //RunTests();
     //RunPerft();
-    //RunSearchTests();
+    RunSearchTests();
     //RunSearchPerfTest();
     //SelfMatch();
-
-   // PlayGame();
 
     bool uciLoopResult = false;
     {

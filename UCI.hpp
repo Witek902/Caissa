@@ -10,6 +10,7 @@
 class UniversalChessInterface
 {
 public:
+    UniversalChessInterface();
     bool Loop();
 
 private:

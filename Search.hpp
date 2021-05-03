@@ -2,36 +2,25 @@
 
 #include "Position.hpp"
 #include "Move.hpp"
+#include "TranspositionTable.hpp"
 
 #include <unordered_map>
-
-
-
-struct TranspositionTableEntry
-{
-    enum Flags : uint8_t
-    {
-        Flag_Invalid,
-        Flag_Exact,
-        Flag_LowerBound,
-        Flag_UpperBound,
-    };
-
-    uint64_t positionHash;
-    int32_t score = INT32_MIN;
-    PackedMove move;
-    uint8_t depth = 0;
-    Flags flag = Flag_Invalid;
-};
-
-static_assert(sizeof(TranspositionTableEntry) == 16, "TT entry is too big");
+#include <span>
 
 struct SearchParam
 {
-    uint32_t transpositionTableSize = 16 * 1024 * 1024;
     uint32_t maxDepth = 8;
+    uint32_t numPvLines = 1;
     bool debugLog = true;
 };
+
+struct PvLine
+{
+    std::vector<Move> moves;
+    int32_t score = 0;
+};
+
+using SearchResult = std::vector<PvLine>;
 
 class Search
 {
@@ -45,12 +34,14 @@ public:
 
     Search();
 
-    ScoreType DoSearch(const Position& position, Move& outBestMove, const SearchParam& param);
+    void DoSearch(const Position& position, const SearchParam& param, SearchResult& result);
 
     void RecordBoardPosition(const Position& position);
 
     // check if a position was repeated 2 times
     bool IsPositionRepeated(const Position& position, uint32_t repetitionCount = 2u) const;
+
+    const TranspositionTable& GetTranspositionTable() const { return mTranspositionTable; }
 
 private:
 
@@ -60,10 +51,12 @@ private:
     {
         const Position* position = nullptr;
         const NodeInfo* parentNode = nullptr;
-        uint8_t depth;
-        uint8_t maxDepth;
         ScoreType alpha;
         ScoreType beta;
+        std::span<Move> moveFilter; // ignore given moves in search, used for multi-PV search
+        uint8_t pvIndex;
+        uint8_t depth;
+        uint8_t maxDepth;
         Color color;
         bool isPvNode = false;
     };
@@ -90,17 +83,18 @@ private:
         uint32_t count = 0;     // how many times it occurred during the game
     };
 
+    std::atomic<bool> mStopSearch = false;
+
     using GameHistoryPositionEntry = std::vector<GameHistoryPosition>;
 
     // principial variation moves tracking for current search
     PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
     uint16_t pvLengths[MaxSearchDepth];
 
-    // principial variation line from previous iterative deepening search
-    uint16_t prevPvArrayLength;
-    PvLineEntry prevPvArray[MaxSearchDepth];
+    // principial variation lines from previous iterative deepening search
+    SearchResult mPrevPvLines;
 
-    std::vector<TranspositionTableEntry> transpositionTable;
+    TranspositionTable mTranspositionTable;
 
     uint32_t searchHistory[2][6][64];
 
@@ -112,12 +106,8 @@ private:
     ScoreType QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx);
     ScoreType NegaMax(const NodeInfo& node, SearchContext& ctx);
 
-    TranspositionTableEntry* ReadTranspositionTable(const Position& position);
-    void WriteTranspositionTable(const TranspositionTableEntry& entry);
-    void PrefetchTranspositionTableEntry(const Position& position) const;
-
     // check if one of generated moves is in PV table
-    const Move FindPvMove(uint32_t depth, const uint64_t positionHash, MoveList& moves) const;
+    const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
     void FindHistoryMoves(Color color, MoveList& moves) const;
     void FindKillerMoves(uint32_t depth, MoveList& moves) const;
 

@@ -91,7 +91,7 @@ public:
 
     Position();
     Position(const Position&) = default;
-    Position(const std::string& fenString);
+    explicit Position(const std::string& fenString);
 
     // compare position (not hash)
     bool operator == (const Position& rhs) const;

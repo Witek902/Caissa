@@ -169,6 +169,8 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -189,6 +191,8 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <OmitFramePointers>true</OmitFramePointers>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -211,6 +215,8 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <OmitFramePointers>true</OmitFramePointers>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -229,6 +235,7 @@
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="Square.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
+    <ClCompile Include="TranspositionTable.cpp" />
     <ClCompile Include="UCI.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -242,6 +249,7 @@
     <ClInclude Include="Search.hpp" />
     <ClInclude Include="Square.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
+    <ClInclude Include="TranspositionTable.hpp" />
     <ClInclude Include="UCI.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

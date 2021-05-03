@@ -8,3 +8,9 @@
 
 #define INLINE __forceinline
 #define NO_INLINE __declspec(noinline)
+
+template<typename T>
+INLINE constexpr bool IsPowerOfTwo(const T n)
+{
+    return (n & (n - 1)) == 0;
+}

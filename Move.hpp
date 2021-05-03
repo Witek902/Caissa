@@ -107,6 +107,8 @@ public:
     const Move& GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index].move; }
     const MoveEntry& GetMoveEntry(uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
 
+    void RemoveMove(const Move& move);
+
     Move PickBestMove(uint32_t index)
     {
         ASSERT(index < numMoves);

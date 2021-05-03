@@ -1,8 +1,14 @@
 #include "UCI.hpp"
 #include "Move.hpp"
+#include "Evaluate.hpp"
 
 #include <sstream>
 #include <iostream>
+
+UniversalChessInterface::UniversalChessInterface()
+{
+    mPosition.FromFEN(Position::InitPositionFEN);
+}
 
 bool UniversalChessInterface::Loop()
 {
@@ -74,6 +80,15 @@ bool UniversalChessInterface::Loop()
         {
             std::unique_lock<std::mutex> lock(mMutex);
             std::cout << mPosition.Print() << std::endl;
+        }
+        else if (command == "eval")
+        {
+            std::cout << Evaluate(mPosition) << std::endl;
+        }
+        else if (command == "ttinfo")
+        {
+            std::unique_lock<std::mutex> lock(mMutex);
+            std::cout << "TT entries in use: " << mSearch.GetTranspositionTable().GetNumUsedEntries() << std::endl;
         }
         else
         {
@@ -234,15 +249,18 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     SearchParam searchParam;
     searchParam.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
+    //searchParam.numPvLines = 4;
 
-    Move bestMove;
-    mSearch.DoSearch(mPosition, bestMove, searchParam);
+    SearchResult searchResult;
+    mSearch.DoSearch(mPosition, searchParam, searchResult);
 
-    if (bestMove.IsValid())
+    if (!searchResult[0].moves.empty())
     {
+        const Move bestMove = searchResult[0].moves[0];
         std::cout << "bestmove " << bestMove.ToString() << std::endl;
-        // TODO ponder
     }
+
+    // TODO ponder
 
     return true;
 }
