@@ -5,6 +5,11 @@
 #include <sstream>
 #include <iostream>
 
+extern void RunUnitTests();
+extern void RunPerft();
+extern bool RunSearchTests();
+extern void RunSearchPerfTest();
+
 UniversalChessInterface::UniversalChessInterface()
 {
     mPosition.FromFEN(Position::InitPositionFEN);
@@ -89,6 +94,16 @@ bool UniversalChessInterface::Loop()
         {
             std::unique_lock<std::mutex> lock(mMutex);
             std::cout << "TT entries in use: " << mSearch.GetTranspositionTable().GetNumUsedEntries() << std::endl;
+        }
+        else if (command == "unittest")
+        {
+            RunUnitTests();
+            std::cout << "Unit tests done." << std::endl;
+        }
+        else if (command == "searchtest")
+        {
+            RunSearchTests();
+            std::cout << "Search tests done." << std::endl;
         }
         else
         {

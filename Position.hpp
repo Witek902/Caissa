@@ -81,7 +81,7 @@ struct Move;
 struct PackedMove;
 class MoveList;
 
-#define MOVE_GEN_ONLY_CAPTURES 1
+#define MOVE_GEN_ONLY_TACTICAL 1
 
 // class representing whole board state
 class Position

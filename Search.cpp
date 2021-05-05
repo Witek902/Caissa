@@ -344,7 +344,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     uint32_t moveGenFlags = 0;
     if (!node.position->IsInCheck(node.color))
     {
-        moveGenFlags |= MOVE_GEN_ONLY_CAPTURES;
+        moveGenFlags |= MOVE_GEN_ONLY_TACTICAL;
     }
 
     MoveList moves;

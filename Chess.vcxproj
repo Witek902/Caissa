@@ -234,6 +234,7 @@
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="Square.cpp" />
+    <ClCompile Include="Tests.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="TranspositionTable.cpp" />
     <ClCompile Include="UCI.cpp" />
