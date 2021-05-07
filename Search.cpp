@@ -6,6 +6,14 @@
 #include <string>
 #include <chrono>
 
+static const uint32_t BetaPruningDepth = 6;
+static const int32_t BetaMarginMultiplier = 100;
+static const int32_t BetaMarginBias = 50;
+
+static const uint32_t AlphaPruningDepth = 6;
+static const int32_t AlphaMarginMultiplier = 100;
+static const int32_t AlphaMarginBias = 3000;
+
 Search::Search()
 {
 #ifndef _DEBUG
@@ -73,14 +81,14 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
     for (uint32_t depth = 1; depth <= param.maxDepth; ++depth)
     {
-        auto startTime = std::chrono::high_resolution_clock::now();
-
         memset(searchHistory, 0, sizeof(searchHistory));
         memset(killerMoves, 0, sizeof(killerMoves));
         pvMovesSoFar.clear();
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
+            auto startTime = std::chrono::high_resolution_clock::now();
+
             memset(pvArray, 0, sizeof(pvArray));
             memset(pvLengths, 0, sizeof(pvLengths));
 
@@ -95,6 +103,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
             rootNode.alpha = alpha;
             rootNode.beta = beta;
             rootNode.color = position.GetSideToMove();
+            rootNode.rootMoves = param.rootMoves;
             
             if (pvIndex > 0u)
             {
@@ -152,6 +161,10 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
                 pvMovesSoFar.push_back(outPvLine.moves.front());
             }
+            else
+            {
+                break;
+            }
 
             auto endTime = std::chrono::high_resolution_clock::now();
 
@@ -159,6 +172,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
             {
                 std::cout << "info";
                 std::cout << " depth " << (uint32_t)depth;
+                std::cout << " seldepth " << (uint32_t)context.maxDepth;
                 if (param.numPvLines > 1)
                 {
                     std::cout << " multipv " << (pvIndex + 1);
@@ -290,6 +304,20 @@ void Search::UpdateSearchHistory(const NodeInfo& node, const Move move)
     historyCounter = (uint32_t)newValue;
 }
 
+void Search::RegisterKillerMove(const NodeInfo& node, const Move move)
+{
+    if (move.isCapture)
+    {
+        return;
+    }
+
+    for (uint32_t j = NumKillerMoves; j-- > 1u; )
+    {
+        killerMoves[node.depth][j] = killerMoves[node.depth][j - 1];
+    }
+    killerMoves[node.depth][0] = move;
+}
+
 bool Search::IsRepetition(const NodeInfo& node) const
 {
     const NodeInfo* parentNode = node.parentNode;
@@ -316,7 +344,14 @@ bool Search::IsRepetition(const NodeInfo& node) const
 
 Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx)
 {
+    // clean PV line
+    ASSERT(node.depth < MaxSearchDepth);
+    pvLengths[node.depth] = node.depth;
+
+    // update stats
+    ctx.nodes++;
     ctx.quiescenceNodes++;
+    ctx.maxDepth = std::max<uint32_t>(ctx.maxDepth, node.depth);
 
     if (IsRepetition(node))
     {
@@ -337,7 +372,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
 
     NodeInfo childNodeParam;
     childNodeParam.parentNode = &node;
-    childNodeParam.depth = 0;
+    childNodeParam.depth = node.depth + 1;
     childNodeParam.maxDepth = 0;
     childNodeParam.color = GetOppositeColor(node.color);
 
@@ -381,6 +416,8 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
         {
             alpha = score;
             bestMove = move;
+
+            //UpdatePvArray(node.depth, move);
         }
 
         if (score >= beta)
@@ -423,16 +460,30 @@ int32_t Search::PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t
 
 Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 {
+    // clean PV line
+    ASSERT(node.depth < MaxSearchDepth);
     pvLengths[node.depth] = node.depth;
 
-    if (IsRepetition(node))
-    {
-        return 0;
-    }
+    // update stats
+    ctx.nodes++;
+    ctx.maxDepth = std::max<uint32_t>(ctx.maxDepth, node.depth);
 
-    if (CheckInsufficientMaterial(*node.position))
+    // root node is the first node in the chain (best move)
+    const bool isRootNode = node.depth == 0;
+
+    // Check for draw
+    // Skip root node as we need some move to be reported
+    if (!isRootNode)
     {
-        return 0;
+        if (IsRepetition(node))
+        {
+            return 0;
+        }
+
+        if (CheckInsufficientMaterial(*node.position))
+        {
+            return 0;
+        }
     }
 
     const bool isInCheck = node.position->IsInCheck(node.color);
@@ -444,10 +495,14 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
     // transposition table lookup
     PackedMove ttMove;
+    ScoreType ttScore = InvalidValue;
     const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(*node.position);
 
     if (ttEntry)
     {
+        // always use hash move as a good first guess
+        ttMove = ttEntry->move;
+
         const bool isFilteredMove = std::find(node.moveFilter.begin(), node.moveFilter.end(), ttEntry->move) != node.moveFilter.end();
 
         // TODO check if the move is valid move for current position
@@ -460,8 +515,6 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             if (ttEntry->flag == TranspositionTableEntry::Flag_Exact)
             {
                 return ttEntry->score;
-                //alpha = ttEntry->score;
-                //beta = ttEntry->score;
             }
             else if (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound)
             {
@@ -476,17 +529,55 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             {
                 return alpha;
             }
-        }
 
-        ttMove = ttEntry->move;
+            ttScore = ttEntry->score;
+        }
+        else
+        {
+            ttEntry = nullptr;
+        }
     }
 
+    // mate distance prunning
+    if (!isRootNode)
+    {
+        int32_t mateDistanceScore = PruneByMateDistance(node, alpha, beta);
+        if (mateDistanceScore != 0)
+        {
+            return mateDistanceScore;
+        }
+    }
+
+
+    // TODO endgame tables probing here
+
+
+    // maximum search depth reached, enter quisence search to find final evaluation
     if (node.depth >= node.maxDepth)
     {
         return QuiescenceNegaMax(node, ctx);
     }
 
-    ctx.nodes++;
+    // determine static evaluation of the board
+    int32_t staticEvaluation = ttScore;
+    if (staticEvaluation == InvalidValue)
+    {
+        staticEvaluation = ColorMultiplier(node.color) * Evaluate(*node.position);
+    }
+
+    // Beta Pruning
+    if (!node.isPvNode && !isInCheck && inversedDepth <= BetaPruningDepth
+        && (staticEvaluation - BetaMarginBias - BetaMarginMultiplier * inversedDepth > beta))
+    {
+        return staticEvaluation;
+    }
+
+    // Alpha Pruning
+    if (!node.isPvNode && !isInCheck && inversedDepth <= AlphaPruningDepth
+        && (staticEvaluation + BetaMarginBias + BetaMarginMultiplier * inversedDepth <= alpha))
+    {
+        return staticEvaluation;
+    }
 
     NodeInfo childNodeParam;
     childNodeParam.parentNode = &node;
@@ -494,7 +585,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     childNodeParam.color = GetOppositeColor(node.color);
     childNodeParam.pvIndex = node.pvIndex;
 
-    uint8_t childNodeMaxDepth = node.maxDepth;
+    uint16_t childNodeMaxDepth = node.maxDepth;
 
     // check extension
     if (isInCheck)
@@ -508,12 +599,28 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     MoveList moves;
     node.position->GenerateMoveList(moves);
 
-    // apply node filter (used for multi-PV search for 2nd, 3rd, etc. moves)
-    if (!node.moveFilter.empty())
+    if (isRootNode)
     {
-        for (const Move& move : node.moveFilter)
+        // apply node filter (used for multi-PV search for 2nd, 3rd, etc. moves)
+        if (!node.moveFilter.empty())
         {
-            moves.RemoveMove(move);
+            for (const Move& move : node.moveFilter)
+            {
+                moves.RemoveMove(move);
+            }
+        }
+
+        // apply node filter (used for "searchmoves" UCI command)
+        if (!node.rootMoves.empty())
+        {
+            // TODO
+            //for (const Move& move : node.rootMoves)
+            //{
+            //    if (!moves.HasMove(move))
+            //    {
+            //        moves.RemoveMove(move);
+            //    }
+            //}
         }
     }
 
@@ -536,15 +643,6 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
                     break;
                 }
             }
-        }
-    }
-
-    // mate distance prunning
-    {
-        int32_t mateDistanceScore = PruneByMateDistance(node, alpha, beta);
-        if (mateDistanceScore != 0)
-        {
-            return mateDistanceScore;
         }
     }
 
@@ -653,14 +751,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             ctx.fh++;
             if (numLegalMoves == 1u) ctx.fhf++;
 
-            if (!move.isCapture)
-            {
-                for (uint32_t j = NumKillerMoves; j-- > 1u; )
-                {
-                    killerMoves[node.depth][j] = killerMoves[node.depth][j - 1];
-                }
-                killerMoves[node.depth][0] = move;
-            }
+            RegisterKillerMove(node, move);
 
             betaCutoff = true;
             break;

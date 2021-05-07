@@ -4,16 +4,13 @@
 #include "Search.hpp"
 #include "UCI.hpp"
 
-int main()
+int main(int argc, const char* argv[])
 {
     InitBitboards(); 
     InitZobristHash();
 
-    bool uciLoopResult = false;
-    {
-        UniversalChessInterface uci;
-        uciLoopResult = uci.Loop();
-    }
+    UniversalChessInterface uci(argc, argv);
+    uci.Loop();
 
-    return uciLoopResult ? 0 : 1;
+    return 0;
 }

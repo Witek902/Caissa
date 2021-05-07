@@ -4,111 +4,136 @@
 
 #include <sstream>
 #include <iostream>
+#include <algorithm>
 
 extern void RunUnitTests();
 extern void RunPerft();
 extern bool RunSearchTests();
 extern void RunSearchPerfTest();
 
-UniversalChessInterface::UniversalChessInterface()
+UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
     mPosition.FromFEN(Position::InitPositionFEN);
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (argv[i])
+        {
+            std::cout << "CommandLine: " << argv[i] << std::endl;
+            ExecuteCommand(argv[i]);
+        }
+    }
 }
 
-bool UniversalChessInterface::Loop()
+void UniversalChessInterface::Loop()
 {
     std::string str;
 
     while (std::getline(std::cin, str))
     {
-        std::istringstream iss(str);
-        std::vector<std::string> args(
-            std::istream_iterator<std::string>{iss},
-            std::istream_iterator<std::string>());
-
-        if (args.empty())
-        {
-            std::cout << "Invalid command" << std::endl;
-            continue;
-        }
-
-        const std::string& command = args[0];
-
-        if (command == "uci")
-        {
-            std::cout << "id name MWCE\n";
-            std::cout << "id author Michal Witanowski\n";
-            std::cout << "uciok" << std::endl;
-        }
-        else if (command == "isready")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            std::cout << "readyok" << std::endl;
-        }
-        else if (command == "ucinewgame")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            // TODO
-        }
-        else if (command == "setoption")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            // TODO
-        }
-        else if (command == "position")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            Command_Position(args);
-        }
-        else if (command == "go")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            Command_Go(args);
-        }
-        else if (command == "ponderhit")
-        {
-            // TODO
-        }
-        else if (command == "stop")
-        {
-            // TODO
-        }
-        else if (command == "quit")
+        if (!ExecuteCommand(str))
         {
             break;
         }
-        else if (command == "perft")
-        {
-            Command_Perft(args);
-        }
-        else if (command == "print")
+    }
+}
+
+bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
+{
+    std::istringstream iss(commandString);
+    std::vector<std::string> args(
+        std::istream_iterator<std::string>{iss},
+        std::istream_iterator<std::string>());
+
+    if (args.empty())
+    {
+        std::cout << "Invalid command" << std::endl;
+        return true;
+    }
+
+    const std::string& command = args[0];
+
+    if (command == "uci")
+    {
+        std::cout << "id name MWCE\n";
+        std::cout << "id author Michal Witanowski\n";
+        std::cout << "uciok" << std::endl;
+    }
+    else if (command == "isready")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        std::cout << "readyok" << std::endl;
+    }
+    else if (command == "ucinewgame")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        // TODO
+    }
+    else if (command == "setoption")
+    {
+        if (args[1] == "name" && args[3] == "value")
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            std::cout << mPosition.Print() << std::endl;
-        }
-        else if (command == "eval")
-        {
-            std::cout << Evaluate(mPosition) << std::endl;
-        }
-        else if (command == "ttinfo")
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-            std::cout << "TT entries in use: " << mSearch.GetTranspositionTable().GetNumUsedEntries() << std::endl;
-        }
-        else if (command == "unittest")
-        {
-            RunUnitTests();
-            std::cout << "Unit tests done." << std::endl;
-        }
-        else if (command == "searchtest")
-        {
-            RunSearchTests();
-            std::cout << "Search tests done." << std::endl;
+            Command_SetOption(args[2], args[4]);
         }
         else
         {
             std::cout << "Invalid command" << std::endl;
         }
+    }
+    else if (command == "position")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        Command_Position(args);
+    }
+    else if (command == "go")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        Command_Go(args);
+    }
+    else if (command == "ponderhit")
+    {
+        // TODO
+    }
+    else if (command == "stop")
+    {
+        // TODO
+    }
+    else if (command == "quit")
+    {
+        return false;
+    }
+    else if (command == "perft")
+    {
+        Command_Perft(args);
+    }
+    else if (command == "print")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        std::cout << mPosition.Print() << std::endl;
+    }
+    else if (command == "eval")
+    {
+        std::cout << Evaluate(mPosition) << std::endl;
+    }
+    else if (command == "ttinfo")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        std::cout << "TT entries in use: " << mSearch.GetTranspositionTable().GetNumUsedEntries() << std::endl;
+    }
+    else if (command == "unittest")
+    {
+        RunUnitTests();
+        std::cout << "Unit tests done." << std::endl;
+    }
+    else if (command == "searchtest")
+    {
+        RunSearchTests();
+        std::cout << "Search tests done." << std::endl;
+    }
+    else
+    {
+        std::cout << "Invalid command" << std::endl;
     }
 
     return true;
@@ -204,13 +229,15 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     bool isInfinite = false;
-    uint32_t maxDepth = 8; // TODO
+    uint32_t maxDepth = UINT32_MAX; // TODO
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
     uint32_t whiteRemainingTime = 0;
     uint32_t blacksRemainingTime = 0;
     uint32_t whiteTimeIncrement = 0;
     uint32_t blacksTimeIncrement = 0;
+
+    std::vector<Move> rootMoves;
 
     for (size_t i = 1; i < args.size(); ++i)
     {
@@ -248,10 +275,20 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
         else if (args[i] == "searchmoves" && i + 1 < args.size())
         {
-            // TODO
             // restrict search to this moves only
-            // Example : After "position startpos" and "go infinite searchmoves e2e4 d2d4"
-            // the engine should only search the two moves e2e4 and d2d4 in the initial position.
+            for (size_t j = i + 1; j < args.size(); ++j)
+            {
+                const Move move = mPosition.MoveFromString(args[j]);
+                if (move.IsValid())
+                {
+                    rootMoves.push_back(move);
+                }
+                else
+                {
+                    std::cout << "Invalid move: " << args[j] << std::endl;
+                    return false;
+                }
+            }
         }
         else if (args[i] == "movestogo" && i + 1 < args.size())
         {
@@ -264,7 +301,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     SearchParam searchParam;
     searchParam.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
-    //searchParam.numPvLines = 4;
+    searchParam.numPvLines = mOptions.multiPV;
+    searchParam.rootMoves = std::move(rootMoves);
 
     SearchResult searchResult;
     mSearch.DoSearch(mPosition, searchParam, searchResult);
@@ -291,6 +329,42 @@ bool UniversalChessInterface::Command_Perft(const std::vector<std::string>& args
     uint32_t maxDepth = atoi(args[1].c_str());
 
     mPosition.Perft(maxDepth, true);
+
+    return true;
+}
+
+static void ToLower(std::string& str)
+{
+    for (char& c : str)
+    {
+        if (c <= 'Z' && c >= 'A')
+        {
+            c = (c - ('Z' - 'z'));
+        }
+    }
+}
+
+bool UniversalChessInterface::Command_SetOption(const std::string& name, const std::string& value)
+{
+    std::string lowerCaseName = name;
+    ToLower(lowerCaseName);
+
+    if (lowerCaseName == "multipv")
+    {
+        mOptions.multiPV = atoi(value.c_str());
+        mOptions.multiPV = std::max(1u, mOptions.multiPV);
+    }
+    else if (lowerCaseName == "hash")
+    {
+        size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
+        size_t numEntries = hashSize / sizeof(TranspositionTableEntry);
+        mSearch.GetTranspositionTable().Resize(numEntries);
+    }
+    else
+    {
+        std::cout << "Invalid option" << std::endl;
+        return false;
+    }
 
     return true;
 }

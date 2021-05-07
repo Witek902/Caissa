@@ -11,6 +11,7 @@ struct SearchParam
 {
     uint32_t maxDepth = 8;
     uint32_t numPvLines = 1;
+    std::vector<Move> rootMoves;
     bool debugLog = true;
 };
 
@@ -29,6 +30,7 @@ public:
     using ScoreType = int32_t;
     static constexpr int32_t CheckmateValue = 100000;
     static constexpr int32_t InfValue       = 10000000;
+    static constexpr int32_t InvalidValue   = 9999999;
 
     static constexpr int32_t MaxSearchDepth = 64;
 
@@ -41,7 +43,7 @@ public:
     // check if a position was repeated 2 times
     bool IsPositionRepeated(const Position& position, uint32_t repetitionCount = 2u) const;
 
-    const TranspositionTable& GetTranspositionTable() const { return mTranspositionTable; }
+    TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
 
 private:
 
@@ -53,10 +55,11 @@ private:
         const NodeInfo* parentNode = nullptr;
         ScoreType alpha;
         ScoreType beta;
-        std::span<Move> moveFilter; // ignore given moves in search, used for multi-PV search
+        std::span<const Move> moveFilter; // ignore given moves in search, used for multi-PV search
+        std::span<const Move> rootMoves;  // consider only this moves at root node, used for "searchmoves" UCI command
+        uint16_t depth;
+        uint16_t maxDepth;
         uint8_t pvIndex;
-        uint8_t depth;
-        uint8_t maxDepth;
         Color color;
         bool isPvNode = false;
     };
@@ -69,6 +72,7 @@ private:
         uint64_t quiescenceNodes = 0;
         uint64_t pseudoMovesPerNode = 0;
         uint64_t ttHits = 0;
+        uint32_t maxDepth = 0;
     };
 
     struct PvLineEntry
@@ -98,8 +102,8 @@ private:
 
     uint32_t searchHistory[2][6][64];
 
-    static constexpr uint32_t NumKillerMoves = 3;
-    Move killerMoves[MaxSearchDepth][NumKillerMoves];
+    static constexpr uint32_t NumKillerMoves = 4;
+    PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 
     std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
 
@@ -120,4 +124,5 @@ private:
     void UpdatePvArray(uint32_t depth, const Move move);
 
     void UpdateSearchHistory(const NodeInfo& node, const Move move);
+    void RegisterKillerMove(const NodeInfo& node, const Move move);
 };

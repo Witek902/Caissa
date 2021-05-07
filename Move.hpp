@@ -132,6 +132,19 @@ public:
         return moves[index].move;
     }
 
+    bool HasMove(const Move move) const
+    {
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            if (moves[i].move == move)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool HasMove(const PackedMove move) const
     {
         for (uint32_t i = 0; i < numMoves; ++i)
