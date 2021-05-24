@@ -207,6 +207,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     {
         for (size_t i = extraMovesStart + 1; i < args.size(); ++i)
         {
+            const Position prevPosition = mPosition;
             const Move move = mPosition.MoveFromString(args[i]);
 
             if (!move.IsValid() || !mPosition.IsMoveValid(move))
@@ -220,6 +221,8 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
                 std::cout << "Invalid move" << std::endl;
                 return false;
             }
+
+            mSearch.RecordBoardPosition(prevPosition);
         }
     }
 
@@ -229,7 +232,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     bool isInfinite = false;
-    uint32_t maxDepth = UINT32_MAX; // TODO
+    uint32_t maxDepth = 14; // TODO
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
     uint32_t whiteRemainingTime = 0;

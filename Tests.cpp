@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <mutex>
+#include <fstream>
 
 #include "ThreadPool.hpp"
 
@@ -872,79 +873,135 @@ void RunUnitTests()
 
 bool RunSearchTests()
 {
-    using BestMovesType = std::vector<const char*>;
-    using TestCaseType = std::pair<const char*, BestMovesType>;
+    using MovesListType = std::vector<std::string>;
 
-    std::vector<TestCaseType> testVector =
+    struct TestCaseEntry
     {
-        // K v KP
-        { "8/6k1/8/8/8/8/P7/7K w - - 0 1", { "a4" } },
-
-        // K v KQ
-        { "8/8/8/3k4/8/8/8/3KQ3 w - - 0 1", { "Qe7" } }, // mate in 7
-        { "k7/8/8/8/8/8/8/K5Q1 w - - 0 1", { "Qg7" } },
-        { "8/8/8/4k3/8/8/1K6/Q7 w - - 0 1", { "Qf1", "Qa6" } },
-
-        // Zugzwang
-        { "8/6p1/4p3/2K1Pk2/p7/P7/7P/8 w - - 0 1", { "Kd6" } },
-
-        // Null Move tests
-        { "8/8/p1p5/1p5p/1P5p/8/PPP2K1p/4R1rk w - - 0 1", { "Rf1" } },
-        { "1q1k4/2Rr4/8/2Q3K1/8/8/8/8 w - - 0 1", { "Kh6" } },
-        { "7k/5K2/5P1p/3p4/6P1/3p4/8/8 w - - 0 1", { "g5", "Ke7" } },
-        { "8/6B1/p5p1/Pp4kp/1P5r/5P1Q/4q1PK/8 w - - 0 32", { "Qxh4+" } },
-        { "8/8/1p1r1k2/p1pPN1p1/P3KnP1/1P6/8/3R4 b - - 0 1", { "Nxd5" } },
-
-        { "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", { "Qg3" } }, // mate in 3
-
-        // Bratko-Kopec test suite (1982)
-        { "1k1r4/pp1b1R2/3q2pp/4p3/2B5/4Q3/PPP2B2/2K5 b - - 0 1", { "Qd1+" } },
-        { "3r1k2/4npp1/1ppr3p/p6P/P2PPPP1/1NR5/5K2/2R5 w - - 0 1", { "d5" } },
-        { "2q1rr1k/3bbnnp/p2p1pp1/2pPp3/PpP1P1P1/1P2BNNP/2BQ1PRK/7R b - - 0 1", { "f5" } },
-        { "rnbqkb1r/p3pppp/1p6/2ppP3/3N4/2P5/PPP1QPPP/R1B1KB1R w KQkq - 0 1", { "e6" } },
-        { "r1b2rk1/2q1b1pp/p2ppn2/1p6/3QP3/1BN1B3/PPP3PP/R4RK1 w - - 0 1", { "Nd5", "a4" } },
-        { "2r3k1/pppR1pp1/4p3/4P1P1/5P2/1P4K1/P1P5/8 w - - 0 1", { "g6" } },
-        { "1nk1r1r1/pp2n1pp/4p3/q2pPp1N/b1pP1P2/B1P2R2/2P1B1PP/R2Q2K1 w - - 0 1", { "Nf6" } },
-        { "4b3/p3kp2/6p1/3pP2p/2pP1P2/4K1P1/P3N2P/8 w - - 0 1", { "f5" } },
-        { "2kr1bnr/pbpq4/2n1pp2/3p3p/3P1P1B/2N2N1Q/PPP3PP/2KR1B1R w - - 0 1", { "f5" } },
-        { "3rr1k1/pp3pp1/1qn2np1/8/3p4/PP1R1P2/2P1NQPP/R1B3K1 b - - 0 1", { "Ne5" } },
-        { "2r1nrk1/p2q1ppp/bp1p4/n1pPp3/P1P1P3/2PBB1N1/4QPPP/R4RK1 w - - 0 1", { "f4" } },
-        { "r3r1k1/ppqb1ppp/8/4p1NQ/8/2P5/PP3PPP/R3R1K1 b - - 0 1", { "Bf5" } },
-        { "r2q1rk1/4bppp/p2p4/2pP4/3pP3/3Q4/PP1B1PPP/R3R1K1 w - - 0 1", { "b4" } },
-        { "rnb2r1k/pp2p2p/2pp2p1/q2P1p2/8/1Pb2NP1/PB2PPBP/R2Q1RK1 w - - 0 1", { "Qd2", "Qe1" } },
-        { "2r3k1/1p2q1pp/2b1pr2/p1pp4/6Q1/1P1PP1R1/P1PN2PP/5RK1 w - - 0 1", { "Qxg7+" } },
-        { "r1bqkb1r/4npp1/p1p4p/1p1pP1B1/8/1B6/PPPN1PPP/R2Q1RK1 w kq - 0 1", { "Ne4" } },
-        { "r2q1rk1/1ppnbppp/p2p1nb1/3Pp3/2P1P1P1/2N2N1P/PPB1QP2/R1B2RK1 b - - 0 1", { "h5" } },
-        { "r1bq1rk1/pp2ppbp/2np2p1/2n5/P3PP2/N1P2N2/1PB3PP/R1B1QRK1 b - - 0 1", { "Nb3" } },
-        { "3rr3/2pq2pk/p2p1pnp/8/2QBPP2/1P6/P5PP/4RRK1 b - - 0 1", { "Rxe4" } },
-        { "r4k2/pb2bp1r/1p1qp2p/3pNp2/3P1P2/2N3P1/PPP1Q2P/2KRR3 w - - 0 1", { "g4" } },
-        { "3rn2k/ppb2rpp/2ppqp2/5N2/2P1P3/1P5Q/PB3PPP/3RR1K1 w - - 0 1", { "Nh6" } },
-        { "2r2rk1/1bqnbpp1/1p1ppn1p/pP6/N1P1P3/P2B1N1P/1B2QPP1/R2R2K1 b - - 0 1", { "Bxe4" } },
-        { "r1bqk2r/pp2bppp/2p5/3pP3/P2Q1P2/2N1B3/1PP3PP/R4RK1 b kq - 0 1", { "f6" } },
-        { "r2qnrnk/p2b2b1/1p1p2pp/2pPpp2/1PP1P3/PRNBB3/3QNPPP/5RK1 w - - 0 1", { "f4" } },
+        std::string positionStr;
+        MovesListType bestMoves;
+        MovesListType avoidMoves;
     };
 
+    enum class ParsingMode
+    {
+        Position,
+        BestMoves,
+        AvoidMoves
+    };
+
+    std::vector<TestCaseEntry> testVector;
+    {
+        std::ifstream file("data/testPositions.txt");
+        if (!file.good())
+        {
+            std::cout << "Failed to open testcases file" << std::endl;
+            return false;
+        }
+
+        std::string lineStr;
+        while (std::getline(file, lineStr))
+        {
+            size_t endPos = lineStr.find(';');
+            if (endPos != std::string::npos)
+            {
+                lineStr = lineStr.substr(0, endPos);
+            }
+
+            // tokenize line
+            std::istringstream iss(lineStr);
+            std::vector<std::string> tokens(
+                std::istream_iterator<std::string>{iss},
+                std::istream_iterator<std::string>());
+
+            std::string positionStr;
+            MovesListType bestMoves;
+            MovesListType avoidMoves;
+            ParsingMode parsingMode = ParsingMode::Position;
+
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                if (tokens[i] == "bm")
+                {
+                    parsingMode = ParsingMode::BestMoves;
+                    continue;
+                }
+                else if (tokens[i] == "am")
+                {
+                    parsingMode = ParsingMode::AvoidMoves;
+                    continue;
+                }
+                else if (tokens[i] == ";")
+                {
+                    break;
+                }
+                else
+                {
+                    if (parsingMode == ParsingMode::BestMoves)
+                    {
+                        bestMoves.push_back(tokens[i]);
+                    }
+                    else if (parsingMode == ParsingMode::AvoidMoves)
+                    {
+                        avoidMoves.push_back(tokens[i]);
+                    }
+                    else
+                    {
+                        if (!positionStr.empty()) positionStr += ' ';
+                        positionStr += tokens[i];
+                    }
+                }
+            }
+
+            Position pos;
+            if (!pos.FromFEN(positionStr))
+            {
+                std::cout << "Test case has invalid position: " << positionStr << std::endl;
+                return false;
+            }
+
+            if (bestMoves.empty() && avoidMoves.empty())
+            {
+                std::cout << "Test case is missing best move: " << positionStr << std::endl;
+                return false;
+            }
+
+            // TODO check if move is valid
+
+            testVector.emplace_back(std::move(positionStr), std::move(bestMoves), std::move(avoidMoves));
+        }
+    }
+    std::cout << testVector.size() << " test positions loaded" << std::endl;
+
+    const uint32_t minDepth = 1;
     const uint32_t maxDepth = 20;
 
-    for (uint32_t depth = 1; depth <= maxDepth; ++depth)
+    bool verbose = false;
+
+    std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
+
+    for (uint32_t depth = minDepth; depth <= maxDepth; ++depth)
     {
         std::mutex mutex;
-        uint32_t success = 0;
+        std::atomic<uint32_t> success = 0;
+
+        for (Search& search : searchArray)
+        {
+            search.GetTranspositionTable().Clear();
+        }
+
+        auto startTimeAll = std::chrono::high_resolution_clock::now();
 
         Waitable waitable;
         {
             TaskBuilder taskBuilder(waitable);
 
-            for (const auto& iter : testVector)
+            for (const TestCaseEntry& testCase : testVector)
             {
-                taskBuilder.Task("SearchTest", [depth, &iter, &mutex, &success](const TaskContext&)
+                taskBuilder.Task("SearchTest", [testCase, &searchArray, depth, &mutex, verbose, &success](const TaskContext& ctx)
                 {
-                    Search search;
+                    Search& search = searchArray[ctx.threadId];
 
-                    const char* fenStr = iter.first;
-                    const BestMovesType& bestMoves = iter.second;
-
-                    const Position position(fenStr);
+                    const Position position(testCase.positionStr);
                     TEST_EXPECT(position.IsValid());
 
                     SearchParam searchParam;
@@ -963,43 +1020,88 @@ bool RunSearchTests()
                     if (!foundMove.IsValid())
                     {
                         std::unique_lock<std::mutex> lock(mutex);
-                        std::cout << "[FAILURE] No move found! position: " << fenStr << std::endl;
+                        std::cout << "[FAILURE] No move found! position: " << testCase.positionStr << std::endl;
                         return;
                     }
 
                     const std::string foundMoveStr = position.MoveToString(foundMove);
                     bool correctMoveFound = false;
-                    for (const char* bestMoveStr : bestMoves)
+                    if (!testCase.bestMoves.empty())
                     {
-                        if (foundMoveStr == bestMoveStr)
+                        for (const std::string& bestMoveStr : testCase.bestMoves)
                         {
-                            correctMoveFound = true;
+                            if (foundMoveStr == bestMoveStr)
+                            {
+                                correctMoveFound = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        correctMoveFound = true;
+                        for (const std::string& avoidMoveStr : testCase.avoidMoves)
+                        {
+                            if (foundMoveStr == avoidMoveStr)
+                            {
+                                correctMoveFound = false;
+                            }
                         }
                     }
 
                     if (!correctMoveFound)
                     {
-                        std::unique_lock<std::mutex> lock(mutex);
-                        std::cout << "[FAILURE] Wrong move found! expected: ";
-                        for (const char* bestMoveStr : bestMoves) std::cout << bestMoveStr << " ";
-                        std::cout << "found: " << foundMoveStr << " position: " << fenStr << std::endl;
+                        if (verbose)
+                        {
+                            std::unique_lock<std::mutex> lock(mutex);
+                            std::cout << "[FAILURE] Wrong move found! ";
+
+                            if (!testCase.bestMoves.empty())
+                            {
+                                std::cout << "expected: ";
+                                for (const std::string& bestMoveStr : testCase.bestMoves) std::cout << bestMoveStr << " ";
+                            }
+                            else if (!testCase.avoidMoves.empty())
+                            {
+                                std::cout << "not expected: ";
+                                for (const std::string& bestMoveStr : testCase.avoidMoves) std::cout << bestMoveStr << " ";
+                            }
+
+                            std::cout << "found: " << foundMoveStr << " position: " << testCase.positionStr << std::endl;
+                        }
                         return;
                     }
 
                     {
-                        std::unique_lock<std::mutex> lock(mutex);
-                        std::cout << "[SUCCESS] Found valid move: " << foundMoveStr << std::endl;
+                        if (verbose)
+                        {
+                            std::unique_lock<std::mutex> lock(mutex);
+                            std::cout << "[SUCCESS] Found valid move: " << foundMoveStr << std::endl;
+                        }
                         success++;
                     }
                 });
             }
+
+            //taskBuilder.Fence();
         }
 
         waitable.Wait();
 
-        std::cout << "Move test summary (depth " << depth << ")" << std::endl;
-        std::cout << "Passed: " << success << "/" << testVector.size() << std::endl;
-        std::cout << "Failed: " << (testVector.size() - success) << "/" << testVector.size() << std::endl;
+        auto endTimeAll = std::chrono::high_resolution_clock::now();
+        const float time = std::chrono::duration_cast<std::chrono::microseconds>(endTimeAll - startTimeAll).count() / 1000000.0f;
+        
+        const float passRate = (float)success / (float)testVector.size();
+        const float factor = passRate / log10f(time);
+
+        std::cout
+            << depth << "; "
+            << success << "; "
+            << passRate << "; "
+            << time << "; "
+            << factor << std::endl;
+
+        //std::cout << "Passed: " << success << "/" << testVector.size() << std::endl;
+        //std::cout << "Time:   " << std::chrono::duration_cast<std::chrono::milliseconds>(endTimeAll - startTimeAll).count() << "ms" << std::endl << std::endl;
     }
 
     return true;

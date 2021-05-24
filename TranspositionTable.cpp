@@ -10,6 +10,11 @@ TranspositionTable::TranspositionTable()
 
 }
 
+void TranspositionTable::Clear()
+{
+    memset(entries.data(), 0, entries.size() * sizeof(TranspositionTableEntry));
+}
+
 void TranspositionTable::Resize(size_t newSize)
 {
     ASSERT(IsPowerOfTwo(newSize));

@@ -115,7 +115,7 @@ bool Position::FromFEN(const std::string& fenString)
         }
     }
 
-    if (numSpaces != 5 || numRows != 8)
+    if (numSpaces < 3 || numSpaces > 5 || numRows != 8)
     {
         fprintf(stderr, "Invalid FEN\n");
         return false;
@@ -217,7 +217,7 @@ bool Position::FromFEN(const std::string& fenString)
     }
 
     std::string enPassantSquare;
-    for (++p; *p != ' '; ++p)
+    for (++p; *p != ' ' && *p != 0; ++p)
     {
         enPassantSquare += *p;
     }

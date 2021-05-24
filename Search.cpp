@@ -6,13 +6,23 @@
 #include <string>
 #include <chrono>
 
+static const uint32_t LateMoveReductionStartDepth = 3;
+static const uint32_t LateMoveReductionRate = 8;
+
+static const uint32_t LateMovePrunningStartDepth = 2;
+
+static const uint32_t AspirationWindowSearchStartDepth = 4;
+static const int32_t AspirationWindowMax = 200;
+static const int32_t AspirationWindowMin = 20;
+static const int32_t AspirationWindowStep = 20;
+
 static const uint32_t BetaPruningDepth = 6;
-static const int32_t BetaMarginMultiplier = 100;
+static const int32_t BetaMarginMultiplier = 110;
 static const int32_t BetaMarginBias = 50;
 
-static const uint32_t AlphaPruningDepth = 6;
-static const int32_t AlphaMarginMultiplier = 100;
-static const int32_t AlphaMarginBias = 3000;
+static const uint32_t AlphaPruningDepth = 4;
+static const int32_t AlphaMarginMultiplier = 110;
+static const int32_t AlphaMarginBias = 800;
 
 Search::Search()
 {
@@ -37,6 +47,11 @@ void Search::RecordBoardPosition(const Position& position)
     }
 
     entry.push_back({ position, 1u });
+}
+
+void Search::ClearPositionHistory()
+{
+    historyGamePositions.clear();
 }
 
 bool Search::IsPositionRepeated(const Position& position, uint32_t repetitionCount) const
@@ -68,16 +83,11 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
     result.resize(param.numPvLines);
     mPrevPvLines.clear();
 
-    //int32_t aspirationWindow = 400;
-    //const int32_t minAspirationWindow = 40;
-    //const uint32_t aspirationSearchStartDepth = 20;
-
-    int32_t alpha = -InfValue;
-    int32_t beta  =  InfValue;
-
     // clamp number of PV lines (there can't be more than number of max moves)
     static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
     const uint32_t numPvLines = std::min(param.numPvLines, MoveList::MaxMoves);
+
+    //auto startTimeAll = std::chrono::high_resolution_clock::now();
 
     for (uint32_t depth = 1; depth <= param.maxDepth; ++depth)
     {
@@ -87,61 +97,32 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
-            auto startTime = std::chrono::high_resolution_clock::now();
-
-            memset(pvArray, 0, sizeof(pvArray));
-            memset(pvLengths, 0, sizeof(pvLengths));
-
             PvLine& outPvLine = result[pvIndex];
 
-            NodeInfo rootNode;
-            rootNode.position = &position;
-            rootNode.depth = 0u;
-            rootNode.isPvNode = true;
-            rootNode.maxDepth = (uint8_t)depth;
-            rootNode.pvIndex = (uint8_t)pvIndex;
-            rootNode.alpha = alpha;
-            rootNode.beta = beta;
-            rootNode.color = position.GetSideToMove();
-            rootNode.rootMoves = param.rootMoves;
-            
-            if (pvIndex > 0u)
+            auto startTime = std::chrono::high_resolution_clock::now();
+
+            SearchContext searchContext;
+
+            AspirationWindowSearchParam aspirationWindowSearchParam =
             {
-                rootNode.moveFilter = pvMovesSoFar;
-            }
+                position,
+                param,
+                result,
+                depth,
+                pvIndex,
+                searchContext,
+                pvIndex > 0u ? pvMovesSoFar : std::span<const Move>(),
+                outPvLine.score
+            };
 
-            SearchContext context;
+            int32_t score = AspirationWindowSearch(aspirationWindowSearchParam);
 
-            ScoreType score = NegaMax(rootNode, context);
+            const bool isMate = (score > CheckmateValue - MaxSearchDepth) || (score < -CheckmateValue + MaxSearchDepth);
 
+            uint32_t pvLength = pvLengths[0];
+
+            // write PV line into result struct
             outPvLine.score = score;
-
-            // out of aspiration window, redo the search in full score range
-            //if (score <= alpha || score >= beta)
-            //{
-            //    if (param.debugLog)
-            //    {
-            //        //std::cout << "out of the aspiration window: alpha=" << alpha << " beta=" << beta << " score=" << score << std::endl;
-            //    }
-            //    aspirationWindow *= 2;
-            //    alpha -= aspirationWindow;
-            //    beta += aspirationWindow;
-            //    depth--;
-            //    continue;
-            //}
-
-            const bool isMate = (score > CheckmateValue - 1000) || (score < -CheckmateValue + 1000);
-
-            //if (depth >= aspirationSearchStartDepth)
-            //{
-            //    alpha = score - aspirationWindow;
-            //    beta = score + aspirationWindow;
-            //    aspirationWindow = (aspirationWindow + minAspirationWindow + 1) / 2; // narrow aspiration window
-            //    ASSERT(aspirationWindow >= minAspirationWindow);
-            //}
-
-            uint16_t pvLength = pvLengths[0];
-
             if (pvLength > 0)
             {
                 outPvLine.moves.clear();
@@ -155,10 +136,13 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
                     outPvLine.moves.push_back(move);
 
-                    const bool moveLegal = iteratedPosition.DoMove(move);
-                    ASSERT(moveLegal);
+                    if (!iteratedPosition.DoMove(move))
+                    {
+                        break;
+                    }
                 }
 
+                ASSERT(!outPvLine.moves.empty());
                 pvMovesSoFar.push_back(outPvLine.moves.front());
             }
             else
@@ -172,7 +156,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
             {
                 std::cout << "info";
                 std::cout << " depth " << (uint32_t)depth;
-                std::cout << " seldepth " << (uint32_t)context.maxDepth;
+                std::cout << " seldepth " << (uint32_t)searchContext.maxDepth;
                 if (param.numPvLines > 1)
                 {
                     std::cout << " multipv " << (pvIndex + 1);
@@ -186,7 +170,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
                 {
                     std::cout << " score cp " << score;
                 }
-                std::cout << " nodes " << context.nodes;
+                std::cout << " nodes " << searchContext.nodes;
 
                 std::cout << " pv ";
                 {
@@ -204,6 +188,70 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
         }
 
         mPrevPvLines = result;
+    }
+
+    //auto endTimeAll = std::chrono::high_resolution_clock::now();
+    //std::cout << "total time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTimeAll - startTimeAll).count() << std::endl;
+}
+
+int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
+{
+    int32_t alpha = -InfValue;
+    int32_t beta = InfValue;
+
+    // decrease aspiration window with increasing depth
+    int32_t aspirationWindow = AspirationWindowMax - (param.depth - AspirationWindowSearchStartDepth) * AspirationWindowStep;
+    aspirationWindow = std::max<int32_t>(AspirationWindowMin, aspirationWindow);
+    ASSERT(aspirationWindow > 0);
+
+    // start applying aspiration window at given depth
+    if (param.depth >= AspirationWindowSearchStartDepth)
+    {
+        alpha = std::max(param.previousScore - aspirationWindow, -InfValue);
+        beta = std::min(param.previousScore + aspirationWindow, InfValue);
+    }
+
+    for (;;)
+    {
+        memset(pvArray, 0, sizeof(pvArray));
+        memset(pvLengths, 0, sizeof(pvLengths));
+
+        NodeInfo rootNode;
+        rootNode.position = &param.position;
+        rootNode.depth = 0u;
+        rootNode.isPvNode = true;
+        rootNode.maxDepth = (uint8_t)param.depth;
+        rootNode.pvIndex = (uint8_t)param.pvIndex;
+        rootNode.alpha = alpha;
+        rootNode.beta = beta;
+        rootNode.color = param.position.GetSideToMove();
+        rootNode.rootMoves = param.searchParam.rootMoves;
+        rootNode.moveFilter = param.moveFilter;
+
+        ScoreType score = NegaMax(rootNode, param.searchContext);
+
+        ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+        // out of aspiration window, redo the search in wider score range
+        if (score <= alpha || score >= beta)
+        {
+            //std::cout << "Aspiration window too small: " << alpha << "..." << beta << ", score: " << score << "\n";
+
+            alpha -= aspirationWindow;
+            beta += aspirationWindow;
+            aspirationWindow *= 2;
+            continue;
+        }
+
+        //if (param.depth >= aspirationSearchStartDepth)
+        //{
+        //    alpha = score - aspirationWindow;
+        //    beta = score + aspirationWindow;
+        //    aspirationWindow = (aspirationWindow + minAspirationWindow + 1) / 2; // narrow aspiration window
+        //    ASSERT(aspirationWindow >= minAspirationWindow);
+        //}
+
+        return score;
     }
 }
 
@@ -397,7 +445,8 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves.PickBestMove(i);
+        int32_t moveScore = 0;
+        const Move move = moves.PickBestMove(i, moveScore);
 
         Position childPosition = *node.position;
         if (!childPosition.DoMove(move))
@@ -460,8 +509,10 @@ int32_t Search::PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t
 
 Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 {
-    // clean PV line
+    ASSERT(node.alpha <= node.beta);
     ASSERT(node.depth < MaxSearchDepth);
+
+    // clean PV line
     pvLengths[node.depth] = node.depth;
 
     // update stats
@@ -565,18 +616,24 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         staticEvaluation = ColorMultiplier(node.color) * Evaluate(*node.position);
     }
 
-    // Beta Pruning
-    if (!node.isPvNode && !isInCheck && inversedDepth <= BetaPruningDepth
-        && (staticEvaluation - BetaMarginBias - BetaMarginMultiplier * inversedDepth > beta))
+    // Futility Pruning
     {
-        return staticEvaluation;
-    }
+        const int32_t alphaMargin = AlphaMarginBias + AlphaMarginMultiplier * inversedDepth;
+        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * inversedDepth;
 
-    // Alpha Pruning
-    if (!node.isPvNode && !isInCheck && inversedDepth <= AlphaPruningDepth
-        && (staticEvaluation + BetaMarginBias + BetaMarginMultiplier * inversedDepth <= alpha))
-    {
-        return staticEvaluation;
+        // Alpha Pruning
+        if (!node.isPvNode && !isInCheck && inversedDepth <= AlphaPruningDepth
+            && (staticEvaluation + alphaMargin <= alpha))
+        {
+            return staticEvaluation + alphaMargin;
+        }
+
+        // Beta Pruning
+        if (!node.isPvNode && !isInCheck && inversedDepth <= BetaPruningDepth
+            && (staticEvaluation - betaMargin >= beta))
+        {
+            return staticEvaluation - betaMargin;
+        }
     }
 
     NodeInfo childNodeParam;
@@ -646,15 +703,9 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    if (node.isPvNode)
-    {
-        //std::cout << "Moves at PV node, depth " << (uint32_t)node.depth << std::endl;
-        //moves.Print();
-    }
-
     Move bestMove;
     uint32_t numLegalMoves = 0;
-    uint32_t numQuietMoves = 0;
+    uint32_t numReducedMoves = 0;
     bool betaCutoff = false;
 
     // count (pseudo) quiet moves
@@ -662,7 +713,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.moves[i].move;
-        if (!move.isCapture && move.promoteTo == Piece::None)
+        if (move.IsQuiet())
         {
             totalQuietMoves++;
         }
@@ -670,7 +721,8 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves.PickBestMove(i);
+        int32_t moveScore = 0;
+        const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
 
         Position childPosition = *node.position;
@@ -690,31 +742,31 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
         numLegalMoves++;
 
+        childNodeParam.position = &childPosition;
         childNodeParam.isPvNode = pvMove == move;
         childNodeParam.maxDepth = childNodeMaxDepth;
 
-        if (!move.isCapture && move.promoteTo == Piece::None)
+        int32_t depthReduction = 0;
+
+        // Late Move Reduction
+        // don't reduce PV moves, while in check, captures, promotions, etc.
+        if (move.IsQuiet() && !isInCheck && totalQuietMoves > 0 && numLegalMoves > 1u && inversedDepth >= LateMoveReductionStartDepth)
         {
-            numQuietMoves++;
+            // reduce depth gradually
+            depthReduction = std::max<int32_t>(1, numReducedMoves / LateMoveReductionRate);
+            numReducedMoves++;
 
-            // Late Move Reduction
-            // don't reduce PV moves, while in check
-            if (!isInCheck && totalQuietMoves > 0 && numLegalMoves > 1u && node.depth >= 5)
+            // Late Move Prunning
+            if (inversedDepth >= LateMovePrunningStartDepth && depthReduction > childNodeMaxDepth)
             {
-                // 0% reduction for first quiet move
-                // 50% reduction for last quiet move
-                //int32_t depthReduction = node.maxDepth * numQuietMoves / totalQuietMoves / 2;
-                //childNodeParam.maxDepth = (uint8_t)std::max(1, (int32_t)childNodeMaxDepth - depthReduction);
-
-                int32_t depthReduction = numQuietMoves > (totalQuietMoves / 2) ? 1 : 0;
-                childNodeParam.maxDepth = (uint8_t)std::max(1, (int32_t)childNodeMaxDepth - depthReduction);
+                continue;
             }
         }
 
+        childNodeParam.maxDepth = (uint16_t)std::max(1, (int32_t)childNodeMaxDepth - depthReduction);
+
         ScoreType score;
         {
-            childNodeParam.position = &childPosition;
-
             if (numLegalMoves == 1)
             {
                 childNodeParam.alpha = -beta;
@@ -734,6 +786,15 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
                     score = -NegaMax(childNodeParam, ctx);
                 }
             }
+        }
+
+        // re-do search at full depth
+        if (depthReduction > 0 && score > alpha)
+        {
+            childNodeParam.maxDepth = childNodeMaxDepth;
+            childNodeParam.alpha = -beta;
+            childNodeParam.beta = -alpha;
+            score = -NegaMax(childNodeParam, ctx);
         }
 
         if (score > alpha) // new best move found

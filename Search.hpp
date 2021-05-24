@@ -40,6 +40,8 @@ public:
 
     void RecordBoardPosition(const Position& position);
 
+    void ClearPositionHistory();
+
     // check if a position was repeated 2 times
     bool IsPositionRepeated(const Position& position, uint32_t repetitionCount = 2u) const;
 
@@ -75,6 +77,18 @@ private:
         uint32_t maxDepth = 0;
     };
 
+    struct AspirationWindowSearchParam
+    {
+        const Position& position;
+        const SearchParam& searchParam;
+        SearchResult& searchResult;
+        uint32_t depth;
+        uint32_t pvIndex;
+        SearchContext& searchContext;
+        std::span<const Move> moveFilter;
+        int32_t previousScore;                  // score in previous ID iteration
+    };
+
     struct PvLineEntry
     {
         uint64_t positionHash;
@@ -106,6 +120,8 @@ private:
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 
     std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
+
+    int32_t AspirationWindowSearch(const AspirationWindowSearchParam& param);
 
     ScoreType QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx);
     ScoreType NegaMax(const NodeInfo& node, SearchContext& ctx);

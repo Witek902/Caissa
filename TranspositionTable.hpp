@@ -39,6 +39,9 @@ public:
     void Write(const TranspositionTableEntry& entry);
     void Prefetch(const Position& position) const;
 
+    // invalidate all entries
+    void Clear();
+
     // resize the table
     // old entries will be preserved if possible
     void Resize(size_t newSize);

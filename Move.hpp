@@ -78,6 +78,11 @@ struct Move
         return value != 0u;
     }
 
+    bool IsQuiet() const
+    {
+        return !isCapture && promoteTo == Piece::None;
+    }
+
     std::string ToString() const;
 };
 
@@ -109,7 +114,7 @@ public:
 
     void RemoveMove(const Move& move);
 
-    Move PickBestMove(uint32_t index)
+    Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
         ASSERT(index < numMoves);
 
@@ -129,6 +134,7 @@ public:
             std::swap(moves[index], moves[bestMoveIndex]);
         }
 
+        outMoveScore = moves[index].score;
         return moves[index].move;
     }
 
