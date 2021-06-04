@@ -6,7 +6,7 @@
 #include <string>
 #include <chrono>
 
-static const uint32_t LateMoveReductionStartDepth = 3;
+static const uint32_t LateMoveReductionStartDepth = 4;
 static const uint32_t LateMoveReductionRate = 8;
 
 static const uint32_t LateMovePrunningStartDepth = 2;
@@ -609,28 +609,27 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         return QuiescenceNegaMax(node, ctx);
     }
 
-    // determine static evaluation of the board
-    int32_t staticEvaluation = ttScore;
-    if (staticEvaluation == InvalidValue)
-    {
-        staticEvaluation = ColorMultiplier(node.color) * Evaluate(*node.position);
-    }
-
     // Futility Pruning
+    if (!node.isPvNode && !isInCheck)
     {
+        // determine static evaluation of the board
+        int32_t staticEvaluation = ttScore;
+        if (staticEvaluation == InvalidValue)
+        {
+            staticEvaluation = ColorMultiplier(node.color) * Evaluate(*node.position);
+        }
+
         const int32_t alphaMargin = AlphaMarginBias + AlphaMarginMultiplier * inversedDepth;
         const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * inversedDepth;
 
         // Alpha Pruning
-        if (!node.isPvNode && !isInCheck && inversedDepth <= AlphaPruningDepth
-            && (staticEvaluation + alphaMargin <= alpha))
+        if (inversedDepth <= AlphaPruningDepth && (staticEvaluation + alphaMargin <= alpha))
         {
             return staticEvaluation + alphaMargin;
         }
 
         // Beta Pruning
-        if (!node.isPvNode && !isInCheck && inversedDepth <= BetaPruningDepth
-            && (staticEvaluation - betaMargin >= beta))
+        if (inversedDepth <= BetaPruningDepth && (staticEvaluation - betaMargin >= beta))
         {
             return staticEvaluation - betaMargin;
         }

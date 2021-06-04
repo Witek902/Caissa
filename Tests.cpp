@@ -973,7 +973,7 @@ bool RunSearchTests()
     std::cout << testVector.size() << " test positions loaded" << std::endl;
 
     const uint32_t minDepth = 1;
-    const uint32_t maxDepth = 20;
+    const uint32_t maxDepth = 10;
 
     bool verbose = false;
 
@@ -1091,7 +1091,7 @@ bool RunSearchTests()
         const float time = std::chrono::duration_cast<std::chrono::microseconds>(endTimeAll - startTimeAll).count() / 1000000.0f;
         
         const float passRate = (float)success / (float)testVector.size();
-        const float factor = passRate / log10f(time);
+        const float factor = passRate / time;
 
         std::cout
             << depth << "; "

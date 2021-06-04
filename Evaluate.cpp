@@ -1,105 +1,97 @@
 #include "Evaluate.hpp"
 #include "Move.hpp"
 
-static constexpr int32_t c_kingValue            = 1000;
-static constexpr int32_t c_queenValue           = 900;
-static constexpr int32_t c_rookValue            = 500;
-static constexpr int32_t c_bishopValue          = 330;
-static constexpr int32_t c_knightValue          = 320;
-static constexpr int32_t c_pawnValue            = 100;
+struct PieceScore
+{
+    int16_t mg;
+    int16_t eg;
+};
+
+#define S(mg, eg) PieceScore{ mg, eg }
+
+static constexpr PieceScore c_kingValue            = S(0, 0);
+static constexpr PieceScore c_queenValue           = S(1025, 936);
+static constexpr PieceScore c_rookValue            = S(477, 512);
+static constexpr PieceScore c_bishopValue          = S(365, 297);
+static constexpr PieceScore c_knightValue          = S(337, 281);
+static constexpr PieceScore c_pawnValue            = S(82, 94);
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_mobilityBonus        = 15;
-static constexpr int32_t c_guardBonus           = 10;
+static constexpr int32_t c_mobilityBonus        = 3;
+static constexpr int32_t c_guardBonus           = 5;
+static constexpr int32_t c_doubledPawnPenalty   = 7;
 
-namespace PieceSquareTables
+const PieceScore PawnPSQT[Square::NumSquares] =
 {
-
-static const int8_t Pawn[] =
-{
-     0,  0,  0,  0,  0,  0,  0,  0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    10, 10, 20, 30, 30, 20, 10, 10,
-     5,  5, 10, 25, 25, 10,  5,  5,
-     0,  0,  0, 20, 20,  0,  0,  0,
-     5, -5,-10,  0,  0,-10, -5,  5,
-     5, 10, 10,-20,-20, 10, 10,  5,
-     0,  0,  0,  0,  0,  0,  0,  0,
+    S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0),
+    S(  98, 178), S( 134, 173), S(  61, 158), S(  95, 134), S(  68, 147), S( 126, 132), S(  34, 165), S( -11, 187),
+    S(  -6,  94), S(   7, 100), S(  26,  85), S(  31,  67), S(  65,  56), S(  56,  53), S(  25,  82), S( -20,  84),
+    S( -14,  32), S(  13,  24), S(   6,  13), S(  21,   5), S(  23,  -2), S(  12,   4), S(  17,  17), S( -23,  17),
+    S( -27,  13), S(  -2,   9), S(  -5,  -3), S(  12,  -7), S(  17,  -7), S(   6,  -8), S(  10,   3), S( -25,  -1),
+    S( -26,   4), S(  -4,   7), S(  -4,  -6), S( -10,   1), S(   3,   0), S(   3,  -5), S(  33,  -1), S( -12,  -8),
+    S( -35,  13), S(  -1,   8), S( -20,   8), S( -23,  10), S( -15,  13), S(  24,   0), S(  38,   2), S( -22,  -7),
+    S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0),
 };
 
-static const int8_t Knight[] =
+const PieceScore KnightPSQT[Square::NumSquares] =
 {
-    -50,-40,-30,-30,-30,-30,-40,-50,
-    -40,-20,  0,  0,  0,  0,-20,-40,
-    -30,  0, 10, 15, 15, 10,  0,-30,
-    -30,  5, 15, 20, 20, 15,  5,-30,
-    -30,  0, 15, 20, 20, 15,  0,-30,
-    -30,  5, 10, 15, 15, 10,  5,-30,
-    -40,-20,  0,  5,  5,  0,-20,-40,
-    -50,-40,-30,-30,-30,-30,-40,-50,
+    S(-167, -58), S( -89, -38), S( -34, -13), S( -49, -28), S(  61, -31), S( -97, -27), S( -15, -63), S(-107, -99),
+    S( -73, -25), S( -41,  -8), S(  72, -25), S(  36,  -2), S(  23,  -9), S(  62, -25), S(   7, -24), S( -17, -52),
+    S( -47, -24), S(  60, -20), S(  37,  10), S(  65,   9), S(  84,  -1), S( 129,  -9), S(  73, -19), S(  44, -41),
+    S(  -9, -17), S(  17,   3), S(  19,  22), S(  53,  22), S(  37,  22), S(  69,  11), S(  18,   8), S(  22, -18),
+    S( -13, -18), S(   4,  -6), S(  16,  16), S(  13,  25), S(  28,  16), S(  19,  17), S(  21,   4), S(  -8, -18),
+    S( -23, -23), S(  -9,  -3), S(  12,  -1), S(  10,  15), S(  19,  10), S(  17,  -3), S(  25, -20), S( -16, -22),
+    S( -29, -42), S( -53, -20), S( -12, -10), S(  -3,  -5), S(  -1,  -2), S(  18, -20), S( -14, -23), S( -19, -44),
+    S(-105, -29), S( -21, -51), S( -58, -23), S( -33, -15), S( -17, -22), S( -28, -18), S( -19, -50), S( -23, -64),
 };
 
-static const int8_t Bishop[] =
+const PieceScore BishopPSQT[Square::NumSquares] =
 {
-    -20,-10,-10,-10,-10,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -10,  5,  5, 10, 10,  5,  5,-10,
-    -10,  0, 10, 10, 10, 10,  0,-10,
-    -10, 10, 10, 10, 10, 10, 10,-10,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -20,-10,-40,-10,-10,-40,-10,-20,
+    S( -29, -14), S(   4, -21), S( -82, -11), S( -37,  -8), S( -25,  -7), S( -42,  -9), S(   7, -17), S(  -8, -24),
+    S( -26,  -8), S(  16,  -4), S( -18,   7), S( -13, -12), S(  30,  -3), S(  59, -13), S(  18,  -4), S( -47, -14),
+    S( -16,   2), S(  37,  -8), S(  43,   0), S(  40,  -1), S(  35,  -2), S(  50,   6), S(  37,   0), S(  -2,   4),
+    S(  -4,  -3), S(   5,   9), S(  19,  12), S(  50,   9), S(  37,  14), S(  37,  10), S(   7,   3), S(  -2,   2),
+    S(  -6,  -6), S(  13,   3), S(  13,  13), S(  26,  19), S(  34,   7), S(  12,  10), S(  10,  -3), S(   4,  -9),
+    S(   0, -12), S(  15,  -3), S(  15,   8), S(  15,  10), S(  14,  13), S(  27,   3), S(  18,  -7), S(  10, -15),
+    S(   4, -14), S(  15, -18), S(  16,  -7), S(   0,  -1), S(   7,   4), S(  21,  -9), S(  33, -15), S(   1, -27),
+    S( -33, -23), S(  -3,  -9), S( -14, -23), S( -21,  -5), S( -13,  -9), S( -12, -16), S( -39,  -5), S( -21, -17),
 };
 
-static const int8_t Rook[] =
+const PieceScore RookPSQT[Square::NumSquares] =
 {
-     0,  0,  0,  0,  0,  0,  0,  0,
-     5, 10, 10, 10, 10, 10, 10,  5,
-    -5,  0,  0,  0,  0,  0,  0, -5,
-    -5,  0,  0,  0,  0,  0,  0, -5,
-    -5,  0,  0,  0,  0,  0,  0, -5,
-    -5,  0,  0,  0,  0,  0,  0, -5,
-    -5,  0,  0,  0,  0,  0,  0, -5,
-     0,  0,  0,  5,  5,  0,  0,  0,
+    S(  32,  13), S(  42,  10), S(  32,  18), S(  51,  15), S(  63,  12), S(   9,  12), S(  31,   8), S(  43,   5),
+    S(  27,  11), S(  32,  13), S(  58,  13), S(  62,  11), S(  80,  -3), S(  67,   3), S(  26,   8), S(  44,   3),
+    S(  -5,   7), S(  19,   7), S(  26,   7), S(  36,   5), S(  17,   4), S(  45,  -3), S(  61,  -5), S(  16,  -3),
+    S( -24,   4), S( -11,   3), S(   7,  13), S(  26,   1), S(  24,   2), S(  35,   1), S(  -8,  -1), S( -20,   2),
+    S( -36,   3), S( -26,   5), S( -12,   8), S(  -1,   4), S(   9,  -5), S(  -7,  -6), S(   6,  -8), S( -23, -11),
+    S( -45,  -4), S( -25,   0), S( -16,  -5), S( -17,  -1), S(   3,  -7), S(   0, -12), S(  -5,  -8), S( -33, -16),
+    S( -44,  -6), S( -16,  -6), S( -20,   0), S(  -9,   2), S(  -1,  -9), S(  11,  -9), S(  -6, -11), S( -71,  -3),
+    S( -19,  -9), S( -13,   2), S(   1,   3), S(  17,  -1), S(  16,  -5), S(   7, -13), S( -37,   4), S( -26, -20),
 };
 
-static const int8_t Queen[] =
+const PieceScore QueenPSQT[Square::NumSquares] =
 {
-    -20,-10,-10, -5, -5,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5,  5,  5,  5,  0,-10,
-     -5,  0,  5,  5,  5,  5,  0, -5,
-      0,  0,  5,  5,  5,  5,  0, -5,
-    -10,  5,  5,  5,  5,  5,  0,-10,
-    -10,  0,  5,  0,  0,  0,  0,-10,
-    -20,-10,-10, -5, -5,-10,-10,-20,
+    S( -28,  -9), S(   0,  22), S(  29,  22), S(  12,  27), S(  59,  27), S(  44,  19), S(  43,  10), S(  45,  20),
+    S( -24, -17), S( -39,  20), S(  -5,  32), S(   1,  41), S( -16,  58), S(  57,  25), S(  28,  30), S(  54,   0),
+    S( -13, -20), S( -17,   6), S(   7,   9), S(   8,  49), S(  29,  47), S(  56,  35), S(  47,  19), S(  57,   9),
+    S( -27,   3), S( -27,  22), S( -16,  24), S( -16,  45), S(  -1,  57), S(  17,  40), S(  -2,  57), S(   1,  36),
+    S(  -9, -18), S( -26,  28), S(  -9,  19), S( -10,  47), S(  -2,  31), S(  -4,  34), S(   3,  39), S(  -3,  23),
+    S( -14, -16), S(   2, -27), S( -11,  15), S(  -2,   6), S(  -5,   9), S(   2,  17), S(  14,  10), S(   5,   5),
+    S( -35, -22), S(  -8, -23), S(  11, -30), S(   2, -16), S(   8, -16), S(  15, -23), S(  -3, -36), S(   1, -32),
+    S(  -1, -33), S( -18, -28), S(  -9, -22), S(  10, -43), S( -15,  -5), S( -25, -32), S( -31, -20), S( -50, -41),
 };
 
-static const int8_t King_MiddleGame[] =
+const PieceScore KingPSQT[Square::NumSquares] =
 {
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -20,-30,-30,-40,-40,-30,-30,-20,
-    -10,-20,-20,-20,-20,-20,-20,-10,
-     20, 20,  0,  0,  0,  0, 20, 20,
-     20, 30, 10,  0,  0, 10, 30, 20,
+    S( -65, -74), S(  23, -35), S(  16, -18), S( -15, -18), S( -56, -11), S( -34,  15), S(   2,   4), S(  13, -17),
+    S(  29, -12), S(  -1,  17), S( -20,  14), S(  -7,  17), S(  -8,  17), S(  -4,  38), S( -38,  23), S( -29,  11),
+    S(  -9,  10), S(  24,  17), S(   2,  23), S( -16,  15), S( -20,  20), S(   6,  45), S(  22,  44), S( -22,  13),
+    S( -17,  -8), S( -20,  22), S( -12,  24), S( -27,  27), S( -30,  26), S( -25,  33), S( -14,  26), S( -36,   3),
+    S( -49, -18), S(  -1,  -4), S( -27,  21), S( -39,  24), S( -46,  27), S( -44,  23), S( -33,   9), S( -51, -11),
+    S( -14, -19), S( -14,  -3), S( -22,  11), S( -46,  21), S( -44,  23), S( -30,  16), S( -15,   7), S( -27,  -9),
+    S(   1, -27), S(   7, -11), S(  -8,   4), S( -64,  13), S( -43,  14), S( -16,   4), S(   9,  -5), S(   8, -17),
+    S( -15, -53), S(  36, -34), S(  12, -21), S( -54, -11), S(   8, -28), S( -28, -14), S(  24, -24), S(  14, -43),
 };
-
-static const int8_t King_EndGame[] =
-{
-    -50,-40,-30,-20,-20,-30,-40,-50,
-    -30,-20,-10,  0,  0,-10,-20,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-30,  0,  0,  0,  0,-30,-30,
-    -50,-30,-30,-30,-30,-30,-30,-50,
-};
-
-} // namespace PieceSquareTables
 
 static uint32_t FlipRank(uint32_t square)
 {
@@ -109,7 +101,37 @@ static uint32_t FlipRank(uint32_t square)
     return square;
 }
 
-int32_t ScoreQuietMove(const Move& move, const Color color)
+INLINE static void EvalWhitePieceSquareTable(const Bitboard bitboard, const PieceScore* scores, int32_t& outScoreMG, int32_t& outScoreEG)
+{
+    bitboard.Iterate([&](uint32_t square)
+    {
+        square = FlipRank(square);
+        ASSERT(square < 64);
+        outScoreMG += scores[square].mg;
+        outScoreEG += scores[square].eg;
+    });
+}
+
+INLINE static void EvalBlackPieceSquareTable(const Bitboard bitboard, const PieceScore* scores, int32_t& outScoreMG, int32_t& outScoreEG)
+{
+    bitboard.Iterate([&](uint32_t square)
+    {
+        ASSERT(square < 64);
+        outScoreMG -= scores[square].mg;
+        outScoreEG -= scores[square].eg;
+    });
+}
+
+static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t egScore)
+{
+    // 32 at the beginning, 0 at the end
+    const int32_t mgPhase = pos.Whites().Occupied().Count() + pos.Blacks().Occupied().Count();
+    const int32_t egPhase = 32u - mgPhase;
+
+    return (mgScore * mgPhase + egScore * egPhase) / 32;
+}
+
+int32_t ScoreQuietMove(const Position& position, const Move& move)
 {
     ASSERT(move.IsValid());
     ASSERT(!move.isCapture);
@@ -118,22 +140,40 @@ int32_t ScoreQuietMove(const Move& move, const Color color)
     uint32_t fromSquare = move.fromSquare.Index();
     uint32_t toSquare = move.toSquare.Index();
 
-    if (color == Color::White)
+    if (position.GetSideToMove() == Color::White)
     {
         fromSquare = FlipRank(fromSquare);
         toSquare = FlipRank(toSquare);
     }
 
-    int32_t score = 0;
+    int32_t scoreMG = 0;
+    int32_t scoreEG = 0;
 
     switch (move.piece)
     {
-    case Piece::Pawn:   score = PieceSquareTables::Pawn[toSquare]   - PieceSquareTables::Pawn[fromSquare];      break;
-    case Piece::Knight: score = PieceSquareTables::Knight[toSquare] - PieceSquareTables::Knight[fromSquare];    break;
-    case Piece::Bishop: score = PieceSquareTables::Bishop[toSquare] - PieceSquareTables::Bishop[fromSquare];    break;
-    case Piece::Rook:   score = PieceSquareTables::Rook[toSquare]   - PieceSquareTables::Rook[fromSquare];      break;
-    case Piece::Queen:  score = PieceSquareTables::Queen[toSquare]  - PieceSquareTables::Queen[fromSquare];     break;
+    case Piece::Pawn:
+        scoreMG = PawnPSQT[toSquare].mg - PawnPSQT[fromSquare].mg;
+        scoreEG = PawnPSQT[toSquare].eg - PawnPSQT[fromSquare].eg;
+        break;
+    case Piece::Knight:
+        scoreMG = KnightPSQT[toSquare].mg - KnightPSQT[fromSquare].mg;
+        scoreEG = KnightPSQT[toSquare].eg - KnightPSQT[fromSquare].eg;
+        break;
+    case Piece::Bishop:
+        scoreMG = BishopPSQT[toSquare].mg - BishopPSQT[fromSquare].mg;
+        scoreEG = BishopPSQT[toSquare].eg - BishopPSQT[fromSquare].eg;
+        break;
+    case Piece::Rook:
+        scoreMG = RookPSQT[toSquare].mg - RookPSQT[fromSquare].mg;
+        scoreEG = RookPSQT[toSquare].eg - RookPSQT[fromSquare].eg;
+        break;
+    case Piece::Queen:
+        scoreMG = QueenPSQT[toSquare].mg - QueenPSQT[fromSquare].mg;
+        scoreEG = QueenPSQT[toSquare].eg - QueenPSQT[fromSquare].eg;
+        break;
     }
+
+    const int32_t score = InterpolateScore(position, scoreMG, scoreEG);
 
     return std::max(0, score);
 }
@@ -176,12 +216,46 @@ bool CheckInsufficientMaterial(const Position& position)
 int32_t Evaluate(const Position& position)
 {
     int32_t value = 0;
+    int32_t valueMG = 0;
+    int32_t valueEG = 0;
 
-    value += c_queenValue * ((int32_t)position.Whites().queens.Count() - (int32_t)position.Blacks().queens.Count());
-    value += c_rookValue * ((int32_t)position.Whites().rooks.Count() - (int32_t)position.Blacks().rooks.Count());
-    value += c_bishopValue * ((int32_t)position.Whites().bishops.Count() - (int32_t)position.Blacks().bishops.Count());
-    value += c_knightValue * ((int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count());
-    value += c_pawnValue * ((int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count());
+    int32_t queensDiff = (int32_t)position.Whites().queens.Count() - (int32_t)position.Blacks().queens.Count();
+    int32_t rooksDiff = (int32_t)position.Whites().rooks.Count() - (int32_t)position.Blacks().rooks.Count();
+    int32_t bishopsDiff = (int32_t)position.Whites().bishops.Count() - (int32_t)position.Blacks().bishops.Count();
+    int32_t knightsDiff = (int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count();
+    int32_t pawnsDiff = (int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count();
+
+    valueMG += c_queenValue.mg * queensDiff;
+    valueMG += c_rookValue.mg * rooksDiff;
+    valueMG += c_bishopValue.mg * bishopsDiff;
+    valueMG += c_knightValue.mg * knightsDiff;
+    valueMG += c_pawnValue.mg * pawnsDiff;
+
+    valueEG += c_queenValue.eg * queensDiff;
+    valueEG += c_rookValue.eg * rooksDiff;
+    valueEG += c_bishopValue.eg * bishopsDiff;
+    valueEG += c_knightValue.eg * knightsDiff;
+    valueEG += c_pawnValue.eg * pawnsDiff;
+
+    //value += c_queenValue * ((int32_t)position.Whites().queens.Count() - (int32_t)position.Blacks().queens.Count());
+    //value += c_rookValue * ((int32_t)position.Whites().rooks.Count() - (int32_t)position.Blacks().rooks.Count());
+    //value += c_bishopValue * ((int32_t)position.Whites().bishops.Count() - (int32_t)position.Blacks().bishops.Count());
+    //value += c_knightValue * ((int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count());
+    //value += c_pawnValue * ((int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count());
+
+    const uint32_t numWhitePieces =
+        (int32_t)position.Whites().queens.Count() +
+        (int32_t)position.Whites().rooks.Count() +
+        (int32_t)position.Whites().bishops.Count() +
+        (int32_t)position.Whites().knights.Count() +
+        (int32_t)position.Whites().pawns.Count();
+
+    const uint32_t numBlackPieces =
+        (int32_t)position.Blacks().queens.Count() +
+        (int32_t)position.Blacks().rooks.Count() +
+        (int32_t)position.Blacks().bishops.Count() +
+        (int32_t)position.Blacks().knights.Count() +
+        (int32_t)position.Blacks().pawns.Count();
 
     const Bitboard whiteAttackedSquares = position.GetAttackedSquares(Color::White);
     const Bitboard blackAttackedSquares = position.GetAttackedSquares(Color::Black);
@@ -209,84 +283,63 @@ int32_t Evaluate(const Position& position)
 
     // piece square tables
     {
-        int32_t pieceSquareValue = 0;
+        EvalWhitePieceSquareTable(position.Whites().pawns,      PawnPSQT,   valueMG, valueEG);
+        EvalWhitePieceSquareTable(position.Whites().knights,    KnightPSQT, valueMG, valueEG);
+        EvalWhitePieceSquareTable(position.Whites().bishops,    BishopPSQT, valueMG, valueEG);
+        EvalWhitePieceSquareTable(position.Whites().rooks,      RookPSQT,   valueMG, valueEG);
+        EvalWhitePieceSquareTable(position.Whites().queens,     QueenPSQT,  valueMG, valueEG);
+        EvalWhitePieceSquareTable(position.Whites().king,       KingPSQT,   valueMG, valueEG);
 
-        position.Whites().pawns.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            pieceSquareValue += PieceSquareTables::Pawn[square];
-        });
-        position.Blacks().pawns.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            pieceSquareValue -= PieceSquareTables::Pawn[square];
-        });
-
-        position.Whites().knights.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            pieceSquareValue += PieceSquareTables::Knight[square];
-        });
-        position.Blacks().knights.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            pieceSquareValue -= PieceSquareTables::Knight[square];
-        });
-
-        position.Whites().bishops.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            pieceSquareValue += PieceSquareTables::Bishop[square];
-        });
-        position.Blacks().bishops.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            pieceSquareValue -= PieceSquareTables::Bishop[square];
-        });
-
-        position.Whites().rooks.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            pieceSquareValue += PieceSquareTables::Rook[square];
-        });
-        position.Blacks().rooks.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            pieceSquareValue -= PieceSquareTables::Rook[square];
-        });
-
-        position.Whites().queens.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            pieceSquareValue += PieceSquareTables::Queen[square];
-        });
-        position.Blacks().queens.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            pieceSquareValue -= PieceSquareTables::Queen[square];
-        });
-
-        position.Whites().king.Iterate([&](uint32_t square)
-        {
-            square = FlipRank(square);
-            ASSERT(square < 64);
-            // TODO smooth blending?
-            pieceSquareValue += whiteOccupiedSquares.Count() < 8 ? PieceSquareTables::King_EndGame[square] : PieceSquareTables::King_MiddleGame[square];
-        });
-        position.Blacks().king.Iterate([&](uint32_t square)
-        {
-            ASSERT(square < 64);
-            // TODO smooth blending?
-            pieceSquareValue -= blackOccupiedSquares.Count() < 8 ? PieceSquareTables::King_EndGame[square] : PieceSquareTables::King_MiddleGame[square];
-        });
-
-        value += pieceSquareValue;
+        EvalBlackPieceSquareTable(position.Blacks().pawns,      PawnPSQT,   valueMG, valueEG);
+        EvalBlackPieceSquareTable(position.Blacks().knights,    KnightPSQT, valueMG, valueEG);
+        EvalBlackPieceSquareTable(position.Blacks().bishops,    BishopPSQT, valueMG, valueEG);
+        EvalBlackPieceSquareTable(position.Blacks().rooks,      RookPSQT,   valueMG, valueEG);
+        EvalBlackPieceSquareTable(position.Blacks().queens,     QueenPSQT,  valueMG, valueEG);
+        EvalBlackPieceSquareTable(position.Blacks().king,       KingPSQT,   valueMG, valueEG);
     }
+
+    // white doubled pawns
+    {
+        const Bitboard pawns = position.Whites().pawns;
+
+        int32_t numDoubledPawns = 0;
+        for (uint32_t file = 0; file < 8u; ++file)
+        {
+            int32_t numPawnsInFile = (pawns & Bitboard::FileBitboard(file)).Count();
+            numDoubledPawns += std::max(0, numPawnsInFile - 1);
+        }
+
+        value -= c_doubledPawnPenalty * numDoubledPawns;
+    }
+
+    // black doubled pawns
+    {
+        const Bitboard pawns = position.Blacks().pawns;
+
+        int32_t numDoubledPawns = 0;
+        for (uint32_t file = 0; file < 8u; ++file)
+        {
+            int32_t numPawnsInFile = (pawns & Bitboard::FileBitboard(file)).Count();
+            numDoubledPawns += std::max(0, numPawnsInFile - 1);
+        }
+
+        value += c_doubledPawnPenalty * numDoubledPawns;
+    }
+
+    // tempo bonus
+    if (position.GetSideToMove() == Color::White)
+    {
+        value += numWhitePieces / 2;
+    }
+    else
+    {
+        value += numBlackPieces / 2;
+    }
+
+    // accumulate middle/end game scores
+    value += InterpolateScore(position, valueMG, valueEG);
+
+    ASSERT(value < 100000 && value > -100000);
 
     return value;
 }

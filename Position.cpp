@@ -219,7 +219,7 @@ static const int32_t c_PromotionScores[] =
 {
     0,          // none
     0,          // pawn
-    9000000,    // knight
+    1000,       // knight
     1000,       // bishop
     1000,       // rook
     9000001,    // queen
@@ -258,7 +258,7 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
     }
     else
     {
-        score += ScoreQuietMove(move, mSideToMove);
+        score += ScoreQuietMove(*this, move);
 
         //// bonus for threats
         {
@@ -268,8 +268,8 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
             else if (move.piece == Piece::Rook)     attacked = Bitboard::GetRookAttacks(move.toSquare);
             else if (move.piece == Piece::Bishop)   attacked = Bitboard::GetBishopAttacks(move.toSquare);
             else if (move.piece == Piece::Queen)    attacked = Bitboard::GetRookAttacks(move.toSquare) | Bitboard::GetBishopAttacks(move.toSquare);
-            // TODO pawns
-            score += (opponentSide.Occupied() & attacked) != 0;
+            else if (move.piece == Piece::Pawn)     attacked = Bitboard::GetPawnAttacks(move.toSquare, mSideToMove);
+            score += (opponentSide.Occupied() & attacked).Count();
         }
     }
 
