@@ -1,5 +1,13 @@
 #include "Evaluate.hpp"
 #include "Move.hpp"
+#include "NeuralNetwork.hpp"
+
+static nn::NeuralNetwork s_neuralNetwork;
+
+bool LoadNeuralNetwork(const char* name)
+{
+    return s_neuralNetwork.Load(name);
+}
 
 struct PieceScore
 {
@@ -180,38 +188,102 @@ int32_t ScoreQuietMove(const Position& position, const Move& move)
 
 bool CheckInsufficientMaterial(const Position& position)
 {
-    if (position.Whites().queens.Count() > 0 || position.Blacks().queens.Count() > 0 ||
-        position.Whites().rooks.Count() > 0 || position.Blacks().rooks.Count() > 0 ||
-        position.Whites().pawns.Count() > 0 || position.Blacks().pawns.Count() > 0)
+    const Bitboard queensRooksPawns =
+        position.Whites().queens | position.Whites().rooks | position.Whites().pawns |
+        position.Blacks().queens | position.Blacks().rooks | position.Blacks().pawns;
+
+    if (queensRooksPawns != 0)
     {
         return false;
     }
 
-    // king and bishop vs. king
-    if (position.Whites().knights.Count() == 0 && position.Blacks().knights.Count() == 0)
+    if (position.Whites().knights == 0 && position.Blacks().knights == 0)
     {
-        if ((position.Whites().bishops.Count() == 0 && position.Blacks().bishops.Count() <= 1) ||
-            (position.Whites().bishops.Count() <= 1 && position.Blacks().bishops.Count() == 0))
+        // king and bishop vs. king
+        if ((position.Whites().bishops == 0 && position.Blacks().bishops.Count() <= 1) ||
+            (position.Whites().bishops.Count() <= 1 && position.Blacks().bishops == 0))
         {
             return true;
+        }
+
+        // king and bishop vs. king and bishop (bishops on the same color squares)
+        if (position.Whites().bishops.Count() == 1 && position.Blacks().bishops.Count() == 1)
+        {
+            const bool whiteBishopOnLightSquare = (position.Whites().bishops & Bitboard::LightSquares()) != 0;
+            const bool blackBishopOnLightSquare = (position.Blacks().bishops & Bitboard::LightSquares()) != 0;
+            return whiteBishopOnLightSquare == blackBishopOnLightSquare;
         }
     }
 
 
     // king and knight vs. king
-    if (position.Whites().bishops.Count() == 0 && position.Blacks().bishops.Count() == 0)
+    if (position.Whites().bishops == 0 && position.Blacks().bishops == 0)
     {
-        if ((position.Whites().knights.Count() == 0 && position.Blacks().knights.Count() <= 1) ||
-            (position.Whites().knights.Count() <= 1 && position.Blacks().knights.Count() == 0))
+        if ((position.Whites().knights == 0 && position.Blacks().knights.Count() <= 1) ||
+            (position.Whites().knights.Count() <= 1 && position.Blacks().knights == 0))
         {
             return true;
         }
     }
 
-    // TODO: king and bishop versus king and bishop with the bishops on the same color ==> draw
-
     return false;
 }
+
+#ifdef USE_NN_EVALUATION
+
+static float WinProbabilityToPawn(float w)
+{
+    w = std::max(0.00001f, std::min(0.99999f, w));
+    return 4.0f * log10f(w / (1.0f - w));
+}
+
+static void PositionToNeuralNetworkInput(const Position& position, nn::Layer::Values& outValues)
+{
+    outValues.resize(12 * 64);
+
+    SidePosition whitePosition = position.Whites();
+    SidePosition blackPosition = position.Whites();
+
+    if (position.GetSideToMove() == Color::Black)
+    {
+        std::swap(whitePosition, blackPosition);
+    }
+
+    for (uint32_t i = 0; i < 64u; ++i)
+    {
+        outValues[0 * 64 + i] = (float)((whitePosition.king >> i) & 1);
+        outValues[1 * 64 + i] = (float)((whitePosition.pawns >> i) & 1);
+        outValues[2 * 64 + i] = (float)((whitePosition.knights >> i) & 1);
+        outValues[3 * 64 + i] = (float)((whitePosition.bishops >> i) & 1);
+        outValues[4 * 64 + i] = (float)((whitePosition.rooks >> i) & 1);
+        outValues[5 * 64 + i] = (float)((whitePosition.queens >> i) & 1);
+
+        outValues[6 * 64 + i] = (float)((blackPosition.king >> i) & 1);
+        outValues[7 * 64 + i] = (float)((blackPosition.pawns >> i) & 1);
+        outValues[8 * 64 + i] = (float)((blackPosition.knights >> i) & 1);
+        outValues[9 * 64 + i] = (float)((blackPosition.bishops >> i) & 1);
+        outValues[10 * 64 + i] = (float)((blackPosition.rooks >> i) & 1);
+        outValues[11 * 64 + i] = (float)((blackPosition.queens >> i) & 1);
+    }
+}
+
+int32_t Evaluate(const Position& position)
+{
+    nn::Layer::Values networkInput;
+    PositionToNeuralNetworkInput(position, networkInput);
+
+    const nn::Layer::Values& networkOutput = s_neuralNetwork.Run(networkInput);
+    float winProbability = networkOutput[0];
+
+    if (position.GetSideToMove() == Color::Black)
+    {
+        winProbability = -winProbability;
+    }
+
+    return static_cast<int32_t>(100.0f * WinProbabilityToPawn(winProbability));
+}
+
+#else
 
 int32_t Evaluate(const Position& position)
 {
@@ -343,3 +415,5 @@ int32_t Evaluate(const Position& position)
 
     return value;
 }
+
+#endif // USE_NN_EVALUATION

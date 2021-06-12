@@ -4,12 +4,16 @@
 
 #include <iostream>
 #include <string>
-#include <chrono>
 
-static const uint32_t LateMoveReductionStartDepth = 4;
+#pragma optimize("",off)
+
+static const uint32_t NullMovePrunningStartDepth = 3;
+static const int32_t NullMovePrunningDepthReduction = 3;
+
+static const uint32_t LateMoveReductionStartDepth = 3;
 static const uint32_t LateMoveReductionRate = 8;
 
-static const uint32_t LateMovePrunningStartDepth = 2;
+static const uint32_t LateMovePrunningStartDepth = 3;
 
 static const uint32_t AspirationWindowSearchStartDepth = 4;
 static const int32_t AspirationWindowMax = 200;
@@ -24,13 +28,24 @@ static const uint32_t AlphaPruningDepth = 4;
 static const int32_t AlphaMarginMultiplier = 110;
 static const int32_t AlphaMarginBias = 800;
 
+int64_t SearchParam::GetElapsedTime() const
+{
+    auto endTimePoint = std::chrono::high_resolution_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - startTimePoint).count();
+}
+
 Search::Search()
 {
 #ifndef _DEBUG
-    mTranspositionTable.Resize(16 * 1024 * 1024);
+    mTranspositionTable.Resize(8 * 1024 * 1024);
 #else
     mTranspositionTable.Resize(1024 * 1024);
 #endif
+}
+
+Search::~Search()
+{
+
 }
 
 void Search::RecordBoardPosition(const Position& position)
@@ -79,20 +94,26 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 {
     std::vector<Move> pvMovesSoFar;
 
-    result.clear();
-    result.resize(param.numPvLines);
     mPrevPvLines.clear();
 
     // clamp number of PV lines (there can't be more than number of max moves)
     static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
-    const uint32_t numPvLines = std::min(param.numPvLines, MoveList::MaxMoves);
+    const uint32_t numPvLines = std::min(param.numPvLines, position.GetNumLegalMoves());
 
-    //auto startTimeAll = std::chrono::high_resolution_clock::now();
+    result.clear();
+    result.resize(numPvLines);
+
+    if (numPvLines == 0u)
+    {
+        // early exit in case of no legal moves
+        return;
+    }
+
+    memset(searchHistory, 0, sizeof(searchHistory));
+    memset(killerMoves, 0, sizeof(killerMoves));
 
     for (uint32_t depth = 1; depth <= param.maxDepth; ++depth)
     {
-        memset(searchHistory, 0, sizeof(searchHistory));
-        memset(killerMoves, 0, sizeof(killerMoves));
         pvMovesSoFar.clear();
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
@@ -132,14 +153,12 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
                 for (uint32_t i = 0; i < pvLength; ++i)
                 {
                     const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
-                    ASSERT(move.IsValid());
 
+                    // Note: move in transpostion table may be invalid due to hash collision
+                    if (!move.IsValid()) break;
+                    if (!iteratedPosition.DoMove(move)) break;
+                    
                     outPvLine.moves.push_back(move);
-
-                    if (!iteratedPosition.DoMove(move))
-                    {
-                        break;
-                    }
                 }
 
                 ASSERT(!outPvLine.moves.empty());
@@ -188,10 +207,16 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
         }
 
         mPrevPvLines = result;
-    }
 
-    //auto endTimeAll = std::chrono::high_resolution_clock::now();
-    //std::cout << "total time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTimeAll - startTimeAll).count() << std::endl;
+        if (param.maxTime < UINT32_MAX)
+        {
+            if (param.GetElapsedTime() > param.maxTime)
+            {
+                // time limit exceeded
+                break;
+            }
+        }
+    }
 }
 
 int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
@@ -242,14 +267,6 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
             aspirationWindow *= 2;
             continue;
         }
-
-        //if (param.depth >= aspirationSearchStartDepth)
-        //{
-        //    alpha = score - aspirationWindow;
-        //    beta = score + aspirationWindow;
-        //    aspirationWindow = (aspirationWindow + minAspirationWindow + 1) / 2; // narrow aspiration window
-        //    ASSERT(aspirationWindow >= minAspirationWindow);
-        //}
 
         return score;
     }
@@ -390,6 +407,26 @@ bool Search::IsRepetition(const NodeInfo& node) const
     return IsPositionRepeated(*node.position);
 }
 
+bool Search::IsDraw(const NodeInfo& node) const
+{
+    if (node.position->GetHalfMoveCount() >= 100)
+    {
+        return true;
+    }
+
+    if (CheckInsufficientMaterial(*node.position))
+    {
+        return true;
+    }
+
+    if (IsRepetition(node))
+    {
+        return true;
+    }
+
+    return false;
+}
+
 Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx)
 {
     // clean PV line
@@ -401,12 +438,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     ctx.quiescenceNodes++;
     ctx.maxDepth = std::max<uint32_t>(ctx.maxDepth, node.depth);
 
-    if (IsRepetition(node))
-    {
-        return 0;
-    }
-
-    if (CheckInsufficientMaterial(*node.position))
+    if (IsDraw(node))
     {
         return 0;
     }
@@ -526,12 +558,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     // Skip root node as we need some move to be reported
     if (!isRootNode)
     {
-        if (IsRepetition(node))
-        {
-            return 0;
-        }
-
-        if (CheckInsufficientMaterial(*node.position))
+        if (IsDraw(node))
         {
             return 0;
         }
@@ -632,6 +659,41 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         if (inversedDepth <= BetaPruningDepth && (staticEvaluation - betaMargin >= beta))
         {
             return staticEvaluation - betaMargin;
+        }
+    }
+
+    // Null Move Prunning
+    if (!node.isPvNode && !isInCheck && inversedDepth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
+    {
+        // don't allow null move if parent or grandparent node was null move
+        bool doNullMove = !node.isNullMove;
+        if (node.parentNode && node.parentNode->isNullMove)
+        {
+            doNullMove = false;
+        }
+
+        if (doNullMove)
+        {
+            Position childPosition = *node.position;
+            childPosition.DoNullMove();
+
+            NodeInfo childNodeParam;
+            childNodeParam.parentNode = &node;
+            childNodeParam.depth = node.depth + 1;
+            childNodeParam.color = GetOppositeColor(node.color);
+            childNodeParam.pvIndex = node.pvIndex;
+            childNodeParam.position = &childPosition;
+            childNodeParam.alpha = -beta;
+            childNodeParam.beta = -beta + 1;
+            childNodeParam.isNullMove = true;
+            childNodeParam.maxDepth = (uint16_t)std::max(0, (int32_t)node.maxDepth - NullMovePrunningDepthReduction);
+
+            const int32_t nullMoveScore = -NegaMax(childNodeParam, ctx);
+
+            if (nullMoveScore >= beta)
+            {
+                return beta;
+            }
         }
     }
 

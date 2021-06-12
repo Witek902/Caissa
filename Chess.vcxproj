@@ -230,9 +230,11 @@
     <ClCompile Include="Evaluate.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Move.cpp" />
+    <ClCompile Include="NeuralNetwork.cpp" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
+    <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Square.cpp" />
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
@@ -245,6 +247,7 @@
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="Evaluate.hpp" />
     <ClInclude Include="Move.hpp" />
+    <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
     <ClInclude Include="Search.hpp" />

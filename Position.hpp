@@ -127,11 +127,23 @@ public:
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
 
+    // get bitboard of attacking squares
+    const Bitboard GetAttackers(const Square square, const Color sideColor) const;
+
     // check if given square is visible by any other piece
     bool IsSquareVisible(const Square square, const Color sideColor) const;
 
     // check if given side is in check
     bool IsInCheck(Color sideColor) const;
+
+    // get number of legal moves
+    uint32_t GetNumLegalMoves() const;
+
+    // check if side to move is checkmated
+    bool IsMate() const;
+
+    // check if side to move has no legal moves
+    bool IsStalemate() const;
     
     void GenerateMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
 
@@ -144,6 +156,12 @@ public:
 
     // apply a move
     bool DoMove(const Move& move);
+
+    // apply null move
+    bool DoNullMove();
+
+    // evaluate material exchange on a single square
+    int32_t StaticExchangeEvaluation(const Move& move) const;
 
     // compute (SLOW) Zobrist hash
     uint64_t ComputeHash() const;
@@ -165,6 +183,8 @@ public:
 
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
+
+    uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
 
 private:
 

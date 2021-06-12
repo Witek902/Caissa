@@ -6,13 +6,29 @@
 
 #include <unordered_map>
 #include <span>
+#include <chrono>
 
 struct SearchParam
 {
+    // used to track total time spend on search
+    std::chrono::time_point<std::chrono::high_resolution_clock> startTimePoint;
+
+    // maximum allowed base search depth (excluding quisence, extensions, etc.)
     uint32_t maxDepth = 8;
+
+    // maximum allowed search time in milliseconds
+    uint32_t maxTime = UINT32_MAX;
+
+    // number of PV lines to report
     uint32_t numPvLines = 1;
+
+    // if not empty, only consider this moves
     std::vector<Move> rootMoves;
+
+    // print UCI-style output
     bool debugLog = true;
+
+    int64_t GetElapsedTime() const;
 };
 
 struct PvLine
@@ -35,6 +51,7 @@ public:
     static constexpr int32_t MaxSearchDepth = 64;
 
     Search();
+    ~Search();
 
     void DoSearch(const Position& position, const SearchParam& param, SearchResult& result);
 
@@ -64,6 +81,7 @@ private:
         uint8_t pvIndex;
         Color color;
         bool isPvNode = false;
+        bool isNullMove = false;
     };
     
     struct SearchContext
@@ -120,6 +138,8 @@ private:
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 
     std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
+
+    bool IsDraw(const NodeInfo& node) const;
 
     int32_t AspirationWindowSearch(const AspirationWindowSearchParam& param);
 
