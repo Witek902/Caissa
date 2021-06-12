@@ -113,19 +113,23 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     pos.GetPieceBitBoard(piece) |= mask;
 }
 
+#pragma optimize("",off)
+
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
 {
     const Bitboard mask = square.Bitboard();
     SidePosition& pos = color == Color::White ? mWhites : mBlacks;
     Bitboard& targetBitboard = pos.GetPieceBitBoard(piece);
 
+    ASSERT((targetBitboard & mask) == mask);
+    targetBitboard &= ~mask;
+
     const uint32_t colorIndex = (uint32_t)color;
     const uint32_t pieceIndex = (uint32_t)piece - 1;
     mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
-
-    ASSERT((targetBitboard & mask) == mask);
-    targetBitboard &= ~mask;
 }
+
+#pragma optimize("",on)
 
 void Position::SetEnPassantSquare(const Square square)
 {
@@ -610,7 +614,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     }
 }
 
-bool Position::IsSquareVisible(const Square square, const Color sideColor) const
+const Bitboard Position::GetAttackers(const Square square, const Color sideColor) const
 {
     const SidePosition& side = sideColor == Color::White ? mWhites : mBlacks;
     const Bitboard occupiedSquares = mWhites.Occupied() | mBlacks.Occupied();
@@ -637,7 +641,12 @@ bool Position::IsSquareVisible(const Square square, const Color sideColor) const
         bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns;
     }
 
-    return bitboard != 0;
+    return bitboard;
+}
+
+bool Position::IsSquareVisible(const Square square, const Color sideColor) const
+{
+    return GetAttackers(square, sideColor) != 0;
 }
 
 bool Position::IsInCheck(Color sideColor) const
@@ -648,6 +657,41 @@ bool Position::IsInCheck(Color sideColor) const
     _BitScanForward64(&kingSquareIndex, currentSide.king);
 
     return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(sideColor));
+}
+
+uint32_t Position::GetNumLegalMoves() const
+{
+    MoveList moves;
+    GenerateMoveList(moves);
+
+    if (moves.numMoves == 0)
+    {
+        return 0;
+    }
+
+    uint32_t numLegalMoves = 0u;
+    for (uint32_t i = 0; i < moves.Size(); ++i)
+    {
+        const Move move = moves.moves[i].move;
+        ASSERT(move.IsValid());
+        Position childPosition = *this;
+        if (childPosition.DoMove(move))
+        {
+            numLegalMoves++;
+        }
+    }
+
+    return numLegalMoves;
+}
+
+bool Position::IsMate() const
+{
+    return GetNumLegalMoves() > 0u && IsInCheck(mSideToMove);
+}
+
+bool Position::IsStalemate() const
+{
+    return GetNumLegalMoves() > 0u && !IsInCheck(mSideToMove);
 }
 
 bool Position::IsMoveLegal(const Move& move) const
@@ -783,6 +827,20 @@ bool Position::DoMove(const Move& move)
         ClearRookCastlingRights(move.fromSquare);
     }
 
+    if (mSideToMove == Color::Black)
+    {
+        mMoveCount++;
+    }
+
+    if (move.piece == Piece::Pawn || move.isCapture)
+    {
+        mHalfMoveCount = 0;
+    }
+    else
+    {
+        mHalfMoveCount++;
+    }
+
     const Color prevToMove = mSideToMove;
 
     mSideToMove = GetOppositeColor(mSideToMove);
@@ -795,4 +853,118 @@ bool Position::DoMove(const Move& move)
 
     // can't be in check after move
     return !IsInCheck(prevToMove);
+}
+
+bool Position::DoNullMove()
+{
+    ASSERT(IsValid());          // board position must be valid
+    ASSERT(!IsInCheck(mSideToMove));
+
+    SetEnPassantSquare(Square());
+
+    if (mSideToMove == Color::Black)
+    {
+        mMoveCount++;
+    }
+
+    mHalfMoveCount++;
+
+    mSideToMove = GetOppositeColor(mSideToMove);
+    mHash ^= s_BlackToMoveHash;
+
+    ASSERT(IsValid());  // board position after the move must be valid
+
+    // validate hash
+    ASSERT(ComputeHash() == GetHash());
+
+    return true;
+}
+
+static const int16_t c_seePieceValues[] =
+{
+    0,      // none
+    100,    // pawn
+    320,    // knight
+    330,    // bishop
+    500,    // rook
+    900,    // queen
+};
+
+int32_t Position::StaticExchangeEvaluation(const Move& move) const
+{
+    Color sideToMove = mSideToMove;
+    Bitboard occupied = mWhites.Occupied() | mBlacks.Occupied();
+    Bitboard allAttackers = GetAttackers(move.toSquare, Color::White) | GetAttackers(move.toSquare, Color::Black);
+
+    int32_t balance = 0;
+
+    {
+        const SidePosition& opponentSide = sideToMove == Color::White ? mBlacks : mWhites;
+        const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
+        balance = c_seePieceValues[(uint32_t)capturedPiece];
+    }
+
+    {
+        const SidePosition& side = sideToMove == Color::White ? mWhites : mBlacks;
+        const Piece movedPiece = side.GetPieceAtSquare(move.fromSquare);
+        balance -= c_seePieceValues[(uint32_t)movedPiece];
+    }
+
+    // If the balance is positive even if losing the moved piece,
+    // the exchange is guaranteed to beat the threshold.
+    if (balance >= 0)
+    {
+        return 1;
+    }
+
+    // "do" move
+    occupied &= ~move.fromSquare.Bitboard();
+    occupied |= move.toSquare.Bitboard();
+    allAttackers &= occupied;
+
+    sideToMove = GetOppositeColor(sideToMove);
+
+    for (;;)
+    {
+        const SidePosition& side = sideToMove == Color::White ? mWhites : mBlacks;
+        const Bitboard ourAttackers = allAttackers & side.Occupied();
+
+        // no more attackers
+        if (ourAttackers == 0) break;
+
+        // find weakest attacker
+        for (uint32_t pieceType = 1; pieceType <= 6u; ++pieceType)
+        {
+            const Bitboard pieceBitboard = ourAttackers & side.GetPieceBitBoard((Piece)pieceType);
+            if (pieceBitboard)
+            {
+                uint32_t attackerSquare = UINT32_MAX;
+                pieceBitboard.BitScanForward(attackerSquare);
+                ASSERT(attackerSquare != UINT32_MAX);
+
+                // remove attacker from occupied squares
+                const Bitboard mask = 1ull << attackerSquare;
+                ASSERT((occupied & mask) != 0);
+                occupied &= ~mask;
+                allAttackers &= occupied;
+
+                // TODO update diagonal/vertical attackers
+
+                balance = -balance - 1 - c_seePieceValues[pieceType];
+
+                break;
+            }
+        }
+
+        sideToMove = GetOppositeColor(sideToMove);
+
+        // If the balance is non negative after giving away our piece then we win
+        if (balance >= 0) 
+        {
+            break;
+        }
+    }
+
+    // Side to move after the loop loses
+    return mSideToMove != sideToMove;
 }

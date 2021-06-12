@@ -10,6 +10,8 @@ extern void RunUnitTests();
 extern void RunPerft();
 extern bool RunSearchTests();
 extern void RunSearchPerfTest();
+extern void SelfPlay();
+extern bool Train();
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
@@ -126,6 +128,14 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         RunUnitTests();
         std::cout << "Unit tests done." << std::endl;
     }
+    else if (command == "selfplay")
+    {
+        SelfPlay();
+    }
+    else if (command == "train")
+    {
+        Train();
+    }
     else if (command == "searchtest")
     {
         RunSearchTests();
@@ -232,7 +242,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     bool isInfinite = false;
-    uint32_t maxDepth = 14; // TODO
+    uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
     uint32_t whiteRemainingTime = 0;
@@ -303,6 +313,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     }
 
     SearchParam searchParam;
+    searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
+    searchParam.maxTime = moveTime;
     searchParam.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     searchParam.numPvLines = mOptions.multiPV;
     searchParam.rootMoves = std::move(rootMoves);

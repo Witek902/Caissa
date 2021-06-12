@@ -53,6 +53,16 @@ struct Bitboard
         };
     }
 
+    INLINE static constexpr Bitboard LightSquares()
+    {
+        return 0x55AA55AA55AA55AAull;
+    }
+
+    INLINE static constexpr Bitboard DarkSquares()
+    {
+        return 0xAA55AA55AA55AA55ull;
+    }
+
     template<uint32_t rank>
     INLINE static constexpr Bitboard RankBitboard()
     {

@@ -15,9 +15,7 @@ bool Position::operator == (const Position& rhs) const
         mSideToMove == rhs.mSideToMove &&
         mEnPassantSquare == rhs.mEnPassantSquare &&
         mWhitesCastlingRights == rhs.mWhitesCastlingRights &&
-        mBlacksCastlingRights == rhs.mBlacksCastlingRights &&
-        mHalfMoveCount == rhs.mHalfMoveCount &&
-        mMoveCount == rhs.mMoveCount;
+        mBlacksCastlingRights == rhs.mBlacksCastlingRights;
 
     if (result)
     {

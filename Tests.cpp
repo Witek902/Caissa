@@ -2,6 +2,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "Search.hpp"
+#include "Evaluate.hpp"
 #include "UCI.hpp"
 
 #include <chrono>
@@ -434,7 +435,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 1 1");
         }
 
         // move knight (valid capture)
@@ -465,7 +466,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 b kq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 b kq - 1 1");
         }
 
         // castling, whites, king side, no rights
@@ -494,7 +495,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/2KR1BNR b kq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/2KR1BNR b kq - 1 1");
         }
 
         // castling, whites, queen side, no rights
@@ -523,7 +524,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbq1rk1/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbq1rk1/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 1 2");
         }
 
         // castling, blacks, king side, no rights
@@ -552,7 +553,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "2kr1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "2kr1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 1 2");
         }
 
         // castling, blacks, queen side, no rights
@@ -587,27 +588,27 @@ void RunUnitTests()
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
-            TEST_EXPECT(!pos.IsMoveValid(move));
+TEST_EXPECT(move.toSquare == Square_g1);
+TEST_EXPECT(move.piece == Piece::King);
+TEST_EXPECT(move.isCapture == false);
+TEST_EXPECT(move.isCastling == true);
+TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move rook, loose castling rights
         {
-            Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
-            const Move move = pos.MoveFromString("a1b1");
-            TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_a1);
-            TEST_EXPECT(move.toSquare == Square_b1);
-            TEST_EXPECT(move.piece == Piece::Rook);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
-            TEST_EXPECT(pos.IsMoveValid(move));
-            TEST_EXPECT(pos.IsMoveLegal(move));
-            TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R b Kkq - 0 1");
+        Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+        const Move move = pos.MoveFromString("a1b1");
+        TEST_EXPECT(move.IsValid());
+        TEST_EXPECT(move.fromSquare == Square_a1);
+        TEST_EXPECT(move.toSquare == Square_b1);
+        TEST_EXPECT(move.piece == Piece::Rook);
+        TEST_EXPECT(move.isCapture == false);
+        TEST_EXPECT(move.isCastling == false);
+        TEST_EXPECT(pos.IsMoveValid(move));
+        TEST_EXPECT(pos.IsMoveLegal(move));
+        TEST_EXPECT(pos.DoMove(move));
+        TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R b Kkq - 1 1");
         }
 
         // move rook, loose castling rights
@@ -623,7 +624,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/R3K1R1 b Qkq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/R3K1R1 b Qkq - 1 1");
         }
 
         // move rook, loose castling rights
@@ -639,7 +640,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "1r2k2r/8/8/8/8/8/8/R3K2R w KQk - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "1r2k2r/8/8/8/8/8/8/R3K2R w KQk - 1 2");
         }
 
         // move rook, loose castling rights
@@ -655,7 +656,7 @@ void RunUnitTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r3k1r1/8/8/8/8/8/8/R3K2R w KQq - 0 1");
+            TEST_EXPECT(pos.ToFEN() == "r3k1r1/8/8/8/8/8/8/R3K2R w KQq - 1 2");
         }
 
         // move king to close opponent's king (illegal move)
@@ -684,6 +685,57 @@ void RunUnitTests()
             TEST_EXPECT(move.isCastling == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(!pos.IsMoveLegal(move));
+        }
+    }
+
+    // Static Exchange Evaluation
+    {
+        // quiet move
+        {
+            Position pos("7k/8/1p6/8/8/1Q6/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+        }
+
+        // hanging pawn
+        {
+            Position pos("7k/8/1p6/8/8/1Q6/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+        }
+
+        // queen takes pawn protected by another pawn
+        {
+            Position pos("7k/p7/1p6/8/8/1Q6/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(0 == pos.StaticExchangeEvaluation(move));
+        }
+
+        // queen trade
+        {
+            Position pos("7k/p7/1q6/8/8/1Q6/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+        }
+
+        // rook trade
+        {
+            Position pos("7k/p7/1q6/8/8/1Q6/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+        }
+
+        // (rook+bishop) vs. 2 knights -> bishop
+        {
+            Position pos("7k/3n4/1n6/8/8/1R2B3/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("b3b6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
         }
     }
 
