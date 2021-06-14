@@ -88,6 +88,7 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 Position::Position()
     : mHash(0)
     , mSideToMove(Color::White)
+    , mEnPassantSquare(Square::Invalid())
     , mWhitesCastlingRights(CastlingRights_All)
     , mBlacksCastlingRights(CastlingRights_All)
     , mHalfMoveCount(0u)
@@ -113,8 +114,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     pos.GetPieceBitBoard(piece) |= mask;
 }
 
-#pragma optimize("",off)
-
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
 {
     const Bitboard mask = square.Bitboard();
@@ -128,8 +127,6 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     const uint32_t pieceIndex = (uint32_t)piece - 1;
     mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
 }
-
-#pragma optimize("",on)
 
 void Position::SetEnPassantSquare(const Square square)
 {
@@ -152,7 +149,7 @@ void Position::ClearEnPassantSquare()
         mHash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
     }
 
-    mEnPassantSquare = Square();
+    mEnPassantSquare = Square::Invalid();
 }
 
 Bitboard Position::GetAttackedSquares(Color side) const
@@ -263,18 +260,6 @@ void Position::PushMove(const Move move, MoveList& outMoveList) const
     else
     {
         score += ScoreQuietMove(*this, move);
-
-        //// bonus for threats
-        {
-            Bitboard attacked = 0;
-            if (move.piece == Piece::King)          attacked = Bitboard::GetKingAttacks(move.toSquare);
-            else if (move.piece == Piece::Knight)   attacked = Bitboard::GetKnightAttacks(move.toSquare);
-            else if (move.piece == Piece::Rook)     attacked = Bitboard::GetRookAttacks(move.toSquare);
-            else if (move.piece == Piece::Bishop)   attacked = Bitboard::GetBishopAttacks(move.toSquare);
-            else if (move.piece == Piece::Queen)    attacked = Bitboard::GetRookAttacks(move.toSquare) | Bitboard::GetBishopAttacks(move.toSquare);
-            else if (move.piece == Piece::Pawn)     attacked = Bitboard::GetPawnAttacks(move.toSquare, mSideToMove);
-            score += (opponentSide.Occupied() & attacked).Count();
-        }
     }
 
     if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
@@ -306,7 +291,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
             const Piece promotionList[] = { Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop };
             for (const Piece promoteTo : promotionList)
             {
-                Move move;
+                Move move = Move::Invalid();
                 move.fromSquare = fromSquare;
                 move.toSquare = toSquare;
                 move.piece = Piece::Pawn;
@@ -318,7 +303,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         }
         else if (!onlyTactical || isCapture)
         {
-            Move move;
+            Move move = Move::Invalid();
             move.fromSquare = fromSquare;
             move.toSquare = toSquare;
             move.piece = Piece::Pawn;
@@ -377,7 +362,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
                 // can move forward only to non-occupied squares
                 if ((occupiedSquares & twoSquaresForward.Bitboard()) == 0u)
                 {
-                    Move move;
+                    Move move = Move::Invalid();
                     move.fromSquare = fromSquare;
                     move.toSquare = twoSquaresForward;
                     move.piece = Piece::Pawn;
@@ -414,7 +399,7 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
             // can't capture king
             if (opponentSide.king & targetSquare.Bitboard()) return;
 
-            Move move;
+            Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Knight;
@@ -448,7 +433,7 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
             // can't capture own piece
             if (currentSide.Occupied() & targetSquare.Bitboard()) return;
 
-            Move move;
+            Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Rook;
@@ -482,7 +467,7 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
             // can't capture own piece
             if (currentSide.Occupied() & targetSquare.Bitboard()) return;
 
-            Move move;
+            Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Bishop;
@@ -518,7 +503,7 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
             // can't capture own piece
             if (currentSide.Occupied() & targetSquare.Bitboard()) return;
 
-            Move move;
+            Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Queen;
@@ -562,7 +547,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         // can't capture own piece
         if (currentSide.Occupied() & targetSquare.Bitboard()) return;
 
-        Move move;
+        Move move = Move::Invalid();
         move.fromSquare = square;
         move.toSquare = targetSquare;
         move.piece = Piece::King;
@@ -589,7 +574,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
             {
                 // TODO Chess960 support?
 
-                Move move;
+                Move move = Move::Invalid();
                 move.fromSquare = square;
                 move.toSquare = Square(2u, square.Rank());
                 move.piece = Piece::King;
@@ -603,7 +588,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
             {
                 // TODO Chess960 support?
 
-                Move move;
+                Move move = Move::Invalid();
                 move.fromSquare = square;
                 move.toSquare = Square(6u, square.Rank());
                 move.piece = Piece::King;
@@ -718,7 +703,7 @@ static Square ExtractEnPassantSquareFromMove(const Move& move)
         return Square(move.fromSquare.File(), 5u);
     }
 
-    return Square();
+    return Square::Invalid();
 }
 
 void Position::ClearRookCastlingRights(const Square affectedSquare)
@@ -774,7 +759,7 @@ bool Position::DoMove(const Move& move)
 
     if (move.isEnPassant)
     {
-        Square captureSquare;
+        Square captureSquare = Square::Invalid();
         if (move.toSquare.Rank() == 5)  captureSquare = Square(move.toSquare.File(), 4u);
         if (move.toSquare.Rank() == 2)  captureSquare = Square(move.toSquare.File(), 3u);
         ASSERT(captureSquare.IsValid());
@@ -782,7 +767,7 @@ bool Position::DoMove(const Move& move)
         RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
     }
 
-    SetEnPassantSquare(move.piece == Piece::Pawn ? ExtractEnPassantSquareFromMove(move) : Square());
+    SetEnPassantSquare(move.piece == Piece::Pawn ? ExtractEnPassantSquareFromMove(move) : Square::Invalid());
 
     if (move.piece == Piece::King)
     {
@@ -860,7 +845,7 @@ bool Position::DoNullMove()
     ASSERT(IsValid());          // board position must be valid
     ASSERT(!IsInCheck(mSideToMove));
 
-    SetEnPassantSquare(Square());
+    SetEnPassantSquare(Square::Invalid());
 
     if (mSideToMove == Color::Black)
     {

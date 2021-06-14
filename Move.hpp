@@ -57,9 +57,7 @@ struct Move
         uint32_t value;
     };
 
-    INLINE Move() : value(0u) { }
-    INLINE Move(const Move&) = default;
-    INLINE Move& operator = (const Move&) = default;
+    INLINE static const Move Invalid() { return { 0 }; }
 
     INLINE bool operator == (const Move rhs) const
     {
