@@ -5,8 +5,6 @@
 #include <iostream>
 #include <string>
 
-#pragma optimize("",off)
-
 static const uint32_t NullMovePrunningStartDepth = 3;
 static const int32_t NullMovePrunningDepthReduction = 3;
 
@@ -470,7 +468,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
         FindPvMove(node, moves);
     }
 
-    Move bestMove;
+    Move bestMove = Move::Invalid();
     ScoreType alpha = std::max(score, node.alpha);
     ScoreType beta = node.beta;
     uint32_t numLegalMoves = 0;
@@ -764,7 +762,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    Move bestMove;
+    Move bestMove = Move::Invalid();
     uint32_t numLegalMoves = 0;
     uint32_t numReducedMoves = 0;
     bool betaCutoff = false;

@@ -9,7 +9,7 @@ int main(int argc, const char* argv[])
 {
     InitBitboards(); 
     InitZobristHash();
-    LoadNeuralNetwork("network.dat");
+    //LoadNeuralNetwork("network.dat");
 
     UniversalChessInterface uci(argc, argv);
     uci.Loop();

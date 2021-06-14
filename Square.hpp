@@ -23,51 +23,58 @@ class Square
 public:
     static constexpr uint32_t NumSquares = 64;
 
-    Square() : mIndex(0xFF) { }
+    INLINE static const Square Invalid()
+    {
+        Square square;
+        square.mIndex = 0xFF;
+        return square;
+    }
 
-    Square(uint32_t value)
+    INLINE Square() = default;
+
+    INLINE Square(uint32_t value)
         : mIndex(static_cast<uint8_t>(value))
     {
         ASSERT(value < 64u);
     }
 
-    Square(SquareName name)
+    INLINE Square(SquareName name)
         : mIndex(static_cast<uint8_t>(name))
     {
         ASSERT(mIndex < 64u);
     }
 
-    Square(uint8_t file, uint8_t rank)
+    INLINE Square(uint8_t file, uint8_t rank)
     {
         ASSERT(file < 8u);
         ASSERT(rank < 8u);
         mIndex = file + (rank * 8u);
     }
 
-    Square(const Square&) = default;
-    Square& operator = (const Square&) = default;
+    INLINE Square(const Square&) = default;
+    INLINE Square& operator = (const Square&) = default;
 
     bool operator == (const Square& rhs) const { return mIndex == rhs.mIndex; }
     bool operator != (const Square& rhs) const { return mIndex != rhs.mIndex; }
 
-    uint8_t Index() const
+    INLINE uint8_t Index() const
     {
         return mIndex;
     }
 
-    Bitboard Bitboard() const
+    INLINE Bitboard Bitboard() const
     {
         return 1ull << mIndex;
     }
 
     // aka. row
-    uint8_t Rank() const
+    INLINE uint8_t Rank() const
     {
         return mIndex / 8u;
     }
 
     // aka. column
-    uint8_t File() const
+    INLINE uint8_t File() const
     {
         return mIndex % 8u;
     }
@@ -76,7 +83,7 @@ public:
 
     std::string ToString() const;
 
-    bool IsValid() const
+    INLINE bool IsValid() const
     {
         return mIndex < 64;
     }

@@ -231,7 +231,7 @@ bool Position::FromFEN(const std::string& fenString)
     }
     else
     {
-        mEnPassantSquare = Square();
+        mEnPassantSquare = Square::Invalid();
     }
 
     // TODO!
@@ -544,7 +544,7 @@ Move Position::MoveFromString(const std::string& str) const
     const Piece movedPiece = currentSide.GetPieceAtSquare(fromSquare);
     const Piece targetPiece = opponentSide.GetPieceAtSquare(toSquare);
 
-    Move move;
+    Move move = Move::Invalid();
     move.fromSquare = fromSquare;
     move.toSquare = toSquare;
     move.piece = movedPiece;
