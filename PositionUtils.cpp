@@ -1,5 +1,7 @@
 #include "Position.hpp"
-#include "Move.hpp"
+#include "MoveList.hpp"
+
+#include <chrono>
 
 Position::Position(const std::string& fenString)
     : Position()
@@ -10,8 +12,8 @@ Position::Position(const std::string& fenString)
 bool Position::operator == (const Position& rhs) const
 {
     const bool result =
-        mWhites == rhs.mWhites &&
-        mBlacks == rhs.mBlacks &&
+        Whites() == rhs.Whites() &&
+        Blacks() == rhs.Blacks() &&
         mSideToMove == rhs.mSideToMove &&
         mEnPassantSquare == rhs.mEnPassantSquare &&
         mWhitesCastlingRights == rhs.mWhitesCastlingRights &&
@@ -28,25 +30,25 @@ bool Position::operator == (const Position& rhs) const
 bool Position::IsValid() const
 {
     // validate piece counts
-    if ((mWhites.pawns.Count() + mWhites.knights.Count() + mWhites.bishops.Count() + mWhites.rooks.Count() + mWhites.queens.Count() > 15u)) return false;
-    if ((mBlacks.pawns.Count() + mBlacks.knights.Count() + mBlacks.bishops.Count() + mBlacks.rooks.Count() + mBlacks.queens.Count() > 15u)) return false;
-    if (mWhites.pawns.Count() > 8u || mBlacks.pawns.Count() > 8u) return false;
-    if (mWhites.knights.Count() > 9u || mBlacks.knights.Count() > 9u) return false;
-    if (mWhites.bishops.Count() > 9u || mBlacks.bishops.Count() > 9u) return false;
-    if (mWhites.rooks.Count() > 9u || mBlacks.rooks.Count() > 9u) return false;
-    if (mWhites.queens.Count() > 9u || mBlacks.queens.Count() > 9u) return false;
-    if (mWhites.king.Count() != 1u || mBlacks.king.Count() != 1u) return false;
+    if ((Whites().pawns.Count() + Whites().knights.Count() + Whites().bishops.Count() + Whites().rooks.Count() + Whites().queens.Count() > 15u)) return false;
+    if ((Blacks().pawns.Count() + Blacks().knights.Count() + Blacks().bishops.Count() + Blacks().rooks.Count() + Blacks().queens.Count() > 15u)) return false;
+    if (Whites().pawns.Count() > 8u || Blacks().pawns.Count() > 8u) return false;
+    if (Whites().knights.Count() > 9u || Blacks().knights.Count() > 9u) return false;
+    if (Whites().bishops.Count() > 9u || Blacks().bishops.Count() > 9u) return false;
+    if (Whites().rooks.Count() > 9u || Blacks().rooks.Count() > 9u) return false;
+    if (Whites().queens.Count() > 9u || Blacks().queens.Count() > 9u) return false;
+    if (Whites().king.Count() != 1u || Blacks().king.Count() != 1u) return false;
 
     // validate pawn locations
     {
         bool pawnsValid = true;
-        mWhites.pawns.Iterate([&](uint32_t index)
+        Whites().pawns.Iterate([&](uint32_t index)
         {
             uint8_t pawnRank = Square(index).Rank();
             pawnsValid &= pawnRank >= 1u;   // pawns can't go backward
             pawnsValid &= pawnRank < 7u;    // unpromoted pawn
         });
-        mBlacks.pawns.Iterate([&](uint32_t index)
+        Blacks().pawns.Iterate([&](uint32_t index)
         {
             uint8_t pawnRank = Square(index).Rank();
             pawnsValid &= pawnRank >= 1u;   // unpromoted pawn
@@ -60,16 +62,16 @@ bool Position::IsValid() const
 
     if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)
     {
-        if (((mWhites.king & Bitboard(1ull << Square_e1)) == 0) ||
-            ((mWhites.rooks & Bitboard(1ull << Square_h1)) == 0))
+        if (((Whites().king & Bitboard(1ull << Square_e1)) == 0) ||
+            ((Whites().rooks & Bitboard(1ull << Square_h1)) == 0))
         {
             return false;
         }
     }
     if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)
     {
-        if (((mWhites.king & Bitboard(1ull << Square_e1)) == 0) ||
-            ((mWhites.rooks & Bitboard(1ull << Square_a1)) == 0))
+        if (((Whites().king & Bitboard(1ull << Square_e1)) == 0) ||
+            ((Whites().rooks & Bitboard(1ull << Square_a1)) == 0))
         {
             return false;
         }
@@ -77,16 +79,16 @@ bool Position::IsValid() const
 
     if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)
     {
-        if (((mBlacks.king & Bitboard(1ull << Square_e8)) == 0) ||
-            ((mBlacks.rooks & Bitboard(1ull << Square_h8)) == 0))
+        if (((Blacks().king & Bitboard(1ull << Square_e8)) == 0) ||
+            ((Blacks().rooks & Bitboard(1ull << Square_h8)) == 0))
         {
             return false;
         }
     }
     if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)
     {
-        if (((mBlacks.king & Bitboard(1ull << Square_e8)) == 0) ||
-            ((mBlacks.rooks & Bitboard(1ull << Square_a8)) == 0))
+        if (((Blacks().king & Bitboard(1ull << Square_e8)) == 0) ||
+            ((Blacks().rooks & Bitboard(1ull << Square_a8)) == 0))
         {
             return false;
         }
@@ -159,8 +161,9 @@ bool Position::FromFEN(const std::string& fenString)
                     return false;
                 }
 
-                SidePosition& side = color == Color::White ? mWhites : mBlacks;
+                SidePosition& side = color == Color::White ? Whites() : Blacks();
                 side.GetPieceBitBoard(piece) |= square.Bitboard();
+                side.occupied |= square.Bitboard();
 
                 file++;
             }
@@ -243,7 +246,7 @@ bool Position::FromFEN(const std::string& fenString)
 
     mHash = ComputeHash();
 
-    return IsValid();
+    return IsValid() && !IsInCheck(GetOppositeColor(mSideToMove));
 }
 
 std::string Position::ToFEN() const
@@ -257,8 +260,8 @@ std::string Position::ToFEN() const
         {
             const Square square(file, rank);
 
-            const Piece whitePiece = mWhites.GetPieceAtSquare(square);
-            const Piece blackPiece = mBlacks.GetPieceAtSquare(square);
+            const Piece whitePiece = Whites().GetPieceAtSquare(square);
+            const Piece blackPiece = Blacks().GetPieceAtSquare(square);
 
             if (whitePiece != Piece::None)
             {
@@ -350,8 +353,8 @@ std::string Position::Print() const
         {
             const Square square(file, rank);
 
-            const Piece whitePiece = mWhites.GetPieceAtSquare(square);
-            const Piece blackPiece = mBlacks.GetPieceAtSquare(square);
+            const Piece whitePiece = Whites().GetPieceAtSquare(square);
+            const Piece blackPiece = Blacks().GetPieceAtSquare(square);
 
             if (whitePiece != Piece::None)
             {
@@ -429,7 +432,7 @@ std::string Position::MoveToString(const Move& move) const
             str = PieceToChar(move.piece);
 
             {
-                const SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
+                const SidePosition& currentSide = GetCurrentSide();
                 const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.piece);
 
                 bool ambiguous = false;
@@ -439,7 +442,7 @@ std::string Position::MoveToString(const Move& move) const
 
                     for (uint32_t i = 0; i < moves.numMoves; ++i)
                     {
-                        const Move& otherMove = moves.moves[i].move;
+                        const Move& otherMove = moves[i].move;
                         if (otherMove.piece == move.piece &&
                             otherMove.toSquare == move.toSquare &&
                             otherMove.fromSquare != move.fromSquare)
@@ -512,9 +515,9 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        if (moves.moves[i].move == packedMove)
+        if (moves[i].move == packedMove)
         {
-            return moves.moves[i].move;
+            return moves[i].move;
         }
     }
 
@@ -538,8 +541,8 @@ Move Position::MoveFromString(const std::string& str) const
         return {};
     }
 
-    const SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
-    const SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
+    const SidePosition& currentSide = GetCurrentSide();
+    const SidePosition& opponentSide = GetOpponentSide();
 
     const Piece movedPiece = currentSide.GetPieceAtSquare(fromSquare);
     const Piece targetPiece = opponentSide.GetPieceAtSquare(toSquare);
@@ -582,8 +585,8 @@ bool Position::IsMoveValid(const Move& move) const
         return {};
     }
 
-    const SidePosition& currentSide = mSideToMove == Color::White ? mWhites : mBlacks;
-    const SidePosition& opponentSide = mSideToMove == Color::White ? mBlacks : mWhites;
+    const SidePosition& currentSide = GetCurrentSide();
+    const SidePosition& opponentSide = GetOpponentSide();
 
     const Piece movedPiece = currentSide.GetPieceAtSquare(move.fromSquare);
     const Piece targetPiece = opponentSide.GetPieceAtSquare(move.toSquare);
@@ -696,6 +699,8 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         std::cout << "Running Perft... depth=" << depth << std::endl;
     }
 
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     MoveList moveList;
     GenerateMoveList(moveList);
 
@@ -720,9 +725,14 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         nodes += numChildNodes;
     }
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+
     if (print)
     {
+        const float timeInSeconds = (1.0e-6f * (float)std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count());
+
         std::cout << "Total nodes: " << nodes << std::endl;
+        std::cout << "Time: " << timeInSeconds << " seconds" << std::endl;
     }
 
     return nodes;

@@ -26,12 +26,12 @@ struct SidePosition
 
     INLINE Bitboard Occupied() const
     {
-        return (pawns | knights) | (bishops | rooks) | (queens | king);
+        return occupied;
     }
 
     INLINE Bitboard OccupiedExcludingKing() const
     {
-        return (pawns | knights) | (bishops | rooks) | queens;
+        return occupied & ~king;
     }
 
     INLINE Square GetKingSquare() const
@@ -59,6 +59,7 @@ struct SidePosition
     Bitboard rooks = 0;
     Bitboard queens = 0;
     Bitboard king = 0;
+    Bitboard occupied = 0;
 };
 
 INLINE Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -172,8 +173,11 @@ public:
     // run performance test
     uint64_t Perft(uint32_t depth, bool print = true) const;
 
-    const SidePosition& Whites() const { return mWhites; }
-    const SidePosition& Blacks() const { return mBlacks; }
+    INLINE const SidePosition& Whites() const { return mColors[0]; }
+    INLINE const SidePosition& Blacks() const { return mColors[1]; }
+
+    INLINE const SidePosition& GetCurrentSide() const { return mColors[(uint8_t)mSideToMove]; }
+    INLINE const SidePosition& GetOpponentSide() const { return mColors[(uint8_t)mSideToMove ^ 1]; }
 
     INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
     INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
@@ -184,11 +188,17 @@ public:
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
 
-    uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
+    INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
 
 private:
 
     friend class Search;
+
+    INLINE SidePosition& Whites() { return mColors[0]; }
+    INLINE SidePosition& Blacks() { return mColors[1]; }
+
+    INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
+    INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
 
     void PushMove(const Move move, MoveList& outMoveList) const;
 
@@ -203,9 +213,8 @@ private:
 
     // BOARD STATE & FLAGS
 
-    // bitboards
-    SidePosition mWhites;
-    SidePosition mBlacks;
+    // bitboards for whites and blacks
+    SidePosition mColors[2];
 
     // who's next move?
     Color mSideToMove;
@@ -224,6 +233,6 @@ private:
     uint64_t mHash; // whole position hash
 };
 
-static_assert(sizeof(Position) == 112, "Invalid position size");
+static_assert(sizeof(Position) == 128, "Invalid position size");
 
 void InitZobristHash();

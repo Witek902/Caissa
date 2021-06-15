@@ -133,23 +133,25 @@ void SelfPlay()
                     pgnString << position.MoveToString(move) << " ";
                 }
 
+                const Position constPosition = position;
+
                 // dump position
                 {
                     PositionEntry entry =
                     {
-                        position.Whites().king,
-                        position.Whites().pawns,
-                        position.Whites().knights,
-                        position.Whites().bishops,
-                        position.Whites().rooks,
-                        position.Whites().queens,
+                        constPosition.Whites().king,
+                        constPosition.Whites().pawns,
+                        constPosition.Whites().knights,
+                        constPosition.Whites().bishops,
+                        constPosition.Whites().rooks,
+                        constPosition.Whites().queens,
 
-                        position.Blacks().king,
-                        position.Blacks().pawns,
-                        position.Blacks().knights,
-                        position.Blacks().bishops,
-                        position.Blacks().rooks,
-                        position.Blacks().queens,
+                        constPosition.Blacks().king,
+                        constPosition.Blacks().pawns,
+                        constPosition.Blacks().knights,
+                        constPosition.Blacks().bishops,
+                        constPosition.Blacks().rooks,
+                        constPosition.Blacks().queens,
 
                         (uint8_t)position.GetSideToMove(),
                         (uint8_t)position.GetWhitesCastlingRights(),
