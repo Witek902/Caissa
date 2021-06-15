@@ -48,7 +48,7 @@ public:
     static constexpr int32_t InfValue       = 10000000;
     static constexpr int32_t InvalidValue   = 9999999;
 
-    static constexpr int32_t MaxSearchDepth = 64;
+    static constexpr int32_t MaxSearchDepth = 256;
 
     Search();
     ~Search();
@@ -59,8 +59,8 @@ public:
 
     void ClearPositionHistory();
 
-    // check if a position was repeated 2 times
-    bool IsPositionRepeated(const Position& position, uint32_t repetitionCount = 2u) const;
+    // check if a position already occurred
+    bool IsPositionRepeated(const Position& position) const;
 
     TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
 
@@ -121,8 +121,6 @@ private:
 
     std::atomic<bool> mStopSearch = false;
 
-    using GameHistoryPositionEntry = std::vector<GameHistoryPosition>;
-
     // principial variation moves tracking for current search
     PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
     uint16_t pvLengths[MaxSearchDepth];
@@ -137,7 +135,8 @@ private:
     static constexpr uint32_t NumKillerMoves = 4;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 
-    std::unordered_map<uint64_t, GameHistoryPositionEntry> historyGamePositions;
+    using GameHistoryPositions = std::vector<Position>;
+    std::unordered_map<uint64_t, GameHistoryPositions> historyGamePositions;
 
     bool IsDraw(const NodeInfo& node) const;
 

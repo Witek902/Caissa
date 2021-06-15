@@ -48,18 +48,17 @@ Search::~Search()
 
 void Search::RecordBoardPosition(const Position& position)
 {
-    GameHistoryPositionEntry& entry = historyGamePositions[position.GetHash()];
+    GameHistoryPositions& entry = historyGamePositions[position.GetHash()];
 
-    for (GameHistoryPosition& historyPosition : entry)
+    for (const Position& historyPosition : entry)
     {
-        if (historyPosition.pos == position)
+        if (historyPosition == position)
         {
-            historyPosition.count++;
             return;
         }
     }
 
-    entry.push_back({ position, 1u });
+    entry.push_back(position);
 }
 
 void Search::ClearPositionHistory()
@@ -67,7 +66,7 @@ void Search::ClearPositionHistory()
     historyGamePositions.clear();
 }
 
-bool Search::IsPositionRepeated(const Position& position, uint32_t repetitionCount) const
+bool Search::IsPositionRepeated(const Position& position) const
 {
     const auto iter = historyGamePositions.find(position.GetHash());
     if (iter == historyGamePositions.end())
@@ -75,13 +74,13 @@ bool Search::IsPositionRepeated(const Position& position, uint32_t repetitionCou
         return false;
     }
 
-    const GameHistoryPositionEntry& entry = iter->second;
+    const GameHistoryPositions& entry = iter->second;
 
-    for (const GameHistoryPosition& historyPosition : entry)
+    for (const Position& historyPosition : entry)
     {
-        if (historyPosition.pos == position)
+        if (historyPosition == position)
         {
-            return historyPosition.count >= repetitionCount;
+            return true;
         }
     }
 
@@ -383,22 +382,31 @@ void Search::RegisterKillerMove(const NodeInfo& node, const Move move)
 
 bool Search::IsRepetition(const NodeInfo& node) const
 {
-    const NodeInfo* parentNode = node.parentNode;
-    while (parentNode)
+    for(const NodeInfo* prevNode = &node;;)
     {
-        ASSERT(parentNode->position);
-        if (parentNode->position->GetHash() == node.position->GetHash())
+        // only check every second previous node, because side to move must be the same
+        if (prevNode->parentNode)
         {
-            return parentNode->position == node.position;
-        }
-
-        if (parentNode->parentNode)
-        {
-            parentNode = parentNode->parentNode->parentNode;
+            prevNode = prevNode->parentNode->parentNode;
         }
         else
         {
-            parentNode = nullptr;
+            prevNode = nullptr;
+        }
+
+        // reached end of the stack
+        if (!prevNode)
+        {
+            break;
+        }
+
+        ASSERT(prevNode->position);
+        if (prevNode->position->GetHash() == node.position->GetHash())
+        {
+            if (*prevNode->position == *node.position)
+            {
+                return true;
+            }
         }
     }
 
