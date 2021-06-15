@@ -242,6 +242,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     bool isInfinite = false;
+    bool printMoves = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
@@ -261,6 +262,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         else if (args[i] == "infinite")
         {
             isInfinite = true;
+        }
+        else if (args[i] == "printMoves")
+        {
+            printMoves = true;
         }
         else if (args[i] == "nodes" && i + 1 < args.size())
         {
@@ -318,6 +323,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     searchParam.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     searchParam.numPvLines = mOptions.multiPV;
     searchParam.rootMoves = std::move(rootMoves);
+    searchParam.printMoves = printMoves;
 
     SearchResult searchResult;
     mSearch.DoSearch(mPosition, searchParam, searchResult);

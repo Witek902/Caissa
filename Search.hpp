@@ -28,6 +28,9 @@ struct SearchParam
     // print UCI-style output
     bool debugLog = true;
 
+    // print move scores for the root nodes
+    bool printMoves = false;
+
     int64_t GetElapsedTime() const;
 };
 
@@ -86,6 +89,7 @@ private:
     
     struct SearchContext
     {
+        const SearchParam& searchParam;
         uint64_t fh = 0;
         uint64_t fhf = 0;
         uint64_t nodes = 0;

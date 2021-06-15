@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Position.hpp"
-#include "Move.hpp"
+#include "MoveList.hpp"
 #include "Search.hpp"
 #include "Evaluate.hpp"
 #include "UCI.hpp"
@@ -57,6 +57,9 @@ void RunUnitTests()
         // pawn at invalid position
         TEST_EXPECT(!Position().FromFEN("rnbqkbpr/ppppppnp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
         TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPNP/RNBQKBPR w KQkq - 0 1"));
+
+        // opponent side can't be in check
+        TEST_EXPECT(!Position().FromFEN("k6Q/8/8/8/8/8/8/K7 w - - 0 1"));
     }
 
     // FEN printing

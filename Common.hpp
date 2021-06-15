@@ -7,6 +7,7 @@
 #endif
 
 #define INLINE __forceinline
+#define INLINE_LAMBDA [[msvc::forceinline]]
 #define NO_INLINE __declspec(noinline)
 
 template<typename T>

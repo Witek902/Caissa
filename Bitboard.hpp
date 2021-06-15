@@ -108,6 +108,14 @@ struct Bitboard
         return board;
     }
 
+    INLINE uint32_t FileMask() const
+    {
+        uint32_t mask = (uint32_t)(value | (value >> 32));
+        mask |= mask >> 16;
+        mask |= mask >> 8;
+        return mask & 0xFF;
+    }
+
     INLINE uint32_t Count() const
     {
         return static_cast<uint32_t>(__popcnt64(value));

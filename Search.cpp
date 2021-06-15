@@ -1,5 +1,5 @@
 #include "Search.hpp"
-#include "Move.hpp"
+#include "MoveList.hpp"
 #include "Evaluate.hpp"
 
 #include <iostream>
@@ -119,7 +119,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
             auto startTime = std::chrono::high_resolution_clock::now();
 
-            SearchContext searchContext;
+            SearchContext searchContext{ param };
 
             AspirationWindowSearchParam aspirationWindowSearchParam =
             {
@@ -235,6 +235,11 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
 
     for (;;)
     {
+        if (param.searchParam.printMoves)
+        {
+            std::cout << "aspiration window: " << alpha << "..." << beta << "\n";
+        }
+
         memset(pvArray, 0, sizeof(pvArray));
         memset(pvLengths, 0, sizeof(pvLengths));
 
@@ -257,8 +262,6 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
         // out of aspiration window, redo the search in wider score range
         if (score <= alpha || score >= beta)
         {
-            //std::cout << "Aspiration window too small: " << alpha << "..." << beta << ", score: " << score << "\n";
-
             alpha -= aspirationWindow;
             beta += aspirationWindow;
             aspirationWindow *= 2;
@@ -292,9 +295,9 @@ const Move Search::FindPvMove(const NodeInfo& node, MoveList& moves) const
 
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
-        if (pvMove.IsValid() && moves.moves[i].move == pvMove)
+        if (pvMove.IsValid() && moves[i].move == pvMove)
         {
-            moves.moves[i].score = INT32_MAX;
+            moves[i].score = INT32_MAX;
             return pvMove;
         }
     }
@@ -308,15 +311,15 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
 {
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
-        const Move move = moves.moves[i].move;
+        const Move move = moves[i].move;
         ASSERT(move.IsValid());
 
         const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
         ASSERT(pieceIndex < 6u);
 
         const uint32_t score = searchHistory[(uint32_t)color][pieceIndex][move.toSquare.Index()];
-        const int64_t finalScore = (int64_t)moves.moves[i].score + score;
-        moves.moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
+        const int64_t finalScore = (int64_t)moves[i].score + score;
+        moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
     }
 }
 
@@ -328,9 +331,9 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
     {
         for (uint32_t j = 0; j < NumKillerMoves; ++j)
         {
-            if (moves.moves[i].move == killerMoves[depth][j])
+            if (moves[i].move == killerMoves[depth][j])
             {
-                moves.moves[i].score += 100000 - j;
+                moves[i].score += 100000 - j;
             }
         }
     }
@@ -761,12 +764,20 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         {
             for (uint32_t i = 0; i < moves.numMoves; ++i)
             {
-                if (moves.moves[i].move == ttMove)
+                if (moves[i].move == ttMove)
                 {
-                    moves.moves[i].score = INT32_MAX - 1;
+                    moves[i].score = INT32_MAX - 1;
                     break;
                 }
             }
+        }
+    }
+
+    if (isRootNode)
+    {
+        if (ctx.searchParam.printMoves)
+        {
+            moves.Print();
         }
     }
 
@@ -779,7 +790,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     uint32_t totalQuietMoves = 0;
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves.moves[i].move;
+        const Move move = moves[i].move;
         if (move.IsQuiet())
         {
             totalQuietMoves++;

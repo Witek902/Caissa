@@ -25,9 +25,11 @@ static constexpr PieceScore c_knightValue          = S(337, 281);
 static constexpr PieceScore c_pawnValue            = S(82, 94);
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_mobilityBonus        = 3;
+static constexpr int32_t c_mobilityBonus        = 2;
 static constexpr int32_t c_guardBonus           = 5;
-static constexpr int32_t c_doubledPawnPenalty   = 7;
+static constexpr int32_t c_kingSafetyBonus      = 12;
+static constexpr int32_t c_doubledPawnPenalty   = 0;
+static constexpr int32_t c_passedPawnBonus      = 200;
 
 const PieceScore PawnPSQT[Square::NumSquares] =
 {
@@ -111,7 +113,7 @@ static uint32_t FlipRank(uint32_t square)
 
 INLINE static void EvalWhitePieceSquareTable(const Bitboard bitboard, const PieceScore* scores, int32_t& outScoreMG, int32_t& outScoreEG)
 {
-    bitboard.Iterate([&](uint32_t square)
+    bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
     {
         square = FlipRank(square);
         ASSERT(square < 64);
@@ -122,7 +124,7 @@ INLINE static void EvalWhitePieceSquareTable(const Bitboard bitboard, const Piec
 
 INLINE static void EvalBlackPieceSquareTable(const Bitboard bitboard, const PieceScore* scores, int32_t& outScoreMG, int32_t& outScoreEG)
 {
-    bitboard.Iterate([&](uint32_t square)
+    bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
     {
         ASSERT(square < 64);
         outScoreMG -= scores[square].mg;
@@ -396,6 +398,42 @@ int32_t Evaluate(const Position& position)
         }
 
         value += c_doubledPawnPenalty * numDoubledPawns;
+    }
+
+    // passed pawns
+    /*
+    {
+        const uint32_t whitePawnsFiles = position.Whites().pawns.FileMask();
+        const uint32_t blackPawnsFiles = position.Blacks().pawns.FileMask();
+
+        const uint32_t whitePassedPawnsFiles = whitePawnsFiles & ~(blackPawnsFiles | (blackPawnsFiles << 1) | (blackPawnsFiles >> 1));
+        const uint32_t blackPassedPawnsFiles = blackPawnsFiles & ~(whitePawnsFiles | (whitePawnsFiles << 1) | (whitePawnsFiles >> 1));
+
+        const int32_t numPassedWhitePawns = __popcnt(whitePassedPawnsFiles);
+        const int32_t numPassedBlackPawns = __popcnt(blackPassedPawnsFiles);
+
+        value += (numPassedWhitePawns - numPassedBlackPawns) * c_passedPawnBonus;
+    }
+    */
+
+    // white king safety
+    {
+        unsigned long kingSquareIndex;
+        if (_BitScanForward64(&kingSquareIndex, position.Whites().king))
+        {
+            int32_t kingNeighbors = (whiteOccupiedSquares & Bitboard::GetKingAttacks(Square(kingSquareIndex))).Count();
+            value += kingNeighbors * c_kingSafetyBonus;
+        }
+    }
+
+    // black king safety
+    {
+        unsigned long kingSquareIndex;
+        if (_BitScanForward64(&kingSquareIndex, position.Blacks().king))
+        {
+            int32_t kingNeighbors = (blackOccupiedSquares & Bitboard::GetKingAttacks(Square(kingSquareIndex))).Count();
+            value -= kingNeighbors * c_kingSafetyBonus;
+        }
     }
 
     // tempo bonus
