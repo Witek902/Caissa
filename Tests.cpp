@@ -1162,27 +1162,3 @@ bool RunSearchTests()
     return true;
     //return success == testVector.size();
 }
-
-void RunSearchPerfTest()
-{
-    Search search;
-
-    //const Position position("k7/3Q4/pp6/8/8/1q3PPP/5PPP/7K w - - 0 1"); // repetition
-    const Position position("r2q1r1k/pb3p1p/2n1p2Q/5p2/8/3B2N1/PP3PPP/R3R1K1 w - - 0 1");
-    //const Position position("r1k4r/ppp1bq1p/2n1N3/6B1/3p2Q1/8/PPP2PPP/R5K1 w - - 0 1"); // mate in 6
-    //const Position position("1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1"); // Lucena
-    //const Position position("8/6k1/8/8/8/8/P7/7K w - - 0 1");
-    //const Position position("8/8/8/3k4/8/8/8/3KQ3 w - - 0 1");
-    //const Position position("r4r1k/1p2p1b1/2ppb2p/p1Pn1pnq/N1NP2pP/1P2P1P1/P1Q1BP2/2RRB1K1 w - - 1 25");
-    TEST_EXPECT(position.IsValid());
-
-    SearchParam searchParam;
-    searchParam.debugLog = true;
-    searchParam.maxDepth = 8;
-    searchParam.numPvLines = 1;
-
-    SearchResult searchResult;
-    search.DoSearch(position, searchParam, searchResult);
-    search.DoSearch(position, searchParam, searchResult);
-    search.DoSearch(position, searchParam, searchResult);
-}

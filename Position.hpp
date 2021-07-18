@@ -188,6 +188,7 @@ public:
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
 
+    INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
 
 private:

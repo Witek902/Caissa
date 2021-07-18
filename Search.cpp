@@ -2,6 +2,8 @@
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 
+#include "tablebase/tbprobe.h"
+
 #include <iostream>
 #include <string>
 
@@ -25,6 +27,18 @@ static const int32_t BetaMarginBias = 30;
 static const uint32_t AlphaPruningDepth = 4;
 static const int32_t AlphaMarginMultiplier = 150;
 static const int32_t AlphaMarginBias = 1000;
+
+static const Piece TranslatePieceType(uint32_t tbPromotes)
+{
+    switch (tbPromotes)
+    {
+    case TB_PROMOTES_QUEEN:     return Piece::Queen;
+    case TB_PROMOTES_ROOK:      return Piece::Rook;
+    case TB_PROMOTES_BISHOP:    return Piece::Bishop;
+    case TB_PROMOTES_KNIGHT:    return Piece::Knight;
+    }
+    return Piece::None;
+}
 
 int64_t SearchParam::GetElapsedTime() const
 {
@@ -188,6 +202,11 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
                 }
                 std::cout << " nodes " << searchContext.nodes;
 
+                if (searchContext.tbHits)
+                {
+                    std::cout << " tbhit " << searchContext.tbHits;
+                }
+
                 std::cout << " pv ";
                 {
                     for (size_t i = 0; i < outPvLine.moves.size(); ++i)
@@ -247,6 +266,7 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
         rootNode.position = &param.position;
         rootNode.depth = 0u;
         rootNode.isPvNode = true;
+        rootNode.isTbNode = true; // traverse endgame table for initial node
         rootNode.maxDepthFractional = param.depth << MaxDepthShift;
         rootNode.pvIndex = (uint8_t)param.pvIndex;
         rootNode.alpha = alpha;
@@ -281,13 +301,18 @@ const Move Search::FindPvMove(const NodeInfo& node, MoveList& moves) const
 {
     if (!node.isPvNode || mPrevPvLines.empty())
     {
-        return Move{};
+        return Move::Invalid();
     }
 
     const std::vector<Move>& pvLine = mPrevPvLines[node.pvIndex].moves;
     if (node.depth >= pvLine.size())
     {
-        return Move{};
+        return Move::Invalid();
+    }
+
+    if (node.depth >= pvLine.size())
+    {
+        return Move::Invalid();
     }
 
     const Move pvMove = pvLine[node.depth];
@@ -322,15 +347,16 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
 
 void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
 {
-    ASSERT(depth < MaxSearchDepth);
-
-    for (uint32_t i = 0; i < moves.numMoves; ++i)
+    if (depth < MaxSearchDepth)
     {
-        for (uint32_t j = 0; j < NumKillerMoves; ++j)
+        for (uint32_t i = 0; i < moves.numMoves; ++i)
         {
-            if (moves[i].move == killerMoves[depth][j])
+            for (uint32_t j = 0; j < NumKillerMoves; ++j)
             {
-                moves[i].score += 100000 - j;
+                if (moves[i].move == killerMoves[depth][j])
+                {
+                    moves[i].score += 100000 - j;
+                }
             }
         }
     }
@@ -338,13 +364,16 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
 
 void Search::UpdatePvArray(uint32_t depth, const Move move)
 {
-    const uint8_t childPvLength = pvLengths[depth + 1];
-    pvArray[depth][depth] = move;
-    for (uint32_t j = depth + 1; j < childPvLength; ++j)
+    if (depth + 1 < MaxSearchDepth)
     {
-        pvArray[depth][j] = pvArray[depth + 1][j];
+        const uint8_t childPvLength = pvLengths[depth + 1];
+        pvArray[depth][depth] = move;
+        for (uint32_t j = depth + 1; j < childPvLength; ++j)
+        {
+            pvArray[depth][j] = pvArray[depth + 1][j];
+        }
+        pvLengths[depth] = childPvLength;
     }
-    pvLengths[depth] = childPvLength;
 }
 
 void Search::UpdateSearchHistory(const NodeInfo& node, const Move move)
@@ -369,11 +398,14 @@ void Search::RegisterKillerMove(const NodeInfo& node, const Move move)
         return;
     }
 
-    for (uint32_t j = NumKillerMoves; j-- > 1u; )
+    if (node.depth < MaxSearchDepth)
     {
-        killerMoves[node.depth][j] = killerMoves[node.depth][j - 1];
+        for (uint32_t j = NumKillerMoves; j-- > 1u; )
+        {
+            killerMoves[node.depth][j] = killerMoves[node.depth][j - 1];
+        }
+        killerMoves[node.depth][0] = move;
     }
-    killerMoves[node.depth][0] = move;
 }
 
 bool Search::IsRepetition(const NodeInfo& node) const
@@ -432,8 +464,10 @@ bool Search::IsDraw(const NodeInfo& node) const
 Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx)
 {
     // clean PV line
-    ASSERT(node.depth < MaxSearchDepth);
-    pvLengths[node.depth] = (uint8_t)node.depth;
+    if (node.depth < MaxSearchDepth)
+    {
+        pvLengths[node.depth] = (uint8_t)node.depth;
+    }
 
     // update stats
     ctx.nodes++;
@@ -550,13 +584,20 @@ int32_t Search::PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t
     return 0;
 }
 
+INLINE static bool HasTablebases()
+{
+    return TB_LARGEST > 0u;
+}
+
 Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 {
     ASSERT(node.alpha <= node.beta);
-    ASSERT(node.depth < MaxSearchDepth);
 
     // clean PV line
-    pvLengths[node.depth] = (uint8_t)node.depth;
+    if (node.depth < MaxSearchDepth)
+    {
+        pvLengths[node.depth] = (uint8_t)node.depth;
+    }
 
     // update stats
     ctx.nodes++;
@@ -575,7 +616,8 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    const bool isInCheck = node.position->IsInCheck(node.color);
+    const Position& position = *node.position;
+    const bool isInCheck = position.IsInCheck(node.color);
     const uint32_t inversedDepth = node.MaxDepth() - node.depth;
 
     const ScoreType oldAlpha = node.alpha;
@@ -585,7 +627,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     // transposition table lookup
     PackedMove ttMove;
     ScoreType ttScore = InvalidValue;
-    const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(*node.position);
+    const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position);
 
     if (ttEntry)
     {
@@ -597,7 +639,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         // TODO check if the move is valid move for current position
         // it maybe be not in case of rare hash collision
 
-        if (ttEntry->depth >= inversedDepth && !isFilteredMove && !node.isPvNode)
+        if (ttEntry->depth >= inversedDepth && !isFilteredMove && !node.isPvNode && !node.isTbNode)
         {
             ctx.ttHits++;
 
@@ -637,8 +679,55 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
+    // probe endgame tables
+    if (!isRootNode && HasTablebases())
+    {
+        const uint32_t pieceCount = (position.Whites().Occupied() | position.Blacks().Occupied()).Count();
 
-    // TODO endgame tables probing here
+        if (pieceCount <= TB_LARGEST)
+        {
+            // TODO skip if too many pieces, obvious wins, etc.
+            const uint32_t probeResult = tb_probe_wdl(
+                position.Whites().Occupied(),
+                position.Blacks().Occupied(),
+                position.Whites().king | position.Blacks().king,
+                position.Whites().queens | position.Blacks().queens,
+                position.Whites().rooks | position.Blacks().rooks,
+                position.Whites().bishops | position.Blacks().bishops,
+                position.Whites().knights | position.Blacks().knights,
+                position.Whites().pawns | position.Blacks().pawns,
+                position.GetHalfMoveCount(),
+                0, // TODO castling rights
+                position.GetEnPassantSquare().mIndex,
+                position.GetSideToMove() == Color::White);
+
+            if (probeResult != TB_RESULT_FAILED)
+            {
+                ctx.tbHits++;
+
+                // convert the WDL value to a score
+                int32_t tbValue =
+                    probeResult == TB_LOSS ? -(TablebaseWinValue - (int32_t)node.depth) :
+                    probeResult == TB_WIN  ?  (TablebaseWinValue - (int32_t)node.depth) : 0;
+
+                // only draws are exact, we don't know exact value for win/loss just based on WDL value
+                const TranspositionTableEntry::Flags bounds =
+                    probeResult == TB_LOSS ? TranspositionTableEntry::Flag_UpperBound :
+                    probeResult == TB_WIN  ? TranspositionTableEntry::Flag_LowerBound :
+                    TranspositionTableEntry::Flag_Exact;
+
+                if (    bounds == TranspositionTableEntry::Flag_Exact
+                    || (bounds == TranspositionTableEntry::Flag_LowerBound && tbValue >= beta)
+                    || (bounds == TranspositionTableEntry::Flag_UpperBound && tbValue <= alpha))
+                {
+                    const TranspositionTableEntry entry{ position.GetHash(), tbValue, Move::Invalid(), (uint8_t)inversedDepth, bounds };
+                    mTranspositionTable.Write(entry);
+
+                    return tbValue;
+                }
+            }
+        }
+    }
 
 
     // maximum search depth reached, enter quisence search to find final evaluation
@@ -648,13 +737,13 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     // Futility Pruning
-    if (!node.isPvNode && !isInCheck)
+    if (!node.isPvNode && !node.isTbNode && !isInCheck)
     {
         // determine static evaluation of the board
         int32_t staticEvaluation = ttScore;
         if (staticEvaluation == InvalidValue)
         {
-            staticEvaluation = ColorMultiplier(node.color) * Evaluate(*node.position);
+            staticEvaluation = ColorMultiplier(node.color) * Evaluate(position);
         }
 
         const int32_t alphaMargin = AlphaMarginBias + AlphaMarginMultiplier * inversedDepth;
@@ -674,7 +763,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     // Null Move Prunning
-    if (!node.isPvNode && !isInCheck && inversedDepth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
+    if (!node.isPvNode && !node.isTbNode && !isInCheck && inversedDepth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
     {
         // don't allow null move if parent or grandparent node was null move
         bool doNullMove = !node.isNullMove;
@@ -685,7 +774,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
         if (doNullMove)
         {
-            Position childPosition = *node.position;
+            Position childPosition = position;
             childPosition.DoNullMove();
 
             NodeInfo childNodeParam;
@@ -723,7 +812,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     MoveList moves;
-    node.position->GenerateMoveList(moves);
+    position.GenerateMoveList(moves);
 
     if (isRootNode)
     {
@@ -780,6 +869,48 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
+    Move tbMove = Move::Invalid();
+    if ((node.isPvNode || node.isTbNode) && HasTablebases())
+    {
+        const uint32_t probeResult = tb_probe_root(
+            position.Whites().Occupied(),
+            position.Blacks().Occupied(),
+            position.Whites().king | position.Blacks().king,
+            position.Whites().queens | position.Blacks().queens,
+            position.Whites().rooks | position.Blacks().rooks,
+            position.Whites().bishops | position.Blacks().bishops,
+            position.Whites().knights | position.Blacks().knights,
+            position.Whites().pawns | position.Blacks().pawns,
+            position.GetHalfMoveCount(),
+            0, // TODO castling rights
+            position.GetEnPassantSquare().mIndex,
+            position.GetSideToMove() == Color::White,
+            nullptr);
+
+        if (probeResult != TB_RESULT_FAILED)
+        {
+            // find move that matches tablebase probe result
+            for (uint32_t i = 0; i < moves.Size(); ++i)
+            {
+                MoveList::MoveEntry& moveEntry = moves[i];
+
+                if (moveEntry.move.fromSquare == TB_GET_FROM(probeResult) &&
+                    moveEntry.move.toSquare == TB_GET_TO(probeResult) &&
+                    moveEntry.move.promoteTo == TranslatePieceType(TB_GET_PROMOTES(probeResult)))
+                {
+                    tbMove = moveEntry.move;
+                    break;
+                }
+            }
+
+            if (tbMove.IsValid())
+            {
+                moves.Clear();
+                moves.PushMove(tbMove, 0);
+            }
+        }
+    }
+
     Move bestMove = Move::Invalid();
     uint32_t numLegalMoves = 0;
     uint32_t numReducedMoves = 0;
@@ -802,7 +933,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
 
-        Position childPosition = *node.position;
+        Position childPosition = position;
         if (!childPosition.DoMove(move))
         {
             continue;
@@ -827,8 +958,18 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             //moveExtensionFractional += 1 << (MaxDepthShift - 1);
         }
 
+        // perform TB walk for child node if this node has moves filtered, so we get full line in multi-PV mode
+        const bool performTablebaseWalk = HasTablebases() && (tbMove == move || !node.moveFilter.empty());
+
+        // endgame tablebase walk extension
+        if (performTablebaseWalk)
+        {
+            moveExtensionFractional += 1 << MaxDepthShift;
+        }
+
         childNodeParam.position = &childPosition;
         childNodeParam.isPvNode = pvMove == move;
+        childNodeParam.isTbNode = performTablebaseWalk;
         childNodeParam.maxDepthFractional = node.maxDepthFractional + moveExtensionFractional;
         childNodeParam.previousMove = move;
 
@@ -924,16 +1065,20 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     // update transposition table
     {
         TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
-        if (alpha <= oldAlpha)
+
+        if (bestMove != tbMove)
         {
-            flag = TranspositionTableEntry::Flag_UpperBound;
-        }
-        else if (betaCutoff)
-        {
-            flag = TranspositionTableEntry::Flag_LowerBound;
+            if (alpha <= oldAlpha)
+            {
+                flag = TranspositionTableEntry::Flag_UpperBound;
+            }
+            else if (betaCutoff)
+            {
+                flag = TranspositionTableEntry::Flag_LowerBound;
+            }
         }
 
-        const TranspositionTableEntry entry{ node.position->GetHash(), alpha, bestMove, (uint8_t)inversedDepth, flag };
+        const TranspositionTableEntry entry{ position.GetHash(), alpha, bestMove, (uint8_t)inversedDepth, flag };
 
         mTranspositionTable.Write(entry);
     }

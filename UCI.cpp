@@ -2,16 +2,25 @@
 #include "Move.hpp"
 #include "Evaluate.hpp"
 
-#include <sstream>
-#include <iostream>
-#include <algorithm>
+#include "tablebase/tbprobe.h"
 
 extern void RunUnitTests();
 extern void RunPerft();
 extern bool RunSearchTests();
-extern void RunSearchPerfTest();
 extern void SelfPlay();
 extern bool Train();
+
+void LoadTablebase(const char* path)
+{
+    if (tb_init(path))
+    {
+        std::cout << "Tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
+    }
+    else
+    {
+        std::cout << "Failed to load tablebase" << std::endl;
+    }
+}
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
@@ -38,14 +47,47 @@ void UniversalChessInterface::Loop()
             break;
         }
     }
+
+    tb_free();
+}
+
+static void ParseCommandString(const std::string& str, std::vector<std::string>& outArgList)
+{
+    std::string tmp;
+
+    // tokenize command string, keep string in quotes as a single string
+    for (size_t i = 0; i < str.length(); i++)
+    {
+        char c = str[i];
+        if (c == ' ')
+        {
+            outArgList.push_back(std::move(tmp));
+        }
+        else if (c == '\"')
+        {
+            i++;
+            while (str[i] != '\"')
+            {
+                tmp += str[i];
+                i++;
+            }
+        }
+        else
+        {
+            tmp += c;
+        }
+    }
+
+    if (!tmp.empty())
+    {
+        outArgList.push_back(std::move(tmp));
+    }
 }
 
 bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 {
-    std::istringstream iss(commandString);
-    std::vector<std::string> args(
-        std::istream_iterator<std::string>{iss},
-        std::istream_iterator<std::string>());
+    std::vector<std::string> args;
+    ParseCommandString(commandString, args);
 
     if (args.empty())
     {
@@ -76,7 +118,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         if (args[1] == "name" && args[3] == "value")
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            Command_SetOption(args[2], args[4]);
+            Command_SetOption(args[2], args.size() > 4 ? args[4] : "");
         }
         else
         {
@@ -382,6 +424,10 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
         size_t numEntries = hashSize / sizeof(TranspositionTableEntry);
         mSearch.GetTranspositionTable().Resize(numEntries);
+    }
+    else if (lowerCaseName == "syzygypath")
+    {
+        LoadTablebase(value.c_str());
     }
     else
     {

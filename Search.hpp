@@ -47,9 +47,10 @@ class Search
 public:
 
     using ScoreType = int32_t;
-    static constexpr int32_t CheckmateValue = 100000;
-    static constexpr int32_t InfValue       = 10000000;
-    static constexpr int32_t InvalidValue   = 9999999;
+    static constexpr int32_t CheckmateValue     = 100000;
+    static constexpr int32_t TablebaseWinValue  = 90000;
+    static constexpr int32_t InfValue           = 10000000;
+    static constexpr int32_t InvalidValue       = 9999999;
 
     static constexpr int32_t MaxSearchDepth = 256;
     static constexpr uint32_t MaxDepthShift = 8;
@@ -86,6 +87,7 @@ private:
         uint8_t pvIndex;
         Color color;
         bool isPvNode = false;
+        bool isTbNode = false;
         bool isNullMove = false;
 
         INLINE uint32_t MaxDepth() const { return maxDepthFractional >> MaxDepthShift; }
@@ -100,6 +102,7 @@ private:
         uint64_t quiescenceNodes = 0;
         uint64_t pseudoMovesPerNode = 0;
         uint64_t ttHits = 0;
+        uint64_t tbHits = 0;
         uint32_t maxDepth = 0;
     };
 

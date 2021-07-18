@@ -34,11 +34,11 @@ bestmove c7c1
   * Multi-PV search
   * Null Move Prunning
   * Magic Bitboards
+  * Syzygy endgame tables support
   
 ## TODO
 
   * Better evaluation function
   * More platforms support
-  * Endgame tables
   * Time management
   * Parallel search
