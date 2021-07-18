@@ -27,9 +27,10 @@ static constexpr PieceScore c_pawnValue            = S(82, 94);
 static constexpr int32_t c_castlingRightsBonus  = 5;
 static constexpr int32_t c_mobilityBonus        = 2;
 static constexpr int32_t c_guardBonus           = 5;
-static constexpr int32_t c_kingSafetyBonus      = 12;
+static constexpr int32_t c_kingSafetyBonus      = 3;
 static constexpr int32_t c_doubledPawnPenalty   = 0;
-static constexpr int32_t c_passedPawnBonus      = 200;
+static constexpr int32_t c_inCheckPenalty       = 20;
+static constexpr int32_t c_passedPawnBonus      = 0;
 
 const PieceScore PawnPSQT[Square::NumSquares] =
 {
@@ -135,8 +136,11 @@ INLINE static void EvalBlackPieceSquareTable(const Bitboard bitboard, const Piec
 static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t egScore)
 {
     // 32 at the beginning, 0 at the end
-    const int32_t mgPhase = pos.Whites().Occupied().Count() + pos.Blacks().Occupied().Count();
-    const int32_t egPhase = 32u - mgPhase;
+    const int32_t mgPhase = (pos.Whites().Occupied() | pos.Blacks().Occupied()).Count();
+    const int32_t egPhase = 32 - mgPhase;
+
+    ASSERT(mgPhase >= 0 && mgPhase <= 32);
+    ASSERT(egPhase >= 0 && egPhase <= 32);
 
     return (mgScore * mgPhase + egScore * egPhase) / 32;
 }
@@ -287,17 +291,105 @@ int32_t Evaluate(const Position& position)
 
 #else
 
+static int32_t PawnlessEndgameScore(
+    int32_t queensA, int32_t rooksA, int32_t bishopsA, int32_t knightsA,
+    int32_t queensB, int32_t rooksB, int32_t bishopsB, int32_t knightsB)
+{
+    // Queen versus one minor piece - a win for the queen
+    {
+        if ((queensA >= 1 && rooksA == 0 && bishopsA == 0 && knightsA == 0) &&
+            (queensB == 0 && rooksB == 0 && (bishopsB + knightsB <= 1)))
+        {
+            return 1;
+        }
+
+        if ((queensB >= 1 && rooksB == 0 && bishopsB == 0 && knightsB == 0) &&
+            (queensA == 0 && rooksA == 0 && (bishopsA + knightsA <= 1)))
+        {
+            return -1;
+        }
+    }
+
+    // Only rook - win for the rook
+    {
+        if ((queensA == 0 && rooksA >= 1 && bishopsA == 0 && knightsA == 0) &&
+            (queensB == 0 && rooksB == 0 && bishopsB == 0 && knightsB == 0))
+        {
+            return 1;
+        }
+
+        if ((queensB == 0 && rooksB >= 1 && bishopsB == 0 && knightsB == 0) &&
+            (queensA == 0 && rooksA == 0 && bishopsA == 0 && knightsA == 0))
+        {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+
+static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
+{
+    int32_t count = 0;
+
+    ourPawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const uint32_t rank = square / 8;
+        const uint32_t file = square % 8;
+        
+        if (rank >= 6)
+        {
+            // pawn is ready to promotion - consider is as passed
+            count++;
+        }
+        else
+        {
+            constexpr const Bitboard fileMask = Bitboard::FileBitboard<0>();
+
+            Bitboard passedPawnMask = fileMask << (square + 8);
+            if (file > 0) passedPawnMask |= fileMask << (square + 7);
+            if (file < 7) passedPawnMask |= fileMask << (square + 9);
+
+            if ((theirPawns & passedPawnMask) == 0)
+            {
+                count++;
+            }
+        }
+    });
+
+    return count;
+}
+
 int32_t Evaluate(const Position& position)
 {
     int32_t value = 0;
     int32_t valueMG = 0;
     int32_t valueEG = 0;
 
-    int32_t queensDiff = (int32_t)position.Whites().queens.Count() - (int32_t)position.Blacks().queens.Count();
-    int32_t rooksDiff = (int32_t)position.Whites().rooks.Count() - (int32_t)position.Blacks().rooks.Count();
-    int32_t bishopsDiff = (int32_t)position.Whites().bishops.Count() - (int32_t)position.Blacks().bishops.Count();
-    int32_t knightsDiff = (int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count();
-    int32_t pawnsDiff = (int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count();
+    const int32_t whiteQueens = position.Whites().queens.Count();
+    const int32_t whiteRooks = position.Whites().rooks.Count();
+    const int32_t whiteBishops = position.Whites().bishops.Count();
+    const int32_t whiteKnights = position.Whites().knights.Count();
+    const int32_t whitePawns = position.Whites().pawns.Count();
+
+    const int32_t blackQueens = position.Blacks().queens.Count();
+    const int32_t blackRooks = position.Blacks().rooks.Count();
+    const int32_t blackBishops = position.Blacks().bishops.Count();
+    const int32_t blackKnights = position.Blacks().knights.Count();
+    const int32_t blackPawns = position.Blacks().pawns.Count();
+
+    if (blackPawns == 0 && whitePawns == 0)
+    {
+        value += 100 * PawnlessEndgameScore(whiteQueens, whiteRooks, whiteBishops, whiteKnights, blackQueens, blackRooks, blackBishops, blackKnights);
+    }
+
+
+    int32_t queensDiff = whiteQueens - blackQueens;
+    int32_t rooksDiff = whiteRooks - blackRooks;
+    int32_t bishopsDiff = whiteBishops - blackBishops;
+    int32_t knightsDiff = whiteKnights - blackKnights;
+    int32_t pawnsDiff = whitePawns - blackPawns;
 
     valueMG += c_queenValue.mg * queensDiff;
     valueMG += c_rookValue.mg * rooksDiff;
@@ -310,12 +402,6 @@ int32_t Evaluate(const Position& position)
     valueEG += c_bishopValue.eg * bishopsDiff;
     valueEG += c_knightValue.eg * knightsDiff;
     valueEG += c_pawnValue.eg * pawnsDiff;
-
-    //value += c_queenValue * ((int32_t)position.Whites().queens.Count() - (int32_t)position.Blacks().queens.Count());
-    //value += c_rookValue * ((int32_t)position.Whites().rooks.Count() - (int32_t)position.Blacks().rooks.Count());
-    //value += c_bishopValue * ((int32_t)position.Whites().bishops.Count() - (int32_t)position.Blacks().bishops.Count());
-    //value += c_knightValue * ((int32_t)position.Whites().knights.Count() - (int32_t)position.Blacks().knights.Count());
-    //value += c_pawnValue * ((int32_t)position.Whites().pawns.Count() - (int32_t)position.Blacks().pawns.Count());
 
     const uint32_t numWhitePieces =
         (int32_t)position.Whites().queens.Count() +
@@ -348,11 +434,11 @@ int32_t Evaluate(const Position& position)
 
     if (whiteAttackedSquares & position.Blacks().king)
     {
-        value += 50;
+        value += c_inCheckPenalty;
     }
     if (blackAttackedSquares & position.Whites().king)
     {
-        value -= 50;
+        value -= c_inCheckPenalty;
     }
 
     // piece square tables
@@ -400,21 +486,13 @@ int32_t Evaluate(const Position& position)
         value += c_doubledPawnPenalty * numDoubledPawns;
     }
 
-    // passed pawns
-    /*
+    // white passed pawns
     {
-        const uint32_t whitePawnsFiles = position.Whites().pawns.FileMask();
-        const uint32_t blackPawnsFiles = position.Blacks().pawns.FileMask();
-
-        const uint32_t whitePassedPawnsFiles = whitePawnsFiles & ~(blackPawnsFiles | (blackPawnsFiles << 1) | (blackPawnsFiles >> 1));
-        const uint32_t blackPassedPawnsFiles = blackPawnsFiles & ~(whitePawnsFiles | (whitePawnsFiles << 1) | (whitePawnsFiles >> 1));
-
-        const int32_t numPassedWhitePawns = __popcnt(whitePassedPawnsFiles);
-        const int32_t numPassedBlackPawns = __popcnt(blackPassedPawnsFiles);
+        const int32_t numPassedWhitePawns = CountPassedPawns(position.Whites().pawns, position.Blacks().pawns);
+        const int32_t numPassedBlackPawns = CountPassedPawns(position.Blacks().pawns.Flipped(), position.Whites().pawns.Flipped());
 
         value += (numPassedWhitePawns - numPassedBlackPawns) * c_passedPawnBonus;
     }
-    */
 
     // white king safety
     {
@@ -439,11 +517,11 @@ int32_t Evaluate(const Position& position)
     // tempo bonus
     if (position.GetSideToMove() == Color::White)
     {
-        value += numWhitePieces / 2;
+        value += numWhitePieces;
     }
     else
     {
-        value += numBlackPieces / 2;
+        value += numBlackPieces;
     }
 
     // accumulate middle/end game scores

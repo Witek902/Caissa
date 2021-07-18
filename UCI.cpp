@@ -121,7 +121,9 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ttinfo")
     {
         std::unique_lock<std::mutex> lock(mMutex);
-        std::cout << "TT entries in use: " << mSearch.GetTranspositionTable().GetNumUsedEntries() << std::endl;
+        const size_t numEntriesUsed = mSearch.GetTranspositionTable().GetNumUsedEntries();
+        const float percentage = 100.0f * (float)numEntriesUsed / (float)mSearch.GetTranspositionTable().GetSize();
+        std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
     }
     else if (command == "unittest")
     {
