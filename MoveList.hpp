@@ -25,6 +25,18 @@ public:
 
     void RemoveMove(const Move& move);
 
+    void Clear()
+    {
+        numMoves = 0;
+    }
+
+    void PushMove(const Move move, int32_t score)
+    {
+        ASSERT(numMoves < MaxMoves);
+        uint32_t index = numMoves++;
+        moves[index] = { move, score };
+    }
+
     Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
         ASSERT(index < numMoves);
@@ -79,12 +91,7 @@ public:
 
 private:
 
-    void PushMove(const Move move, int32_t score)
-    {
-        ASSERT(numMoves < MaxMoves);
-        uint32_t index = numMoves++;
-        moves[index] = { move, score };
-    }
+
 
     uint32_t numMoves = 0;
     MoveEntry moves[MaxMoves];
