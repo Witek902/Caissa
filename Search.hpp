@@ -52,6 +52,7 @@ public:
     static constexpr int32_t InvalidValue   = 9999999;
 
     static constexpr int32_t MaxSearchDepth = 256;
+    static constexpr uint32_t MaxDepthShift = 8;
 
     Search();
     ~Search();
@@ -77,14 +78,17 @@ private:
         const NodeInfo* parentNode = nullptr;
         ScoreType alpha;
         ScoreType beta;
+        Move previousMove = Move::Invalid();
         std::span<const Move> moveFilter; // ignore given moves in search, used for multi-PV search
         std::span<const Move> rootMoves;  // consider only this moves at root node, used for "searchmoves" UCI command
-        uint16_t depth;
-        uint16_t maxDepth;
+        uint32_t depth;
+        uint32_t maxDepthFractional;
         uint8_t pvIndex;
         Color color;
         bool isPvNode = false;
         bool isNullMove = false;
+
+        INLINE uint32_t MaxDepth() const { return maxDepthFractional >> MaxDepthShift; }
     };
     
     struct SearchContext
@@ -127,14 +131,14 @@ private:
 
     // principial variation moves tracking for current search
     PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
-    uint16_t pvLengths[MaxSearchDepth];
+    uint8_t pvLengths[MaxSearchDepth];
 
     // principial variation lines from previous iterative deepening search
     SearchResult mPrevPvLines;
 
     TranspositionTable mTranspositionTable;
 
-    uint32_t searchHistory[2][6][64];
+    uint32_t searchHistory[2][64][64];
 
     static constexpr uint32_t NumKillerMoves = 4;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];

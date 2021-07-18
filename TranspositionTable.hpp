@@ -46,6 +46,8 @@ public:
     // old entries will be preserved if possible
     void Resize(size_t newSize);
 
+    size_t GetSize() const { return entries.size(); }
+
     // compute number of used entries
     size_t GetNumUsedEntries() const;
 

@@ -260,7 +260,7 @@ bool NeuralNetwork::Load(const char* filePath)
         prevLayerSize = numLayerOutputs;
     }
 
-    layers.back().activationFunction = ActivationFunction::ATan;
+    layers.back().activationFunction = ActivationFunction::Linear;
     tempError.resize(prevLayerSize);
 
     // read weights
@@ -293,7 +293,7 @@ void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSize
         prevLayerSize = layersSizes[i];
     }
 
-    layers.back().activationFunction = ActivationFunction::ATan;
+    layers.back().activationFunction = ActivationFunction::Linear;
     tempError.resize(layersSizes.back());
 }
 

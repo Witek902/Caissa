@@ -84,8 +84,8 @@ void SelfPlay()
                 search.RecordBoardPosition(position);
 
                 SearchParam searchParam;
-                searchParam.maxDepth = 8;
-                searchParam.numPvLines = 4;
+                searchParam.maxDepth = 9;
+                searchParam.numPvLines = 3;
                 searchParam.debugLog = false;
 
                 searchResult.clear();
@@ -321,9 +321,7 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
 static const uint32_t cNumIterations = 1000;
 static const uint32_t cNumTrainingVectorsPerIteration = 2048;
 static const uint32_t cNumValidationVectorsPerIteration = 100;
-static const uint32_t cBatchSize = 64;
-
-#pragma optimize("",off)
+static const uint32_t cBatchSize = 128;
 
 bool Train()
 {
@@ -359,8 +357,8 @@ bool Train()
     fclose(dumpFile);
 
     nn::NeuralNetwork network;
-    network.Init(12 * 64, { 1024, 512, 256, 1 });
-    // if (!network.Load("network.dat")) return false;
+    network.Init(12 * 64, { 256, 32, 32, 1 });
+    //if (!network.Load("network.dat")) return false;
 
     std::random_device rd;
     std::mt19937 gen(rd());

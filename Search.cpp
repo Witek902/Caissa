@@ -19,12 +19,12 @@ static const int32_t AspirationWindowMin = 20;
 static const int32_t AspirationWindowStep = 20;
 
 static const uint32_t BetaPruningDepth = 6;
-static const int32_t BetaMarginMultiplier = 110;
-static const int32_t BetaMarginBias = 50;
+static const int32_t BetaMarginMultiplier = 80;
+static const int32_t BetaMarginBias = 30;
 
 static const uint32_t AlphaPruningDepth = 4;
-static const int32_t AlphaMarginMultiplier = 110;
-static const int32_t AlphaMarginBias = 800;
+static const int32_t AlphaMarginMultiplier = 150;
+static const int32_t AlphaMarginBias = 1000;
 
 int64_t SearchParam::GetElapsedTime() const
 {
@@ -247,7 +247,7 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
         rootNode.position = &param.position;
         rootNode.depth = 0u;
         rootNode.isPvNode = true;
-        rootNode.maxDepth = (uint8_t)param.depth;
+        rootNode.maxDepthFractional = param.depth << MaxDepthShift;
         rootNode.pvIndex = (uint8_t)param.pvIndex;
         rootNode.alpha = alpha;
         rootNode.beta = beta;
@@ -314,10 +314,7 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
         const Move move = moves[i].move;
         ASSERT(move.IsValid());
 
-        const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
-        ASSERT(pieceIndex < 6u);
-
-        const uint32_t score = searchHistory[(uint32_t)color][pieceIndex][move.toSquare.Index()];
+        const uint32_t score = searchHistory[(uint32_t)color][move.fromSquare.Index()][move.toSquare.Index()];
         const int64_t finalScore = (int64_t)moves[i].score + score;
         moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
     }
@@ -341,7 +338,7 @@ void Search::FindKillerMoves(uint32_t depth, MoveList& moves) const
 
 void Search::UpdatePvArray(uint32_t depth, const Move move)
 {
-    const uint16_t childPvLength = pvLengths[depth + 1];
+    const uint8_t childPvLength = pvLengths[depth + 1];
     pvArray[depth][depth] = move;
     for (uint32_t j = depth + 1; j < childPvLength; ++j)
     {
@@ -357,15 +354,11 @@ void Search::UpdateSearchHistory(const NodeInfo& node, const Move move)
         return;
     }
 
-    const uint32_t pieceIndex = (uint32_t)(move.piece) - 1;
-    ASSERT(pieceIndex < 6u);
+    uint32_t& historyCounter = searchHistory[(uint32_t)node.color][move.fromSquare.Index()][move.toSquare.Index()];
 
-    uint32_t& historyCounter = searchHistory[(uint32_t)node.color][pieceIndex][move.toSquare.Index()];
+    const uint64_t historyBonus = node.MaxDepth() - node.depth;
 
-    const uint32_t historyBonus = node.maxDepth - node.depth;
-    ASSERT(historyBonus > 0u);
-
-    const uint64_t newValue = std::min<uint64_t>(UINT32_MAX, (uint64_t)historyCounter + (uint64_t)historyBonus * (uint64_t)historyBonus);
+    const uint64_t newValue = std::min<uint64_t>(UINT32_MAX, (uint64_t)historyCounter + 1u + historyBonus * historyBonus);
     historyCounter = (uint32_t)newValue;
 }
 
@@ -440,7 +433,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
 {
     // clean PV line
     ASSERT(node.depth < MaxSearchDepth);
-    pvLengths[node.depth] = node.depth;
+    pvLengths[node.depth] = (uint8_t)node.depth;
 
     // update stats
     ctx.nodes++;
@@ -452,7 +445,9 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
         return 0;
     }
 
-    ScoreType score = ColorMultiplier(node.color) * Evaluate(*node.position);
+    const ScoreType staticEval = ColorMultiplier(node.color) * Evaluate(*node.position);
+
+    ScoreType score = staticEval;
 
     if (score >= node.beta)
     {
@@ -462,7 +457,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     NodeInfo childNodeParam;
     childNodeParam.parentNode = &node;
     childNodeParam.depth = node.depth + 1;
-    childNodeParam.maxDepth = 0;
+    childNodeParam.maxDepthFractional = 0;
     childNodeParam.color = GetOppositeColor(node.color);
 
     uint32_t moveGenFlags = 0;
@@ -518,6 +513,13 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
             return beta;
         }
     }
+    
+    if (node.MaxDepth() > 10 && !node.position->IsInCheck(node.color) && numLegalMoves == 0)
+    {
+        //std::cout << node.position->ToFEN() << " eval " << staticEval << std::endl;
+        //std::cout << node.position->Print() << std::endl;
+        //std::cout << node.position->ToFEN() << std::endl;
+    }
 
     return alpha;
 }
@@ -554,7 +556,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     ASSERT(node.depth < MaxSearchDepth);
 
     // clean PV line
-    pvLengths[node.depth] = node.depth;
+    pvLengths[node.depth] = (uint8_t)node.depth;
 
     // update stats
     ctx.nodes++;
@@ -574,7 +576,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     const bool isInCheck = node.position->IsInCheck(node.color);
-    const uint16_t inversedDepth = node.maxDepth - node.depth;
+    const uint32_t inversedDepth = node.MaxDepth() - node.depth;
 
     const ScoreType oldAlpha = node.alpha;
     ScoreType alpha = node.alpha;
@@ -640,7 +642,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
 
     // maximum search depth reached, enter quisence search to find final evaluation
-    if (node.depth >= node.maxDepth)
+    if (node.depth >= node.MaxDepth())
     {
         return QuiescenceNegaMax(node, ctx);
     }
@@ -695,7 +697,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             childNodeParam.alpha = -beta;
             childNodeParam.beta = -beta + 1;
             childNodeParam.isNullMove = true;
-            childNodeParam.maxDepth = (uint16_t)std::max(0, (int32_t)node.maxDepth - NullMovePrunningDepthReduction);
+            childNodeParam.maxDepthFractional = std::max(0, (int32_t)node.maxDepthFractional - (NullMovePrunningDepthReduction << MaxDepthShift));
 
             const int32_t nullMoveScore = -NegaMax(childNodeParam, ctx);
 
@@ -712,15 +714,12 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     childNodeParam.color = GetOppositeColor(node.color);
     childNodeParam.pvIndex = node.pvIndex;
 
-    uint16_t childNodeMaxDepth = node.maxDepth;
+    uint16_t extension = 0;
 
     // check extension
     if (isInCheck)
     {
-        if (childNodeMaxDepth < UINT8_MAX)
-        {
-            childNodeMaxDepth++;
-        }
+        extension++;
     }
 
     MoveList moves;
@@ -820,28 +819,39 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
         numLegalMoves++;
 
+        int32_t moveExtensionFractional = extension << MaxDepthShift;
+
+        // recapture extension
+        if (move.isCapture && node.previousMove.isCapture && move.toSquare == node.previousMove.toSquare)
+        {
+            //moveExtensionFractional += 1 << (MaxDepthShift - 1);
+        }
+
         childNodeParam.position = &childPosition;
         childNodeParam.isPvNode = pvMove == move;
-        childNodeParam.maxDepth = childNodeMaxDepth;
+        childNodeParam.maxDepthFractional = node.maxDepthFractional + moveExtensionFractional;
+        childNodeParam.previousMove = move;
 
-        int32_t depthReduction = 0;
+        uint32_t depthReductionFractional = 0;
 
         // Late Move Reduction
         // don't reduce PV moves, while in check, captures, promotions, etc.
         if (move.IsQuiet() && !isInCheck && totalQuietMoves > 0 && numLegalMoves > 1u && inversedDepth >= LateMoveReductionStartDepth)
         {
             // reduce depth gradually
-            depthReduction = std::max<int32_t>(1, numReducedMoves / LateMoveReductionRate);
+            //depthReductionFractional = (numReducedMoves << MaxDepthShift) / LateMoveReductionRate;
+            depthReductionFractional = std::max<int32_t>(1, numReducedMoves / LateMoveReductionRate) << MaxDepthShift;
             numReducedMoves++;
 
             // Late Move Prunning
-            if (inversedDepth >= LateMovePrunningStartDepth && depthReduction > childNodeMaxDepth)
+            if (inversedDepth >= LateMovePrunningStartDepth && depthReductionFractional > childNodeParam.maxDepthFractional)
             {
                 continue;
             }
         }
 
-        childNodeParam.maxDepth = (uint16_t)std::max(1, (int32_t)childNodeMaxDepth - depthReduction);
+        ASSERT(childNodeParam.maxDepthFractional >= depthReductionFractional);
+        childNodeParam.maxDepthFractional = childNodeParam.maxDepthFractional - depthReductionFractional;
 
         ScoreType score;
         {
@@ -867,9 +877,9 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
 
         // re-do search at full depth
-        if (depthReduction > 0 && score > alpha)
+        if (depthReductionFractional > 0 && score > alpha)
         {
-            childNodeParam.maxDepth = childNodeMaxDepth;
+            childNodeParam.maxDepthFractional = node.maxDepthFractional + moveExtensionFractional;
             childNodeParam.alpha = -beta;
             childNodeParam.beta = -alpha;
             score = -NegaMax(childNodeParam, ctx);
