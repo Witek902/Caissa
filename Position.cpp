@@ -636,7 +636,7 @@ bool Position::IsInCheck(Color sideColor) const
     return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(sideColor));
 }
 
-uint32_t Position::GetNumLegalMoves() const
+uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 {
     MoveList moves;
     GenerateMoveList(moves);
@@ -651,10 +651,16 @@ uint32_t Position::GetNumLegalMoves() const
     {
         const Move move = moves[i].move;
         ASSERT(move.IsValid());
+
         Position childPosition = *this;
         if (childPosition.DoMove(move))
         {
             numLegalMoves++;
+
+            if (outMoves)
+            {
+                outMoves->push_back(move);
+            }
         }
     }
 

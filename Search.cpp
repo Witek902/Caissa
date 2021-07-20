@@ -1,4 +1,5 @@
 #include "Search.hpp"
+#include "Game.hpp"
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 
@@ -60,56 +61,45 @@ Search::~Search()
 
 }
 
-void Search::RecordBoardPosition(const Position& position)
+void Search::StopSearch()
 {
-    GameHistoryPositions& entry = historyGamePositions[position.GetHash()];
-
-    for (const Position& historyPosition : entry)
-    {
-        if (historyPosition == position)
-        {
-            return;
-        }
-    }
-
-    entry.push_back(position);
+    mStopSearch = true;
 }
 
-void Search::ClearPositionHistory()
+bool Search::CheckStopCondition(const SearchContext& ctx) const
 {
-    historyGamePositions.clear();
-}
-
-bool Search::IsPositionRepeated(const Position& position) const
-{
-    const auto iter = historyGamePositions.find(position.GetHash());
-    if (iter == historyGamePositions.end())
+    if (mStopSearch)
     {
-        return false;
+        return true;
+    }
+    
+    if (ctx.searchParam.limits.maxNodes < UINT64_MAX && ctx.nodes >= ctx.searchParam.limits.maxNodes)
+    {
+        // nodes limit exceeded
+        return true;
     }
 
-    const GameHistoryPositions& entry = iter->second;
-
-    for (const Position& historyPosition : entry)
+    if (ctx.searchParam.limits.maxTime < UINT32_MAX && ctx.searchParam.GetElapsedTime() >= ctx.searchParam.limits.maxTime)
     {
-        if (historyPosition == position)
-        {
-            return true;
-        }
+        // time limit exceeded
+        return true;
     }
 
     return false;
 }
 
-void Search::DoSearch(const Position& position, const SearchParam& param, SearchResult& result)
+void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& result)
 {
     std::vector<Move> pvMovesSoFar;
 
+    mStopSearch = false;
     mPrevPvLines.clear();
 
     // clamp number of PV lines (there can't be more than number of max moves)
     static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
-    const uint32_t numPvLines = std::min(param.numPvLines, position.GetNumLegalMoves());
+    std::vector<Move> legalMoves;
+    const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves(&legalMoves);
+    const uint32_t numPvLines = std::min(param.numPvLines, numLegalMoves);
 
     result.clear();
     result.resize(numPvLines);
@@ -120,12 +110,22 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
         return;
     }
 
+    if (param.limits.maxTime < UINT32_MAX && numLegalMoves == 1)
+    {
+        // if we have time limit and there's only a single legal move, return it immediately without evaluation
+        result.front().moves.push_back(legalMoves.front());
+        result.front().score = 0;
+        return;
+    }
+
     memset(searchHistory, 0, sizeof(searchHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 
-    for (uint32_t depth = 1; depth <= param.maxDepth; ++depth)
+    for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
     {
         pvMovesSoFar.clear();
+
+        bool finishSearchAtDepth = false;
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
@@ -133,11 +133,11 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
             auto startTime = std::chrono::high_resolution_clock::now();
 
-            SearchContext searchContext{ param };
+            SearchContext searchContext{ game, param };
 
             AspirationWindowSearchParam aspirationWindowSearchParam =
             {
-                position,
+                game.GetPosition(),
                 param,
                 result,
                 depth,
@@ -149,8 +149,6 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
             int32_t score = AspirationWindowSearch(aspirationWindowSearchParam);
 
-            const bool isMate = (score > CheckmateValue - MaxSearchDepth) || (score < -CheckmateValue + MaxSearchDepth);
-
             uint32_t pvLength = pvLengths[0];
 
             // write PV line into result struct
@@ -160,7 +158,7 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
                 outPvLine.moves.clear();
 
                 // reconstruct PV line
-                Position iteratedPosition = position;
+                Position iteratedPosition = game.GetPosition();
                 for (uint32_t i = 0; i < pvLength; ++i)
                 {
                     const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
@@ -192,14 +190,20 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
                     std::cout << " multipv " << (pvIndex + 1);
                 }
                 std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-                if (isMate)
+
+                if (score > CheckmateValue - MaxSearchDepth)
                 {
-                    std::cout << " score mate " << (pvLength + 1) / 2;
+                    std::cout << " score mate " << (CheckmateValue - score + 1) / 2;
+                }
+                else if (score < -CheckmateValue + MaxSearchDepth)
+                {
+                    std::cout << " score mate -" << (score - CheckmateValue + 1) / 2;
                 }
                 else
                 {
                     std::cout << " score cp " << score;
                 }
+
                 std::cout << " nodes " << searchContext.nodes;
 
                 if (searchContext.tbHits)
@@ -220,17 +224,18 @@ void Search::DoSearch(const Position& position, const SearchParam& param, Search
 
                 std::cout << std::endl;
             }
+
+            if (CheckStopCondition(searchContext))
+            {
+                finishSearchAtDepth = true;
+            }
         }
 
         mPrevPvLines = result;
 
-        if (param.maxTime < UINT32_MAX)
+        if (finishSearchAtDepth)
         {
-            if (param.GetElapsedTime() > param.maxTime)
-            {
-                // time limit exceeded
-                break;
-            }
+            break;
         }
     }
 }
@@ -246,7 +251,7 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
     ASSERT(aspirationWindow > 0);
 
     // start applying aspiration window at given depth
-    if (param.depth >= AspirationWindowSearchStartDepth)
+    if (param.depth >= AspirationWindowSearchStartDepth && !CheckStopCondition(param.searchContext))
     {
         alpha = std::max(param.previousScore - aspirationWindow, -InfValue);
         beta = std::min(param.previousScore + aspirationWindow, InfValue);
@@ -408,7 +413,7 @@ void Search::RegisterKillerMove(const NodeInfo& node, const Move move)
     }
 }
 
-bool Search::IsRepetition(const NodeInfo& node) const
+bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
 {
     for(const NodeInfo* prevNode = &node;;)
     {
@@ -438,10 +443,10 @@ bool Search::IsRepetition(const NodeInfo& node) const
         }
     }
 
-    return IsPositionRepeated(*node.position);
+    return game.GetRepetitionCount(*node.position) > 0;
 }
 
-bool Search::IsDraw(const NodeInfo& node) const
+bool Search::IsDraw(const NodeInfo& node, const Game& game) const
 {
     if (node.position->GetHalfMoveCount() >= 100)
     {
@@ -453,7 +458,7 @@ bool Search::IsDraw(const NodeInfo& node) const
         return true;
     }
 
-    if (IsRepetition(node))
+    if (IsRepetition(node, game))
     {
         return true;
     }
@@ -474,7 +479,7 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     ctx.quiescenceNodes++;
     ctx.maxDepth = std::max<uint32_t>(ctx.maxDepth, node.depth);
 
-    if (IsDraw(node))
+    if (IsDraw(node, ctx.game))
     {
         return 0;
     }
@@ -482,6 +487,8 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     const ScoreType staticEval = ColorMultiplier(node.color) * Evaluate(*node.position);
 
     ScoreType score = staticEval;
+    ScoreType alpha = std::max(score, node.alpha);
+    ScoreType beta = node.beta;
 
     if (score >= node.beta)
     {
@@ -509,8 +516,6 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     }
 
     Move bestMove = Move::Invalid();
-    ScoreType alpha = std::max(score, node.alpha);
-    ScoreType beta = node.beta;
     uint32_t numLegalMoves = 0;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
@@ -608,12 +613,9 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
     // Check for draw
     // Skip root node as we need some move to be reported
-    if (!isRootNode)
+    if (!isRootNode && IsDraw(node, ctx.game))
     {
-        if (IsDraw(node))
-        {
-            return 0;
-        }
+        return 0;
     }
 
     const Position& position = *node.position;
@@ -1046,6 +1048,12 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             betaCutoff = true;
             break;
         }
+
+        if (!isRootNode && CheckStopCondition(ctx))
+        {
+            // abort search of further moves
+            break;
+        }
     }
 
     if (numLegalMoves == 0u)
@@ -1063,6 +1071,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     ASSERT(bestMove.IsValid());
 
     // update transposition table
+    if (!CheckStopCondition(ctx))
     {
         TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
 

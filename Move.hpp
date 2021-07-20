@@ -18,8 +18,9 @@ struct PackedMove
     {
         struct
         {
-            Square fromSquare;
-            Square toSquare;
+            uint16_t fromSquare : 6;
+            uint16_t toSquare : 6;
+            uint16_t promoteTo : 4;
         };
 
         uint16_t value;
@@ -39,7 +40,7 @@ struct PackedMove
     }
 };
 
-static_assert(sizeof(PackedMove) <= 2, "Invalid PackedMove size");
+static_assert(sizeof(PackedMove) == 2, "Invalid PackedMove size");
 
 struct Move
 {
@@ -68,7 +69,10 @@ struct Move
 
     INLINE bool operator == (const PackedMove rhs) const
     {
-        return (value & 0xFFFF) == rhs.value;
+        return
+            rhs.fromSquare == fromSquare.Index() &&
+            rhs.toSquare == toSquare.Index() &&
+            rhs.promoteTo == static_cast<uint8_t>(promoteTo);
     }
 
     // valid move does not mean it's a legal move for a given position
@@ -88,7 +92,9 @@ struct Move
 
 INLINE PackedMove::PackedMove(const Move& rhs)
 {
-    value = static_cast<uint16_t>(rhs.value);
+    fromSquare = rhs.fromSquare.Index();
+    toSquare = rhs.toSquare.Index();
+    promoteTo = static_cast<uint8_t>(rhs.promoteTo);
 }
 
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
