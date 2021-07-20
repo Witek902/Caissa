@@ -62,6 +62,9 @@
     <ClCompile Include="tablebase\tbprobe.c">
       <Filter>tablebase</Filter>
     </ClCompile>
+    <ClCompile Include="Game.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -114,6 +117,9 @@
     </ClInclude>
     <ClInclude Include="tablebase\tbprobe.h">
       <Filter>tablebase</Filter>
+    </ClInclude>
+    <ClInclude Include="Game.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

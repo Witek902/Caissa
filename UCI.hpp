@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Position.hpp"
+#include "Game.hpp"
 #include "Search.hpp"
+#include "ThreadPool.hpp"
 
 #include <iostream>
 #include <mutex>
@@ -10,6 +11,13 @@
 struct Options
 {
     uint32_t multiPV = 1;
+};
+
+struct SearchTaskContext
+{
+    SearchParam searchParam;
+    SearchResult searchResult;
+    threadpool::Waitable waitable;
 };
 
 class UniversalChessInterface
@@ -22,12 +30,15 @@ public:
 private:
     bool Command_Position(const std::vector<std::string>& args);
     bool Command_Go(const std::vector<std::string>& args);
+    bool Command_Stop();
     bool Command_Perft(const std::vector<std::string>& args);
     bool Command_SetOption(const std::string& name, const std::string& value);
 
-    Position mPosition;
+    Game mGame;
     Search mSearch;
     Options mOptions;
 
     std::mutex mMutex;
+
+    std::unique_ptr<SearchTaskContext> mSearchCtx;
 };

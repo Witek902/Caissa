@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <string>
+#include <vector>
 
 #include "Bitboard.hpp"
 #include "Piece.hpp"
@@ -138,7 +139,7 @@ public:
     bool IsInCheck(Color sideColor) const;
 
     // get number of legal moves
-    uint32_t GetNumLegalMoves() const;
+    uint32_t GetNumLegalMoves(std::vector<Move>* outMoves = nullptr) const;
 
     // check if side to move is checkmated
     bool IsMate() const;

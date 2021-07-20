@@ -231,6 +231,7 @@
   <ItemGroup>
     <ClCompile Include="Bitboard.cpp" />
     <ClCompile Include="Evaluate.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Move.cpp" />
     <ClCompile Include="MoveList.cpp" />
@@ -261,6 +262,7 @@
     <ClInclude Include="Color.hpp" />
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="Evaluate.hpp" />
+    <ClInclude Include="Game.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />
     <ClInclude Include="NeuralNetwork.hpp" />

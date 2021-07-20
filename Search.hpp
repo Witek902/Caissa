@@ -8,16 +8,27 @@
 #include <span>
 #include <chrono>
 
-struct SearchParam
-{
-    // used to track total time spend on search
-    std::chrono::time_point<std::chrono::high_resolution_clock> startTimePoint;
+class Game;
 
+struct SearchLimits
+{
     // maximum allowed base search depth (excluding quisence, extensions, etc.)
     uint32_t maxDepth = 8;
 
     // maximum allowed search time in milliseconds
     uint32_t maxTime = UINT32_MAX;
+
+    // maximum allowed searched nodes
+    uint64_t maxNodes = UINT64_MAX;
+};
+
+struct SearchParam
+{
+    // used to track total time spend on search
+    std::chrono::time_point<std::chrono::high_resolution_clock> startTimePoint;
+
+    // search limits
+    SearchLimits limits;
 
     // number of PV lines to report
     uint32_t numPvLines = 1;
@@ -58,14 +69,9 @@ public:
     Search();
     ~Search();
 
-    void DoSearch(const Position& position, const SearchParam& param, SearchResult& result);
+    void DoSearch(const Game& game, const SearchParam& param, SearchResult& result);
 
-    void RecordBoardPosition(const Position& position);
-
-    void ClearPositionHistory();
-
-    // check if a position already occurred
-    bool IsPositionRepeated(const Position& position) const;
+    void StopSearch();
 
     TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
 
@@ -95,6 +101,7 @@ private:
     
     struct SearchContext
     {
+        const Game& game;
         const SearchParam& searchParam;
         uint64_t fh = 0;
         uint64_t fhf = 0;
@@ -146,10 +153,7 @@ private:
     static constexpr uint32_t NumKillerMoves = 4;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 
-    using GameHistoryPositions = std::vector<Position>;
-    std::unordered_map<uint64_t, GameHistoryPositions> historyGamePositions;
-
-    bool IsDraw(const NodeInfo& node) const;
+    bool IsDraw(const NodeInfo& node, const Game& game) const;
 
     int32_t AspirationWindowSearch(const AspirationWindowSearchParam& param);
 
@@ -164,11 +168,14 @@ private:
     int32_t PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t beta);
 
     // check for repetition in the searched node
-    bool IsRepetition(const NodeInfo& node) const;
+    bool IsRepetition(const NodeInfo& node, const Game& game) const;
 
     // update principal variation line
     void UpdatePvArray(uint32_t depth, const Move move);
 
     void UpdateSearchHistory(const NodeInfo& node, const Move move);
     void RegisterKillerMove(const NodeInfo& node, const Move move);
+
+    // returns true if the search needs to be aborted immediately
+    bool CheckStopCondition(const SearchContext& ctx) const;
 };

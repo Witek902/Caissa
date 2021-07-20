@@ -1059,12 +1059,15 @@ bool RunSearchTests()
                     const Position position(testCase.positionStr);
                     TEST_EXPECT(position.IsValid());
 
+                    Game game;
+                    game.Reset(position);
+
                     SearchParam searchParam;
                     searchParam.debugLog = false;
-                    searchParam.maxDepth = depth;
+                    searchParam.limits.maxDepth = depth;
 
                     SearchResult searchResult;
-                    search.DoSearch(position, searchParam, searchResult);
+                    search.DoSearch(game, searchParam, searchResult);
 
                     Move foundMove;
                     if (!searchResult[0].moves.empty())

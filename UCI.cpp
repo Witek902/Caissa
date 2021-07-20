@@ -24,7 +24,7 @@ void LoadTablebase(const char* path)
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
-    mPosition.FromFEN(Position::InitPositionFEN);
+    mGame.Reset(Position(Position::InitPositionFEN));
 
     for (int i = 1; i < argc; ++i)
     {
@@ -141,7 +141,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "stop")
     {
-        // TODO
+        std::unique_lock<std::mutex> lock(mMutex);
+        Command_Stop();
     }
     else if (command == "quit")
     {
@@ -154,11 +155,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "print")
     {
         std::unique_lock<std::mutex> lock(mMutex);
-        std::cout << mPosition.Print() << std::endl;
+        std::cout << "Init:  " << mGame.GetInitialPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
+        std::cout << mGame.GetPosition().Print() << std::endl;
     }
     else if (command == "eval")
     {
-        std::cout << Evaluate(mPosition) << std::endl;
+        std::cout << Evaluate(mGame.GetPosition()) << std::endl;
     }
     else if (command == "ttinfo")
     {
@@ -197,9 +199,11 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 {
     size_t extraMovesStart = 0;
 
+    Position pos;
+
     if (args.size() >= 2 && args[1] == "startpos")
     {
-        mPosition.FromFEN(Position::InitPositionFEN);
+        pos.FromFEN(Position::InitPositionFEN);
 
         if (args.size() >= 4 && args[2] == "moves")
         {
@@ -250,50 +254,64 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             fenString += "1";
         }
 
-        if (!mPosition.FromFEN(fenString))
+        
+        if (!pos.FromFEN(fenString))
         {
             std::cout << "Invalid FEN" << std::endl;
             return false;
         }
     }
 
+    mGame.Reset(pos);
+
     if (extraMovesStart > 0)
     {
         for (size_t i = extraMovesStart + 1; i < args.size(); ++i)
         {
-            const Position prevPosition = mPosition;
-            const Move move = mPosition.MoveFromString(args[i]);
+            const Move move = mGame.GetPosition().MoveFromString(args[i]);
 
-            if (!move.IsValid() || !mPosition.IsMoveValid(move))
+            if (!move.IsValid() || !mGame.GetPosition().IsMoveValid(move))
             {
                 std::cout << "Invalid move" << std::endl;
                 return false;
             }
 
-            if (!mPosition.DoMove(move))
+            if (!mGame.DoMove(move))
             {
                 std::cout << "Invalid move" << std::endl;
                 return false;
             }
-
-            mSearch.RecordBoardPosition(prevPosition);
         }
     }
 
     return true;
 }
 
+static float EstimateMovesLeft(const float ply)
+{
+    // based on LeelaChessZero 
+    const float move = ply / 2.0f;
+    const float midpoint = 50.0f;
+    const float steepness = 5.0f;
+    return midpoint * std::pow(1.0f + 2.0f * std::pow(move / midpoint, steepness), 1.0f / steepness) - move;
+}
+
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
+    Command_Stop();
+
+    const auto startTimePoint = std::chrono::high_resolution_clock::now();
+
     bool isInfinite = false;
     bool printMoves = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
-    uint32_t whiteRemainingTime = 0;
-    uint32_t blacksRemainingTime = 0;
+    uint32_t whiteRemainingTime = UINT32_MAX;
+    uint32_t blacksRemainingTime = UINT32_MAX;
     uint32_t whiteTimeIncrement = 0;
     uint32_t blacksTimeIncrement = 0;
+    uint32_t movesToGo = UINT32_MAX;
 
     std::vector<Move> rootMoves;
 
@@ -340,7 +358,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
             // restrict search to this moves only
             for (size_t j = i + 1; j < args.size(); ++j)
             {
-                const Move move = mPosition.MoveFromString(args[j]);
+                const Move move = mGame.GetPosition().MoveFromString(args[j]);
                 if (move.IsValid())
                 {
                     rootMoves.push_back(move);
@@ -354,31 +372,65 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
         else if (args[i] == "movestogo" && i + 1 < args.size())
         {
-            // TODO
-            // there are x moves to the next time control,
-            // this will only be sent if x > 0,
-            // if you don't get this and get the wtime and btime it's sudden death
+            movesToGo = atoi(args[i + 1].c_str());
         }
     }
 
-    SearchParam searchParam;
-    searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
-    searchParam.maxTime = moveTime;
-    searchParam.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
-    searchParam.numPvLines = mOptions.multiPV;
-    searchParam.rootMoves = std::move(rootMoves);
-    searchParam.printMoves = printMoves;
-
-    SearchResult searchResult;
-    mSearch.DoSearch(mPosition, searchParam, searchResult);
-
-    if (!searchResult[0].moves.empty())
+    // calculate time for move based on total remaining time and other heuristics
+    uint32_t timeEstimatedMs = UINT32_MAX;
     {
-        const Move bestMove = searchResult[0].moves[0];
-        std::cout << "bestmove " << bestMove.ToString() << std::endl;
+        const uint32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
+        const uint32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
+
+        if (remainingTime != UINT32_MAX)
+        {
+            const float minTimePerMove = 0.01f;
+            const float movesLeftEstimated = EstimateMovesLeft(static_cast<float>(mGame.GetMoves().size()));
+            const float timeEstimated = std::max(minTimePerMove, remainingTime / movesLeftEstimated + remainingTimeInc);
+
+            timeEstimatedMs = static_cast<uint32_t>(timeEstimated + 0.5f);
+        }
     }
 
+    mSearchCtx = std::make_unique<SearchTaskContext>();
+
+    mSearchCtx->searchParam.startTimePoint = startTimePoint;
+    mSearchCtx->searchParam.limits.maxTime = std::min(moveTime, timeEstimatedMs);
+    mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
+    mSearchCtx->searchParam.limits.maxNodes = maxNodes;
+    mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
+    mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
+    mSearchCtx->searchParam.printMoves = printMoves;
+
+    threadpool::TaskDesc taskDesc;
+    taskDesc.waitable = &mSearchCtx->waitable;
+    taskDesc.function = [this](const threadpool::TaskContext&)
+    {
+        mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
+
+        if (!mSearchCtx->searchResult[0].moves.empty())
+        {
+            const Move bestMove = mSearchCtx->searchResult[0].moves[0];
+            std::cout << "bestmove " << bestMove.ToString() << std::endl;
+        }
+    };
+
+    threadpool::ThreadPool().GetInstance().CreateAndDispatchTask(taskDesc);
+
     // TODO ponder
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_Stop()
+{
+    if (mSearchCtx)
+    {
+        mSearch.StopSearch();
+
+        mSearchCtx->waitable.Wait();
+        mSearchCtx.reset();
+    }
 
     return true;
 }
@@ -393,7 +445,7 @@ bool UniversalChessInterface::Command_Perft(const std::vector<std::string>& args
 
     uint32_t maxDepth = atoi(args[1].c_str());
 
-    mPosition.Perft(maxDepth, true);
+    mGame.GetPosition().Perft(maxDepth, true);
 
     return true;
 }
@@ -431,7 +483,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else
     {
-        std::cout << "Invalid option" << std::endl;
+        std::cout << "Invalid option: " << name << std::endl;
         return false;
     }
 

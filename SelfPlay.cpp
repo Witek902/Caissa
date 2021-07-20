@@ -1,5 +1,6 @@
 #include <iostream>
 #include "Position.hpp"
+#include "Game.hpp"
 #include "Move.hpp"
 #include "Search.hpp"
 #include "Evaluate.hpp"
@@ -64,14 +65,14 @@ void SelfPlay()
             std::mt19937 gen(rd());
 
             Search& search = searchArray[context.threadId];
-            search.ClearPositionHistory();
             search.GetTranspositionTable().Clear();
 
-            Position position(Position::InitPositionFEN);
+            Game game;
+            game.Reset(Position(Position::InitPositionFEN));
+
             SearchResult searchResult;
 
             int32_t score = 0;
-            std::stringstream pgnString;
             std::vector<PositionEntry> posEntries;
             posEntries.reserve(200);
 
@@ -81,16 +82,14 @@ void SelfPlay()
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
             {
-                search.RecordBoardPosition(position);
-
                 SearchParam searchParam;
-                searchParam.maxDepth = 9;
+                searchParam.limits.maxDepth = 4;
                 searchParam.numPvLines = 3;
                 searchParam.debugLog = false;
 
                 searchResult.clear();
 
-                search.DoSearch(position, searchParam, searchResult);
+                search.DoSearch(game, searchParam, searchResult);
 
                 if (searchResult.empty())
                 {
@@ -115,7 +114,7 @@ void SelfPlay()
                 ASSERT(!searchResult[moveIndex].moves.empty());
                 const Move move = searchResult[moveIndex].moves.front();
                 score = searchResult[moveIndex].score;
-                if (position.GetSideToMove() == Color::Black) score = -score;
+                if (game.GetSideToMove() == Color::Black) score = -score;
 
                 // if didn't picked best move, reduce treshold of picking worse move
                 // this way the game will be more random at the beginning and there will be less blunders later in the game
@@ -124,16 +123,7 @@ void SelfPlay()
                     scoreDiffTreshold = std::max(10, scoreDiffTreshold - 5);
                 }
 
-                // log move
-                {
-                    if (halfMoveNumber % 2 == 0)
-                    {
-                        pgnString << (1 + (halfMoveNumber / 2)) << ". ";
-                    }
-                    pgnString << position.MoveToString(move) << " ";
-                }
-
-                const Position constPosition = position;
+                const Position constPosition = game.GetPosition();
 
                 // dump position
                 {
@@ -153,9 +143,9 @@ void SelfPlay()
                         constPosition.Blacks().rooks,
                         constPosition.Blacks().queens,
 
-                        (uint8_t)position.GetSideToMove(),
-                        (uint8_t)position.GetWhitesCastlingRights(),
-                        (uint8_t)position.GetBlacksCastlingRights(),
+                        (uint8_t)constPosition.GetSideToMove(),
+                        (uint8_t)constPosition.GetWhitesCastlingRights(),
+                        (uint8_t)constPosition.GetBlacksCastlingRights(),
 
                         score,
                         0, // game result
@@ -166,14 +156,11 @@ void SelfPlay()
                     posEntries.push_back(entry);
                 }
 
-                const bool moveSuccess = position.DoMove(move);
+                const bool moveSuccess = game.DoMove(move);
                 ASSERT(moveSuccess);
 
                 // check for draw
-                if (search.IsPositionRepeated(position) ||
-                    position.GetHalfMoveCount() >= 100 ||
-                    CheckInsufficientMaterial(position) ||
-                    halfMoveNumber > maxMoves)
+                if (game.IsDrawn() || halfMoveNumber > maxMoves)
                 {
                     score = 0;
                     break;
@@ -207,7 +194,7 @@ void SelfPlay()
                 const uint32_t gameNumber = games++;
 
                 std::cout << "Game #" << gameNumber << " ";
-                std::cout << pgnString.str();
+                std::cout << game.ToPGN();
 
                 if (score > 0)
                 {
@@ -223,9 +210,9 @@ void SelfPlay()
                 }
                 else
                 {
-                    if (search.IsPositionRepeated(position)) std::cout << "(draw by repetition)"; 
-                    else if (position.GetHalfMoveCount() >= 100) std::cout << "(draw by 50 move rule)";
-                    else if (CheckInsufficientMaterial(position)) std::cout << "(draw by insufficient material)";
+                    if (game.GetRepetitionCount(game.GetPosition()) >= 2) std::cout << "(draw by repetition)";
+                    else if (game.GetPosition().GetHalfMoveCount() >= 100) std::cout << "(draw by 50 move rule)";
+                    else if (CheckInsufficientMaterial(game.GetPosition())) std::cout << "(draw by insufficient material)";
                     else std::cout << "(draw by too long game)";
 
                     draws++;
