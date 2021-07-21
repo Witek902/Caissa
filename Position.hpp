@@ -151,6 +151,7 @@ public:
 
     // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;
+    bool IsMoveValid_Fast(const PackedMove& move) const;
 
     // Check if a valid pseudomove is legal. This is a vull validity test, it includes checks/checkmates.
     // NOTE: It's assumed that provided move is a valid move, otherwise the function will assert

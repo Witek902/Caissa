@@ -11,7 +11,7 @@ std::string Move::ToString() const
 
     if (promoteTo != Piece::None)
     {
-        str += PieceToChar(promoteTo);
+        str += PieceToChar(promoteTo, false);
     }
 
     return str;

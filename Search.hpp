@@ -164,6 +164,7 @@ private:
     const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
     void FindHistoryMoves(Color color, MoveList& moves) const;
     void FindKillerMoves(uint32_t depth, MoveList& moves) const;
+    void FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
     int32_t PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t beta);
 
@@ -172,6 +173,9 @@ private:
 
     // update principal variation line
     void UpdatePvArray(uint32_t depth, const Move move);
+
+    // reconstruct PV line from cache and TT table
+    std::vector<Move> GetPvLine(const Position& pos, uint32_t maxLength) const;
 
     void UpdateSearchHistory(const NodeInfo& node, const Move move);
     void RegisterKillerMove(const NodeInfo& node, const Move move);

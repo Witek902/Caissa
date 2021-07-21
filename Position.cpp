@@ -67,7 +67,7 @@ uint64_t Position::ComputeHash() const
     return hash;
 }
 
-Piece SidePosition::GetPieceAtSquare(const Square square) const
+NO_INLINE Piece SidePosition::GetPieceAtSquare(const Square square) const
 {
     ASSERT(square.IsValid());
 
@@ -224,8 +224,8 @@ static const int32_t c_PromotionScores[] =
     0,          // none
     0,          // pawn
     1000,       // knight
-    1000,       // bishop
-    1000,       // rook
+    0,          // bishop
+    0,          // rook
     9000001,    // queen
 };
 
