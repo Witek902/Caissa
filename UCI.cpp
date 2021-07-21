@@ -4,9 +4,16 @@
 
 #include "tablebase/tbprobe.h"
 
+// TODO set TT size based on current memory usage / total memory size
+#ifndef _DEBUG
+static const uint32_t c_DefaultTTSize = 32 * 1024 * 1024;
+#else
+static const uint32_t c_DefaultTTSize = 1024 * 1024;
+#endif
+
 extern void RunUnitTests();
 extern void RunPerft();
-extern bool RunSearchTests();
+extern bool RunSearchTests(const char* path);
 extern void SelfPlay();
 extern bool Train();
 
@@ -25,6 +32,7 @@ void LoadTablebase(const char* path)
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
     mGame.Reset(Position(Position::InitPositionFEN));
+    mSearch.GetTranspositionTable().Resize(c_DefaultTTSize);
 
     for (int i = 1; i < argc; ++i)
     {
@@ -101,6 +109,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         std::cout << "id name MWCE\n";
         std::cout << "id author Michal Witanowski\n";
+        std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
+        std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -184,7 +194,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "searchtest")
     {
-        RunSearchTests();
+        RunSearchTests(args[1].c_str());
         std::cout << "Search tests done." << std::endl;
     }
     else
@@ -303,6 +313,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
 
     bool isInfinite = false;
+    bool isPonder = false;
     bool printMoves = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
@@ -324,6 +335,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         else if (args[i] == "infinite")
         {
             isInfinite = true;
+        }
+        else if (args[i] == "ponder")
+        {
+            isPonder = true;
         }
         else if (args[i] == "printMoves")
         {
@@ -379,16 +394,17 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     // calculate time for move based on total remaining time and other heuristics
     uint32_t timeEstimatedMs = UINT32_MAX;
     {
+        const float minTimePerMove = 1; // make configurable
+        const float moveOverhead = 20; // make configurable
         const uint32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const uint32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
 
         if (remainingTime != UINT32_MAX)
         {
-            const float minTimePerMove = 0.01f;
             const float movesLeftEstimated = EstimateMovesLeft(static_cast<float>(mGame.GetMoves().size()));
-            const float timeEstimated = std::max(minTimePerMove, remainingTime / movesLeftEstimated + remainingTimeInc);
+            const float timeEstimated = std::min((float)remainingTime, remainingTime / movesLeftEstimated + remainingTimeInc);
 
-            timeEstimatedMs = static_cast<uint32_t>(timeEstimated + 0.5f);
+            timeEstimatedMs = static_cast<uint32_t>(std::max(minTimePerMove, timeEstimated - moveOverhead) + 0.5f);
         }
     }
 
@@ -408,16 +424,22 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     {
         mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
-        if (!mSearchCtx->searchResult[0].moves.empty())
+        const auto& bestLine = mSearchCtx->searchResult[0].moves;
+
+        if (!bestLine.empty())
         {
-            const Move bestMove = mSearchCtx->searchResult[0].moves[0];
-            std::cout << "bestmove " << bestMove.ToString() << std::endl;
+            std::cout << "bestmove " << bestLine[0].ToString();
+
+            if (bestLine.size() > 1)
+            {
+                std::cout << " ponder " << bestLine[1].ToString();
+            }
+
+            std::cout << std::endl;
         }
     };
 
     threadpool::ThreadPool().GetInstance().CreateAndDispatchTask(taskDesc);
-
-    // TODO ponder
 
     return true;
 }

@@ -926,7 +926,7 @@ TEST_EXPECT(!pos.IsMoveValid(move));
     }
 }
 
-bool RunSearchTests()
+bool RunSearchTests(const char* path)
 {
     using MovesListType = std::vector<std::string>;
 
@@ -946,7 +946,7 @@ bool RunSearchTests()
 
     std::vector<TestCaseEntry> testVector;
     {
-        std::ifstream file("data/testPositions.txt");
+        std::ifstream file(path);
         if (!file.good())
         {
             std::cout << "Failed to open testcases file" << std::endl;
@@ -1028,11 +1028,16 @@ bool RunSearchTests()
     std::cout << testVector.size() << " test positions loaded" << std::endl;
 
     const uint32_t minDepth = 1;
-    const uint32_t maxDepth = 10;
+    const uint32_t maxDepth = 30;
 
     bool verbose = false;
 
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
+
+    for (Search& search : searchArray)
+    {
+        search.GetTranspositionTable().Resize(8 * 1024 * 1024);
+    }
 
     for (uint32_t depth = minDepth; depth <= maxDepth; ++depth)
     {

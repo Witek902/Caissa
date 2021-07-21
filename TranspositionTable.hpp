@@ -10,17 +10,23 @@ struct TranspositionTableEntry
 {
     enum Flags : uint8_t
     {
-        Flag_Invalid,
-        Flag_Exact,
-        Flag_LowerBound,
-        Flag_UpperBound,
+        Flag_Invalid        = 0,
+        Flag_Exact          = 1,
+        Flag_LowerBound     = 2,
+        Flag_UpperBound     = 3,
     };
 
     uint64_t positionHash;
     int32_t score = INT32_MIN;  // TODO 16 bits should be enough
     PackedMove move;
     uint8_t depth = 0;
-    Flags flag = Flag_Invalid;
+    Flags flag : 2;
+    bool isQuiescent : 1;
+
+    TranspositionTableEntry()
+        : flag(Flag_Invalid)
+        , isQuiescent(false)
+    {}
 
     bool IsValid() const
     {

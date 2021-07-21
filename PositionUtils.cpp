@@ -692,6 +692,42 @@ bool Position::IsMoveValid(const Move& move) const
     return isMoveValid;
 }
 
+bool Position::IsMoveValid_Fast(const PackedMove& move) const
+{
+    ASSERT(move.IsValid());
+    ASSERT(move.fromSquare != move.toSquare);
+
+    const SidePosition& currentSide = GetCurrentSide();
+    const SidePosition& opponentSide = GetOpponentSide();
+
+    const Piece movedPiece = currentSide.GetPieceAtSquare(move.fromSquare);
+    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.toSquare);
+
+    if (movedPiece == Piece::None)
+    {
+        return false;
+    }
+
+    if (opponentSide.GetPieceAtSquare(move.fromSquare) != Piece::None)
+    {
+        return false;
+    }
+
+    if (currentSide.GetPieceAtSquare(move.toSquare) != Piece::None)
+    {
+        // cannot capture own piece
+        return false;
+    }
+
+    if (targetPiece == Piece::King)
+    {
+        // cannot capture king
+        return false;
+    }
+
+    return true;
+}
+
 uint64_t Position::Perft(uint32_t depth, bool print) const
 {
     if (print)

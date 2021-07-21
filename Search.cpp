@@ -17,9 +17,9 @@ static const uint32_t LateMoveReductionRate = 8;
 static const uint32_t LateMovePrunningStartDepth = 3;
 
 static const uint32_t AspirationWindowSearchStartDepth = 4;
-static const int32_t AspirationWindowMax = 200;
-static const int32_t AspirationWindowMin = 20;
-static const int32_t AspirationWindowStep = 20;
+static const int32_t AspirationWindowMax = 120;
+static const int32_t AspirationWindowMin = 15;
+static const int32_t AspirationWindowStep = 5;
 
 static const uint32_t BetaPruningDepth = 6;
 static const int32_t BetaMarginMultiplier = 80;
@@ -49,11 +49,7 @@ int64_t SearchParam::GetElapsedTime() const
 
 Search::Search()
 {
-#ifndef _DEBUG
-    mTranspositionTable.Resize(8 * 1024 * 1024);
-#else
     mTranspositionTable.Resize(1024 * 1024);
-#endif
 }
 
 Search::~Search()
@@ -86,6 +82,51 @@ bool Search::CheckStopCondition(const SearchContext& ctx) const
     }
 
     return false;
+}
+
+std::vector<Move> Search::GetPvLine(const Position& pos, uint32_t maxLength) const
+{
+    std::vector<Move> moves;
+
+    uint32_t pvLength = pvLengths[0];
+
+    if (pvLength > 0)
+    {
+        uint32_t i;
+
+        // reconstruct PV line using PV array
+        Position iteratedPosition = pos;
+        for (i = 0; i < pvLength; ++i)
+        {
+            const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
+
+            if (!move.IsValid()) break;
+            if (!iteratedPosition.DoMove(move)) break;
+
+            moves.push_back(move);
+        }
+
+        // reconstruct PV line using transposition table
+        for (; i < maxLength; ++i)
+        {
+            if (iteratedPosition.GetNumLegalMoves() == 0) break;
+
+            const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(iteratedPosition);
+            if (!ttEntry) break;
+
+            const Move move = iteratedPosition.MoveFromPacked(ttEntry->move);
+
+            // Note: move in transpostion table may be invalid due to hash collision
+            if (!move.IsValid()) break;
+            if (!iteratedPosition.DoMove(move)) break;
+
+            moves.push_back(move);
+        }
+
+        ASSERT(!moves.empty());
+    }
+
+    return moves;
 }
 
 void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& result)
@@ -147,40 +188,25 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
                 outPvLine.score
             };
 
-            int32_t score = AspirationWindowSearch(aspirationWindowSearchParam);
-
-            uint32_t pvLength = pvLengths[0];
+            const int32_t score = AspirationWindowSearch(aspirationWindowSearchParam);
+            ASSERT(score > -CheckmateValue && score < CheckmateValue);
 
             // write PV line into result struct
             outPvLine.score = score;
-            if (pvLength > 0)
-            {
-                outPvLine.moves.clear();
+            outPvLine.moves = GetPvLine(game.GetPosition(), depth);
+            ASSERT(!outPvLine.moves.empty());
 
-                // reconstruct PV line
-                Position iteratedPosition = game.GetPosition();
-                for (uint32_t i = 0; i < pvLength; ++i)
-                {
-                    const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
-
-                    // Note: move in transpostion table may be invalid due to hash collision
-                    if (!move.IsValid()) break;
-                    if (!iteratedPosition.DoMove(move)) break;
-                    
-                    outPvLine.moves.push_back(move);
-                }
-
-                ASSERT(!outPvLine.moves.empty());
-                pvMovesSoFar.push_back(outPvLine.moves.front());
-            }
-            else
-            {
-                break;
-            }
+            // store for multi-PV filtering in next iteration
+            pvMovesSoFar.push_back(outPvLine.moves.front());
 
             auto endTime = std::chrono::high_resolution_clock::now();
 
-            if (param.debugLog)
+            // stop search only at depth 2 and more
+            if (depth > 1 && CheckStopCondition(searchContext))
+            {
+                finishSearchAtDepth = true;
+            }
+            else if (param.debugLog)
             {
                 std::cout << "info";
                 std::cout << " depth " << (uint32_t)depth;
@@ -197,7 +223,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
                 }
                 else if (score < -CheckmateValue + MaxSearchDepth)
                 {
-                    std::cout << " score mate -" << (score - CheckmateValue + 1) / 2;
+                    std::cout << " score mate -" << (CheckmateValue + score + 1) / 2;
                 }
                 else
                 {
@@ -224,19 +250,18 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 
                 std::cout << std::endl;
             }
-
-            if (CheckStopCondition(searchContext))
-            {
-                finishSearchAtDepth = true;
-            }
         }
-
-        mPrevPvLines = result;
 
         if (finishSearchAtDepth)
         {
+            // restore result from previous depth, the current result is not reliable
+            ASSERT(!mPrevPvLines.empty());
+            result = mPrevPvLines;
+
             break;
         }
+
+        mPrevPvLines = result;
     }
 }
 
@@ -289,7 +314,7 @@ int32_t Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
         {
             alpha -= aspirationWindow;
             beta += aspirationWindow;
-            aspirationWindow *= 2;
+            aspirationWindow *= 4;
             continue;
         }
 
@@ -347,6 +372,21 @@ void Search::FindHistoryMoves(Color color, MoveList& moves) const
         const uint32_t score = searchHistory[(uint32_t)color][move.fromSquare.Index()][move.toSquare.Index()];
         const int64_t finalScore = (int64_t)moves[i].score + score;
         moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
+    }
+}
+
+void Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
+{
+    if (ttMove.IsValid())
+    {
+        for (uint32_t i = 0; i < moves.numMoves; ++i)
+        {
+            if (moves[i].move == ttMove)
+            {
+                moves[i].score = INT32_MAX - 1;
+                break;
+            }
+        }
     }
 }
 
@@ -484,15 +524,44 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
         return 0;
     }
 
-    const ScoreType staticEval = ColorMultiplier(node.color) * Evaluate(*node.position);
+    const Position& position = *node.position;
 
-    ScoreType score = staticEval;
-    ScoreType alpha = std::max(score, node.alpha);
+    const uint32_t inversedDepth = node.MaxDepth() - node.depth;
+    const bool isRootNode = node.depth == 0; // root node is the first node in the chain (best move)
+    const bool isPvNode = node.alpha != node.beta - 1;
+
+    // transposition table lookup
+    PackedMove ttMove;
+    ScoreType ttScore = InvalidValue;
+    if (const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position))
+    {
+        ttMove = ttEntry->move;
+
+        if (ttEntry->depth >= inversedDepth && !isPvNode && !isRootNode)
+        {
+            ctx.ttHits++;
+
+            ttScore = ttEntry->score;
+            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+
+            if ((ttEntry->flag == TranspositionTableEntry::Flag_Exact) ||
+                (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound && ttEntry->score >= node.beta) ||
+                (ttEntry->flag == TranspositionTableEntry::Flag_UpperBound && ttEntry->score <= node.alpha))
+            {
+                return ttScore;
+            }
+        }
+    }
+
+    const ScoreType staticEval = ColorMultiplier(node.color) * Evaluate(position);
+
+    ScoreType alpha = std::max(staticEval, node.alpha);
+    ScoreType oldAlpha = alpha;
     ScoreType beta = node.beta;
 
-    if (score >= node.beta)
+    if (alpha >= node.beta)
     {
-        return node.beta;
+        return staticEval;
     }
 
     NodeInfo childNodeParam;
@@ -502,65 +571,77 @@ Search::ScoreType Search::QuiescenceNegaMax(const NodeInfo& node, SearchContext&
     childNodeParam.color = GetOppositeColor(node.color);
 
     uint32_t moveGenFlags = 0;
-    if (!node.position->IsInCheck(node.color))
+    if (!position.IsInCheck(node.color))
     {
         moveGenFlags |= MOVE_GEN_ONLY_TACTICAL;
     }
 
     MoveList moves;
-    node.position->GenerateMoveList(moves, moveGenFlags);
+    position.GenerateMoveList(moves, moveGenFlags);
 
     if (moves.numMoves > 1u)
     {
-        FindPvMove(node, moves);
+        FindTTMove(ttMove, moves);
     }
 
     Move bestMove = Move::Invalid();
-    uint32_t numLegalMoves = 0;
+    int32_t bestValue = staticEval;
+    uint32_t moveIndex = 0;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         int32_t moveScore = 0;
         const Move move = moves.PickBestMove(i, moveScore);
 
-        Position childPosition = *node.position;
+        Position childPosition = position;
         if (!childPosition.DoMove(move))
         {
             continue;
         }
 
-        numLegalMoves++;
+        moveIndex++;
 
         childNodeParam.position = &childPosition;
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
-        score = -QuiescenceNegaMax(childNodeParam, ctx);
+        ScoreType score = -QuiescenceNegaMax(childNodeParam, ctx);
 
-        if (score > alpha)
+        if (score > bestValue)
         {
-            alpha = score;
+            bestValue = score;
             bestMove = move;
 
-            //UpdatePvArray(node.depth, move);
-        }
+            if (score > alpha)
+            {
+                alpha = score;
 
-        if (score >= beta)
-        {
-            // for move ordering stats
-            ctx.fh++;
-            if (numLegalMoves == 1u) ctx.fhf++;
-            return beta;
+                if (score >= beta)
+                {
+                    // for move ordering stats
+                    ctx.fh++;
+                    if (moveIndex == 1u) ctx.fhf++;
+                    break;
+                }
+            }
         }
     }
-    
-    if (node.MaxDepth() > 10 && !node.position->IsInCheck(node.color) && numLegalMoves == 0)
+
+    // store value in transposition table
     {
-        //std::cout << node.position->ToFEN() << " eval " << staticEval << std::endl;
-        //std::cout << node.position->Print() << std::endl;
-        //std::cout << node.position->ToFEN() << std::endl;
+        TranspositionTableEntry entry;
+        entry.positionHash = position.GetHash();
+        entry.score = bestValue;
+        entry.move = bestMove;
+        entry.isQuiescent = true;
+        entry.flag =
+            bestValue >= beta ? TranspositionTableEntry::Flag_LowerBound :
+            bestValue > oldAlpha ? TranspositionTableEntry::Flag_Exact :
+            TranspositionTableEntry::Flag_UpperBound;
+
+        mTranspositionTable.Write(entry);
     }
 
-    return alpha;
+    return bestValue;
 }
 
 
@@ -608,8 +689,8 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     ctx.nodes++;
     ctx.maxDepth = std::max<uint32_t>(ctx.maxDepth, node.depth);
 
-    // root node is the first node in the chain (best move)
-    const bool isRootNode = node.depth == 0;
+    const bool isRootNode = node.depth == 0; // root node is the first node in the chain (best move)
+    const bool isPvNode = node.alpha != node.beta - 1;
 
     // Check for draw
     // Skip root node as we need some move to be reported
@@ -629,45 +710,24 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     // transposition table lookup
     PackedMove ttMove;
     ScoreType ttScore = InvalidValue;
-    const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position);
-
-    if (ttEntry)
+    if (const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position))
     {
-        // always use hash move as a good first guess
         ttMove = ttEntry->move;
 
-        const bool isFilteredMove = std::find(node.moveFilter.begin(), node.moveFilter.end(), ttEntry->move) != node.moveFilter.end();
-
-        // TODO check if the move is valid move for current position
-        // it maybe be not in case of rare hash collision
-
-        if (ttEntry->depth >= inversedDepth && !isFilteredMove && !node.isPvNode && !node.isTbNode)
+        if (!isPvNode && !isRootNode && !node.isTbNode &&
+            !ttEntry->isQuiescent && ttEntry->depth >= inversedDepth)
         {
             ctx.ttHits++;
 
-            if (ttEntry->flag == TranspositionTableEntry::Flag_Exact)
-            {
-                return ttEntry->score;
-            }
-            else if (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound)
-            {
-                alpha = std::max(alpha, ttEntry->score);
-            }
-            else if (ttEntry->flag == TranspositionTableEntry::Flag_UpperBound)
-            {
-                beta = std::min(beta, ttEntry->score);
-            }
-
-            if (alpha >= beta)
-            {
-                return alpha;
-            }
-
             ttScore = ttEntry->score;
-        }
-        else
-        {
-            ttEntry = nullptr;
+            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+
+            if ((ttEntry->flag == TranspositionTableEntry::Flag_Exact) ||
+                (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound && ttEntry->score >= beta) ||
+                (ttEntry->flag == TranspositionTableEntry::Flag_UpperBound && ttEntry->score <= alpha))
+            {
+                return ttScore;
+            }
         }
     }
 
@@ -722,8 +782,8 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
                     || (bounds == TranspositionTableEntry::Flag_LowerBound && tbValue >= beta)
                     || (bounds == TranspositionTableEntry::Flag_UpperBound && tbValue <= alpha))
                 {
-                    const TranspositionTableEntry entry{ position.GetHash(), tbValue, Move::Invalid(), (uint8_t)inversedDepth, bounds };
-                    mTranspositionTable.Write(entry);
+                    //const TranspositionTableEntry entry{ position.GetHash(), tbValue, Move::Invalid(), (uint8_t)inversedDepth, bounds };
+                    //mTranspositionTable.Write(entry);
 
                     return tbValue;
                 }
@@ -739,7 +799,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     // Futility Pruning
-    if (!node.isPvNode && !node.isTbNode && !isInCheck)
+    if (!isPvNode && !node.isTbNode && !isInCheck)
     {
         // determine static evaluation of the board
         int32_t staticEvaluation = ttScore;
@@ -765,7 +825,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     // Null Move Prunning
-    if (!node.isPvNode && !node.isTbNode && !isInCheck && inversedDepth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
+    if (!isPvNode && !node.isTbNode && !isInCheck && inversedDepth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
     {
         // don't allow null move if parent or grandparent node was null move
         bool doNullMove = !node.isNullMove;
@@ -849,18 +909,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     {
         FindHistoryMoves(node.color, moves);
         FindKillerMoves(node.depth, moves);
-
-        if (ttMove.IsValid())
-        {
-            for (uint32_t i = 0; i < moves.numMoves; ++i)
-            {
-                if (moves[i].move == ttMove)
-                {
-                    moves[i].score = INT32_MAX - 1;
-                    break;
-                }
-            }
-        }
+        FindTTMove(ttMove, moves);
     }
 
     if (isRootNode)
@@ -872,7 +921,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     Move tbMove = Move::Invalid();
-    if ((node.isPvNode || node.isTbNode) && HasTablebases())
+    if ((isPvNode || node.isTbNode) && HasTablebases())
     {
         const uint32_t probeResult = tb_probe_root(
             position.Whites().Occupied(),
@@ -914,9 +963,9 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
     }
 
     Move bestMove = Move::Invalid();
-    uint32_t numLegalMoves = 0;
+    int32_t bestValue = INT32_MIN;
+    uint32_t moveIndex = 0;
     uint32_t numReducedMoves = 0;
-    bool betaCutoff = false;
 
     // count (pseudo) quiet moves
     uint32_t totalQuietMoves = 0;
@@ -943,14 +992,7 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
         mTranspositionTable.Prefetch(childPosition);
 
-        // store any best move, in case of we never improve alpha in this loop,
-        // so we can write anything into transposition table
-        if (numLegalMoves == 0)
-        {
-            bestMove = move;
-        }
-
-        numLegalMoves++;
+        moveIndex++;
 
         int32_t moveExtensionFractional = extension << MaxDepthShift;
 
@@ -979,11 +1021,11 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
 
         // Late Move Reduction
         // don't reduce PV moves, while in check, captures, promotions, etc.
-        if (move.IsQuiet() && !isInCheck && totalQuietMoves > 0 && numLegalMoves > 1u && inversedDepth >= LateMoveReductionStartDepth)
+        if (move.IsQuiet() && !isInCheck && totalQuietMoves > 0 && moveIndex > 1u && inversedDepth >= LateMoveReductionStartDepth)
         {
             // reduce depth gradually
             //depthReductionFractional = (numReducedMoves << MaxDepthShift) / LateMoveReductionRate;
-            depthReductionFractional = std::max<int32_t>(1, numReducedMoves / LateMoveReductionRate) << MaxDepthShift;
+            depthReductionFractional = std::max<int32_t>(1, (numReducedMoves << MaxDepthShift) / LateMoveReductionRate);
             numReducedMoves++;
 
             // Late Move Prunning
@@ -993,60 +1035,73 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
             }
         }
 
-        ASSERT(childNodeParam.maxDepthFractional >= depthReductionFractional);
-        childNodeParam.maxDepthFractional = childNodeParam.maxDepthFractional - depthReductionFractional;
+        ScoreType score = InvalidValue;
 
-        ScoreType score;
+        bool doFullDepthSearch = !(isPvNode && moveIndex == 1);
+
+        // PVS search at reduced depth
+        if (depthReductionFractional)
         {
-            if (numLegalMoves == 1)
-            {
-                childNodeParam.alpha = -beta;
-                childNodeParam.beta = -alpha;
-                score = -NegaMax(childNodeParam, ctx);
-            }
-            else // Principal Variation Search
-            {
-                childNodeParam.alpha = -alpha - 1;
-                childNodeParam.beta = -alpha;
-                score = -NegaMax(childNodeParam, ctx);
+            ASSERT(childNodeParam.maxDepthFractional >= depthReductionFractional);
+            childNodeParam.maxDepthFractional -= depthReductionFractional;
+            childNodeParam.alpha = -alpha - 1;
+            childNodeParam.beta = -alpha;
 
-                if (score > alpha && score < beta)
-                {
-                    childNodeParam.alpha = -beta;
-                    childNodeParam.beta = -alpha;
-                    score = -NegaMax(childNodeParam, ctx);
-                }
-            }
+            score = -NegaMax(childNodeParam, ctx);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+            doFullDepthSearch = score > alpha;
         }
 
-        // re-do search at full depth
-        if (depthReductionFractional > 0 && score > alpha)
+        // PVS search at full depth
+        // TODO: internal aspiration window?
+        if (doFullDepthSearch)
         {
             childNodeParam.maxDepthFractional = node.maxDepthFractional + moveExtensionFractional;
-            childNodeParam.alpha = -beta;
+            childNodeParam.alpha = -alpha - 1;
             childNodeParam.beta = -alpha;
+
             score = -NegaMax(childNodeParam, ctx);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
         }
 
-        if (score > alpha) // new best move found
+        // full search for PV nodes
+        if (isPvNode)
         {
+            if (moveIndex == 1 || score > alpha)
+            {
+                childNodeParam.maxDepthFractional = node.maxDepthFractional + moveExtensionFractional;
+                childNodeParam.alpha = -beta;
+                childNodeParam.beta = -alpha;
+
+                score = -NegaMax(childNodeParam, ctx);
+                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+            }
+        }
+
+        if (score > bestValue) // new best move found
+        {
+            bestValue = score;
             bestMove = move;
-            alpha = score;
 
-            UpdatePvArray(node.depth, move);
-            UpdateSearchHistory(node, move);
-        }
+            if (score > alpha) // update lower bound
+            {
+                alpha = score;
 
-        if (score >= beta) // beta cutoff
-        {
-            // for move ordering stats
-            ctx.fh++;
-            if (numLegalMoves == 1u) ctx.fhf++;
+                UpdatePvArray(node.depth, move);
+                UpdateSearchHistory(node, move);
 
-            RegisterKillerMove(node, move);
+                if (score >= beta) // beta cutoff
+                {
+                    // for move ordering stats
+                    ctx.fh++;
+                    if (moveIndex == 1u) ctx.fhf++;
 
-            betaCutoff = true;
-            break;
+                    RegisterKillerMove(node, move);
+
+                    break;
+                }
+            }
         }
 
         if (!isRootNode && CheckStopCondition(ctx))
@@ -1056,7 +1111,8 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    if (numLegalMoves == 0u)
+    // no legal moves
+    if (moveIndex == 0u)
     {
         if (isInCheck) // checkmate
         {
@@ -1068,31 +1124,33 @@ Search::ScoreType Search::NegaMax(const NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    ASSERT(bestMove.IsValid());
+    ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
 
     // update transposition table
-    if (!CheckStopCondition(ctx))
+    // don't write anything new to TT if time is exceeded as evaluation may be inaccurate
+    // skip root nodes when searching secondary PV lines, as they don't contain best moves
+    if (!CheckStopCondition(ctx) && !(isRootNode && node.pvIndex > 0))
     {
         TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
 
+        // move from tablebases is always best
         if (bestMove != tbMove)
         {
-            if (alpha <= oldAlpha)
-            {
-                flag = TranspositionTableEntry::Flag_UpperBound;
-            }
-            else if (betaCutoff)
-            {
-                flag = TranspositionTableEntry::Flag_LowerBound;
-            }
+            flag =
+                bestValue >= beta ? TranspositionTableEntry::Flag_LowerBound :
+                bestValue > oldAlpha ? TranspositionTableEntry::Flag_Exact :
+                TranspositionTableEntry::Flag_UpperBound;
         }
 
-        const TranspositionTableEntry entry{ position.GetHash(), alpha, bestMove, (uint8_t)inversedDepth, flag };
+        TranspositionTableEntry entry;
+        entry.positionHash = position.GetHash();
+        entry.score = bestValue;
+        entry.move = bestMove;
+        entry.depth = (uint8_t)inversedDepth;
+        entry.flag = flag;
 
         mTranspositionTable.Write(entry);
     }
 
-    ASSERT(alpha > -CheckmateValue && alpha < CheckmateValue);
-
-    return alpha;
+    return bestValue;
 }
