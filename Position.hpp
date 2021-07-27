@@ -1,13 +1,13 @@
 #pragma once
 
-#include <inttypes.h>
-#include <string>
-#include <vector>
-
+#include "Common.hpp"
 #include "Bitboard.hpp"
 #include "Piece.hpp"
 #include "Square.hpp"
 #include "Color.hpp"
+
+#include <string>
+#include <vector>
 
 enum CastlingRights : uint8_t
 {

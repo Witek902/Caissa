@@ -3,7 +3,6 @@
 #include "Common.hpp"
 #include "Color.hpp"
 
-#include <inttypes.h>
 #include <assert.h>
 #include <string>
 

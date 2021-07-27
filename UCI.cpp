@@ -6,7 +6,7 @@
 
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
-static const uint32_t c_DefaultTTSize = 32 * 1024 * 1024;
+static const uint32_t c_DefaultTTSize = 16 * 1024 * 1024;
 #else
 static const uint32_t c_DefaultTTSize = 1024 * 1024;
 #endif
@@ -109,8 +109,11 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         std::cout << "id name MWCE\n";
         std::cout << "id author Michal Witanowski\n";
+        std::cout << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
+        std::cout << "option name Ponder type check default false\n";
+        std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -147,7 +150,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "ponderhit")
     {
-        // TODO
+        std::unique_lock<std::mutex> lock(mMutex);
+        Command_PonderHit();
     }
     else if (command == "stop")
     {
@@ -156,6 +160,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "quit")
     {
+        std::unique_lock<std::mutex> lock(mMutex);
+        Command_Stop();
         return false;
     }
     else if (command == "perft")
@@ -178,6 +184,16 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         const size_t numEntriesUsed = mSearch.GetTranspositionTable().GetNumUsedEntries();
         const float percentage = 100.0f * (float)numEntriesUsed / (float)mSearch.GetTranspositionTable().GetSize();
         std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
+        std::cout << "TT collisions: " << mSearch.GetTranspositionTable().GetNumCollisions() << std::endl;
+    }
+    else if (command == "ttprobe")
+    {
+        Command_TTProbe();
+    }
+    else if (command == "moveordererinfo")
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mSearch.GetMoveOrderer().DebugPrint();
     }
     else if (command == "unittest")
     {
@@ -272,6 +288,8 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         }
     }
 
+    Command_Stop();
+
     mGame.Reset(pos);
 
     if (extraMovesStart > 0)
@@ -302,7 +320,7 @@ static float EstimateMovesLeft(const float ply)
     // based on LeelaChessZero 
     const float move = ply / 2.0f;
     const float midpoint = 50.0f;
-    const float steepness = 5.0f;
+    const float steepness = 6.0f;
     return midpoint * std::pow(1.0f + 2.0f * std::pow(move / midpoint, steepness), 1.0f / steepness) - move;
 }
 
@@ -315,6 +333,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     bool isInfinite = false;
     bool isPonder = false;
     bool printMoves = false;
+    bool verboseStats = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
     uint32_t moveTime = UINT32_MAX;
@@ -340,9 +359,13 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         {
             isPonder = true;
         }
-        else if (args[i] == "printMoves")
+        else if (args[i] == "printmoves")
         {
             printMoves = true;
+        }
+        else if (args[i] == "verbosestats")
+        {
+            verboseStats = true;
         }
         else if (args[i] == "nodes" && i + 1 < args.size())
         {
@@ -391,24 +414,33 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
     }
 
+    mSearchCtx = std::make_unique<SearchTaskContext>();
+
     // calculate time for move based on total remaining time and other heuristics
     uint32_t timeEstimatedMs = UINT32_MAX;
     {
-        const float minTimePerMove = 1; // make configurable
-        const float moveOverhead = 20; // make configurable
+        const float moveOverhead = 10; // make configurable
         const uint32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const uint32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
 
         if (remainingTime != UINT32_MAX)
         {
-            const float movesLeftEstimated = EstimateMovesLeft(static_cast<float>(mGame.GetMoves().size()));
+            const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft((float)mGame.GetMoves().size());
             const float timeEstimated = std::min((float)remainingTime, remainingTime / movesLeftEstimated + remainingTimeInc);
 
-            timeEstimatedMs = static_cast<uint32_t>(std::max(minTimePerMove, timeEstimated - moveOverhead) + 0.5f);
+            timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated - moveOverhead) + 0.5f);
         }
+
+        // use at least 75% of estimated time
+        // TODO some better heuristics:
+        // for example, estimate time spent in each iteration based on previous searches
+        mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
     }
 
-    mSearchCtx = std::make_unique<SearchTaskContext>();
+    // TODO
+    // Instead of pondering on suggested move, maybe undo last move and ponder on oponent's position instead.
+    // This way we can consider all possible oponent's replies, not just focus on predicted one... UCI is lame...
+    mSearchCtx->searchParam.isPonder = isPonder;
 
     mSearchCtx->searchParam.startTimePoint = startTimePoint;
     mSearchCtx->searchParam.limits.maxTime = std::min(moveTime, timeEstimatedMs);
@@ -417,22 +449,38 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
     mSearchCtx->searchParam.printMoves = printMoves;
+    mSearchCtx->searchParam.verboseStats = verboseStats;
 
+    RunSearchTask();
+
+    return true;
+}
+
+void UniversalChessInterface::RunSearchTask()
+{
     threadpool::TaskDesc taskDesc;
     taskDesc.waitable = &mSearchCtx->waitable;
     taskDesc.function = [this](const threadpool::TaskContext&)
     {
         mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
-        const auto& bestLine = mSearchCtx->searchResult[0].moves;
-
-        if (!bestLine.empty())
+        // only report best move in non-pondering mode or if "stop" was called during ponder search
+        if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
         {
-            std::cout << "bestmove " << bestLine[0].ToString();
+            const auto& bestLine = mSearchCtx->searchResult[0].moves;
 
-            if (bestLine.size() > 1)
+            if (!bestLine.empty())
             {
-                std::cout << " ponder " << bestLine[1].ToString();
+                std::cout << "bestmove " << bestLine[0].ToString();
+
+                if (bestLine.size() > 1)
+                {
+                    std::cout << " ponder " << bestLine[1].ToString();
+                }
+            }
+            else // null move
+            {
+                std::cout << "bestmove 0000";
             }
 
             std::cout << std::endl;
@@ -440,18 +488,44 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     };
 
     threadpool::ThreadPool().GetInstance().CreateAndDispatchTask(taskDesc);
-
-    return true;
 }
 
 bool UniversalChessInterface::Command_Stop()
 {
     if (mSearchCtx)
     {
+        // wait for previous search to complete
         mSearch.StopSearch();
-
         mSearchCtx->waitable.Wait();
+
         mSearchCtx.reset();
+    }
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_PonderHit()
+{
+    if (mSearchCtx)
+    {
+        if (!mSearchCtx->searchParam.isPonder)
+        {
+            std::cout << "Engine is not pondering right now" << std::endl;
+            return false;
+        }
+
+        mSearchCtx->ponderHit = true;
+
+        // wait for previous search to complete
+        mSearch.StopSearch();
+        mSearchCtx->waitable.Wait();
+        mSearchCtx->waitable.Reset();
+
+        // start searching again, this time not in pondering mode
+        mSearchCtx->searchParam.isPonder = false;
+        mSearchCtx->searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
+
+        RunSearchTask();
     }
 
     return true;
@@ -503,10 +577,37 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         LoadTablebase(value.c_str());
     }
+    else if (lowerCaseName == "ponder")
+    {
+        // nothing special here
+    }
     else
     {
         std::cout << "Invalid option: " << name << std::endl;
         return false;
+    }
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_TTProbe()
+{
+    std::unique_lock<std::mutex> lock(mMutex);
+    if (const TranspositionTableEntry* ttEntry = mSearch.GetTranspositionTable().Read(mGame.GetPosition()))
+    {
+        const char* boundsStr =
+            ttEntry->flag == TranspositionTableEntry::Flag_Exact ? "exact" :
+            ttEntry->flag == TranspositionTableEntry::Flag_UpperBound ? "upper" :
+            ttEntry->flag == TranspositionTableEntry::Flag_LowerBound ? "lower" :
+            "invalid";
+
+        std::cout << "Score:     " << ttEntry->score << std::endl;
+        std::cout << "Depth:     " << (uint32_t)ttEntry->depth << std::endl;
+        std::cout << "Bounds:    " << boundsStr << std::endl;
+    }
+    else
+    {
+        std::cout << "(no entry found)" << std::endl;
     }
 
     return true;

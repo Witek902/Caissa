@@ -62,6 +62,13 @@ void Waitable::Wait()
     }
 }
 
+void Waitable::Reset()
+{
+    assert(mFinished.load());
+
+    mFinished = false;
+}
+
 void Waitable::OnFinished()
 {
     const bool oldState = mFinished.exchange(true);

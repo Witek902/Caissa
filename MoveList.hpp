@@ -6,6 +6,7 @@ class MoveList
 {
     friend class Position;
     friend class Search;
+    friend class MoveOrderer;
 
 public:
 
@@ -90,8 +91,6 @@ public:
     void Print(bool sorted = true) const;
 
 private:
-
-
 
     uint32_t numMoves = 0;
     MoveEntry moves[MaxMoves];

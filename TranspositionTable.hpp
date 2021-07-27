@@ -20,13 +20,7 @@ struct TranspositionTableEntry
     int32_t score = INT32_MIN;  // TODO 16 bits should be enough
     PackedMove move;
     uint8_t depth = 0;
-    Flags flag : 2;
-    bool isQuiescent : 1;
-
-    TranspositionTableEntry()
-        : flag(Flag_Invalid)
-        , isQuiescent(false)
-    {}
+    Flags flag = Flag_Invalid;
 
     bool IsValid() const
     {
@@ -57,7 +51,11 @@ public:
     // compute number of used entries
     size_t GetNumUsedEntries() const;
 
+    uint64_t GetNumCollisions() const { return numCollisions; }
+
 private:
 
     std::vector<TranspositionTableEntry> entries;
+
+    uint64_t numCollisions;
 };

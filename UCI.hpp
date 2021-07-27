@@ -18,6 +18,7 @@ struct SearchTaskContext
     SearchParam searchParam;
     SearchResult searchResult;
     threadpool::Waitable waitable;
+    std::atomic<bool> ponderHit = false;
 };
 
 class UniversalChessInterface
@@ -31,8 +32,12 @@ private:
     bool Command_Position(const std::vector<std::string>& args);
     bool Command_Go(const std::vector<std::string>& args);
     bool Command_Stop();
+    bool Command_PonderHit();
     bool Command_Perft(const std::vector<std::string>& args);
     bool Command_SetOption(const std::string& name, const std::string& value);
+    bool Command_TTProbe();
+
+    void RunSearchTask();
 
     Game mGame;
     Search mSearch;

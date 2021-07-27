@@ -30,6 +30,7 @@ static constexpr int32_t c_guardBonus           = 5;
 static constexpr int32_t c_kingSafetyBonus      = 3;
 static constexpr int32_t c_doubledPawnPenalty   = 0;
 static constexpr int32_t c_inCheckPenalty       = 20;
+static constexpr int32_t c_noPawnPenalty        = 120;
 static constexpr int32_t c_passedPawnBonus      = 0;
 
 const PieceScore PawnPSQT[Square::NumSquares] =
@@ -384,6 +385,15 @@ int32_t Evaluate(const Position& position)
         value += 100 * PawnlessEndgameScore(whiteQueens, whiteRooks, whiteBishops, whiteKnights, blackQueens, blackRooks, blackBishops, blackKnights);
     }
 
+    if (whitePawns == 0)
+    {
+        value -= c_noPawnPenalty;
+    }
+
+    if (blackPawns == 0)
+    {
+        value += c_noPawnPenalty;
+    }
 
     int32_t queensDiff = whiteQueens - blackQueens;
     int32_t rooksDiff = whiteRooks - blackRooks;
@@ -403,24 +413,13 @@ int32_t Evaluate(const Position& position)
     valueEG += c_knightValue.eg * knightsDiff;
     valueEG += c_pawnValue.eg * pawnsDiff;
 
-    const uint32_t numWhitePieces =
-        (int32_t)position.Whites().queens.Count() +
-        (int32_t)position.Whites().rooks.Count() +
-        (int32_t)position.Whites().bishops.Count() +
-        (int32_t)position.Whites().knights.Count() +
-        (int32_t)position.Whites().pawns.Count();
-
-    const uint32_t numBlackPieces =
-        (int32_t)position.Blacks().queens.Count() +
-        (int32_t)position.Blacks().rooks.Count() +
-        (int32_t)position.Blacks().bishops.Count() +
-        (int32_t)position.Blacks().knights.Count() +
-        (int32_t)position.Blacks().pawns.Count();
-
     const Bitboard whiteAttackedSquares = position.GetAttackedSquares(Color::White);
     const Bitboard blackAttackedSquares = position.GetAttackedSquares(Color::Black);
     const Bitboard whiteOccupiedSquares = position.Whites().Occupied();
     const Bitboard blackOccupiedSquares = position.Blacks().Occupied();
+
+    const uint32_t numWhitePieces = whiteOccupiedSquares.Count() - 1;
+    const uint32_t numBlackPieces = blackOccupiedSquares.Count() - 1;
 
     const Bitboard whitesMobility = whiteAttackedSquares & ~whiteOccupiedSquares;
     const Bitboard blacksMobility = blackAttackedSquares & ~blackOccupiedSquares;
