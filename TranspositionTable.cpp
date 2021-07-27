@@ -71,12 +71,30 @@ void TranspositionTable::Write(const TranspositionTableEntry& entry)
 {
     ASSERT(entry.IsValid());
 
-    if (!entries.empty())
+    if (entries.empty())
     {
-        const size_t hashmapMask = entries.size() - 1;
-
-        entries[entry.positionHash & hashmapMask] = entry;
+        return;
     }
+
+    const size_t hashmapMask = entries.size() - 1;
+    TranspositionTableEntry& existingEntry = entries[entry.positionHash & hashmapMask];
+
+    if (existingEntry.positionHash == entry.positionHash)
+    {
+        // only keep higher values computed at higher depth
+        if (existingEntry.depth > entry.depth && existingEntry.flag == entry.flag)
+        {
+            return;
+        }
+    }
+#ifndef CONFIGURATION_FINAL
+    else if (existingEntry.positionHash != 0)
+    {
+        numCollisions++;
+    }
+#endif // CONFIGURATION_FINAL
+
+    entries[entry.positionHash & hashmapMask] = entry;
 }
 
 size_t TranspositionTable::GetNumUsedEntries() const

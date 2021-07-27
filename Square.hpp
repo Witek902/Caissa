@@ -1,10 +1,9 @@
 #pragma once
 
-#include <inttypes.h>
+#include "Bitboard.hpp"
+
 #include <assert.h>
 #include <string>
-
-#include "Bitboard.hpp"
 
 enum SquareName : uint32_t
 {

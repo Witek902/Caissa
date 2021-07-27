@@ -82,6 +82,8 @@ public:
     // NOTE This can be called only on the main thread!
     void Wait();
 
+    void Reset();
+
     void OnFinished();
 
 private:

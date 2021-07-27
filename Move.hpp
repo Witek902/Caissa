@@ -38,6 +38,8 @@ struct PackedMove
     {
         return value != 0u;
     }
+
+    std::string ToString() const;
 };
 
 static_assert(sizeof(PackedMove) == 2, "Invalid PackedMove size");

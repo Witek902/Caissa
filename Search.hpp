@@ -1,10 +1,10 @@
 #pragma once
 
 #include "Position.hpp"
-#include "Move.hpp"
+#include "MoveList.hpp"
+#include "MoveOrderer.hpp"
 #include "TranspositionTable.hpp"
 
-#include <unordered_map>
 #include <span>
 #include <chrono>
 
@@ -15,7 +15,10 @@ struct SearchLimits
     // maximum allowed base search depth (excluding quisence, extensions, etc.)
     uint32_t maxDepth = 8;
 
-    // maximum allowed search time in milliseconds
+    // suggested search time in milliseconds, it's checked every iteration so can be exceeded
+    uint32_t maxTimeSoft = UINT32_MAX;
+
+    // maximum allowed search time in milliseconds, after that all search must be stopped immediately
     uint32_t maxTime = UINT32_MAX;
 
     // maximum allowed searched nodes
@@ -36,11 +39,17 @@ struct SearchParam
     // if not empty, only consider this moves
     std::vector<Move> rootMoves;
 
+    // in pondering we don't care about limits
+    bool isPonder = false;
+
     // print UCI-style output
     bool debugLog = true;
 
     // print move scores for the root nodes
     bool printMoves = false;
+
+    // print verbose debug stats (not UCI comaptible)
+    bool verboseStats = false;
 
     int64_t GetElapsedTime() const;
 };
@@ -53,18 +62,27 @@ struct PvLine
 
 using SearchResult = std::vector<PvLine>;
 
+struct NodeInfo
+{
+    const Position* position = nullptr;
+    const NodeInfo* parentNode = nullptr;
+    ScoreType alpha;
+    ScoreType beta;
+    Move previousMove = Move::Invalid();
+    std::span<const Move> moveFilter;   // ignore given moves in search, used for multi-PV search
+    std::span<const Move> rootMoves;    // consider only this moves at root node, used for "searchmoves" UCI command
+    int32_t depth;                   // remaining depth
+    uint32_t height;                    // depth in ply (depth counting from root)
+    uint8_t pvIndex;
+    Color color;
+    bool isPvNode = false;
+    bool isTbNode = false;
+    bool isNullMove = false;
+};
+
 class Search
 {
 public:
-
-    using ScoreType = int32_t;
-    static constexpr int32_t CheckmateValue     = 100000;
-    static constexpr int32_t TablebaseWinValue  = 90000;
-    static constexpr int32_t InfValue           = 10000000;
-    static constexpr int32_t InvalidValue       = 9999999;
-
-    static constexpr int32_t MaxSearchDepth = 256;
-    static constexpr uint32_t MaxDepthShift = 8;
 
     Search();
     ~Search();
@@ -74,43 +92,30 @@ public:
     void StopSearch();
 
     TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
+    const MoveOrderer& GetMoveOrderer() const { return mMoveOrderer; }
 
 private:
 
     Search(const Search&) = delete;
 
-    struct NodeInfo
+    struct SearchStats
     {
-        const Position* position = nullptr;
-        const NodeInfo* parentNode = nullptr;
-        ScoreType alpha;
-        ScoreType beta;
-        Move previousMove = Move::Invalid();
-        std::span<const Move> moveFilter; // ignore given moves in search, used for multi-PV search
-        std::span<const Move> rootMoves;  // consider only this moves at root node, used for "searchmoves" UCI command
-        uint32_t depth;
-        uint32_t maxDepthFractional;
-        uint8_t pvIndex;
-        Color color;
-        bool isPvNode = false;
-        bool isTbNode = false;
-        bool isNullMove = false;
-
-        INLINE uint32_t MaxDepth() const { return maxDepthFractional >> MaxDepthShift; }
-    };
-    
-    struct SearchContext
-    {
-        const Game& game;
-        const SearchParam& searchParam;
         uint64_t fh = 0;
         uint64_t fhf = 0;
         uint64_t nodes = 0;
         uint64_t quiescenceNodes = 0;
-        uint64_t pseudoMovesPerNode = 0;
         uint64_t ttHits = 0;
+        uint64_t ttWrites = 0;
         uint64_t tbHits = 0;
         uint32_t maxDepth = 0;
+        uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
+    };
+
+    struct SearchContext
+    {
+        const Game& game;
+        const SearchParam& searchParam;
+        SearchStats stats;
     };
 
     struct AspirationWindowSearchParam
@@ -125,18 +130,6 @@ private:
         int32_t previousScore;                  // score in previous ID iteration
     };
 
-    struct PvLineEntry
-    {
-        uint64_t positionHash;
-        Move move;
-    };
-
-    struct GameHistoryPosition
-    {
-        Position pos;           // board position
-        uint32_t count = 0;     // how many times it occurred during the game
-    };
-
     std::atomic<bool> mStopSearch = false;
 
     // principial variation moves tracking for current search
@@ -147,11 +140,7 @@ private:
     SearchResult mPrevPvLines;
 
     TranspositionTable mTranspositionTable;
-
-    uint32_t searchHistory[2][64][64];
-
-    static constexpr uint32_t NumKillerMoves = 4;
-    PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
+    MoveOrderer mMoveOrderer;
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
@@ -162,8 +151,6 @@ private:
 
     // check if one of generated moves is in PV table
     const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
-    void FindHistoryMoves(Color color, MoveList& moves) const;
-    void FindKillerMoves(uint32_t depth, MoveList& moves) const;
     void FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
     int32_t PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t beta);
@@ -176,9 +163,6 @@ private:
 
     // reconstruct PV line from cache and TT table
     std::vector<Move> GetPvLine(const Position& pos, uint32_t maxLength) const;
-
-    void UpdateSearchHistory(const NodeInfo& node, const Move move);
-    void RegisterKillerMove(const NodeInfo& node, const Move move);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const SearchContext& ctx) const;

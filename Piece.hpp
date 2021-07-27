@@ -1,6 +1,7 @@
 ﻿#pragma once
 
-#include <inttypes.h>
+#include "Common.hpp"
+
 #include <string>
 
 #include "Color.hpp"
