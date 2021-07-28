@@ -203,8 +203,6 @@ private:
     INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
     INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
 
-    void PushMove(const Move move, MoveList& outMoveList) const;
-
     void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
     void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
     void GenerateRookMoveList(MoveList& outMoveList, uint32_t flags = 0) const;

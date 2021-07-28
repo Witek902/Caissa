@@ -151,7 +151,7 @@ private:
 
     // check if one of generated moves is in PV table
     const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
-    void FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
+    const Move FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
     ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta);
 
