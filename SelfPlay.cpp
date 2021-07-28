@@ -76,15 +76,15 @@ void SelfPlay()
             std::vector<PositionEntry> posEntries;
             posEntries.reserve(200);
 
-            int32_t scoreDiffTreshold = 50;
+            int32_t scoreDiffTreshold = 10;
             uint32_t maxMoves = 500;
 
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
             {
                 SearchParam searchParam;
-                searchParam.limits.maxDepth = 4;
-                searchParam.numPvLines = 3;
+                searchParam.limits.maxDepth = 8;
+                searchParam.numPvLines = 2;
                 searchParam.debugLog = false;
 
                 searchResult.clear();

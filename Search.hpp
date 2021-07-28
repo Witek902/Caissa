@@ -57,7 +57,7 @@ struct SearchParam
 struct PvLine
 {
     std::vector<Move> moves;
-    int32_t score = 0;
+    ScoreType score = 0;
 };
 
 using SearchResult = std::vector<PvLine>;
@@ -65,7 +65,7 @@ using SearchResult = std::vector<PvLine>;
 struct NodeInfo
 {
     const Position* position = nullptr;
-    const NodeInfo* parentNode = nullptr;
+    NodeInfo* parentNode = nullptr;
     ScoreType alpha;
     ScoreType beta;
     Move previousMove = Move::Invalid();
@@ -127,7 +127,7 @@ private:
         uint32_t pvIndex;
         SearchContext& searchContext;
         std::span<const Move> moveFilter;
-        int32_t previousScore;                  // score in previous ID iteration
+        ScoreType previousScore;                  // score in previous ID iteration
     };
 
     std::atomic<bool> mStopSearch = false;
@@ -144,16 +144,16 @@ private:
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
-    int32_t AspirationWindowSearch(const AspirationWindowSearchParam& param);
+    ScoreType AspirationWindowSearch(const AspirationWindowSearchParam& param);
 
-    ScoreType QuiescenceNegaMax(const NodeInfo& node, SearchContext& ctx);
-    ScoreType NegaMax(const NodeInfo& node, SearchContext& ctx);
+    ScoreType QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx);
+    ScoreType NegaMax(NodeInfo& node, SearchContext& ctx);
 
     // check if one of generated moves is in PV table
     const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
     void FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
-    int32_t PruneByMateDistance(const NodeInfo& node, int32_t alpha, int32_t beta);
+    ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta);
 
     // check for repetition in the searched node
     bool IsRepetition(const NodeInfo& node, const Game& game) const;

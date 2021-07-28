@@ -5,6 +5,19 @@
 #include <vector>
 #include <unordered_map>
 
+namespace std {
+
+template<>
+struct hash<Position>
+{
+    size_t operator()(const Position& k) const
+    {
+        return static_cast<size_t>(k.GetHash());
+    }
+};
+
+} // std
+
 // represents whole game
 class Game
 {
@@ -34,8 +47,6 @@ private:
     Position mPosition;
     std::vector<Move> mMoves;
 
-    // store some simplified position state instead of full struct
-    using HistoryPosition = std::pair<Position, uint32_t>;
-    using HistoryPositions = std::vector<HistoryPosition>;
-    std::unordered_map<uint64_t, HistoryPositions> mHistoryGamePositions;
+    // TODO store some simplified position state instead of full struct
+    std::unordered_map<Position, uint16_t> mHistoryGamePositions;
 };

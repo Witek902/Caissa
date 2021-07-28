@@ -3,6 +3,7 @@
 #include "Evaluate.hpp"
 
 #include "tablebase/tbprobe.h"
+#include "nnue-probe/nnue.h"
 
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
@@ -113,6 +114,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
         std::cout << "option name Ponder type check default false\n";
+        std::cout << "option name EvalFile type string default nn-04cf2b4ed1da.nnue\n";
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "uciok" << std::endl;
     }
@@ -336,11 +338,11 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     bool verboseStats = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
-    uint32_t moveTime = UINT32_MAX;
-    uint32_t whiteRemainingTime = UINT32_MAX;
-    uint32_t blacksRemainingTime = UINT32_MAX;
-    uint32_t whiteTimeIncrement = 0;
-    uint32_t blacksTimeIncrement = 0;
+    int32_t moveTime = INT32_MAX;
+    int32_t whiteRemainingTime = INT32_MAX;
+    int32_t blacksRemainingTime = INT32_MAX;
+    int32_t whiteTimeIncrement = 0;
+    int32_t blacksTimeIncrement = 0;
     uint32_t movesToGo = UINT32_MAX;
 
     std::vector<Move> rootMoves;
@@ -417,24 +419,30 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx = std::make_unique<SearchTaskContext>();
 
     // calculate time for move based on total remaining time and other heuristics
-    uint32_t timeEstimatedMs = UINT32_MAX;
     {
-        const float moveOverhead = 10; // make configurable
-        const uint32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
-        const uint32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
+        const int32_t moveOverhead = 10; // make configurable
+        const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
+        const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
+        int32_t timeEstimatedMs = INT32_MAX;
 
-        if (remainingTime != UINT32_MAX)
+        if (remainingTime != INT32_MAX)
         {
             const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft((float)mGame.GetMoves().size());
-            const float timeEstimated = std::min((float)remainingTime, remainingTime / movesLeftEstimated + remainingTimeInc);
+            const float timeEstimated = std::min((float)remainingTime, (float)remainingTime / movesLeftEstimated + (float)remainingTimeInc);
+            timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated) + 0.5f);
 
-            timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated - moveOverhead) + 0.5f);
+            // use at least 75% of estimated time
+            // TODO some better heuristics:
+            // for example, estimate time spent in each iteration based on previous searches
+            mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
         }
 
-        // use at least 75% of estimated time
-        // TODO some better heuristics:
-        // for example, estimate time spent in each iteration based on previous searches
-        mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
+        int32_t hardLimit = remainingTime;
+        hardLimit = std::min(hardLimit, moveTime);
+        hardLimit -= moveOverhead;
+        hardLimit = std::max(0, hardLimit);
+
+        mSearchCtx->searchParam.limits.maxTime = hardLimit;
     }
 
     // TODO
@@ -443,7 +451,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.isPonder = isPonder;
 
     mSearchCtx->searchParam.startTimePoint = startTimePoint;
-    mSearchCtx->searchParam.limits.maxTime = std::min(moveTime, timeEstimatedMs);
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
@@ -577,6 +584,10 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         LoadTablebase(value.c_str());
     }
+    else if (lowerCaseName == "evalfile")
+    {
+        nnue_init(value.c_str());
+    }
     else if (lowerCaseName == "ponder")
     {
         // nothing special here
@@ -601,9 +612,10 @@ bool UniversalChessInterface::Command_TTProbe()
             ttEntry->flag == TranspositionTableEntry::Flag_LowerBound ? "lower" :
             "invalid";
 
-        std::cout << "Score:     " << ttEntry->score << std::endl;
-        std::cout << "Depth:     " << (uint32_t)ttEntry->depth << std::endl;
-        std::cout << "Bounds:    " << boundsStr << std::endl;
+        std::cout << "Score:      " << ttEntry->score << std::endl;
+        std::cout << "StaticEval: " << ttEntry->staticEval << std::endl;
+        std::cout << "Depth:      " << (uint32_t)ttEntry->depth << std::endl;
+        std::cout << "Bounds:     " << boundsStr << std::endl;
     }
     else
     {

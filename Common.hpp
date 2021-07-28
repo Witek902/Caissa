@@ -18,11 +18,11 @@ INLINE constexpr bool IsPowerOfTwo(const T n)
     return (n & (n - 1)) == 0;
 }
 
-using ScoreType = int32_t;
+using ScoreType = int16_t;
 
-static constexpr int32_t CheckmateValue     = 100000;
-static constexpr int32_t TablebaseWinValue  = 90000;
-static constexpr int32_t InfValue           = 10000000;
-static constexpr int32_t InvalidValue       = 9999999;
+static constexpr ScoreType InfValue           = 32767;
+static constexpr ScoreType InvalidValue       = INT16_MAX;
+static constexpr ScoreType CheckmateValue     = 32000;
+static constexpr ScoreType TablebaseWinValue  = 31000;
 
-static constexpr int32_t MaxSearchDepth = 256;
+static constexpr ScoreType MaxSearchDepth = 256;

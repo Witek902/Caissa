@@ -27,39 +27,18 @@ bool Game::DoMove(const Move& move)
 
 void Game::RecordBoardPosition(const Position& position)
 {
-    HistoryPositions& entry = mHistoryGamePositions[position.GetHash()];
-
-    for (HistoryPosition& historyPosition : entry)
-    {
-        if (historyPosition.first == position)
-        {
-            historyPosition.second++;
-            return;
-        }
-    }
-
-    entry.emplace_back(position, 1u);
+    mHistoryGamePositions[position]++;
 }
 
 uint32_t Game::GetRepetitionCount(const Position& position) const
 {
-    const auto iter = mHistoryGamePositions.find(position.GetHash());
+    const auto& iter = mHistoryGamePositions.find(position);
     if (iter == mHistoryGamePositions.end())
     {
-        return false;
+        return 0;
     }
 
-    const HistoryPositions& entry = iter->second;
-
-    for (const HistoryPosition& historyPosition : entry)
-    {
-        if (historyPosition.first == position)
-        {
-            return historyPosition.second;
-        }
-    }
-
-    return 0;
+    return iter->second;
 }
 
 bool Game::IsDrawn() const
