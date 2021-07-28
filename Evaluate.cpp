@@ -2,6 +2,10 @@
 #include "Move.hpp"
 #include "NeuralNetwork.hpp"
 
+#include "nnue-probe/nnue.h"
+
+#pragma warning(disable : 4505)
+
 static nn::NeuralNetwork s_neuralNetwork;
 
 bool LoadNeuralNetwork(const char* name)
@@ -362,7 +366,105 @@ static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPaw
     return count;
 }
 
-int32_t Evaluate(const Position& position)
+static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueData)
+{
+    int32_t pieces[32 + 1];
+    int32_t squares[32 + 1];
+
+    size_t index = 2;
+
+    pieces[0] = pieces::wking;
+    _BitScanForward64((unsigned long*)&squares[0], position.Whites().king);
+
+    pieces[1] = pieces::bking;
+    _BitScanForward64((unsigned long*)&squares[1], position.Blacks().king);
+
+    position.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::wpawn;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::bpawn;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::wknight;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::bknight;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::wbishop;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::bbishop;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::wrook;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::brook;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::wqueen;
+        squares[index] = square;
+        index++;
+    });
+
+    position.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        pieces[index] = pieces::bqueen;
+        squares[index] = square;
+        index++;
+    });
+
+    pieces[index] = 0;
+    squares[index] = 0;
+
+    int32_t score = nnueData ?
+        nnue_evaluate_incremental(position.GetSideToMove() == Color::White ? 0 : 1, pieces, squares, nnueData) :
+        nnue_evaluate(position.GetSideToMove() == Color::White ? 0 : 1, pieces, squares);
+
+    if (position.GetSideToMove() == Color::Black)
+    {
+        score = -score;
+    }
+
+    return score;
+}
+
+ScoreType Evaluate(const Position& position)
 {
     int32_t value = 0;
     int32_t valueMG = 0;
@@ -526,9 +628,19 @@ int32_t Evaluate(const Position& position)
     // accumulate middle/end game scores
     value += InterpolateScore(position, valueMG, valueEG);
 
-    ASSERT(value < 100000 && value > -100000);
+    ASSERT(value < TablebaseWinValue&& value > -TablebaseWinValue);
 
-    return value;
+    constexpr int32_t nnueTreshold = 1024;
+
+    // use NNUE for balanced positions
+    if (nnue_is_valid() && value < nnueTreshold && value > -nnueTreshold)
+    {
+        const int32_t nnueValue = EvaluateStockfishNNUE(position, nullptr);
+        const int32_t nnueFactor = std::abs(value);
+        value = (nnueFactor * value + nnueValue * (nnueTreshold - 1 - nnueFactor)) / nnueTreshold;
+    }
+
+    return (ScoreType)value;
 }
 
 #endif // USE_NN_EVALUATION

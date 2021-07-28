@@ -17,7 +17,8 @@ struct TranspositionTableEntry
     };
 
     uint64_t positionHash;
-    int32_t score = INT32_MIN;  // TODO 16 bits should be enough
+    ScoreType score = InvalidValue;
+    ScoreType staticEval = InvalidValue;
     PackedMove move;
     uint8_t depth = 0;
     Flags flag = Flag_Invalid;
