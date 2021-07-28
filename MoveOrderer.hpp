@@ -8,11 +8,15 @@ class MoveOrderer
 {
 public:
 
+    static constexpr int32_t PVMoveValue = INT32_MAX;
+    static constexpr int32_t TTMoveValue = PVMoveValue - 1;
+
     void Clear();
 
     void OnBetaCutoff(const NodeInfo& node, const Move move);
 
-    void OrderMoves(const NodeInfo& node, MoveList& moves) const;
+    // assign scores to move list
+    void ScoreMoves(const NodeInfo& node, MoveList& moves) const;
 
     void DebugPrint() const;
 

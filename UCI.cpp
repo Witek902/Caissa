@@ -471,6 +471,9 @@ void UniversalChessInterface::RunSearchTask()
     {
         mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
+        const auto endTimePoint = std::chrono::high_resolution_clock::now();
+        const auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - mSearchCtx->searchParam.startTimePoint).count();
+
         // only report best move in non-pondering mode or if "stop" was called during ponder search
         if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
         {
@@ -491,6 +494,11 @@ void UniversalChessInterface::RunSearchTask()
             }
 
             std::cout << std::endl;
+        }
+
+        if (mSearchCtx->searchParam.verboseStats)
+        {
+            std::cout << "Elapsed time: " << elapsedTime << " ms" << std::endl;
         }
     };
 

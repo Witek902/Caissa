@@ -442,7 +442,7 @@ const Move Search::FindPvMove(const NodeInfo& node, MoveList& moves) const
     {
         if (pvMove.IsValid() && moves[i].move == pvMove)
         {
-            moves[i].score = INT32_MAX;
+            moves[i].score = MoveOrderer::PVMoveValue;
             return pvMove;
         }
     }
@@ -452,7 +452,7 @@ const Move Search::FindPvMove(const NodeInfo& node, MoveList& moves) const
     return pvMove;
 }
 
-void Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
+const Move Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
 {
     if (ttMove.IsValid())
     {
@@ -460,11 +460,13 @@ void Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
         {
             if (moves[i].move == ttMove)
             {
-                moves[i].score = INT32_MAX - 1;
-                break;
+                moves[i].score = MoveOrderer::TTMoveValue;
+                return moves[i].move;
             }
         }
     }
+
+    return Move::Invalid();
 }
 
 void Search::UpdatePvArray(uint32_t depth, const Move move)
@@ -629,9 +631,18 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
     MoveList moves;
     position.GenerateMoveList(moves, moveGenFlags);
 
+    // resolve move scoring
+    // the idea here is to defer scoring if we have a TT/PV move
+    // most likely we'll get beta cutoff on it so we won't need to score any other move
+    uint32_t numScoredMoves = moves.numMoves;
     if (moves.numMoves > 1u)
     {
-        FindTTMove(ttMove, moves);
+        numScoredMoves = 0;
+
+        if (FindTTMove(ttMove, moves).IsValid())
+        {
+            numScoredMoves++;
+        }
     }
 
     Move bestMove = Move::Invalid();
@@ -640,6 +651,12 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
+        if (i == numScoredMoves)
+        {
+            // we reached a point where moves are not scored anymore, so score them now
+            mMoveOrderer.ScoreMoves(node, moves);
+        }
+
         int32_t moveScore = 0;
         const Move move = moves.PickBestMove(i, moveScore);
 
@@ -648,6 +665,8 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
         {
             continue;
         }
+
+        mTranspositionTable.Prefetch(childPosition);
 
         moveIndex++;
 
@@ -990,12 +1009,19 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
         }
     }
 
-    const Move pvMove = FindPvMove(node, moves);
-
+    // resolve move scoring
+    // the idea here is to defer scoring if we have a TT/PV move
+    // most likely we'll get beta cutoff on it so we won't need to score any other move
+    uint32_t numScoredMoves = moves.numMoves;
     if (moves.numMoves > 1u)
     {
-        FindTTMove(ttMove, moves);
-        mMoveOrderer.OrderMoves(node, moves);
+        const Move pvMove = FindPvMove(node, moves);
+        const Move fullTTMove = FindTTMove(ttMove, moves);
+
+        numScoredMoves = 0;
+
+        if (pvMove.IsValid()) numScoredMoves++;
+        if (fullTTMove.IsValid()) numScoredMoves++;
     }
 
     if (isRootNode)
@@ -1043,7 +1069,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             if (tbMove.IsValid())
             {
                 moves.Clear();
-                moves.PushMove(tbMove, 0);
+                moves.Push(tbMove);
             }
         }
     }
@@ -1054,6 +1080,12 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
+        if (i == numScoredMoves)
+        {
+            // we reached a point where moves are not scored anymore, so score them now
+            mMoveOrderer.ScoreMoves(node, moves);
+        }
+
         int32_t moveScore = 0;
         const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
@@ -1099,7 +1131,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             if (move.IsQuiet() && !isInCheck && moveIndex > 1u)
             {
                 // reduce depth gradually
-                //depthReduction = std::min(5, std::max(1, numReducedMoves / LateMoveReductionRate));
+                //depthReduction = std::min(1, std::max(1, numReducedMoves / LateMoveReductionRate));
                 depthReduction = std::max(1, int(0.5f * sqrtf((float)(node.depth + 1 - LateMoveReductionStartDepth) * (float)numReducedMoves)));
                 numReducedMoves++;
 

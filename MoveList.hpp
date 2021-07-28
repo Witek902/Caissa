@@ -31,18 +31,18 @@ public:
         numMoves = 0;
     }
 
-    void PushMove(const Move move, int32_t score)
+    void Push(const Move move)
     {
         ASSERT(numMoves < MaxMoves);
         uint32_t index = numMoves++;
-        moves[index] = { move, score };
+        moves[index] = { move, 0 };
     }
 
-    Move PickBestMove(uint32_t index, int32_t& outMoveScore)
+    const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
         ASSERT(index < numMoves);
 
-        int32_t bestScore = -1;
+        int32_t bestScore = INT32_MIN;
         uint32_t bestMoveIndex = index;
         for (uint32_t i = index; i < numMoves; ++i)
         {

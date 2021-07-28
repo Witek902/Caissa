@@ -1,7 +1,6 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "Bitboard.hpp"
-#include "Evaluate.hpp"
 
 #include <random>
 
@@ -217,64 +216,6 @@ void Position::GenerateMoveList(MoveList& outMoveList, uint32_t flags) const
     GenerateKingMoveList(outMoveList, flags);
 }
 
-static const int32_t c_MvvLvaScoreBaseValue = 10000000;
-
-static const int32_t c_PromotionScores[] =
-{
-    0,          // none
-    0,          // pawn
-    1000,       // knight
-    0,          // bishop
-    0,          // rook
-    9000001,    // queen
-};
-
-static const int16_t c_PieceValues[] =
-{
-    0,      // none
-    100,    // pawn
-    320,    // knight
-    330,    // bishop
-    500,    // rook
-    900,    // queen
-};
-
-static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
-{
-    return c_MvvLvaScoreBaseValue + 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
-}
-
-void Position::PushMove(const Move move, MoveList& outMoveList) const
-{
-    int32_t score = 0;
-
-    const SidePosition& opponentSide = GetOpponentSide();
-
-    if (move.isEnPassant)
-    {
-        score += c_MvvLvaScoreBaseValue;
-    }
-    else if (move.isCapture)
-    {
-        const Piece attackingPiece = move.piece;
-        const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.toSquare);
-        score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
-    }
-    else
-    {
-        score += ScoreQuietMove(*this, move);
-    }
-
-    if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
-    {
-        const uint32_t pieceIndex = (uint32_t)move.promoteTo;
-        ASSERT(pieceIndex > 1 && pieceIndex < 6);
-        score += c_PromotionScores[pieceIndex];
-    }
-
-    outMoveList.PushMove(move, score);
-}
-
 void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
 {
     const bool onlyTactical = flags & MOVE_GEN_ONLY_TACTICAL;
@@ -301,7 +242,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
                 move.promoteTo = promoteTo;
                 move.isCapture = isCapture;
                 move.isEnPassant = enPassant;
-                PushMove(move, outMoveList);
+                outMoveList.Push(move);
             }
         }
         else if (!onlyTactical || isCapture)
@@ -313,7 +254,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
             move.promoteTo = Piece::None;
             move.isCapture = isCapture;
             move.isEnPassant = enPassant;
-            PushMove(move, outMoveList);
+            outMoveList.Push(move);
         }
     };
 
@@ -370,7 +311,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
                     move.toSquare = twoSquaresForward;
                     move.piece = Piece::Pawn;
                     move.promoteTo = Piece::None;
-                    PushMove(move, outMoveList);
+                    outMoveList.Push(move);
                 }
             }
         }
@@ -400,7 +341,7 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
             move.toSquare = targetSquare;
             move.piece = Piece::Knight;
             move.isCapture = opponentSide.occupied & targetSquare.Bitboard();
-            PushMove(move, outMoveList);
+            outMoveList.Push(move);
         });
     });
 }
@@ -430,7 +371,7 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
             move.toSquare = targetSquare;
             move.piece = Piece::Rook;
             move.isCapture = opponentSide.occupied & targetSquare.Bitboard();
-            PushMove(move, outMoveList);
+            outMoveList.Push(move);
         });
     });
 }
@@ -464,7 +405,7 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
             move.toSquare = targetSquare;
             move.piece = Piece::Bishop;
             move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
-            PushMove(move, outMoveList);
+            outMoveList.Push(move);
         });
     });
 }
@@ -500,7 +441,7 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
             move.toSquare = targetSquare;
             move.piece = Piece::Queen;
             move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
-            PushMove(move, outMoveList);
+            outMoveList.Push(move);
         });
     });
 }
@@ -544,7 +485,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         move.toSquare = targetSquare;
         move.piece = Piece::King;
         move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
-        PushMove(move, outMoveList);
+        outMoveList.Push(move);
     });
 
     if (!onlyTactical && (currentSideCastlingRights & CastlingRights_All))
@@ -571,7 +512,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 move.toSquare = Square(2u, square.Rank());
                 move.piece = Piece::King;
                 move.isCastling = true;
-                PushMove(move, outMoveList);
+                outMoveList.Push(move);
             }
 
             if ((currentSideCastlingRights & CastlingRights_ShortCastleAllowed) &&
@@ -585,7 +526,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 move.toSquare = Square(6u, square.Rank());
                 move.piece = Piece::King;
                 move.isCastling = true;
-                PushMove(move, outMoveList);
+                outMoveList.Push(move);
             }
         }
     }

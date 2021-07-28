@@ -1,6 +1,34 @@
 #include "MoveOrderer.hpp"
 #include "Search.hpp"
 #include "MoveList.hpp"
+#include "Evaluate.hpp"
+
+static const int32_t c_MvvLvaScoreBaseValue = 10000000;
+
+static const int32_t c_PromotionScores[] =
+{
+    0,          // none
+    0,          // pawn
+    9000000,    // knight
+    0,          // bishop
+    0,          // rook
+    9000001,    // queen
+};
+
+static const int16_t c_PieceValues[] =
+{
+    0,      // none
+    100,    // pawn
+    320,    // knight
+    330,    // bishop
+    500,    // rook
+    900,    // queen
+};
+
+static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
+{
+    return c_MvvLvaScoreBaseValue + 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
+}
 
 void MoveOrderer::DebugPrint() const
 {
@@ -111,8 +139,10 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
     }
 }
 
-void MoveOrderer::OrderMoves(const NodeInfo& node, MoveList& moves) const
+void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 {
+    const Position& pos = *node.position;
+
     const uint32_t KillerMoveBonus  = 100000;
     const uint32_t CounterMoveBonus = 0;
 
@@ -123,11 +153,39 @@ void MoveOrderer::OrderMoves(const NodeInfo& node, MoveList& moves) const
         const Move move = moves[i].move;
         ASSERT(move.IsValid());
 
-        int64_t finalScore = (int64_t)moves[i].score;
+        // skip PV move
+        if (moves[i].score >= TTMoveValue)
+        {
+            continue;
+        }
+
+        int64_t score = 0;
+
+        if (move.isEnPassant)
+        {
+            score += c_MvvLvaScoreBaseValue;
+        }
+        else if (move.isCapture)
+        {
+            const Piece attackingPiece = move.piece;
+            const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.toSquare);
+            score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
+        }
+        else
+        {
+            score += ScoreQuietMove(pos, move);
+        }
+
+        if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
+        {
+            const uint32_t pieceIndex = (uint32_t)move.promoteTo;
+            ASSERT(pieceIndex > 1 && pieceIndex < 6);
+            score += c_PromotionScores[pieceIndex];
+        }
 
         // history heuristics
         {
-            finalScore += searchHistory[color][move.fromSquare.Index()][move.toSquare.Index()];
+            score += searchHistory[color][move.fromSquare.Index()][move.toSquare.Index()];
         }
 
         // killer moves heuristics
@@ -137,7 +195,7 @@ void MoveOrderer::OrderMoves(const NodeInfo& node, MoveList& moves) const
             {
                 if (move == killerMoves[node.height][j])
                 {
-                    finalScore += KillerMoveBonus - j;
+                    score += KillerMoveBonus - j;
                 }
             }
         }
@@ -150,10 +208,10 @@ void MoveOrderer::OrderMoves(const NodeInfo& node, MoveList& moves) const
 
             if (move == counterMoveHistory[color][fromIndex][toIndex])
             {
-                finalScore += CounterMoveBonus;
+                score += CounterMoveBonus;
             }
         }
 
-        moves[i].score = (int32_t)std::min<uint64_t>(finalScore, INT32_MAX);
+        moves[i].score = (int32_t)std::min<uint64_t>(score, INT32_MAX);
     }
 }
