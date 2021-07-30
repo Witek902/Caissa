@@ -6,7 +6,7 @@
 
 class Position;
 
-struct TranspositionTableEntry
+struct TTEntry
 {
     enum Flags : uint8_t
     {
@@ -25,19 +25,22 @@ struct TranspositionTableEntry
 
     bool IsValid() const
     {
-        return flag != TranspositionTableEntry::Flag_Invalid;
+        return flag != TTEntry::Flag_Invalid;
     }
 };
 
-static_assert(sizeof(TranspositionTableEntry) == 16, "TT entry is too big");
+using AtomicTTEntry = std::atomic<TTEntry>;
+
+static_assert(sizeof(TTEntry) == 16, "TT entry is too big");
 
 class TranspositionTable
 {
 public:
     TranspositionTable();
+    ~TranspositionTable();
 
-    const TranspositionTableEntry* Read(const Position& position) const;
-    void Write(const TranspositionTableEntry& entry);
+    const TTEntry* Read(const Position& position) const;
+    void Write(const TTEntry& entry);
     void Prefetch(const Position& position) const;
 
     // invalidate all entries
@@ -45,9 +48,9 @@ public:
 
     // resize the table
     // old entries will be preserved if possible
-    void Resize(size_t newSize);
+    void Resize(size_t newSize, bool preserveEntries = false);
 
-    size_t GetSize() const { return entries.size(); }
+    size_t GetSize() const { return size; }
 
     // compute number of used entries
     size_t GetNumUsedEntries() const;
@@ -56,7 +59,8 @@ public:
 
 private:
 
-    std::vector<TranspositionTableEntry> entries;
+    TTEntry* entries;
+    size_t size;
 
     uint64_t numCollisions;
 };

@@ -165,7 +165,7 @@ std::vector<Move> Search::GetPvLine(const Position& pos, uint32_t maxLength) con
         {
             if (iteratedPosition.GetNumLegalMoves() == 0) break;
 
-            const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(iteratedPosition);
+            const TTEntry* ttEntry = mTranspositionTable.Read(iteratedPosition);
             if (!ttEntry) break;
 
             const Move move = iteratedPosition.MoveFromPacked(ttEntry->move);
@@ -577,7 +577,7 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
     if (UseTranspositionTableInQSearch)
     {
         ScoreType ttScore = InvalidValue;
-        if (const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position))
+        if (const TTEntry* ttEntry = mTranspositionTable.Read(position))
         {
             ttMove = ttEntry->move;
             staticEval = ttEntry->staticEval;
@@ -589,9 +589,9 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
                 ttScore = ScoreFromTT(ttEntry->score, node.height, position.GetHalfMoveCount());
                 ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-                if ((ttEntry->flag == TranspositionTableEntry::Flag_Exact) ||
-                    (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound && ttScore >= node.beta) ||
-                    (ttEntry->flag == TranspositionTableEntry::Flag_UpperBound && ttScore <= node.alpha))
+                if ((ttEntry->flag == TTEntry::Flag_Exact) ||
+                    (ttEntry->flag == TTEntry::Flag_LowerBound && ttScore >= node.beta) ||
+                    (ttEntry->flag == TTEntry::Flag_UpperBound && ttScore <= node.alpha))
                 {
                     return ttScore;
                 }
@@ -705,16 +705,16 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
     // store value in transposition table
     if (UseTranspositionTableInQSearch && !CheckStopCondition(ctx))
     {
-        TranspositionTableEntry entry;
+        TTEntry entry;
         entry.positionHash = position.GetHash();
         entry.score = ScoreToTT(bestValue, node.height);
         entry.staticEval = staticEval;
         entry.move = bestMove;
         entry.depth = 0;
         entry.flag =
-            bestValue >= beta ? TranspositionTableEntry::Flag_LowerBound :
-            bestValue > oldAlpha ? TranspositionTableEntry::Flag_Exact :
-            TranspositionTableEntry::Flag_UpperBound;
+            bestValue >= beta ? TTEntry::Flag_LowerBound :
+            bestValue > oldAlpha ? TTEntry::Flag_Exact :
+            TTEntry::Flag_UpperBound;
 
         mTranspositionTable.Write(entry);
 
@@ -799,7 +799,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     // transposition table lookup
     PackedMove ttMove;
     ScoreType ttScore = InvalidValue;
-    if (const TranspositionTableEntry* ttEntry = mTranspositionTable.Read(position))
+    if (const TTEntry* ttEntry = mTranspositionTable.Read(position))
     {
         ttMove = ttEntry->move;
         staticEval = ttEntry->staticEval;
@@ -811,16 +811,16 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             ttScore = ScoreFromTT(ttEntry->score, node.height, position.GetHalfMoveCount());
             ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-            if (ttEntry->flag == TranspositionTableEntry::Flag_Exact)
+            if (ttEntry->flag == TTEntry::Flag_Exact)
             {
                 return ttScore;
             }
-            else if (ttEntry->flag == TranspositionTableEntry::Flag_UpperBound)
+            else if (ttEntry->flag == TTEntry::Flag_UpperBound)
             {
                 if (ttScore <= alpha) return alpha;
                 if (ttScore < beta) beta = ttScore;
             }
-            else if (ttEntry->flag == TranspositionTableEntry::Flag_LowerBound)
+            else if (ttEntry->flag == TTEntry::Flag_LowerBound)
             {
                 if (ttScore >= beta) return beta;
                 if (ttScore > alpha) alpha = ttScore;
@@ -870,19 +870,19 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                     probeResult == TB_WIN  ?  (TablebaseWinValue - (ScoreType)node.height) : 0;
 
                 // only draws are exact, we don't know exact value for win/loss just based on WDL value
-                const TranspositionTableEntry::Flags bounds =
-                    probeResult == TB_LOSS ? TranspositionTableEntry::Flag_UpperBound :
-                    probeResult == TB_WIN  ? TranspositionTableEntry::Flag_LowerBound :
-                    TranspositionTableEntry::Flag_Exact;
+                const TTEntry::Flags bounds =
+                    probeResult == TB_LOSS ? TTEntry::Flag_UpperBound :
+                    probeResult == TB_WIN  ? TTEntry::Flag_LowerBound :
+                    TTEntry::Flag_Exact;
 
-                if (    bounds == TranspositionTableEntry::Flag_Exact
-                    || (bounds == TranspositionTableEntry::Flag_LowerBound && tbValue >= beta)
-                    || (bounds == TranspositionTableEntry::Flag_UpperBound && tbValue <= alpha))
+                if (    bounds == TTEntry::Flag_Exact
+                    || (bounds == TTEntry::Flag_LowerBound && tbValue >= beta)
+                    || (bounds == TTEntry::Flag_UpperBound && tbValue <= alpha))
                 {
-                    TranspositionTableEntry entry;
+                    TTEntry entry;
                     entry.positionHash = position.GetHash();
                     entry.score = ScoreToTT(tbValue, node.height);
-                    entry.depth = bounds == TranspositionTableEntry::Flag_Exact ? UINT8_MAX : (uint8_t)node.depth;
+                    entry.depth = bounds == TTEntry::Flag_Exact ? UINT8_MAX : (uint8_t)node.depth;
                     entry.flag = bounds;
 
                     mTranspositionTable.Write(entry);
@@ -894,7 +894,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
 
                 if (isPvNode)
                 {
-                    if (bounds == TranspositionTableEntry::Flag_LowerBound)
+                    if (bounds == TTEntry::Flag_LowerBound)
                     {
                         bestValue = tbValue;
                         alpha = std::max(alpha, tbValue);
@@ -1270,7 +1270,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     // no legal moves
     if (moveIndex == 0u)
     {
-        TranspositionTableEntry entry;
+        TTEntry entry;
         entry.positionHash = position.GetHash();
 
         if (isInCheck) // checkmate
@@ -1280,9 +1280,9 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             // checkmate score depends on depth and may not be exact
             entry.depth = (uint8_t)node.depth;
             entry.flag =
-                bestValue >= beta ? TranspositionTableEntry::Flag_LowerBound :
-                bestValue > oldAlpha ? TranspositionTableEntry::Flag_Exact :
-                TranspositionTableEntry::Flag_UpperBound;
+                bestValue >= beta ? TTEntry::Flag_LowerBound :
+                bestValue > oldAlpha ? TTEntry::Flag_Exact :
+                TTEntry::Flag_UpperBound;
         }
         else // stalemate
         {
@@ -1290,7 +1290,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
 
             // stalemate score is always exact so we can even extend TT entry depth to infinity
             entry.depth = UINT8_MAX;
-            entry.flag = TranspositionTableEntry::Flag_Exact;
+            entry.flag = TTEntry::Flag_Exact;
         }
         entry.score = ScoreToTT(bestValue, node.height);
 
@@ -1312,18 +1312,18 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     // skip root nodes when searching secondary PV lines, as they don't contain best moves
     if (!CheckStopCondition(ctx) && !(isRootNode && node.pvIndex > 0))
     {
-        TranspositionTableEntry::Flags flag = TranspositionTableEntry::Flag_Exact;
+        TTEntry::Flags flag = TTEntry::Flag_Exact;
 
         // move from tablebases is always best
         if (bestMove != tbMove)
         {
             flag =
-                bestValue >= beta ? TranspositionTableEntry::Flag_LowerBound :
-                bestValue <= oldAlpha ? TranspositionTableEntry::Flag_UpperBound :
-                TranspositionTableEntry::Flag_Exact;
+                bestValue >= beta ? TTEntry::Flag_LowerBound :
+                bestValue <= oldAlpha ? TTEntry::Flag_UpperBound :
+                TTEntry::Flag_Exact;
         }
 
-        TranspositionTableEntry entry;
+        TTEntry entry;
         entry.positionHash = position.GetHash();
         entry.score = ScoreToTT(bestValue, node.height);
         entry.staticEval = staticEval;

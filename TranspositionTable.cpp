@@ -6,78 +6,121 @@
 #include <intrin.h>
 
 TranspositionTable::TranspositionTable()
+    : entries(nullptr)
+    , size(0)
+    , numCollisions(0)
 {
+}
 
+TranspositionTable::~TranspositionTable()
+{
+    _aligned_free(entries);
 }
 
 void TranspositionTable::Clear()
 {
-    memset(entries.data(), 0, entries.size() * sizeof(TranspositionTableEntry));
+    memset(entries, 0, size * sizeof(TTEntry));
 }
 
-void TranspositionTable::Resize(size_t newSize)
+void TranspositionTable::Resize(size_t newSize, bool preserveEntries)
 {
     ASSERT(IsPowerOfTwo(newSize));
 
-    if (entries.size() != newSize)
+    if (size == newSize)
     {
-        std::vector<TranspositionTableEntry> oldEntries = std::move(entries);
-        entries.resize(newSize);
+        return;
+    }
 
+    if (newSize == 0)
+    {
+        _aligned_free(entries);
+        entries = nullptr;
+        size = 0;
+        return;
+    }
+
+    TTEntry* oldEntries = entries;
+    size_t oldSize = size;
+
+    if (!preserveEntries)
+    {
+        _aligned_free(oldEntries);
+        oldEntries = nullptr;
+        oldSize = 0;
+    }
+
+    entries = (TTEntry*)_aligned_malloc(newSize * sizeof(TTEntry), CACHELINE_SIZE);
+    size = newSize;
+    ASSERT(entries);
+    ASSERT((size_t)entries % CACHELINE_SIZE == 0);
+
+    if (!entries)
+    {
+        std::cerr << "Failed to allocate transposition table" << std::endl;
+        ::exit(1);
+    }
+
+    Clear();
+
+    if (preserveEntries)
+    {
         // copy old entries
-        if (!oldEntries.empty())
+        if (oldEntries)
         {
-            const size_t hashmapMask = oldEntries.size() - 1;
+            const size_t hashmapMask = oldSize - 1;
 
-            for (const TranspositionTableEntry& oldEntry : oldEntries)
+            for (size_t i = 0; i < oldSize; ++i)
             {
+                const TTEntry& oldEntry = oldEntries[i];
                 if (oldEntry.IsValid())
                 {
                     Write(oldEntry);
                 }
             }
         }
+
+        _aligned_free(oldEntries);
     }
 }
 
 void TranspositionTable::Prefetch(const Position& position) const
 {
-    if (!entries.empty())
+    if (entries)
     {
-        const size_t hashmapMask = entries.size() - 1;
+        const size_t hashmapMask = size - 1;
 
-        const TranspositionTableEntry& ttEntry = entries[position.GetHash() & hashmapMask];
-        _mm_prefetch(reinterpret_cast<const char*>(&ttEntry), _MM_HINT_T0);
+        const TTEntry* ttEntry = entries + (position.GetHash() & hashmapMask);
+        _mm_prefetch(reinterpret_cast<const char*>(ttEntry), _MM_HINT_T0);
     }
 }
 
-const TranspositionTableEntry* TranspositionTable::Read(const Position& position) const
+const TTEntry* TranspositionTable::Read(const Position& position) const
 {
-    if (!entries.empty())
+    if (entries)
     {
-        const size_t hashmapMask = entries.size() - 1;
+        const size_t hashmapMask = size - 1;
 
-        const TranspositionTableEntry& ttEntry = entries[position.GetHash() & hashmapMask];
-        if (ttEntry.positionHash == position.GetHash() && ttEntry.flag != TranspositionTableEntry::Flag_Invalid)
+        const TTEntry* ttEntry = entries + (position.GetHash() & hashmapMask);
+        if (ttEntry->positionHash == position.GetHash() && ttEntry->flag != TTEntry::Flag_Invalid)
         {
-            return &ttEntry;
+            return ttEntry;
         }
     }
 
     return nullptr;
 }
 
-void TranspositionTable::Write(const TranspositionTableEntry& entry)
+void TranspositionTable::Write(const TTEntry& entry)
 {
     ASSERT(entry.IsValid());
 
-    if (entries.empty())
+    if (!entries)
     {
         return;
     }
 
-    const size_t hashmapMask = entries.size() - 1;
-    TranspositionTableEntry& existingEntry = entries[entry.positionHash & hashmapMask];
+    const size_t hashmapMask = size - 1;
+    TTEntry& existingEntry = entries[entry.positionHash & hashmapMask];
 
     if (existingEntry.positionHash == entry.positionHash)
     {
@@ -101,8 +144,9 @@ size_t TranspositionTable::GetNumUsedEntries() const
 {
     size_t num = 0;
 
-    for (const TranspositionTableEntry& entry : entries)
+    for (size_t i = 0; i < size; ++i)
     {
+        const TTEntry& entry = entries[i];
         if (entry.IsValid())
         {
             num++;
