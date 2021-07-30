@@ -585,7 +585,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "hash")
     {
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
-        size_t numEntries = hashSize / sizeof(TranspositionTableEntry);
+        size_t numEntries = hashSize / sizeof(TTEntry);
         mSearch.GetTranspositionTable().Resize(numEntries);
     }
     else if (lowerCaseName == "syzygypath")
@@ -612,12 +612,12 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 bool UniversalChessInterface::Command_TTProbe()
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    if (const TranspositionTableEntry* ttEntry = mSearch.GetTranspositionTable().Read(mGame.GetPosition()))
+    if (const TTEntry* ttEntry = mSearch.GetTranspositionTable().Read(mGame.GetPosition()))
     {
         const char* boundsStr =
-            ttEntry->flag == TranspositionTableEntry::Flag_Exact ? "exact" :
-            ttEntry->flag == TranspositionTableEntry::Flag_UpperBound ? "upper" :
-            ttEntry->flag == TranspositionTableEntry::Flag_LowerBound ? "lower" :
+            ttEntry->flag == TTEntry::Flag_Exact ? "exact" :
+            ttEntry->flag == TTEntry::Flag_UpperBound ? "upper" :
+            ttEntry->flag == TTEntry::Flag_LowerBound ? "lower" :
             "invalid";
 
         std::cout << "Score:      " << ttEntry->score << std::endl;

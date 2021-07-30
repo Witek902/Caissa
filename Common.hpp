@@ -8,6 +8,7 @@
     #define ASSERT(x)
 #endif
 
+#define CACHELINE_SIZE 64
 #define INLINE __forceinline
 #define INLINE_LAMBDA [[msvc::forceinline]]
 #define NO_INLINE __declspec(noinline)
