@@ -5,6 +5,7 @@
 
 #include <intrin.h>
 
+static_assert(sizeof(TTEntry) == sizeof(uint64_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT cluster is too big");
 
 TranspositionTable::TranspositionTable()
@@ -25,7 +26,7 @@ void TranspositionTable::Clear()
     memset(clusters, 0, numClusters * sizeof(TTCluster));
 }
 
-void TranspositionTable::Resize(size_t newSize, bool preserveEntries)
+void TranspositionTable::Resize(size_t newSize)
 {
     ASSERT(IsPowerOfTwo(newSize));
 
@@ -44,15 +45,8 @@ void TranspositionTable::Resize(size_t newSize, bool preserveEntries)
         return;
     }
 
-    TTCluster* oldClusters = clusters;
-    size_t oldNumClusters = numClusters;
-
-    if (!preserveEntries)
-    {
-        _aligned_free(oldClusters);
-        oldClusters = nullptr;
-        oldNumClusters = 0;
-    }
+    _aligned_free(clusters);
+    clusters = nullptr;
 
     clusters = (TTCluster*)_aligned_malloc(newNumClusters * sizeof(TTCluster), CACHELINE_SIZE);
     numClusters = newNumClusters;
@@ -66,30 +60,6 @@ void TranspositionTable::Resize(size_t newSize, bool preserveEntries)
     }
 
     Clear();
-
-    if (preserveEntries)
-    {
-        // copy old entries
-        if (oldClusters)
-        {
-            const size_t hashmapMask = oldNumClusters - 1;
-
-            for (size_t i = 0; i < oldNumClusters; ++i)
-            {
-                const TTCluster& cluster = oldClusters[i];
-                for (size_t j = 0; j < NumEntriesPerCluster; ++j)
-                {
-                    const TTEntry& oldEntry = cluster[j];
-                    if (oldEntry.IsValid())
-                    {
-                        Write(oldEntry);
-                    }
-                }
-            }
-        }
-
-        _aligned_free(oldClusters);
-    }
 }
 
 void TranspositionTable::Prefetch(const Position& position) const
@@ -103,7 +73,7 @@ void TranspositionTable::Prefetch(const Position& position) const
     }
 }
 
-const TTEntry* TranspositionTable::Read(const Position& position) const
+bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 {
     if (clusters)
     {
@@ -113,18 +83,24 @@ const TTEntry* TranspositionTable::Read(const Position& position) const
 
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
-            const TTEntry& entry = cluster[i];
-            if (entry.hash == position.GetHash() && entry.flag != TTEntry::Flag_Invalid)
+            const InternalEntry& entry = cluster[i];
+
+            const uint64_t key = entry.key;
+            const TTEntry data = entry.data;
+
+            // Xor trick by Robert Hyatt and Tim Mann
+            if (((key ^ data.packed) == position.GetHash()) && data.flag != TTEntry::Flag_Invalid)
             {
-                return &entry;
+                outEntry = data;
+                return true;
             }
         }
     }
 
-    return nullptr;
+    return false;
 }
 
-void TranspositionTable::Write(const TTEntry& entry)
+void TranspositionTable::Write(const Position& position, const TTEntry& entry)
 {
     ASSERT(entry.IsValid());
 
@@ -133,22 +109,26 @@ void TranspositionTable::Write(const TTEntry& entry)
         return;
     }
 
+    const uint64_t hash = position.GetHash();
     const size_t hashmapMask = numClusters - 1;
 
-    TTCluster& cluster = clusters[entry.hash & hashmapMask];
+    TTCluster& cluster = clusters[hash & hashmapMask];
 
     // find target entry in the cluster
     uint32_t targetIndex = 0;
     uint32_t minDepthInCluster = MaxSearchDepth;
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
-        TTEntry& existingEntry = cluster[i];
+        InternalEntry& existingEntry = cluster[i];
+
+        const uint64_t key = existingEntry.key;
+        const TTEntry data = existingEntry.data;
 
         // found entry with same hash and bouds type
-        if (existingEntry.hash == entry.hash && existingEntry.flag == entry.flag)
+        if (((key ^ data.packed) == hash) && data.flag == entry.flag)
         {
             // if there's already an entry with higher depth, don't overwrite it
-            if (existingEntry.depth > entry.depth)
+            if (data.depth > entry.depth)
             {
                 return;
             }
@@ -158,26 +138,24 @@ void TranspositionTable::Write(const TTEntry& entry)
         }
 
         // if no entry with same hash is found, use one with lowest value
-        if (existingEntry.depth < minDepthInCluster)
+        if (data.depth < minDepthInCluster)
         {
-            minDepthInCluster = existingEntry.depth;
+            minDepthInCluster = data.depth;
             targetIndex = i;
         }
     }
 
-    TTEntry& targetEntry = cluster[targetIndex];
+    InternalEntry& targetEntry = cluster[targetIndex];
 
-    targetEntry.hash = entry.hash;
-    targetEntry.score = entry.score;
-    targetEntry.staticEval = entry.staticEval;
-    targetEntry.depth = entry.depth;
-    targetEntry.flag = entry.flag;
+    // Xor trick by Robert Hyatt and Tim Mann
+    targetEntry.key = hash ^ entry.packed;
+    targetEntry.data = entry;
 
-    // preserve existing move
-    if (entry.move.IsValid() || targetEntry.hash != entry.hash)
-    {
-        targetEntry.move = entry.move;
-    }
+    //// preserve existing move
+    //if (entry.move.IsValid() || targetEntry.hash != entry.hash)
+    //{
+    //    targetEntry.move = entry.move;
+    //}
 }
 
 size_t TranspositionTable::GetNumUsedEntries() const
@@ -189,8 +167,8 @@ size_t TranspositionTable::GetNumUsedEntries() const
         const TTCluster& cluster = clusters[i];
         for (size_t j = 0; j < NumEntriesPerCluster; ++j)
         {
-            const TTEntry& entry = cluster[j];
-            if (entry.IsValid())
+            const InternalEntry& entry = cluster[j];
+            if (entry.data.load().IsValid())
             {
                 num++;
             }

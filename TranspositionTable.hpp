@@ -6,7 +6,7 @@
 
 class Position;
 
-struct TTEntry
+union TTEntry
 {
     enum Flags : uint8_t
     {
@@ -16,12 +16,18 @@ struct TTEntry
         Flag_UpperBound     = 3,
     };
 
-    uint64_t hash;
-    ScoreType score = InvalidValue;
-    ScoreType staticEval = InvalidValue;
-    PackedMove move;
-    uint8_t depth = 0;
-    Flags flag = Flag_Invalid;
+    struct
+    {
+        ScoreType score;
+        ScoreType staticEval;
+        PackedMove move;
+        uint8_t depth;
+        Flags flag;
+    };
+
+    uint64_t packed;
+
+    INLINE TTEntry() : packed(0) { }
 
     bool IsValid() const
     {
@@ -32,15 +38,21 @@ struct TTEntry
 class TranspositionTable
 {
 public:
+    struct InternalEntry
+    {
+        std::atomic<uint64_t> key;
+        std::atomic<TTEntry> data;
+    };
+
     // one cluster occupies one cache line
     static constexpr uint32_t NumEntriesPerCluster = 4;
-    using TTCluster = TTEntry[NumEntriesPerCluster];
+    using TTCluster = InternalEntry[NumEntriesPerCluster];
 
     TranspositionTable();
     ~TranspositionTable();
 
-    const TTEntry* Read(const Position& position) const;
-    void Write(const TTEntry& entry);
+    bool Read(const Position& position, TTEntry& outEntry) const;
+    void Write(const Position& position, const TTEntry& entry);
     void Prefetch(const Position& position) const;
 
     // invalidate all entries
@@ -48,7 +60,7 @@ public:
 
     // resize the table
     // old entries will be preserved if possible
-    void Resize(size_t newSize, bool preserveEntries = false);
+    void Resize(size_t newSize);
 
     size_t GetSize() const { return numClusters * NumEntriesPerCluster; }
 

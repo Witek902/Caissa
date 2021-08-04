@@ -612,17 +612,20 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 bool UniversalChessInterface::Command_TTProbe()
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    if (const TTEntry* ttEntry = mSearch.GetTranspositionTable().Read(mGame.GetPosition()))
+
+    TTEntry ttEntry;
+
+    if (mSearch.GetTranspositionTable().Read(mGame.GetPosition(), ttEntry))
     {
         const char* boundsStr =
-            ttEntry->flag == TTEntry::Flag_Exact ? "exact" :
-            ttEntry->flag == TTEntry::Flag_UpperBound ? "upper" :
-            ttEntry->flag == TTEntry::Flag_LowerBound ? "lower" :
+            ttEntry.flag == TTEntry::Flag_Exact ? "exact" :
+            ttEntry.flag == TTEntry::Flag_UpperBound ? "upper" :
+            ttEntry.flag == TTEntry::Flag_LowerBound ? "lower" :
             "invalid";
 
-        std::cout << "Score:      " << ttEntry->score << std::endl;
-        std::cout << "StaticEval: " << ttEntry->staticEval << std::endl;
-        std::cout << "Depth:      " << (uint32_t)ttEntry->depth << std::endl;
+        std::cout << "Score:      " << ttEntry.score << std::endl;
+        std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
+        std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
     }
     else
