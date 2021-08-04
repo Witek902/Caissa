@@ -706,7 +706,7 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
     if (UseTranspositionTableInQSearch && !CheckStopCondition(ctx))
     {
         TTEntry entry;
-        entry.positionHash = position.GetHash();
+        entry.hash = position.GetHash();
         entry.score = ScoreToTT(bestValue, node.height);
         entry.staticEval = staticEval;
         entry.move = bestMove;
@@ -880,7 +880,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                     || (bounds == TTEntry::Flag_UpperBound && tbValue <= alpha))
                 {
                     TTEntry entry;
-                    entry.positionHash = position.GetHash();
+                    entry.hash = position.GetHash();
                     entry.score = ScoreToTT(tbValue, node.height);
                     entry.depth = bounds == TTEntry::Flag_Exact ? UINT8_MAX : (uint8_t)node.depth;
                     entry.flag = bounds;
@@ -1271,7 +1271,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     if (moveIndex == 0u)
     {
         TTEntry entry;
-        entry.positionHash = position.GetHash();
+        entry.hash = position.GetHash();
 
         if (isInCheck) // checkmate
         {
@@ -1324,7 +1324,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
         }
 
         TTEntry entry;
-        entry.positionHash = position.GetHash();
+        entry.hash = position.GetHash();
         entry.score = ScoreToTT(bestValue, node.height);
         entry.staticEval = staticEval;
         entry.move = bestMove;
