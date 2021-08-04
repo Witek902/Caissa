@@ -16,7 +16,7 @@ struct TTEntry
         Flag_UpperBound     = 3,
     };
 
-    uint64_t positionHash;
+    uint64_t hash;
     ScoreType score = InvalidValue;
     ScoreType staticEval = InvalidValue;
     PackedMove move;
@@ -29,13 +29,13 @@ struct TTEntry
     }
 };
 
-using AtomicTTEntry = std::atomic<TTEntry>;
-
-static_assert(sizeof(TTEntry) == 16, "TT entry is too big");
-
 class TranspositionTable
 {
 public:
+    // one cluster occupies one cache line
+    static constexpr uint32_t NumEntriesPerCluster = 4;
+    using TTCluster = TTEntry[NumEntriesPerCluster];
+
     TranspositionTable();
     ~TranspositionTable();
 
@@ -50,7 +50,7 @@ public:
     // old entries will be preserved if possible
     void Resize(size_t newSize, bool preserveEntries = false);
 
-    size_t GetSize() const { return size; }
+    size_t GetSize() const { return numClusters * NumEntriesPerCluster; }
 
     // compute number of used entries
     size_t GetNumUsedEntries() const;
@@ -59,8 +59,9 @@ public:
 
 private:
 
-    TTEntry* entries;
-    size_t size;
+    TTCluster* clusters;
+    size_t numClusters;
+    uint8_t generation;
 
     uint64_t numCollisions;
 };
