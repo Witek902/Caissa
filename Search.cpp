@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <thread>
 
 static const bool UseTranspositionTableInQSearch = true;
 static const bool UsePVS = true;
@@ -138,11 +139,11 @@ bool Search::CheckStopCondition(const SearchContext& ctx) const
     return false;
 }
 
-std::vector<Move> Search::GetPvLine(const Position& pos, uint32_t maxLength) const
+std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& pos, uint32_t maxLength) const
 {
     std::vector<Move> moves;
 
-    uint32_t pvLength = pvLengths[0];
+    uint32_t pvLength = thread.pvLengths[0];
 
     if (pvLength > 0)
     {
@@ -152,7 +153,7 @@ std::vector<Move> Search::GetPvLine(const Position& pos, uint32_t maxLength) con
         Position iteratedPosition = pos;
         for (i = 0; i < pvLength; ++i)
         {
-            const Move move = iteratedPosition.MoveFromPacked(pvArray[0][i]);
+            const Move move = iteratedPosition.MoveFromPacked(thread.pvArray[0][i]);
 
             if (!move.IsValid()) break;
             if (!iteratedPosition.DoMove(move)) break;
@@ -183,12 +184,9 @@ std::vector<Move> Search::GetPvLine(const Position& pos, uint32_t maxLength) con
     return moves;
 }
 
-void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& result)
+void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult)
 {
-    std::vector<Move> pvMovesSoFar;
-
     mStopSearch = false;
-    mPrevPvLines.clear();
 
     // clamp number of PV lines (there can't be more than number of max moves)
     static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
@@ -196,8 +194,8 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves(&legalMoves);
     const uint32_t numPvLines = std::min(param.numPvLines, numLegalMoves);
 
-    result.clear();
-    result.resize(numPvLines);
+    outResult.clear();
+    outResult.resize(numPvLines);
 
     if (numPvLines == 0u)
     {
@@ -208,148 +206,175 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     if (param.limits.maxTime < UINT32_MAX && numLegalMoves == 1)
     {
         // if we have time limit and there's only a single legal move, return it immediately without evaluation
-        result.front().moves.push_back(legalMoves.front());
-        result.front().score = 0;
+        outResult.front().moves.push_back(legalMoves.front());
+        outResult.front().score = 0;
         return;
     }
 
-    mMoveOrderer.Clear();
+    std::vector<std::thread> threads;
 
-    // main iterative deepening loop
-    for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
+    mThreadData.resize(param.numThreads);
+
+    for (uint32_t i = 0; i < param.numThreads; ++i)
     {
-        pvMovesSoFar.clear();
-
-        bool finishSearchAtDepth = false;
-
-        for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
+        threads.emplace_back([&, threadID=i]()
         {
-            PvLine& outPvLine = result[pvIndex];
+            const bool isMainThread = threadID == 0;
+            ThreadData& thread = mThreadData[threadID];
 
-            auto startTime = std::chrono::high_resolution_clock::now();
+            std::vector<Move> pvMovesSoFar;
 
-            SearchContext searchContext{ game, param };
+            SearchResult tempResult;
+            tempResult.resize(numPvLines);
 
-            AspirationWindowSearchParam aspirationWindowSearchParam =
+            thread.moveOrderer.Clear();
+            thread.prevPvLines.clear();
+            thread.prevPvLines.resize(numPvLines);
+
+            // main iterative deepening loop
+            for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
             {
-                game.GetPosition(),
-                param,
-                result,
-                depth,
-                pvIndex,
-                searchContext,
-                pvIndex > 0u ? pvMovesSoFar : std::span<const Move>(),
-                outPvLine.score
-            };
+                pvMovesSoFar.clear();
 
-            const ScoreType score = AspirationWindowSearch(aspirationWindowSearchParam);
-            ASSERT(score > -CheckmateValue && score < CheckmateValue);
+                bool finishSearchAtDepth = false;
 
-            // write PV line into result struct
-            outPvLine.score = score;
-            outPvLine.moves = GetPvLine(game.GetPosition(), depth);
-            ASSERT(!outPvLine.moves.empty());
-
-            // store for multi-PV filtering in next iteration
-            pvMovesSoFar.push_back(outPvLine.moves.front());
-
-            auto endTime = std::chrono::high_resolution_clock::now();
-
-            // stop search only at depth 2 and more
-            if (depth > 1 && CheckStopCondition(searchContext))
-            {
-                finishSearchAtDepth = true;
-            }
-            else if (param.debugLog)
-            {
-                std::cout << "info";
-                std::cout << " depth " << (uint32_t)depth;
-                std::cout << " seldepth " << (uint32_t)searchContext.stats.maxDepth;
-                if (param.numPvLines > 1)
+                for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
                 {
-                    std::cout << " multipv " << (pvIndex + 1);
-                }
-                std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+                    PvLine& prevPvLine = thread.prevPvLines[pvIndex];
 
-                if (score > CheckmateValue - MaxSearchDepth)
-                {
-                    std::cout << " score mate " << (CheckmateValue - score + 1) / 2;
-                }
-                else if (score < -CheckmateValue + MaxSearchDepth)
-                {
-                    std::cout << " score mate -" << (CheckmateValue + score + 1) / 2;
-                }
-                else
-                {
-                    std::cout << " score cp " << score;
-                }
+                    auto startTime = std::chrono::high_resolution_clock::now();
 
-                std::cout << " nodes " << searchContext.stats.nodes;
-                //std::cout << " qnodes " << searchContext.stats.quiescenceNodes;
-                //std::cout << " tthit " << searchContext.stats.ttHits;
-                //std::cout << " ttwrite " << searchContext.stats.ttWrites;
+                    SearchContext searchContext{ game, param };
 
-                if (searchContext.stats.tbHits)
-                {
-                    std::cout << " tbhit " << searchContext.stats.tbHits;
-                }
-
-                std::cout << " pv ";
-                {
-                    for (size_t i = 0; i < outPvLine.moves.size(); ++i)
+                    AspirationWindowSearchParam aspirationWindowSearchParam =
                     {
-                        const Move move = outPvLine.moves[i];
-                        ASSERT(move.IsValid());
-                        std::cout << move.ToString();
-                        if (i + 1 < outPvLine.moves.size()) std::cout << ' ';
+                        game.GetPosition(),
+                        param,
+                        depth,
+                        pvIndex,
+                        searchContext,
+                        pvIndex > 0u ? pvMovesSoFar : std::span<const Move>(),
+                        prevPvLine.score
+                    };
+
+                    const ScoreType score = AspirationWindowSearch(thread, aspirationWindowSearchParam);
+                    ASSERT(score > -CheckmateValue && score < CheckmateValue);
+
+                    std::vector<Move> pvLine = GetPvLine(thread, game.GetPosition(), depth);
+                    ASSERT(!pvLine.empty());
+
+                    // store for multi-PV filtering in next iteration
+                    pvMovesSoFar.push_back(pvLine.front());
+
+                    // write PV line into result struct
+                    tempResult[pvIndex].score = score;
+                    tempResult[pvIndex].moves = pvLine;
+
+                    auto endTime = std::chrono::high_resolution_clock::now();
+
+                    // stop search only at depth 2 and more
+                    if (depth > 1 && CheckStopCondition(searchContext))
+                    {
+                        finishSearchAtDepth = true;
                     }
-                }
-
-                std::cout << std::endl;
-
-                if (param.verboseStats)
-                {
-                    std::cout << "Beta cutoff histogram\n";
-                    uint32_t maxMoveIndex = 0;
-                    uint64_t sum = 0;
-                    for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
+                    else if (param.debugLog && isMainThread)
                     {
-                        if (searchContext.stats.betaCutoffHistogram[i])
+                        std::cout << "info";
+                        std::cout << " depth " << (uint32_t)depth;
+                        std::cout << " seldepth " << (uint32_t)searchContext.stats.maxDepth;
+                        if (param.numPvLines > 1)
                         {
-                            sum += searchContext.stats.betaCutoffHistogram[i];
-                            maxMoveIndex = std::max(maxMoveIndex, i);
+                            std::cout << " multipv " << (pvIndex + 1);
+                        }
+                        std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+                        if (score > CheckmateValue - MaxSearchDepth)
+                        {
+                            std::cout << " score mate " << (CheckmateValue - score + 1) / 2;
+                        }
+                        else if (score < -CheckmateValue + MaxSearchDepth)
+                        {
+                            std::cout << " score mate -" << (CheckmateValue + score + 1) / 2;
+                        }
+                        else
+                        {
+                            std::cout << " score cp " << score;
+                        }
+
+                        std::cout << " nodes " << searchContext.stats.nodes;
+                        //std::cout << " qnodes " << searchContext.stats.quiescenceNodes;
+                        //std::cout << " tthit " << searchContext.stats.ttHits;
+                        //std::cout << " ttwrite " << searchContext.stats.ttWrites;
+
+                        if (searchContext.stats.tbHits)
+                        {
+                            std::cout << " tbhit " << searchContext.stats.tbHits;
+                        }
+
+                        std::cout << " pv ";
+                        {
+                            for (size_t i = 0; i < pvLine.size(); ++i)
+                            {
+                                const Move move = pvLine[i];
+                                ASSERT(move.IsValid());
+                                std::cout << move.ToString();
+                                if (i + 1 < pvLine.size()) std::cout << ' ';
+                            }
+                        }
+
+                        std::cout << std::endl;
+
+                        if (param.verboseStats)
+                        {
+                            std::cout << "Beta cutoff histogram\n";
+                            uint32_t maxMoveIndex = 0;
+                            uint64_t sum = 0;
+                            for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
+                            {
+                                if (searchContext.stats.betaCutoffHistogram[i])
+                                {
+                                    sum += searchContext.stats.betaCutoffHistogram[i];
+                                    maxMoveIndex = std::max(maxMoveIndex, i);
+                                }
+                            }
+                            for (uint32_t i = 0; i <= maxMoveIndex; ++i)
+                            {
+                                const uint64_t value = searchContext.stats.betaCutoffHistogram[i];
+                                printf("    %u : %llu (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
+                            }
                         }
                     }
-                    for (uint32_t i = 0; i <= maxMoveIndex; ++i)
-                    {
-                        const uint64_t value = searchContext.stats.betaCutoffHistogram[i];
-                        printf("    %u : %llu (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
-                    }
+                }
+
+                if (finishSearchAtDepth)
+                {
+                    break;
+                }
+
+                // rememeber PV lines so they can be used in next iteration
+                thread.prevPvLines = tempResult;
+
+                // check soft time limit every depth iteration
+                if (!param.isPonder && param.limits.maxTimeSoft < UINT32_MAX && param.GetElapsedTime() >= param.limits.maxTimeSoft)
+                {
+                    break;
                 }
             }
-        }
 
-        if (finishSearchAtDepth)
-        {
-            // restore result from previous depth, the current result is not reliable
-            ASSERT(!mPrevPvLines.empty());
-            result = mPrevPvLines;
+            if (isMainThread)
+            {
+                outResult = tempResult;
+            }
+        });
+    }
 
-            break;
-        }
-
-        // rememeber PV lines so they can be used in next iteration
-        mPrevPvLines = result;
-
-        // check soft time limit every depth iteration
-        if (!param.isPonder && param.limits.maxTimeSoft < UINT32_MAX && param.GetElapsedTime() >= param.limits.maxTimeSoft)
-        {
-            break;
-        }
+    for (uint32_t threadID = 0; threadID < param.numThreads; ++threadID)
+    {
+        threads[threadID].join();
     }
 }
 
-ScoreType Search::AspirationWindowSearch(const AspirationWindowSearchParam& param)
+ScoreType Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param)
 {
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
@@ -370,8 +395,8 @@ ScoreType Search::AspirationWindowSearch(const AspirationWindowSearchParam& para
     {
         // std::cout << "aspiration window: " << alpha << "..." << beta << "\n";
 
-        memset(pvArray, 0, sizeof(pvArray));
-        memset(pvLengths, 0, sizeof(pvLengths));
+        memset(thread.pvArray, 0, sizeof(ThreadData::pvArray));
+        memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
 
         NodeInfo rootNode;
         rootNode.position = &param.position;
@@ -386,7 +411,7 @@ ScoreType Search::AspirationWindowSearch(const AspirationWindowSearchParam& para
         rootNode.rootMoves = param.searchParam.rootMoves;
         rootNode.moveFilter = param.moveFilter;
 
-        ScoreType score = NegaMax(rootNode, param.searchContext);
+        ScoreType score = NegaMax(thread, rootNode, param.searchContext);
 
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
@@ -417,14 +442,14 @@ static INLINE ScoreType ColorMultiplier(Color color)
     return color == Color::White ? 1 : -1;
 }
 
-const Move Search::FindPvMove(const NodeInfo& node, MoveList& moves) const
+const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves) const
 {
-    if (!node.isPvNode || mPrevPvLines.empty())
+    if (!node.isPvNode || prevPvLines.empty())
     {
         return Move::Invalid();
     }
 
-    const std::vector<Move>& pvLine = mPrevPvLines[node.pvIndex].moves;
+    const std::vector<Move>& pvLine = prevPvLines[node.pvIndex].moves;
     if (node.height >= pvLine.size())
     {
         return Move::Invalid();
@@ -469,7 +494,7 @@ const Move Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
     return Move::Invalid();
 }
 
-void Search::UpdatePvArray(uint32_t depth, const Move move)
+void Search::ThreadData::UpdatePvArray(uint32_t depth, const Move move)
 {
     if (depth + 1 < MaxSearchDepth)
     {
@@ -544,7 +569,7 @@ bool Search::IsDraw(const NodeInfo& node, const Game& game) const
     return false;
 }
 
-ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
+ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx)
 {
     ASSERT(node.depth <= 0);
     ASSERT(node.alpha <= node.beta);
@@ -553,7 +578,7 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
     // clean PV line
     if (node.height < MaxSearchDepth)
     {
-        pvLengths[node.height] = (uint8_t)node.height;
+        thread.pvLengths[node.height] = (uint8_t)node.height;
     }
 
     // update stats
@@ -654,7 +679,7 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
         if (i == numScoredMoves)
         {
             // we reached a point where moves are not scored anymore, so score them now
-            mMoveOrderer.ScoreMoves(node, moves);
+            thread.moveOrderer.ScoreMoves(node, moves);
         }
 
         int32_t moveScore = 0;
@@ -673,7 +698,7 @@ ScoreType Search::QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx)
         childNodeParam.position = &childPosition;
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
-        ScoreType score = -QuiescenceNegaMax(childNodeParam, ctx);
+        ScoreType score = -QuiescenceNegaMax(thread, childNodeParam, ctx);
 
         if (score > bestValue) // new best move found
         {
@@ -754,7 +779,7 @@ INLINE static bool HasTablebases()
     return TB_LARGEST > 0u;
 }
 
-ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
+ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx)
 {
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
@@ -762,7 +787,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     // clean PV line
     if (node.height < MaxSearchDepth)
     {
-        pvLengths[node.height] = (uint8_t)node.height;
+        thread.pvLengths[node.height] = (uint8_t)node.height;
     }
 
     // update stats
@@ -782,7 +807,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     // maximum search depth reached, enter quisence search to find final evaluation
     if (node.depth <= 0)
     {
-        return QuiescenceNegaMax(node, ctx);
+        return QuiescenceNegaMax(thread, node, ctx);
     }
 
     const Position& position = *node.position;
@@ -933,7 +958,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             childNodeParam.height = node.height + 1;
             childNodeParam.depth = node.depth - NullMovePrunningDepthReduction;
 
-            const int32_t nullMoveScore = -NegaMax(childNodeParam, ctx);
+            const int32_t nullMoveScore = -NegaMax(thread, childNodeParam, ctx);
 
             if (nullMoveScore >= beta)
             {
@@ -1014,7 +1039,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
     uint32_t numScoredMoves = moves.numMoves;
     if (moves.numMoves > 1u)
     {
-        const Move pvMove = FindPvMove(node, moves);
+        const Move pvMove = thread.FindPvMove(node, moves);
         const Move fullTTMove = FindTTMove(ttMove, moves);
 
         numScoredMoves = 0;
@@ -1082,7 +1107,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
         if (i == numScoredMoves)
         {
             // we reached a point where moves are not scored anymore, so score them now
-            mMoveOrderer.ScoreMoves(node, moves);
+            thread.moveOrderer.ScoreMoves(node, moves);
         }
 
         int32_t moveScore = 0;
@@ -1156,7 +1181,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                 childNodeParam.beta = -alpha;
                 childNodeParam.isPvNode = false;
 
-                score = -NegaMax(childNodeParam, ctx);
+                score = -NegaMax(thread, childNodeParam, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
                 doFullDepthSearch = score > alpha;
@@ -1171,7 +1196,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                 childNodeParam.beta = -alpha;
                 childNodeParam.isPvNode = false;
 
-                score = -NegaMax(childNodeParam, ctx);
+                score = -NegaMax(thread, childNodeParam, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
             }
 
@@ -1185,7 +1210,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                     childNodeParam.beta = -alpha;
                     childNodeParam.isPvNode = true;
 
-                    score = -NegaMax(childNodeParam, ctx);
+                    score = -NegaMax(thread, childNodeParam, ctx);
                     ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
                 }
             }
@@ -1200,7 +1225,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                 childNodeParam.beta = -alpha;
                 childNodeParam.isPvNode = true;
 
-                score = -NegaMax(childNodeParam, ctx);
+                score = -NegaMax(thread, childNodeParam, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
             }
 
@@ -1212,7 +1237,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
                 childNodeParam.beta = -alpha;
                 childNodeParam.isPvNode = true;
 
-                score = -NegaMax(childNodeParam, ctx);
+                score = -NegaMax(thread, childNodeParam, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
             }
         }
@@ -1236,7 +1261,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
             {
                 if (isPvNode)
                 {
-                    UpdatePvArray(node.height, move);
+                    thread.UpdatePvArray(node.height, move);
                 }
 
                 if (isPvNode && score < beta) // keep alpha < beta
@@ -1263,7 +1288,7 @@ ScoreType Search::NegaMax(NodeInfo& node, SearchContext& ctx)
 
     if (bestValue >= beta)
     {
-        mMoveOrderer.OnBetaCutoff(node, bestMove);
+        thread.moveOrderer.OnBetaCutoff(node, bestMove);
     }
 
     // no legal moves
