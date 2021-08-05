@@ -33,6 +33,8 @@ struct SearchParam
     // search limits
     SearchLimits limits;
 
+    uint32_t numThreads = 1;
+
     // number of PV lines to report
     uint32_t numPvLines = 1;
 
@@ -87,12 +89,11 @@ public:
     Search();
     ~Search();
 
-    void DoSearch(const Game& game, const SearchParam& param, SearchResult& result);
+    void DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult);
 
     void StopSearch();
 
     TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
-    const MoveOrderer& GetMoveOrderer() const { return mMoveOrderer; }
 
 private:
 
@@ -102,7 +103,7 @@ private:
     {
         uint64_t fh = 0;
         uint64_t fhf = 0;
-        uint64_t nodes = 0;
+        std::atomic<uint64_t> nodes = 0;
         uint64_t quiescenceNodes = 0;
         uint64_t ttHits = 0;
         uint64_t ttWrites = 0;
@@ -122,7 +123,6 @@ private:
     {
         const Position& position;
         const SearchParam& searchParam;
-        SearchResult& searchResult;
         uint32_t depth;
         uint32_t pvIndex;
         SearchContext& searchContext;
@@ -130,27 +130,38 @@ private:
         ScoreType previousScore;                  // score in previous ID iteration
     };
 
+    struct ThreadData
+    {
+        // principial variation moves tracking for current search
+        PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
+        uint8_t pvLengths[MaxSearchDepth];
+
+        // principial variation lines from previous iterative deepening search
+        SearchResult prevPvLines;
+
+        MoveOrderer moveOrderer;
+
+        // update principal variation line
+        void UpdatePvArray(uint32_t depth, const Move move);
+
+        // check if one of generated moves is in PV table
+        const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
+    };
+
     std::atomic<bool> mStopSearch = false;
 
-    // principial variation moves tracking for current search
-    PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
-    uint8_t pvLengths[MaxSearchDepth];
-
-    // principial variation lines from previous iterative deepening search
-    SearchResult mPrevPvLines;
-
     TranspositionTable mTranspositionTable;
-    MoveOrderer mMoveOrderer;
+    
+    std::vector<ThreadData> mThreadData;
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
-    ScoreType AspirationWindowSearch(const AspirationWindowSearchParam& param);
+    ScoreType AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param);
 
-    ScoreType QuiescenceNegaMax(NodeInfo& node, SearchContext& ctx);
-    ScoreType NegaMax(NodeInfo& node, SearchContext& ctx);
+    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx);
+    ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx);
 
-    // check if one of generated moves is in PV table
-    const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
+    // check if one of generated moves is in TT
     const Move FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
     ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta);
@@ -158,11 +169,8 @@ private:
     // check for repetition in the searched node
     bool IsRepetition(const NodeInfo& node, const Game& game) const;
 
-    // update principal variation line
-    void UpdatePvArray(uint32_t depth, const Move move);
-
     // reconstruct PV line from cache and TT table
-    std::vector<Move> GetPvLine(const Position& pos, uint32_t maxLength) const;
+    std::vector<Move> GetPvLine(const ThreadData& thread, const Position& pos, uint32_t maxLength) const;
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const SearchContext& ctx) const;

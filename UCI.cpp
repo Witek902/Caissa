@@ -192,11 +192,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_TTProbe();
     }
-    else if (command == "moveordererinfo")
-    {
-        std::unique_lock<std::mutex> lock(mMutex);
-        mSearch.GetMoveOrderer().DebugPrint();
-    }
     else if (command == "unittest")
     {
         RunUnitTests();
@@ -454,6 +449,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
+    mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
     mSearchCtx->searchParam.printMoves = printMoves;
     mSearchCtx->searchParam.verboseStats = verboseStats;
@@ -581,6 +577,11 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         mOptions.multiPV = atoi(value.c_str());
         mOptions.multiPV = std::max(1u, mOptions.multiPV);
+    }
+    else if (lowerCaseName == "threads")
+    {
+        mOptions.threads = atoi(value.c_str());
+        mOptions.threads = std::max(1u, std::min(64u, mOptions.threads));
     }
     else if (lowerCaseName == "hash")
     {
