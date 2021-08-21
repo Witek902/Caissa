@@ -37,10 +37,8 @@ struct SidePosition
 
     INLINE Square GetKingSquare() const
     {
-        unsigned long kingSquareIndex;
-        const bool kingSquareFound = _BitScanForward64(&kingSquareIndex, king);
-        ASSERT(kingSquareFound);
-        return Square(kingSquareIndex);
+        ASSERT(king);
+        return Square(FirstBitSet(king));
     }
 
     bool operator == (const SidePosition& rhs) const
@@ -98,10 +96,10 @@ public:
     // compare position (not hash)
     bool operator == (const Position& rhs) const;
 
-    // load position from Forsyth–Edwards Notation
+    // load position from Forsythï¿½Edwards Notation
     bool FromFEN(const std::string& fenString);
 
-    // save position to Forsyth–Edwards Notation
+    // save position to Forsythï¿½Edwards Notation
     std::string ToFEN() const;
 
     // print board as ASCI art

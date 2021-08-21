@@ -8,13 +8,15 @@
 #include <chrono>
 #include <mutex>
 #include <fstream>
+#include <sstream>
+#include <iterator>
 
 #include "ThreadPool.hpp"
 
 using namespace threadpool;
 
 #define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak();}
+    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; }
 
 void RunPerft()
 {
@@ -1022,7 +1024,7 @@ bool RunSearchTests(const char* path)
 
             // TODO check if move is valid
 
-            testVector.emplace_back(std::move(positionStr), std::move(bestMoves), std::move(avoidMoves));
+            //testVector.emplace_back(positionStr, bestMoves, avoidMoves);
         }
     }
     std::cout << testVector.size() << " test positions loaded" << std::endl;

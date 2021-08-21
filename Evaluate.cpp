@@ -4,8 +4,6 @@
 
 #include "nnue-probe/nnue.h"
 
-#pragma warning(disable : 4505)
-
 static nn::NeuralNetwork s_neuralNetwork;
 
 bool LoadNeuralNetwork(const char* name)
@@ -21,7 +19,6 @@ struct PieceScore
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
-static constexpr PieceScore c_kingValue            = S(0, 0);
 static constexpr PieceScore c_queenValue           = S(1025, 936);
 static constexpr PieceScore c_rookValue            = S(477, 512);
 static constexpr PieceScore c_bishopValue          = S(365, 297);
@@ -374,10 +371,10 @@ static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueDa
     size_t index = 2;
 
     pieces[0] = pieces::wking;
-    _BitScanForward64((unsigned long*)&squares[0], position.Whites().king);
+    squares[0] = FirstBitSet(position.Whites().king);
 
     pieces[1] = pieces::bking;
-    _BitScanForward64((unsigned long*)&squares[1], position.Blacks().king);
+    squares[1] = FirstBitSet(position.Blacks().king);
 
     position.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
     {
@@ -531,7 +528,7 @@ ScoreType Evaluate(const Position& position)
     const Bitboard blacksGuardedPieces = blackAttackedSquares & blackOccupiedSquares;
     value += c_guardBonus * ((int32_t)whitesGuardedPieces.Count() - (int32_t)blacksGuardedPieces.Count());
 
-    value += c_castlingRightsBonus * ((int32_t)__popcnt16(position.GetWhitesCastlingRights()) - (int32_t)__popcnt16(position.GetBlacksCastlingRights()));
+    value += c_castlingRightsBonus * ((int32_t)PopCount(position.GetWhitesCastlingRights()) - (int32_t)PopCount(position.GetBlacksCastlingRights()));
 
     if (whiteAttackedSquares & position.Blacks().king)
     {
@@ -597,22 +594,16 @@ ScoreType Evaluate(const Position& position)
 
     // white king safety
     {
-        unsigned long kingSquareIndex;
-        if (_BitScanForward64(&kingSquareIndex, position.Whites().king))
-        {
-            int32_t kingNeighbors = (whiteOccupiedSquares & Bitboard::GetKingAttacks(Square(kingSquareIndex))).Count();
-            value += kingNeighbors * c_kingSafetyBonus;
-        }
+        const Square kingSquare(FirstBitSet(position.Whites().king));
+        int32_t kingNeighbors = (whiteOccupiedSquares & Bitboard::GetKingAttacks(kingSquare)).Count();
+        value += kingNeighbors * c_kingSafetyBonus;
     }
 
     // black king safety
     {
-        unsigned long kingSquareIndex;
-        if (_BitScanForward64(&kingSquareIndex, position.Blacks().king))
-        {
-            int32_t kingNeighbors = (blackOccupiedSquares & Bitboard::GetKingAttacks(Square(kingSquareIndex))).Count();
-            value -= kingNeighbors * c_kingSafetyBonus;
-        }
+        const Square kingSquare(FirstBitSet(position.Blacks().king));
+        int32_t kingNeighbors = (blackOccupiedSquares & Bitboard::GetKingAttacks(kingSquare)).Count();
+        value -= kingNeighbors * c_kingSafetyBonus;
     }
 
     // tempo bonus

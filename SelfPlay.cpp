@@ -10,7 +10,7 @@
 #include <random>
 #include <mutex>
 #include <fstream>
-#include <intrin.h>
+#include <limits.h>
 
 #include "ThreadPool.hpp"
 
@@ -44,8 +44,7 @@ struct PositionEntry
 
 void SelfPlay()
 {
-    FILE* dumpFile = nullptr;
-    fopen_s(&dumpFile, "selfplay.dat", "wb");
+    FILE* dumpFile = fopen("selfplay.dat", "wb");
 
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
     
@@ -312,11 +311,7 @@ static const uint32_t cBatchSize = 128;
 
 bool Train()
 {
-    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-
-    FILE* dumpFile = nullptr;
-    fopen_s(&dumpFile, "selfplay.dat", "rb");
+    FILE* dumpFile = fopen("selfplay.dat", "rb");
 
     if (!dumpFile)
     {
@@ -380,8 +375,8 @@ bool Train()
             numTrainingVectorsPassedInEpoch = 0;
         }
 
-        float minError = FLT_MAX;
-        float maxError = FLT_MIN;
+        float minError = std::numeric_limits<float>::max();
+        float maxError = -std::numeric_limits<float>::max();
         float errorSum = 0.0f;
         for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
         {

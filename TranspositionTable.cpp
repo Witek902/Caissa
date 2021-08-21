@@ -1,24 +1,50 @@
-#pragma once
-
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
 
-#include <intrin.h>
+#include <cstring>
+#include <xmmintrin.h>
 
 static_assert(sizeof(TTEntry) == sizeof(uint64_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT cluster is too big");
 
+#if defined(_MSC_VER)
+
+    static void* Malloc(size_t size, size_t alignment)
+    {
+        return _aligned_malloc(size, alignment);
+    }
+
+    static void Free(void* ptr)
+    {
+        _aligned_free(ptr);
+    }
+
+#elif defined(__GNUC__) || defined(__clang__)
+
+    static void* Malloc(size_t size, size_t alignment)
+    {
+        void* ptr = nullptr;
+        int ret = posix_memalign(&ptr, alignment, size);
+        return ret != 0 ? nullptr : ptr;
+    }
+
+    static void Free(void* ptr)
+    {
+        free(ptr);
+    }
+
+#endif
+
 TranspositionTable::TranspositionTable()
     : clusters(nullptr)
     , numClusters(0)
-    , generation(0)
     , numCollisions(0)
 {
 }
 
 TranspositionTable::~TranspositionTable()
 {
-    _aligned_free(clusters);
+    Free(clusters);
 }
 
 void TranspositionTable::Clear()
@@ -39,16 +65,16 @@ void TranspositionTable::Resize(size_t newSize)
 
     if (newSize == 0)
     {
-        _aligned_free(clusters);
+        Free(clusters);
         clusters = nullptr;
         numClusters = 0;
         return;
     }
 
-    _aligned_free(clusters);
+    Free(clusters);
     clusters = nullptr;
 
-    clusters = (TTCluster*)_aligned_malloc(newNumClusters * sizeof(TTCluster), CACHELINE_SIZE);
+    clusters = (TTCluster*)Malloc(newNumClusters * sizeof(TTCluster), CACHELINE_SIZE);
     numClusters = newNumClusters;
     ASSERT(clusters);
     ASSERT((size_t)clusters % CACHELINE_SIZE == 0);

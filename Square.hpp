@@ -61,7 +61,7 @@ public:
         return mIndex;
     }
 
-    INLINE Bitboard Bitboard() const
+    INLINE Bitboard GetBitboard() const
     {
         return 1ull << mIndex;
     }

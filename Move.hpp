@@ -5,18 +5,15 @@
 
 #include <iostream>
 
-// "C++ nonstandard extension: nameless struct"
-#pragma warning(disable : 4201)
-
 class MoveList;
 
 struct Move;
 
 struct PackedMove
 {
-    union
+    UNNAMED_STRUCT union
     {
-        struct
+        UNNAMED_STRUCT struct
         {
             uint16_t fromSquare : 6;
             uint16_t toSquare : 6;
@@ -46,9 +43,9 @@ static_assert(sizeof(PackedMove) == 2, "Invalid PackedMove size");
 
 struct Move
 {
-    union
+    UNNAMED_STRUCT union
     {
-        struct
+        UNNAMED_STRUCT struct
         {
             Square fromSquare;
             Square toSquare;
@@ -62,7 +59,12 @@ struct Move
         uint32_t value;
     };
 
-    INLINE static const Move Invalid() { return { 0 }; }
+    INLINE static const Move Invalid()
+    {
+        Move move;
+        move.value = 0;
+        return move;
+    }
 
     INLINE bool operator == (const Move rhs) const
     {

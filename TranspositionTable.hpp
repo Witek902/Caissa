@@ -3,6 +3,7 @@
 #include "Move.hpp"
 
 #include <vector>
+#include <atomic>
 
 class Position;
 
@@ -73,7 +74,6 @@ private:
 
     TTCluster* clusters;
     size_t numClusters;
-    uint8_t generation;
 
     uint64_t numCollisions;
 };
