@@ -44,9 +44,9 @@ struct Bitboard
     INLINE void Iterate(const Func func) const
     {
         uint64_t mask = value;
-        unsigned long index;
-        while (_BitScanForward64(&index, mask))
+        while (mask)
         {
+            const uint32_t index = FirstBitSet(mask);
             mask &= ~(1ull << index);
             func(index);
         };
@@ -135,15 +135,14 @@ struct Bitboard
 
     INLINE uint32_t Count() const
     {
-        return static_cast<uint32_t>(__popcnt64(value));
+        return PopCount(value);
     }
 
     INLINE bool BitScanForward(uint32_t& outIndex) const
     {
-        unsigned long index;
-        if (_BitScanForward64(&index, value))
+        if (value)
         {
-            outIndex = index;
+            outIndex = FirstBitSet(value);
             return true;
         }
         else
@@ -154,10 +153,9 @@ struct Bitboard
 
     INLINE bool BitScanReverse(uint32_t& outIndex) const
     {
-        unsigned long index;
-        if (_BitScanReverse64(&index, value))
+        if (value)
         {
-            outIndex = index;
+            outIndex = LastBitSet(value);
             return true;
         }
         else

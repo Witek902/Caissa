@@ -1,6 +1,7 @@
 #include "NeuralNetwork.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <algorithm>
 #include <iostream>
 
@@ -34,7 +35,7 @@ void Layer::InitWeights()
     //const float scale = 0.1f;
     const float scale = 1.0f / sqrtf((float)input.size());
 
-    for (int i = 0; i < weights.size(); i++)
+    for (size_t i = 0; i < weights.size(); i++)
     {
         adam_m[i] = 0.0f;
         adam_v[i] = 0.0f;
@@ -69,7 +70,7 @@ void Layer::Run(const Values& in)
             x += weights[offs + j] * input[j];
         }
 
-        assert(!isnan(x));
+        assert(!std::isnan(x));
         assert(fabsf(x) < 10000.0f);
 
         linearValue[i] = x;
@@ -159,8 +160,7 @@ void Layer::SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth)
 
 bool NeuralNetwork::Save(const char* filePath) const
 {
-    FILE* file = nullptr;
-    fopen_s(&file, filePath, "wb");
+    FILE* file = fopen(filePath, "wb");
 
     const uint32_t numLayers = (uint32_t)layers.size();
     if (1 != fwrite(&numLayers, sizeof(uint32_t), 1, file))
@@ -205,8 +205,7 @@ bool NeuralNetwork::Save(const char* filePath) const
 
 bool NeuralNetwork::Load(const char* filePath)
 {
-    FILE* file = nullptr;
-    fopen_s(&file, filePath, "rb");
+    FILE* file = fopen(filePath, "rb");
 
     uint32_t numLayers = (uint32_t)layers.size();
     if (1 != fread(&numLayers, sizeof(uint32_t), 1, file))
@@ -301,7 +300,7 @@ const Layer::Values& NeuralNetwork::Run(const Layer::Values& input)
 {
     layers.front().Run(input);
 
-    for (int i = 1; i < layers.size(); i++)
+    for (size_t i = 1; i < layers.size(); i++)
     {
         const Layer::Values& prevOutput = layers[i - 1].GetOutput();
         layers[i].Run(prevOutput);
@@ -316,9 +315,9 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer, float scale) const
 
     size_t offs = 0;
 
-    for (int i = 0; i < layer.output.size(); i++)
+    for (size_t i = 0; i < layer.output.size(); i++)
     {
-        for (int j = 0; j <= inputSize; j++)
+        for (size_t j = 0; j <= inputSize; j++)
         {
             const size_t idx = offs + j;
 
@@ -336,9 +335,9 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer, float scale) const
 
             //w -= g * scale;
 
-            assert(!isnan(m));
-            assert(!isnan(v));
-            assert(!isnan(w));
+            assert(!std::isnan(m));
+            assert(!std::isnan(v));
+            assert(!std::isnan(w));
             assert(fabsf(w) < cWeightsRange);
 
             // clamp

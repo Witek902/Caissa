@@ -2,7 +2,7 @@
 #include "Square.hpp"
 #include "Common.hpp"
 
-#include <intrin.h>
+#include <immintrin.h>
 #include <iostream>
 
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
@@ -153,7 +153,7 @@ static void InitKingAttacks()
 
             const Square targetSquare((uint8_t)targetFile, (uint8_t)targetRank);
 
-            bitboard |= targetSquare.Bitboard();
+            bitboard |= targetSquare.GetBitboard();
         }
 
         gKingAttacksBitboard[squareIndex] = bitboard;
@@ -182,7 +182,7 @@ static void InitKnightAttacks()
 
             const Square targetSquare((uint8_t)targetFile, (uint8_t)targetRank);
 
-            bitboard |= targetSquare.Bitboard();
+            bitboard |= targetSquare.GetBitboard();
         }
 
         gKnightAttacksBitboard[squareIndex] = bitboard;
@@ -223,7 +223,7 @@ static Bitboard GetRookAttackMask(const Square square)
     b |= Bitboard::RankBitboard(square.Rank()) & (~Bitboard::FileBitboard<0>() & ~Bitboard::FileBitboard<7>());
 
     // exclude self
-    b &= ~square.Bitboard();
+    b &= ~square.GetBitboard();
 
     return b;
 }
@@ -238,7 +238,7 @@ static Bitboard GetBishopAttackMask(const Square square)
     b |= Bitboard::GetRay(square, RayDir::SouthWest);
 
     // exclude self and borders
-    b &= ~square.Bitboard();
+    b &= ~square.GetBitboard();
     b &= ~Bitboard::FileBitboard<0>();
     b &= ~Bitboard::RankBitboard<0>();
     b &= ~Bitboard::FileBitboard<7>();
@@ -260,7 +260,7 @@ static void InitRookMagicBitboards()
         gRookAttacksMasks[squareIndex] = attackMask;
 
         // compute number of possible occluder layouts
-        const uint32_t attackMaskBits = (uint32_t)__popcnt64(attackMask);
+        const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
 
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
@@ -299,7 +299,7 @@ static void InitBishopMagicBitboards()
         gBishopAttacksMasks[squareIndex] = attackMask;
 
         // compute number of possible occluder layouts
-        const uint32_t attackMaskBits = (uint32_t)__popcnt64(attackMask);
+        const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
 
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
@@ -422,13 +422,13 @@ Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
 
     if (color == Color::White)
     {
-        bitboard = (square.Bitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
-        bitboard |= (square.Bitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
+        bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
+        bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
     }
     else
     {
-        bitboard = (square.Bitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
-        bitboard |= (square.Bitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
+        bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
+        bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
     }
 
     return bitboard;

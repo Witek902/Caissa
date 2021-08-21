@@ -15,16 +15,6 @@ static const int32_t c_PromotionScores[] =
     9000001,    // queen
 };
 
-static const int16_t c_PieceValues[] =
-{
-    0,      // none
-    100,    // pawn
-    320,    // knight
-    330,    // bishop
-    500,    // rook
-    900,    // queen
-};
-
 static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
 {
     return c_MvvLvaScoreBaseValue + 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;

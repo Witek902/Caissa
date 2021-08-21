@@ -70,7 +70,7 @@ NO_INLINE Piece SidePosition::GetPieceAtSquare(const Square square) const
 {
     ASSERT(square.IsValid());
 
-    const Bitboard squareBitboard = square.Bitboard();
+    const Bitboard squareBitboard = square.GetBitboard();
 
     if (pawns & squareBitboard)     return Piece::Pawn;
     if (knights & squareBitboard)   return Piece::Knight;
@@ -85,18 +85,18 @@ NO_INLINE Piece SidePosition::GetPieceAtSquare(const Square square) const
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Position::Position()
-    : mHash(0)
-    , mSideToMove(Color::White)
+    : mSideToMove(Color::White)
     , mEnPassantSquare(Square::Invalid())
     , mWhitesCastlingRights(CastlingRights_All)
     , mBlacksCastlingRights(CastlingRights_All)
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
+    , mHash(0u)
 {}
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
-    const Bitboard mask = square.Bitboard();
+    const Bitboard mask = square.GetBitboard();
     SidePosition& pos = mColors[(uint8_t)color];
 
     ASSERT((pos.pawns & mask) == 0);
@@ -116,7 +116,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
 
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
 {
-    const Bitboard mask = square.Bitboard();
+    const Bitboard mask = square.GetBitboard();
     SidePosition& pos = mColors[(uint8_t)color];
     Bitboard& targetBitboard = pos.GetPieceBitBoard(piece);
 
@@ -193,13 +193,7 @@ Bitboard Position::GetAttackedSquares(Color side) const
         bitboard |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares);
     });
 
-    {
-        unsigned long kingSquareIndex;
-        if (_BitScanForward64(&kingSquareIndex, currentSide.king))
-        {
-            bitboard |= Bitboard::GetKingAttacks(Square(kingSquareIndex));
-        }
-    }
+    bitboard |= Bitboard::GetKingAttacks(Square(FirstBitSet(currentSide.king)));
 
     return bitboard;
 }
@@ -270,7 +264,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         if (fromSquare.File() > 0u)
         {
             const Square toSquare(fromSquare.Index() + pawnDirection * 8 - 1);
-            if (toSquare.Bitboard() & opponentSide.OccupiedExcludingKing())
+            if (toSquare.GetBitboard() & opponentSide.OccupiedExcludingKing())
             {
                 generatePawnMove(fromSquare, toSquare, true, false);
             }
@@ -284,7 +278,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         if (fromSquare.File() < 7u)
         {
             const Square toSquare(fromSquare.Index() + pawnDirection * 8 + 1);
-            if (toSquare.Bitboard() & opponentSide.OccupiedExcludingKing())
+            if (toSquare.GetBitboard() & opponentSide.OccupiedExcludingKing())
             {
                 generatePawnMove(fromSquare, toSquare, true, false);
             }
@@ -295,7 +289,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         }
 
         // can move forward only to non-occupied squares
-        if ((occupiedSquares & squareForward.Bitboard()) == 0u)
+        if ((occupiedSquares & squareForward.GetBitboard()) == 0u)
         {
             generatePawnMove(fromSquare, squareForward, false, false);
 
@@ -304,7 +298,7 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
                 const Square twoSquaresForward(fromSquare.Index() + pawnDirection * 16); // two ranks up
 
                 // can move forward only to non-occupied squares
-                if ((occupiedSquares & twoSquaresForward.Bitboard()) == 0u)
+                if ((occupiedSquares & twoSquaresForward.GetBitboard()) == 0u)
                 {
                     Move move = Move::Invalid();
                     move.fromSquare = fromSquare;
@@ -340,7 +334,7 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Knight;
-            move.isCapture = opponentSide.occupied & targetSquare.Bitboard();
+            move.isCapture = opponentSide.occupied & targetSquare.GetBitboard();
             outMoveList.Push(move);
         });
     });
@@ -370,7 +364,7 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Rook;
-            move.isCapture = opponentSide.occupied & targetSquare.Bitboard();
+            move.isCapture = opponentSide.occupied & targetSquare.GetBitboard();
             outMoveList.Push(move);
         });
     });
@@ -398,13 +392,13 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
             const Square targetSquare(toIndex);
 
             // can't capture own piece
-            if (currentSide.Occupied() & targetSquare.Bitboard()) return;
+            if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
             Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Bishop;
-            move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
+            move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
             outMoveList.Push(move);
         });
     });
@@ -434,13 +428,13 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
             const Square targetSquare(toIndex);
 
             // can't capture own piece
-            if (currentSide.Occupied() & targetSquare.Bitboard()) return;
+            if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
             Move move = Move::Invalid();
             move.fromSquare = square;
             move.toSquare = targetSquare;
             move.piece = Piece::Queen;
-            move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
+            move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
             outMoveList.Push(move);
         });
     });
@@ -449,9 +443,6 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
 void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 {
     const bool onlyTactical = flags & MOVE_GEN_ONLY_TACTICAL;
-    const uint32_t numKingOffsets = 8u;
-    const int32_t kingFileOffsets[numKingOffsets] = { 0, 1, 1, 1, 0, -1, -1, -1 };
-    const int32_t kingRankOffsets[numKingOffsets] = { 1, 1, 0, -1, -1, -1, 0, 1 };
 
     const CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
     const SidePosition& currentSide = GetCurrentSide();
@@ -459,12 +450,8 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
-    unsigned long kingSquareIndex;
-    if (0 == _BitScanForward64(&kingSquareIndex, currentSide.king))
-    {
-        return;
-    }
-
+    ASSERT(currentSide.king);
+    const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
     const Square square(kingSquareIndex);
 
     Bitboard attackBitboard = Bitboard::GetKingAttacks(square);
@@ -478,13 +465,13 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         const Square targetSquare(toIndex);
 
         // can't capture own piece
-        if (currentSide.Occupied() & targetSquare.Bitboard()) return;
+        if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
         Move move = Move::Invalid();
         move.fromSquare = square;
         move.toSquare = targetSquare;
         move.piece = Piece::King;
-        move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.Bitboard();
+        move.isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
         outMoveList.Push(move);
     });
 
@@ -571,9 +558,7 @@ bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = mColors[(uint8_t)sideColor];
 
-    unsigned long kingSquareIndex;
-    _BitScanForward64(&kingSquareIndex, currentSide.king);
-
+    const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
     return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(sideColor));
 }
 
@@ -841,8 +826,8 @@ int32_t Position::StaticExchangeEvaluation(const Move& move) const
     }
 
     // "do" move
-    occupied &= ~move.fromSquare.Bitboard();
-    occupied |= move.toSquare.Bitboard();
+    occupied &= ~move.fromSquare.GetBitboard();
+    occupied |= move.toSquare.GetBitboard();
     allAttackers &= occupied;
 
     sideToMove = GetOppositeColor(sideToMove);

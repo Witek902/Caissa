@@ -2,8 +2,6 @@
 
 #include <assert.h>
 
-#pragma warning(disable : 4324) // warning C4324: structure was padded due to alignment specifier
-
 namespace threadpool {
 
 Task::Task()
@@ -574,7 +572,6 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
     };
 
     // TODO get rid of dynamic allocation, e.g. by using some kind of pool
-    using Counter = std::atomic<uint32_t>;
     using ThreadDataPtr = std::shared_ptr<std::vector<ThreadData>>;
     ThreadDataPtr threadDataPtr = std::make_shared<std::vector<ThreadData>>();
     threadDataPtr->resize(numThreads);

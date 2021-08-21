@@ -3,34 +3,38 @@
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 
-#include "tablebase/tbprobe.h"
+#ifdef USE_TABLE_BASES
+    #include "tablebase/tbprobe.h"
+#endif // USE_TABLE_BASES
 
 #include <iostream>
+#include <cstring>
 #include <string>
 #include <thread>
+#include <math.h>
 
 static const bool UseTranspositionTableInQSearch = true;
 static const bool UsePVS = true;
 
-static const uint32_t NullMovePrunningStartDepth = 3;
+static const int32_t NullMovePrunningStartDepth = 3;
 static const int32_t NullMovePrunningDepthReduction = 3;
 
 static const bool UseLateMoveReduction = true;
-static const uint32_t LateMoveReductionStartDepth = 2;
+static const int32_t LateMoveReductionStartDepth = 2;
 static const int32_t LateMoveReductionRate = 8;
 
-static const uint32_t LateMovePrunningStartDepth = 3;
+static const int32_t LateMovePrunningStartDepth = 3;
 
-static const uint32_t AspirationWindowSearchStartDepth = 2;
+static const int32_t AspirationWindowSearchStartDepth = 2;
 static const int32_t AspirationWindowMax = 60;
 static const int32_t AspirationWindowMin = 20;
 static const int32_t AspirationWindowStep = 5;
 
-static const uint32_t BetaPruningDepth = 6;
+static const int32_t BetaPruningDepth = 6;
 static const int32_t BetaMarginMultiplier = 80;
 static const int32_t BetaMarginBias = 30;
 
-static const uint32_t AlphaPruningDepth = 4;
+static const int32_t AlphaPruningDepth = 4;
 static const int32_t AlphaMarginMultiplier = 150;
 static const int32_t AlphaMarginBias = 1000;
 
@@ -81,7 +85,8 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
     return v;
 }
 
-static const Piece TranslatePieceType(uint32_t tbPromotes)
+#ifdef USE_TABLE_BASES
+static Piece TranslatePieceType(uint32_t tbPromotes)
 {
     switch (tbPromotes)
     {
@@ -92,6 +97,7 @@ static const Piece TranslatePieceType(uint32_t tbPromotes)
     }
     return Piece::None;
 }
+#endif // USE_TABLE_BASES
 
 int64_t SearchParam::GetElapsedTime() const
 {
@@ -244,7 +250,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 
                     auto startTime = std::chrono::high_resolution_clock::now();
 
-                    SearchContext searchContext{ game, param };
+                    SearchContext searchContext{ game, param, SearchStats{} };
 
                     AspirationWindowSearchParam aspirationWindowSearchParam =
                     {
@@ -253,7 +259,8 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
                         depth,
                         pvIndex,
                         searchContext,
-                        pvIndex > 0u ? pvMovesSoFar : std::span<const Move>(),
+                        pvIndex > 0u ? pvMovesSoFar.data() : nullptr,
+                        pvIndex > 0u ? (uint32_t)pvMovesSoFar.size() : 0u,
                         prevPvLine.score
                     };
 
@@ -408,7 +415,8 @@ ScoreType Search::AspirationWindowSearch(ThreadData& thread, const AspirationWin
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.color = param.position.GetSideToMove();
-        rootNode.rootMoves = param.searchParam.rootMoves;
+        rootNode.rootMoves = param.searchParam.rootMoves.data();
+        rootNode.rootMovesCount = (uint32_t)param.searchParam.rootMoves.size();
         rootNode.moveFilter = param.moveFilter;
 
         ScoreType score = NegaMax(thread, rootNode, param.searchContext);
@@ -776,7 +784,11 @@ ScoreType Search::PruneByMateDistance(const NodeInfo& node, ScoreType alpha, Sco
 
 INLINE static bool HasTablebases()
 {
+#ifdef USE_TABLE_BASES
     return TB_LARGEST > 0u;
+#else
+    return false;
+#endif
 }
 
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx)
@@ -863,6 +875,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
+#ifdef USE_TABLE_BASES
     // probe endgame tables
     if (!isRootNode && HasTablebases())
     {
@@ -931,6 +944,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
     }
+#endif // USE_TABLE_BASES
 
     // Null Move Prunning
     if (!isPvNode && !node.isTbNode && !isInCheck && node.depth >= NullMovePrunningStartDepth && ttScore >= beta && !ttMove.IsValid())
@@ -1011,18 +1025,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (isRootNode)
     {
         // apply node filter (used for multi-PV search for 2nd, 3rd, etc. moves)
-        if (!node.moveFilter.empty())
+        if (node.moveFilter)
         {
-            for (const Move& move : node.moveFilter)
+            for (uint32_t i = 0; i < node.moveFilterCount; ++i)
             {
+                const Move& move = node.moveFilter[i];
                 moves.RemoveMove(move);
             }
         }
 
+        // TODO
         // apply node filter (used for "searchmoves" UCI command)
-        if (!node.rootMoves.empty())
-        {
-            // TODO
+        //if (!node.rootMoves.empty())
+        //{
             //for (const Move& move : node.rootMoves)
             //{
             //    if (!moves.HasMove(move))
@@ -1030,7 +1045,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             //        moves.RemoveMove(move);
             //    }
             //}
-        }
+        //}
     }
 
     // resolve move scoring
@@ -1057,6 +1072,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     Move tbMove = Move::Invalid();
+#ifdef USE_TABLE_BASES
     if ((isPvNode || node.isTbNode) && HasTablebases())
     {
         const uint32_t probeResult = tb_probe_root(
@@ -1097,6 +1113,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
     }
+#endif // USE_TABLE_BASES
 
     Move bestMove = Move::Invalid();
     uint32_t moveIndex = 0;
@@ -1127,7 +1144,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         int32_t moveExtension = extension;
 
         // perform TB walk for child node if this node has moves filtered, so we get full line in multi-PV mode
-        const bool performTablebaseWalk = HasTablebases() && (tbMove == move || !node.moveFilter.empty());
+        const bool hasMoveFilter = node.moveFilter && node.moveFilterCount > 0u;
+        const bool performTablebaseWalk = HasTablebases() && (tbMove == move || hasMoveFilter);
 
         // promotion extension
         if (move.promoteTo != Piece::None)
@@ -1156,7 +1174,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 // reduce depth gradually
                 //depthReduction = std::min(1, std::max(1, numReducedMoves / LateMoveReductionRate));
-                depthReduction = std::max(1, int(0.5f * sqrtf((float)(node.depth + 1 - LateMoveReductionStartDepth) * (float)numReducedMoves)));
+                depthReduction = std::max(1, int(0.5f * std::sqrt((float)(node.depth + 1 - LateMoveReductionStartDepth) * (float)numReducedMoves)));
                 numReducedMoves++;
 
                 // Late Move Prunning

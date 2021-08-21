@@ -1,6 +1,7 @@
 #include "MoveList.hpp"
 
 #include <algorithm>
+#include <cstring>
 
 void MoveList::RemoveMove(const Move& move)
 {

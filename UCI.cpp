@@ -2,8 +2,13 @@
 #include "Move.hpp"
 #include "Evaluate.hpp"
 
+#ifdef USE_TABLE_BASES
 #include "tablebase/tbprobe.h"
+#endif // USE_TABLE_BASES
+
 #include "nnue-probe/nnue.h"
+
+#include <math.h>
 
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
@@ -18,6 +23,7 @@ extern bool RunSearchTests(const char* path);
 extern void SelfPlay();
 extern bool Train();
 
+#ifdef USE_TABLE_BASES
 void LoadTablebase(const char* path)
 {
     if (tb_init(path))
@@ -29,6 +35,7 @@ void LoadTablebase(const char* path)
         std::cout << "Failed to load tablebase" << std::endl;
     }
 }
+#endif // USE_TABLE_BASES
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
@@ -57,7 +64,9 @@ void UniversalChessInterface::Loop()
         }
     }
 
+#ifdef USE_TABLE_BASES
     tb_free();
+#endif // USE_TABLE_BASES
 }
 
 static void ParseCommandString(const std::string& str, std::vector<std::string>& outArgList)
@@ -589,10 +598,12 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         size_t numEntries = hashSize / sizeof(TTEntry);
         mSearch.GetTranspositionTable().Resize(numEntries);
     }
+#ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")
     {
         LoadTablebase(value.c_str());
     }
+#endif // USE_TABLE_BASES
     else if (lowerCaseName == "evalfile")
     {
         nnue_init(value.c_str());

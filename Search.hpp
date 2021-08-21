@@ -5,7 +5,6 @@
 #include "MoveOrderer.hpp"
 #include "TranspositionTable.hpp"
 
-#include <span>
 #include <chrono>
 
 class Game;
@@ -71,12 +70,25 @@ struct NodeInfo
     ScoreType alpha;
     ScoreType beta;
     Move previousMove = Move::Invalid();
-    std::span<const Move> moveFilter;   // ignore given moves in search, used for multi-PV search
-    std::span<const Move> rootMoves;    // consider only this moves at root node, used for "searchmoves" UCI command
-    int32_t depth;                   // remaining depth
-    uint32_t height;                    // depth in ply (depth counting from root)
+
+    // ignore given moves in search, used for multi-PV search
+    const Move* moveFilter = nullptr;
+    uint32_t moveFilterCount = 0;
+
+    // consider only this moves at root node, used for "searchmoves" UCI command
+    const Move* rootMoves = nullptr;
+    uint32_t rootMovesCount = 0;
+
+    // remaining depth
+    int32_t depth;
+
+    // depth in ply (depth counting from root)
+    uint32_t height;
+
     uint8_t pvIndex;
+
     Color color;
+
     bool isPvNode = false;
     bool isTbNode = false;
     bool isNullMove = false;
@@ -126,7 +138,8 @@ private:
         uint32_t depth;
         uint32_t pvIndex;
         SearchContext& searchContext;
-        std::span<const Move> moveFilter;
+        const Move* moveFilter = nullptr;
+        uint32_t moveFilterCount = 0;
         ScoreType previousScore;                  // score in previous ID iteration
     };
 

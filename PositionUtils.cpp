@@ -162,8 +162,8 @@ bool Position::FromFEN(const std::string& fenString)
                 }
 
                 SidePosition& side = color == Color::White ? Whites() : Blacks();
-                side.GetPieceBitBoard(piece) |= square.Bitboard();
-                side.occupied |= square.Bitboard();
+                side.GetPieceBitBoard(piece) |= square.GetBitboard();
+                side.occupied |= square.GetBitboard();
 
                 file++;
             }
