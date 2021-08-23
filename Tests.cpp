@@ -16,7 +16,7 @@
 using namespace threadpool;
 
 #define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; }
+    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak(); }
 
 void RunPerft()
 {
@@ -30,7 +30,7 @@ void RunPerft()
     std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
 }
 
-void RunUnitTests()
+void PositionTests()
 {
     // empty board
     TEST_EXPECT(!Position().IsValid());
@@ -593,11 +593,11 @@ void RunUnitTests()
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.fromSquare == Square_e1);
-TEST_EXPECT(move.toSquare == Square_g1);
-TEST_EXPECT(move.piece == Piece::King);
-TEST_EXPECT(move.isCapture == false);
-TEST_EXPECT(move.isCastling == true);
-TEST_EXPECT(!pos.IsMoveValid(move));
+            TEST_EXPECT(move.toSquare == Square_g1);
+            TEST_EXPECT(move.piece == Piece::King);
+            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move rook, loose castling rights
@@ -928,6 +928,80 @@ TEST_EXPECT(!pos.IsMoveValid(move));
     }
 }
 
+void EvalTests()
+{
+    // incufficient material
+    {
+        // KvK
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/7k w - - 0 1")));
+
+        // KvB
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/6bk w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/6bk b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/B7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/B7/8/8/8/8/8/7k b - - 0 1")));
+
+        // KvN
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/6nk w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/6nk b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/N7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/N7/8/8/8/8/8/7k b - - 0 1")));
+
+        // KvNN
+        TEST_EXPECT(0 == Evaluate(Position("K7/N7/N7/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/N7/N7/8/8/8/8/7k b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/5nnk w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/5nnk b - - 0 1")));
+
+        // KvBB (same color)
+        TEST_EXPECT(0 == Evaluate(Position("KB6/B7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("KB6/B7/8/8/8/8/8/7k b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/7b/6bk w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/7b/6bk b - - 0 1")));
+
+        // KvBB (opposite colors)
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/B7/B7/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/B7/B7/8/8/8/8/7k b - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/7b/7b/7k w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/7b/7b/7k w - - 0 1")));
+
+        // KvR
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/R7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/R7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
+
+        // KvQ
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/Q7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/Q7/8/8/8/8/8/7k w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6qk w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6qk w - - 0 1")));
+
+        // KvP (white winning)
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("7k/8/8/8/8/8/P7/K7 w - - 0 1")));
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("7k/8/8/8/8/8/P7/K7 b - - 0 1")));
+        TEST_EXPECT(KnownWinValue <= Evaluate(Position("8/8/1k6/8/8/1K6/1P6/8 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("8/8/1k6/8/8/1K6/1P6/8 b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("5k2/8/8/8/8/8/P7/K7 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("5k2/8/8/8/8/8/P7/K7 w - - 0 1")));
+
+        // KvP (black winning)
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("7k/7p/8/8/8/8/8/K7 w - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("7k/7p/8/8/8/8/8/K7 b - - 0 1")));
+        TEST_EXPECT(-KnownWinValue >= Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 b - - 0 1")));
+    }
+}
+
+void RunUnitTests()
+{
+    EvalTests();
+    PositionTests();
+}
+
 bool RunSearchTests(const char* path)
 {
     using MovesListType = std::vector<std::string>;
@@ -1155,7 +1229,7 @@ bool RunSearchTests(const char* path)
         auto endTimeAll = std::chrono::high_resolution_clock::now();
         const float time = std::chrono::duration_cast<std::chrono::microseconds>(endTimeAll - startTimeAll).count() / 1000000.0f;
         
-        const float passRate = (float)success / (float)testVector.size();
+        const float passRate = !testVector.empty() ? (float)success / (float)testVector.size() : 0.0f;
         const float factor = passRate / time;
 
         std::cout

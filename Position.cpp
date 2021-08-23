@@ -4,6 +4,8 @@
 
 #include <random>
 
+static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
+
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 static uint64_t s_BlackToMoveHash;
@@ -786,6 +788,25 @@ bool Position::DoNullMove()
     ASSERT(ComputeHash() == GetHash());
 
     return true;
+}
+
+const MaterialKey Position::GetMaterialKey() const
+{
+    MaterialKey key;
+
+    key.numWhiteQueens = mColors[0].queens.Count();
+    key.numWhiteRooks = mColors[0].rooks.Count();
+    key.numWhiteBishops = mColors[0].bishops.Count();
+    key.numWhiteKnights = mColors[0].knights.Count();
+    key.numWhitePawns = mColors[0].pawns.Count();
+
+    key.numBlackQueens = mColors[1].queens.Count();
+    key.numBlackRooks = mColors[1].rooks.Count();
+    key.numBlackBishops = mColors[1].bishops.Count();
+    key.numBlackKnights = mColors[1].knights.Count();
+    key.numBlackPawns = mColors[1].pawns.Count();
+
+    return key;
 }
 
 static const int16_t c_seePieceValues[] =

@@ -1,5 +1,6 @@
 #include "Evaluate.hpp"
 #include "Move.hpp"
+#include "Endgame.hpp"
 #include "NeuralNetwork.hpp"
 
 #include "nnue-probe/nnue.h"
@@ -293,44 +294,6 @@ int32_t Evaluate(const Position& position)
 
 #else
 
-static int32_t PawnlessEndgameScore(
-    int32_t queensA, int32_t rooksA, int32_t bishopsA, int32_t knightsA,
-    int32_t queensB, int32_t rooksB, int32_t bishopsB, int32_t knightsB)
-{
-    // Queen versus one minor piece - a win for the queen
-    {
-        if ((queensA >= 1 && rooksA == 0 && bishopsA == 0 && knightsA == 0) &&
-            (queensB == 0 && rooksB == 0 && (bishopsB + knightsB <= 1)))
-        {
-            return 1;
-        }
-
-        if ((queensB >= 1 && rooksB == 0 && bishopsB == 0 && knightsB == 0) &&
-            (queensA == 0 && rooksA == 0 && (bishopsA + knightsA <= 1)))
-        {
-            return -1;
-        }
-    }
-
-    // Only rook - win for the rook
-    {
-        if ((queensA == 0 && rooksA >= 1 && bishopsA == 0 && knightsA == 0) &&
-            (queensB == 0 && rooksB == 0 && bishopsB == 0 && knightsB == 0))
-        {
-            return 1;
-        }
-
-        if ((queensB == 0 && rooksB >= 1 && bishopsB == 0 && knightsB == 0) &&
-            (queensA == 0 && rooksA == 0 && bishopsA == 0 && knightsA == 0))
-        {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-
 static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
 {
     int32_t count = 0;
@@ -463,6 +426,15 @@ static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueDa
 
 ScoreType Evaluate(const Position& position)
 {
+    // check endgame evaluation first
+    {
+        int32_t endgameScore;
+        if (EvaluateEndgame(position, endgameScore))
+        {
+            return (ScoreType)endgameScore;
+        }
+    }
+
     int32_t value = 0;
     int32_t valueMG = 0;
     int32_t valueEG = 0;
@@ -478,11 +450,6 @@ ScoreType Evaluate(const Position& position)
     const int32_t blackBishops = position.Blacks().bishops.Count();
     const int32_t blackKnights = position.Blacks().knights.Count();
     const int32_t blackPawns = position.Blacks().pawns.Count();
-
-    if (blackPawns == 0 && whitePawns == 0)
-    {
-        value += 100 * PawnlessEndgameScore(whiteQueens, whiteRooks, whiteBishops, whiteKnights, blackQueens, blackRooks, blackBishops, blackKnights);
-    }
 
     if (whitePawns == 0)
     {

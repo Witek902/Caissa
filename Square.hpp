@@ -53,8 +53,8 @@ public:
     INLINE Square(const Square&) = default;
     INLINE Square& operator = (const Square&) = default;
 
-    bool operator == (const Square& rhs) const { return mIndex == rhs.mIndex; }
-    bool operator != (const Square& rhs) const { return mIndex != rhs.mIndex; }
+    INLINE bool operator == (const Square& rhs) const { return mIndex == rhs.mIndex; }
+    INLINE bool operator != (const Square& rhs) const { return mIndex != rhs.mIndex; }
 
     INLINE uint8_t Index() const
     {
@@ -76,6 +76,70 @@ public:
     INLINE uint8_t File() const
     {
         return mIndex % 8u;
+    }
+
+    INLINE Square North() const
+    {
+        return Rank() < 7 ? mIndex + 8 : Invalid();
+    }
+
+    INLINE Square South() const
+    {
+        return Rank() > 0 ? mIndex - 8 : Invalid();
+    }
+
+    INLINE Square East() const
+    {
+        return File() < 7 ? (mIndex + 1) : Invalid();
+    }
+
+    INLINE Square West() const
+    {
+        return File() > 0 ? (mIndex - 1) : Invalid();
+    }
+
+    INLINE Square FlippedFile() const
+    {
+        return mIndex ^ 0b000111;
+    }
+
+    INLINE Square FlippedRank() const
+    {
+        return mIndex ^ 0b111000;
+    }
+
+    uint32_t EdgeDistance() const
+    {
+        const uint32_t r = Rank();
+        const uint32_t f = File();
+        const uint32_t rd = std::min(r, 7u - r);
+        const uint32_t fd = std::min(f, 7u - f);
+        return std::min(rd, fd);
+    }
+
+    uint32_t DarkCornerDistance() const
+    {
+        return 7 - std::abs(7 - (int32_t)Rank() - (int32_t)File());
+    }
+
+    uint32_t AnyCornerDistance() const
+    {
+        const uint32_t r = Rank();
+        const uint32_t f = File();
+        const uint32_t a1 = std::max(r, f);
+        const uint32_t a8 = std::max(7 - r, f);
+        const uint32_t h1 = std::max(r, 7 - f);
+        const uint32_t h8 = std::max(7 - r, 7 - f);
+        return std::min(std::min(a1, a8), std::min(h1, h8));
+    }
+
+    static uint32_t Distance(const Square a, const Square b)
+    {
+        ASSERT(a.IsValid());
+        ASSERT(b.IsValid());
+        const int32_t r = std::abs((int32_t)a.Rank() - (int32_t)b.Rank());
+        const int32_t f = std::abs((int32_t)a.File() - (int32_t)b.File());
+        return (uint32_t)std::max(r, f);
     }
 
     static Square FromString(const std::string& str);
