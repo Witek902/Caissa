@@ -3,12 +3,14 @@
 #include "Move.hpp"
 #include "Search.hpp"
 #include "Evaluate.hpp"
+#include "Endgame.hpp"
 #include "UCI.hpp"
 
 int main(int argc, const char* argv[])
 {
     InitBitboards(); 
     InitZobristHash();
+    InitEndgame();
     //LoadNeuralNetwork("network.dat");
 
     UniversalChessInterface uci(argc, argv);
