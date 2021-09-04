@@ -1024,7 +1024,7 @@ bool RunSearchTests(const char* path)
 
             // TODO check if move is valid
 
-            //testVector.emplace_back(positionStr, bestMoves, avoidMoves);
+            testVector.emplace_back(positionStr, bestMoves, avoidMoves);
         }
     }
     std::cout << testVector.size() << " test positions loaded" << std::endl;
