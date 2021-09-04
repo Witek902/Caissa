@@ -167,6 +167,8 @@ private:
     
     std::vector<ThreadData> mThreadData;
 
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);
+
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
     ScoreType AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param);
