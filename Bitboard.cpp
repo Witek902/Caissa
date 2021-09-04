@@ -74,7 +74,7 @@ const uint8_t cBishopMagicOffsets[Square::NumSquares] =
 static const uint32_t RookAttackTableSize = 4096;
 static uint64_t gRookAttackTable[Square::NumSquares][RookAttackTableSize];
 
-static const uint32_t BishopAttackTableSize = 1024;
+static const uint32_t BishopAttackTableSize = 512;
 static uint64_t gBishopAttackTable[Square::NumSquares][BishopAttackTableSize];
 
 std::string Bitboard::Print() const
