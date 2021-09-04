@@ -147,6 +147,14 @@ class MoveList;
 
 #define MOVE_GEN_ONLY_TACTICAL 1
 
+struct PackedPosition
+{
+    uint64_t occupied;          // bitboard of occupied squares
+    uint8_t sideToMove : 1;     // 0 - white, 1 - black
+    uint8_t halfMoveCount : 7;
+    uint8_t piecesData[16];     // 4 bits per occupied square
+};
+
 // class representing whole board state
 class Position
 {
@@ -240,8 +248,8 @@ public:
     INLINE const SidePosition& Whites() const { return mColors[0]; }
     INLINE const SidePosition& Blacks() const { return mColors[1]; }
 
-    INLINE const SidePosition& GetCurrentSide() const { return mColors[(uint8_t)mSideToMove]; }
-    INLINE const SidePosition& GetOpponentSide() const { return mColors[(uint8_t)mSideToMove ^ 1]; }
+    INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
+    INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
     INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
     INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }

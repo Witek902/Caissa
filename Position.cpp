@@ -5,6 +5,7 @@
 #include <random>
 
 static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
+static_assert(sizeof(PackedPosition) == 32, "Invalid packed position size");
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -319,14 +320,15 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
+    Bitboard filter = ~currentSide.Occupied(); // can't capture own piece
+    if (flags & MOVE_GEN_ONLY_TACTICAL) filter &= opponentSide.occupied;
+    filter &= ~opponentSide.king; // can't capture king
+
     currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
         const Square square(fromIndex);
 
-        Bitboard attackBitboard = Bitboard::GetKnightAttacks(square);
-        attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
-        if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= opponentSide.occupied;
-        attackBitboard &= ~opponentSide.king; // can't capture king
+        const Bitboard attackBitboard = Bitboard::GetKnightAttacks(square) & filter;
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
@@ -384,17 +386,13 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
         const Square square(fromIndex);
 
         Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(square, occupiedSquares);
-        if (flags & MOVE_GEN_ONLY_TACTICAL)
-        {
-            attackBitboard &= opponentSide.OccupiedExcludingKing();
-        }
+        attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
+        if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= opponentSide.OccupiedExcludingKing();
+        attackBitboard &= ~opponentSide.king; // can't capture king
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             const Square targetSquare(toIndex);
-
-            // can't capture own piece
-            if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
             Move move = Move::Invalid();
             move.fromSquare = square;
