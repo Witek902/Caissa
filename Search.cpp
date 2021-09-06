@@ -432,6 +432,7 @@ ScoreType Search::AspirationWindowSearch(ThreadData& thread, const AspirationWin
         rootNode.rootMoves = param.searchParam.rootMoves.data();
         rootNode.rootMovesCount = (uint32_t)param.searchParam.rootMoves.size();
         rootNode.moveFilter = param.moveFilter;
+        rootNode.moveFilterCount = param.moveFilterCount;
 
         ScoreType score = NegaMax(thread, rootNode, param.searchContext);
 
@@ -822,6 +823,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.isPvNode;
+    const bool hasMoveFilter = node.moveFilter && node.moveFilterCount > 0u;
 
     // Check for draw
     // Skip root node as we need some move to be reported
@@ -1039,7 +1041,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (isRootNode)
     {
         // apply node filter (used for multi-PV search for 2nd, 3rd, etc. moves)
-        if (node.moveFilter)
+        if (hasMoveFilter)
         {
             for (uint32_t i = 0; i < node.moveFilterCount; ++i)
             {
@@ -1087,7 +1089,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     Move tbMove = Move::Invalid();
 #ifdef USE_TABLE_BASES
-    if ((isPvNode || node.isTbNode) && HasTablebases())
+    if ((isPvNode || node.isTbNode) && !hasMoveFilter && HasTablebases())
     {
         const uint32_t probeResult = tb_probe_root(
             position.Whites().Occupied(),
@@ -1158,7 +1160,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         int32_t moveExtension = extension;
 
         // perform TB walk for child node if this node has moves filtered, so we get full line in multi-PV mode
-        const bool hasMoveFilter = node.moveFilter && node.moveFilterCount > 0u;
         const bool performTablebaseWalk = HasTablebases() && (tbMove == move || hasMoveFilter);
 
         // promotion extension
