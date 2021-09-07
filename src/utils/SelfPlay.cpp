@@ -1,18 +1,18 @@
 #include <iostream>
-#include "Position.hpp"
-#include "Game.hpp"
-#include "Move.hpp"
-#include "Search.hpp"
-#include "Evaluate.hpp"
-#include "NeuralNetwork.hpp"
+#include "../backend/Position.hpp"
+#include "../backend/Game.hpp"
+#include "../backend/Move.hpp"
+#include "../backend/Search.hpp"
+#include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
+#include "../backend/NeuralNetwork.hpp"
+#include "../backend/ThreadPool.hpp"
 
 #include <chrono>
 #include <random>
 #include <mutex>
 #include <fstream>
 #include <limits.h>
-
-#include "ThreadPool.hpp"
 
 using namespace threadpool;
 
@@ -408,4 +408,19 @@ bool Train()
     network.Save("network.dat");
 
     return true;
+}
+
+int main(int argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    InitBitboards();
+    InitZobristHash();
+    InitEndgame();
+
+    // TODO
+    SelfPlay();
+
+    return 0;
 }

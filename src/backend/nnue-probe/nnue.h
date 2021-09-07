@@ -1,33 +1,6 @@
 #ifndef NNUE_H
 #define NNUE_H
 
-#ifndef __cplusplus
-#ifndef _MSC_VER
-#include <stdalign.h>
-#endif
-#endif
-
-/**
-* Calling convention
-*/
-#ifdef __cplusplus
-#   define EXTERNC extern "C"
-#else
-#   define EXTERNC
-#endif
-
-#if defined (_WIN32)
-#   define _CDECL __cdecl
-#ifdef DLL_EXPORT
-#   define DLLExport EXTERNC __declspec(dllexport)
-#else
-#   define DLLExport EXTERNC __declspec(dllimport)
-#endif
-#else
-#   define _CDECL
-#   define DLLExport EXTERNC
-#endif
-
 /**
 * Internal piece representation
 *     wking=1, wqueen=2, wrook=3, wbishop= 4, wknight= 5, wpawn= 6,
@@ -98,14 +71,14 @@ int nnue_evaluate_pos(NNUEPosition* pos);
 /**
 * Load NNUE file
 */
-DLLExport void _CDECL nnue_init(
+void nnue_init(
   const char * evalFile             /** Path to NNUE file */
 );
 
 /**
 * Check if NNUE is loaded
 */
-DLLExport bool _CDECL nnue_is_valid();
+bool nnue_is_valid();
 
 /**
 * Evaluation subroutine suitable for chess engines.
@@ -125,7 +98,7 @@ DLLExport bool _CDECL nnue_is_valid();
 * Returns
 *   Score relative to side to move in approximate centi-pawns
 */
-DLLExport int _CDECL nnue_evaluate(
+int nnue_evaluate(
   int player,                       /** Side to move: white=0 black=1 */
   int* pieces,                      /** Array of pieces */
   int* squares                      /** Corresponding array of squares each piece stands on */
@@ -141,7 +114,7 @@ DLLExport int _CDECL nnue_evaluate(
 *    nnue_data[1] is pointer to NNUEdata for ply - 1
 *    nnue_data[2] is pointer to NNUEdata for ply - 2
 */
-DLLExport int _CDECL nnue_evaluate_incremental(
+int nnue_evaluate_incremental(
   int player,                       /** Side to move: white=0 black=1 */
   int* pieces,                      /** Array of pieces */
   int* squares,                     /** Corresponding array of squares each piece stands on */
