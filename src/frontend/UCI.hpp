@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Game.hpp"
-#include "Search.hpp"
-#include "ThreadPool.hpp"
+#include "../backend/Game.hpp"
+#include "../backend/Search.hpp"
+#include "../backend/ThreadPool.hpp"
 
 #include <iostream>
 #include <mutex>

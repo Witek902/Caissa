@@ -1267,7 +1267,7 @@ static bool load_eval_file(const char *evalFile)
 /*
 Interfaces
 */
-DLLExport void _CDECL nnue_init(const char* evalFile)
+void nnue_init(const char* evalFile)
 {
   printf("Loading NNUE : %s\n", evalFile);
   fflush(stdout);
@@ -1284,12 +1284,12 @@ DLLExport void _CDECL nnue_init(const char* evalFile)
   is_nnue_loaded = false;
 }
 
-DLLExport bool _CDECL nnue_is_valid()
+bool nnue_is_valid()
 {
   return is_nnue_loaded;
 }
 
-DLLExport int _CDECL nnue_evaluate(
+int nnue_evaluate(
   int player, int* pieces, int* squares)
 {
   NNUEdata nnue;
@@ -1305,7 +1305,7 @@ DLLExport int _CDECL nnue_evaluate(
   return nnue_evaluate_pos(&pos);
 }
 
-DLLExport int _CDECL nnue_evaluate_incremental(
+int nnue_evaluate_incremental(
   int player, int* pieces, int* squares, NNUEdata** nnue)
 {
   assert(nnue[0] && (uint64_t)(&nnue[0]->accumulator) % 64 == 0);

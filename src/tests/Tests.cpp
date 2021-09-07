@@ -1,17 +1,17 @@
 #include <iostream>
-#include "Position.hpp"
-#include "MoveList.hpp"
-#include "Search.hpp"
-#include "Evaluate.hpp"
-#include "UCI.hpp"
+#include "../backend/Position.hpp"
+#include "../backend/MoveList.hpp"
+#include "../backend/Search.hpp"
+#include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
+#include "../backend/Game.hpp"
+#include "../backend/ThreadPool.hpp"
 
 #include <chrono>
 #include <mutex>
 #include <fstream>
 #include <sstream>
 #include <iterator>
-
-#include "ThreadPool.hpp"
 
 using namespace threadpool;
 
@@ -1244,5 +1244,26 @@ bool RunSearchTests(const char* path)
     }
 
     return true;
-    //return success == testVector.size();
+}
+
+int main(int argc, const char* argv[])
+{
+    InitBitboards();
+    InitZobristHash();
+    InitEndgame();
+
+    if (argc > 1 && strcmp(argv[1], "unittests") == 0)
+    {
+        RunUnitTests();
+    }
+    else if (argc > 2 && strcmp(argv[1], "searchtests") == 0)
+    {
+        RunSearchTests(argv[2]);
+    }
+    else
+    {
+        return 1;
+    }
+
+    return 0;
 }

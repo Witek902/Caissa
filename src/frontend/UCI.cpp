@@ -1,12 +1,9 @@
 #include "UCI.hpp"
-#include "Move.hpp"
-#include "Evaluate.hpp"
+#include "../backend/Move.hpp"
+#include "../backend/Evaluate.hpp"
+#include "../backend/Tablebase.hpp"
 
-#ifdef USE_TABLE_BASES
-#include "tablebase/tbprobe.h"
-#endif // USE_TABLE_BASES
-
-#include "nnue-probe/nnue.h"
+#include "../backend/nnue-probe/nnue.h"
 
 #include <math.h>
 
@@ -16,26 +13,6 @@ static const uint32_t c_DefaultTTSize = 16 * 1024 * 1024;
 #else
 static const uint32_t c_DefaultTTSize = 1024 * 1024;
 #endif
-
-extern void RunUnitTests();
-extern void RunPerft();
-extern bool RunSearchTests(const char* path);
-extern void SelfPlay();
-extern bool Train();
-
-#ifdef USE_TABLE_BASES
-void LoadTablebase(const char* path)
-{
-    if (tb_init(path))
-    {
-        std::cout << "Tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
-    }
-    else
-    {
-        std::cout << "Failed to load tablebase" << std::endl;
-    }
-}
-#endif // USE_TABLE_BASES
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
@@ -64,9 +41,7 @@ void UniversalChessInterface::Loop()
         }
     }
 
-#ifdef USE_TABLE_BASES
-    tb_free();
-#endif // USE_TABLE_BASES
+    UnloadTablebase();
 }
 
 static void ParseCommandString(const std::string& str, std::vector<std::string>& outArgList)
@@ -200,24 +175,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ttprobe")
     {
         Command_TTProbe();
-    }
-    else if (command == "unittest")
-    {
-        RunUnitTests();
-        std::cout << "Unit tests done." << std::endl;
-    }
-    else if (command == "selfplay")
-    {
-        SelfPlay();
-    }
-    else if (command == "train")
-    {
-        Train();
-    }
-    else if (command == "searchtest")
-    {
-        RunSearchTests(args[1].c_str());
-        std::cout << "Search tests done." << std::endl;
     }
     else
     {

@@ -35,6 +35,13 @@ bestmove c7c1
   * Null Move Prunning
   * Magic Bitboards
   * Syzygy endgame tables support
+
+## Modules
+
+The projects comprises folowing modules:
+  * _backend_ (library) - engine's core
+  * _frontend_ (executable) - UCI wrapper for the backend
+  * _tests_ (executable) - unit tests and search tests
   
 ## TODO
 
