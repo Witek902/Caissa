@@ -1,5 +1,9 @@
 #include "Tablebase.hpp"
 
+#include "tablebase/tbprobe.h"
+
+#include <iostream>
+
 void LoadTablebase(const char* path)
 {
 #ifdef USE_TABLE_BASES

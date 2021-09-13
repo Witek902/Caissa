@@ -1,12 +1,15 @@
-#include <iostream>
+#include "Common.hpp"
+
 #include "../backend/Position.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
+#include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
 #include "../backend/ThreadPool.hpp"
+#include "../backend/tablebase/tbprobe.h"
 
 #include <chrono>
 #include <random>
@@ -15,32 +18,6 @@
 #include <limits.h>
 
 using namespace threadpool;
-
-struct PositionEntry
-{
-    uint64_t whiteKing;
-    uint64_t whitePawns;
-    uint64_t whiteKnights;
-    uint64_t whiteBishops;
-    uint64_t whiteRooks;
-    uint64_t whiteQueens;
-
-    uint64_t blackKing;
-    uint64_t blackPawns;
-    uint64_t blackKnights;
-    uint64_t blackBishops;
-    uint64_t blackRooks;
-    uint64_t blackQueens;
-
-    uint8_t sideToMove : 1;
-    uint8_t whiteCastlingRights : 2;
-    uint8_t blackCastlingRights : 2;
-
-    int32_t eval;
-    int32_t gameResult;
-    uint16_t moveNumber;
-    uint16_t totalMovesInGame;
-};
 
 void SelfPlay()
 {
@@ -227,200 +204,4 @@ void SelfPlay()
     waitable.Wait();
 
     fclose(dumpFile);
-}
-
-/*
-static float ClampNetworkOutput(float value)
-{
-    return std::max(-127.0f, std::min(127.0f, value));
-}
-*/
-
-static float PawnToWinProbability(float cp)
-{
-    return 1.0f / (1.0f + powf(10.0, -cp / 4.0f));
-}
-
-uint64_t RotateBitboard180(uint64_t x)
-{
-    const uint64_t h1 = 0x5555555555555555ull;
-    const uint64_t h2 = 0x3333333333333333ull;
-    const uint64_t h4 = 0x0F0F0F0F0F0F0F0Full;
-    const uint64_t v1 = 0x00FF00FF00FF00FFull;
-    const uint64_t v2 = 0x0000FFFF0000FFFFull;
-    x = ((x >> 1) & h1) | ((x & h1) << 1);
-    x = ((x >> 2) & h2) | ((x & h2) << 2);
-    x = ((x >> 4) & h4) | ((x & h4) << 4);
-    x = ((x >> 8) & v1) | ((x & v1) << 8);
-    x = ((x >> 16) & v2) | ((x & v2) << 16);
-    x = (x >> 32) | (x << 32);
-    return x;
-}
-
-void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVector& outVector)
-{
-    outVector.input.resize(12 * 64);
-    outVector.output.resize(1);
-
-    PositionEntry flippedEntry = entry;
-    if (entry.sideToMove == 1)
-    {
-        flippedEntry.whiteKing = RotateBitboard180(entry.blackKing);
-        flippedEntry.whitePawns = RotateBitboard180(entry.blackPawns);
-        flippedEntry.whiteKnights = RotateBitboard180(entry.blackKnights);
-        flippedEntry.whiteBishops = RotateBitboard180(entry.blackBishops);
-        flippedEntry.whiteRooks = RotateBitboard180(entry.blackRooks);
-        flippedEntry.whiteQueens = RotateBitboard180(entry.blackQueens);
-
-        flippedEntry.blackKing = RotateBitboard180(entry.whiteKing);
-        flippedEntry.blackPawns = RotateBitboard180(entry.whitePawns);
-        flippedEntry.blackKnights = RotateBitboard180(entry.whiteKnights);
-        flippedEntry.blackBishops = RotateBitboard180(entry.whiteBishops);
-        flippedEntry.blackRooks = RotateBitboard180(entry.whiteRooks);
-        flippedEntry.blackQueens = RotateBitboard180(entry.whiteQueens);
-
-        flippedEntry.eval *= -1;
-        flippedEntry.gameResult *= -1;
-    }
-
-    for (uint32_t i = 0; i < 64u; ++i)
-    {
-        outVector.input[ 0 * 64 + i] = (float)((flippedEntry.whiteKing >> i) & 1);
-        outVector.input[ 1 * 64 + i] = (float)((flippedEntry.whitePawns >> i) & 1);
-        outVector.input[ 2 * 64 + i] = (float)((flippedEntry.whiteKnights >> i) & 1);
-        outVector.input[ 3 * 64 + i] = (float)((flippedEntry.whiteBishops >> i) & 1);
-        outVector.input[ 4 * 64 + i] = (float)((flippedEntry.whiteRooks >> i) & 1);
-        outVector.input[ 5 * 64 + i] = (float)((flippedEntry.whiteQueens >> i) & 1);
-
-        outVector.input[ 6 * 64 + i] = (float)((flippedEntry.blackKing >> i) & 1);
-        outVector.input[7 * 64 + i] = (float)((flippedEntry.blackPawns >> i) & 1);
-        outVector.input[8 * 64 + i] = (float)((flippedEntry.blackKnights >> i) & 1);
-        outVector.input[9 * 64 + i] = (float)((flippedEntry.blackBishops >> i) & 1);
-        outVector.input[10 * 64 + i] = (float)((flippedEntry.blackRooks >> i) & 1);
-        outVector.input[11 * 64 + i] = (float)((flippedEntry.blackQueens >> i) & 1);
-    }
-
-    outVector.output[0] = (float)flippedEntry.eval / 100.0f;
-    outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
-}
-
-static const uint32_t cNumIterations = 1000;
-static const uint32_t cNumTrainingVectorsPerIteration = 2048;
-static const uint32_t cNumValidationVectorsPerIteration = 100;
-static const uint32_t cBatchSize = 128;
-
-bool Train()
-{
-    FILE* dumpFile = fopen("selfplay.dat", "rb");
-
-    if (!dumpFile)
-    {
-        std::cout << "ERROR: Failed to load selfplay data file!" << std::endl;
-        return false;
-    }
-
-    fseek(dumpFile, 0, SEEK_END);
-    const size_t fileSize = ftell(dumpFile);
-    fseek(dumpFile, 0, SEEK_SET);
-
-    const size_t numEntries = fileSize / sizeof(PositionEntry);
-
-    std::vector<PositionEntry> entries;
-    entries.resize(numEntries);
-
-    if (numEntries != fread(entries.data(), sizeof(PositionEntry), numEntries, dumpFile))
-    {
-        std::cout << "ERROR: Failed read selfplay data file!" << std::endl;
-        fclose(dumpFile);
-        return false;
-    }
-
-    std::cout << "INFO: Loaded " << numEntries << " entries" << std::endl;
-    fclose(dumpFile);
-
-    nn::NeuralNetwork network;
-    network.Init(12 * 64, { 256, 32, 32, 1 });
-    //if (!network.Load("network.dat")) return false;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    std::vector<nn::TrainingVector> trainingSet;
-    trainingSet.resize(cNumTrainingVectorsPerIteration);
-
-    nn::TrainingVector validationVector;
-
-    nn::Layer::Values tempValues;
-
-    uint32_t numTrainingVectorsPassed = 0;
-    uint32_t numTrainingVectorsPassedInEpoch = 0;
-
-    for (uint32_t iteration = 0; iteration < cNumIterations; ++iteration)
-    {
-        // pick random test entries
-        std::uniform_int_distribution<size_t> distrib(0, numEntries - 1);
-        for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
-        {
-            const PositionEntry& entry = entries[distrib(gen)];
-            PositionEntryToTrainingVector(entry, trainingSet[i]);
-        }
-        network.Train(trainingSet, tempValues, cBatchSize);
-
-        numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
-        numTrainingVectorsPassedInEpoch += cNumTrainingVectorsPerIteration;
-
-        if (numTrainingVectorsPassedInEpoch > numEntries)
-        {
-            network.NextEpoch();
-            numTrainingVectorsPassedInEpoch = 0;
-        }
-
-        float minError = std::numeric_limits<float>::max();
-        float maxError = -std::numeric_limits<float>::max();
-        float errorSum = 0.0f;
-        for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
-        {
-            const PositionEntry& entry = entries[distrib(gen)];
-            PositionEntryToTrainingVector(entry, validationVector);
-
-            tempValues = network.Run(validationVector.input);
-
-            float expectedValue = validationVector.output[0];
-
-            if (i < 10)
-            {
-                //std::cout << "    value= " << tempValues[0] << ", expected=" << expectedValue << std::endl;
-            }
-
-            const float error = expectedValue - tempValues[0];
-            minError = std::min(minError, fabsf(error));
-            maxError = std::max(maxError, fabsf(error));
-            const float sqrError = error * error;
-            errorSum += sqrError;
-        }
-        errorSum = sqrtf(errorSum / cNumValidationVectorsPerIteration);
-
-        float epoch = (float)numTrainingVectorsPassed / (float)numEntries;
-        std::cout << epoch << "\t" << errorSum << "\t" << minError << "\t" << maxError;
-        std::cout << std::endl;
-    }
-
-    network.Save("network.dat");
-
-    return true;
-}
-
-int main(int argc, const char* argv[])
-{
-    (void)argc;
-    (void)argv;
-
-    InitBitboards();
-    InitZobristHash();
-    InitEndgame();
-
-    // TODO
-    SelfPlay();
-
-    return 0;
 }
