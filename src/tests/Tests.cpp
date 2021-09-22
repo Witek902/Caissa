@@ -2,6 +2,7 @@
 #include "../backend/Position.hpp"
 #include "../backend/MoveList.hpp"
 #include "../backend/Search.hpp"
+#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Game.hpp"
@@ -996,13 +997,85 @@ void EvalTests()
     }
 }
 
-void RunUnitTests()
+// this test suite runs full search on well known/easy positions
+void RunSearchTests()
 {
-    EvalTests();
-    PositionTests();
+    Search search;
+    TranspositionTable tt{ 1024 * 1024 };
+    SearchResult result;
+    Game game;
+
+    SearchParam param{ tt };
+    param.debugLog = false;
+    param.limits.maxDepth = 4;
+    param.numPvLines = UINT32_MAX;
+
+    // incufficient material draw
+    {
+        game.Reset(Position("4k2K/8/8/8/8/8/8/8 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 3);
+        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(result[1].score == 0);
+        TEST_EXPECT(result[2].score == 0);
+    }
+
+    // stalemate (no legal move)
+    {
+        game.Reset(Position("k7/2Q5/1K6/8/8/8/8/8 b - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 0);
+    }
+
+    // mate in one
+    {
+        game.Reset(Position("k7/7Q/1K6/8/8/8/8/8 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 27);
+        TEST_EXPECT(result[0].score == CheckmateValue - 1);
+        TEST_EXPECT(result[1].score == CheckmateValue - 1);
+        TEST_EXPECT(result[2].score == CheckmateValue - 1);
+        TEST_EXPECT(result[3].score == CheckmateValue - 1);
+    }
+
+    // winnnig KPK
+    {
+        game.Reset(Position("4k3/8/8/8/8/8/5P2/5K2 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 6);
+        TEST_EXPECT(result[0].score > KnownWinValue);
+        TEST_EXPECT(result[1].score > KnownWinValue);
+        TEST_EXPECT(result[2].score == 0);
+        TEST_EXPECT(result[3].score == 0);
+        TEST_EXPECT(result[4].score == 0);
+        TEST_EXPECT(result[5].score == 0);
+    }
+
+    // drawing KPK
+    {
+        game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 4);
+        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(result[1].score == 0);
+        TEST_EXPECT(result[2].score == 0);
+        TEST_EXPECT(result[3].score == 0);
+    }
 }
 
-bool RunSearchTests(const char* path)
+void RunUnitTests()
+{
+    PositionTests();
+    EvalTests();
+    RunSearchTests();
+}
+
+bool RunPerformanceTests(const char* path)
 {
     using MovesListType = std::vector<std::string>;
 
@@ -1108,22 +1181,15 @@ bool RunSearchTests(const char* path)
 
     bool verbose = false;
 
+    TranspositionTable tt(64 * 1024 * 1024);
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
-
-    for (Search& search : searchArray)
-    {
-        search.GetTranspositionTable().Resize(8 * 1024 * 1024);
-    }
 
     for (uint32_t depth = minDepth; depth <= maxDepth; ++depth)
     {
         std::mutex mutex;
         std::atomic<uint32_t> success = 0;
 
-        for (Search& search : searchArray)
-        {
-            search.GetTranspositionTable().Clear();
-        }
+        tt.Clear();
 
         auto startTimeAll = std::chrono::high_resolution_clock::now();
 
@@ -1133,7 +1199,7 @@ bool RunSearchTests(const char* path)
 
             for (const TestCaseEntry& testCase : testVector)
             {
-                taskBuilder.Task("SearchTest", [testCase, &searchArray, depth, &mutex, verbose, &success](const TaskContext& ctx)
+                taskBuilder.Task("SearchTest", [testCase, &searchArray, depth, &mutex, verbose, &success, &tt](const TaskContext& ctx)
                 {
                     Search& search = searchArray[ctx.threadId];
 
@@ -1143,7 +1209,7 @@ bool RunSearchTests(const char* path)
                     Game game;
                     game.Reset(position);
 
-                    SearchParam searchParam;
+                    SearchParam searchParam{ tt };
                     searchParam.debugLog = false;
                     searchParam.limits.maxDepth = depth;
 
@@ -1252,13 +1318,13 @@ int main(int argc, const char* argv[])
     InitZobristHash();
     InitEndgame();
 
-    if (argc > 1 && strcmp(argv[1], "unittests") == 0)
+    if (argc > 1 && strcmp(argv[1], "unittest") == 0)
     {
         RunUnitTests();
     }
-    else if (argc > 2 && strcmp(argv[1], "searchtests") == 0)
+    else if (argc > 2 && strcmp(argv[1], "perftest") == 0)
     {
-        RunSearchTests(argv[2]);
+        RunPerformanceTests(argv[2]);
     }
     else
     {

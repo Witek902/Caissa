@@ -143,6 +143,7 @@
     <ClCompile Include="NeuralNetwork.cpp" />
     <ClCompile Include="nnue-probe\misc.cpp" />
     <ClCompile Include="nnue-probe\nnue.cpp" />
+    <ClCompile Include="PackedNeuralNetwork.cpp" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
@@ -175,6 +176,7 @@
     <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="nnue-probe\misc.h" />
     <ClInclude Include="nnue-probe\nnue.h" />
+    <ClInclude Include="PackedNeuralNetwork.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
     <ClInclude Include="Search.hpp" />

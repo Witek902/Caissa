@@ -2,6 +2,7 @@
 
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
+#include "../backend/TranspositionTable.hpp"
 #include "../backend/ThreadPool.hpp"
 
 #include <iostream>
@@ -20,6 +21,8 @@ struct SearchTaskContext
     SearchResult searchResult;
     threadpool::Waitable waitable;
     std::atomic<bool> ponderHit = false;
+
+    SearchTaskContext(TranspositionTable& tt) : searchParam{ tt } { }
 };
 
 class UniversalChessInterface
@@ -42,6 +45,7 @@ private:
 
     Game mGame;
     Search mSearch;
+    TranspositionTable mTranspositionTable;
     Options mOptions;
 
     std::mutex mMutex;

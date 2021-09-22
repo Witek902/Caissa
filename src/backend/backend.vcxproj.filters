@@ -71,6 +71,9 @@
     <ClCompile Include="Tablebase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="PackedNeuralNetwork.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -137,6 +140,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Tablebase.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PackedNeuralNetwork.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

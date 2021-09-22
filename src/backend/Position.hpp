@@ -270,8 +270,8 @@ private:
 
     friend class Search;
 
-    INLINE SidePosition& Whites() { return mColors[0]; }
-    INLINE SidePosition& Blacks() { return mColors[1]; }
+    //INLINE SidePosition& Whites() { return mColors[0]; }
+    //INLINE SidePosition& Blacks() { return mColors[1]; }
 
     INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
     INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
@@ -310,3 +310,5 @@ private:
 static_assert(sizeof(Position) == 128, "Invalid position size");
 
 void InitZobristHash();
+
+bool GenerateRandomPosition(const MaterialKey material, Position& outPosition);

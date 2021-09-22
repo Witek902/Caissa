@@ -49,7 +49,7 @@ public:
     static constexpr uint32_t NumEntriesPerCluster = 4;
     using TTCluster = InternalEntry[NumEntriesPerCluster];
 
-    TranspositionTable();
+    TranspositionTable(size_t initialSize = 0);
     ~TranspositionTable();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
