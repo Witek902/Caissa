@@ -15,11 +15,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra")
 # Warnings excpetions
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-switch")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-gnu-anonymous-struct -Wno-nested-anon-types")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-security") # TODO - remove
 
-file(GLOB CHESS_SOURCES *.cpp nnue-probe/*.cpp)
+add_subdirectory("src")
 
-add_executable(chess ${CHESS_SOURCES})
+set(OUTPUT_DIRECTORY ${CMAKE_ROOT_DIRECTORY}/bin)
 
-set_target_properties(chess PROPERTIES LINK_FLAGS "-pthread")
+file(MAKE_DIRECTORY ${OUTPUT_DIRECTORY})

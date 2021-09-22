@@ -112,7 +112,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
     }
 
     // update killer heuristics
-    if (node.height < MaxSearchDepth && killerMoves[node.height][0] != move)
+    if (node.height < MaxSearchDepth && killerMoves[node.height][0] != PackedMove(move))
     {
         for (uint32_t j = NumKillerMoves; j-- > 1u; )
         {

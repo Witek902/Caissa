@@ -17,7 +17,7 @@
 using namespace threadpool;
 
 #define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; __debugbreak(); }
+    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
 
 void RunPerft()
 {
@@ -1171,7 +1171,7 @@ bool RunPerformanceTests(const char* path)
 
             // TODO check if move is valid
 
-            testVector.emplace_back(positionStr, bestMoves, avoidMoves);
+            testVector.push_back({positionStr, bestMoves, avoidMoves});
         }
     }
     std::cout << testVector.size() << " test positions loaded" << std::endl;

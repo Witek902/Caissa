@@ -17,7 +17,7 @@ union TTEntry
         Flag_UpperBound     = 3,
     };
 
-    struct
+    UNNAMED_STRUCT struct
     {
         ScoreType score;
         ScoreType staticEval;

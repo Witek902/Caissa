@@ -1,5 +1,8 @@
 x64/
 .vs/
+.vscode/
 *.vcxproj.user
 *.args.json
 build/
+bin/
+

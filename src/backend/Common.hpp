@@ -8,12 +8,15 @@
 #endif
 
 
+#if defined(_MSC_VER)
+    #define DEBUG_BREAK() __debugbreak()
+#elif defined(__GNUC__) || defined(__clang__)
+    #define DEBUG_BREAK() std::raise(SIGINT)
+#endif
+
+
 #ifndef CONFIGURATION_FINAL
-    #if defined(_MSC_VER)
-        #define ASSERT(x) if (!(x)) __debugbreak();
-    #elif defined(__GNUC__) || defined(__clang__)
-        #define ASSERT(x) if (!(x)) std::raise(SIGINT);
-    #endif
+    #define ASSERT(x) if (!(x)) DEBUG_BREAK();
 #else
     #define ASSERT(x)
 #endif
@@ -85,11 +88,24 @@
     #define UNNAMED_STRUCT
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+    #define EXPORT __attribute__((visibility("default")))
+#else
+    #define EXPORT
+#endif
+
+
 template<typename T>
 INLINE constexpr bool IsPowerOfTwo(const T n)
 {
     return (n & (n - 1)) == 0;
 }
+
+union Move;
+struct PackedMove;
+class MoveList;
+class Game;
+class TranspositionTable;
 
 using ScoreType = int16_t;
 
