@@ -3,11 +3,11 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "MoveOrderer.hpp"
-#include "TranspositionTable.hpp"
 
 #include <chrono>
 
 class Game;
+class TranspositionTable;
 
 struct SearchLimits
 {
@@ -26,6 +26,9 @@ struct SearchLimits
 
 struct SearchParam
 {
+    // shared transposition table
+    TranspositionTable& transpositionTable;
+
     // used to track total time spend on search
     std::chrono::time_point<std::chrono::high_resolution_clock> startTimePoint;
 
@@ -105,8 +108,6 @@ public:
 
     void StopSearch();
 
-    TranspositionTable& GetTranspositionTable() { return mTranspositionTable; }
-
 private:
 
     Search(const Search&) = delete;
@@ -162,8 +163,6 @@ private:
     };
 
     std::atomic<bool> mStopSearch = false;
-
-    TranspositionTable mTranspositionTable;
     
     std::vector<ThreadData> mThreadData;
 
@@ -185,7 +184,7 @@ private:
     bool IsRepetition(const NodeInfo& node, const Game& game) const;
 
     // reconstruct PV line from cache and TT table
-    std::vector<Move> GetPvLine(const ThreadData& thread, const Position& pos, uint32_t maxLength) const;
+    static std::vector<Move> GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const SearchContext& ctx) const;

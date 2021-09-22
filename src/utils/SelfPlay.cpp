@@ -4,6 +4,7 @@
 #include "../backend/Game.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
+#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
@@ -23,6 +24,8 @@ void SelfPlay()
 {
     FILE* dumpFile = fopen("selfplay.dat", "wb");
 
+    TranspositionTable tt(1024 * 1024);
+
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
     
     std::mutex mutex;
@@ -41,7 +44,6 @@ void SelfPlay()
             std::mt19937 gen(rd());
 
             Search& search = searchArray[context.threadId];
-            search.GetTranspositionTable().Clear();
 
             Game game;
             game.Reset(Position(Position::InitPositionFEN));
@@ -58,7 +60,7 @@ void SelfPlay()
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
             {
-                SearchParam searchParam;
+                SearchParam searchParam{ tt };
                 searchParam.limits.maxDepth = 8;
                 searchParam.numPvLines = 2;
                 searchParam.debugLog = false;

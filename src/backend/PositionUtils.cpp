@@ -2,6 +2,9 @@
 #include "MoveList.hpp"
 
 #include <chrono>
+#include <random>
+
+#include <immintrin.h>
 
 Position::Position(const std::string& fenString)
     : Position()
@@ -117,7 +120,7 @@ bool Position::FromFEN(const std::string& fenString)
 
     if (numSpaces < 3 || numSpaces > 5 || numRows != 8)
     {
-        fprintf(stderr, "Invalid FEN\n");
+        fprintf(stderr, "Invalid FEN: wrong syntax\n");
         return false;
     }
 
@@ -140,7 +143,7 @@ bool Position::FromFEN(const std::string& fenString)
                 }
                 else
                 {
-                    fprintf(stderr, "Invalid FEN\n");
+                    fprintf(stderr, "Invalid FEN: failed to parse board state\n");
                     return false;
                 }
             }
@@ -157,11 +160,11 @@ bool Position::FromFEN(const std::string& fenString)
                 Piece piece;
                 if (!CharToPiece(ch, piece))
                 {
-                    fprintf(stderr, "Invalid FEN\n");
+                    fprintf(stderr, "Invalid FEN: failed to parse board state\n");
                     return false;
                 }
 
-                SidePosition& side = color == Color::White ? Whites() : Blacks();
+                SidePosition& side = color == Color::White ? mColors[0] : mColors[1];
                 side.GetPieceBitBoard(piece) |= square.GetBitboard();
                 side.occupied |= square.GetBitboard();
 
@@ -246,7 +249,19 @@ bool Position::FromFEN(const std::string& fenString)
 
     mHash = ComputeHash();
 
-    return IsValid() && !IsInCheck(GetOppositeColor(mSideToMove));
+    if (!IsValid())
+    {
+        fprintf(stderr, "Invalid FEN: invalid position\n");
+        return false;
+    }
+
+    if (IsInCheck(GetOppositeColor(mSideToMove)))
+    {
+        fprintf(stderr, "Invalid FEN: opponent cannot be in check\n");
+        return false;
+    }
+
+    return true;
 }
 
 std::string Position::ToFEN() const
@@ -772,4 +787,164 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     }
 
     return nodes;
+}
+
+static std::random_device g_randomDevice;
+static thread_local std::mt19937_64 g_randomGenerator(g_randomDevice());
+
+bool GenerateRandomPosition(const MaterialKey material, Position& outPosition)
+{
+    std::mt19937_64& randomGenerator = g_randomGenerator;
+
+    const auto genLegalSquare = [&randomGenerator](const Bitboard mask) -> Square
+    {
+        std::uniform_int_distribution<uint32_t> distr;
+
+        if (!mask) return Square::Invalid();
+
+        const uint32_t numLegalSquares = mask.Count();
+        const uint32_t maskedSquareIndex = distr(randomGenerator) % numLegalSquares;
+
+        const uint64_t squareMask = _pdep_u64(1ull << maskedSquareIndex, mask);
+        ASSERT(squareMask);
+
+        return Square(FirstBitSet(squareMask));
+    };
+
+    std::uniform_int_distribution<uint32_t> distr;
+
+    for (;;)
+    {
+        outPosition = Position();
+
+        Bitboard occupied = 0;
+
+        // place white king on any square
+        const Square whiteKingSq = Square(distr(randomGenerator) % 64);
+        occupied |= whiteKingSq.GetBitboard();
+        outPosition.SetPiece(whiteKingSq, Piece::King, Color::White);
+
+        // place black king on any square
+        Square blackKingSq;
+        {
+            const Bitboard mask = ~whiteKingSq.GetBitboard() & ~Bitboard::GetKingAttacks(whiteKingSq);
+            blackKingSq = genLegalSquare(mask);
+            ASSERT(blackKingSq.IsValid());
+            occupied |= blackKingSq.GetBitboard();
+            outPosition.SetPiece(blackKingSq, Piece::King, Color::Black);
+        }
+
+        // generate white pawns on ranks 1-7, they cannot attack black king
+        for (uint32_t i = 0; i < material.numWhitePawns; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::RankBitboard(0) & ~Bitboard::RankBitboard(7) & ~Bitboard::GetPawnAttacks(blackKingSq, Color::Black);
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Pawn, Color::White);
+        }
+
+        // TODO generate en-passant square if possible
+
+        // generate black pawns on ranks 1-7
+        for (uint32_t i = 0; i < material.numBlackPawns; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::RankBitboard(0) & ~Bitboard::RankBitboard(7);
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Pawn, Color::Black);
+        }
+
+        // generate white queens, they cannot attack black king
+        for (uint32_t i = 0; i < material.numWhiteQueens; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateRookAttacks(blackKingSq, occupied) & ~Bitboard::GenerateBishopAttacks(blackKingSq, occupied);
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Queen, Color::White);
+        }
+
+        // generate black queens
+        for (uint32_t i = 0; i < material.numBlackQueens; ++i)
+        {
+            const Bitboard mask = ~occupied;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Queen, Color::Black);
+        }
+
+        // generate white rooks, they cannot attack black king
+        for (uint32_t i = 0; i < material.numWhiteRooks; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateRookAttacks(blackKingSq, occupied);
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Rook, Color::White);
+        }
+
+        // generate black rooks
+        for (uint32_t i = 0; i < material.numBlackRooks; ++i)
+        {
+            const Bitboard mask = ~occupied;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Rook, Color::Black);
+        }
+
+        // generate white bishops, they cannot attack black king
+        for (uint32_t i = 0; i < material.numWhiteBishops; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateBishopAttacks(blackKingSq, occupied);
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Bishop, Color::White);
+        }
+
+        // generate black bishops
+        for (uint32_t i = 0; i < material.numBlackBishops; ++i)
+        {
+            const Bitboard mask = ~occupied;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Bishop, Color::Black);
+        }
+
+        // generate white knights, they cannot attack black king
+        for (uint32_t i = 0; i < material.numWhiteKnights; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GetKnightAttacks(blackKingSq);
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Knight, Color::White);
+        }
+
+        // generate black knights
+        for (uint32_t i = 0; i < material.numBlackKnights; ++i)
+        {
+            const Bitboard mask = ~occupied;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Knight, Color::Black);
+        }
+
+        break;
+    }
+
+    ASSERT(outPosition.IsValid());
+    ASSERT(!outPosition.IsInCheck(Color::Black));
+
+    return true;
 }

@@ -90,8 +90,8 @@ NO_INLINE Piece SidePosition::GetPieceAtSquare(const Square square) const
 Position::Position()
     : mSideToMove(Color::White)
     , mEnPassantSquare(Square::Invalid())
-    , mWhitesCastlingRights(CastlingRights_All)
-    , mBlacksCastlingRights(CastlingRights_All)
+    , mWhitesCastlingRights(CastlingRights(0))
+    , mBlacksCastlingRights(CastlingRights(0))
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
     , mHash(0u)
@@ -358,7 +358,6 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
         Bitboard attackBitboard = Bitboard::GenerateRookAttacks(square, occupiedSquares);
         attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
         if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= opponentSide.occupied;
-        attackBitboard &= ~opponentSide.king; // can't capture king
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
@@ -388,7 +387,6 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
         Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(square, occupiedSquares);
         attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
         if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= opponentSide.OccupiedExcludingKing();
-        attackBitboard &= ~opponentSide.king; // can't capture king
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
@@ -418,6 +416,7 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
         Bitboard attackBitboard =
             Bitboard::GenerateRookAttacks(square, occupiedSquares) |
             Bitboard::GenerateBishopAttacks(square, occupiedSquares);
+        attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
         if (flags & MOVE_GEN_ONLY_TACTICAL)
         {
             attackBitboard &= opponentSide.OccupiedExcludingKing();
@@ -426,9 +425,6 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             const Square targetSquare(toIndex);
-
-            // can't capture own piece
-            if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
             Move move = Move::Invalid();
             move.fromSquare = square;
@@ -455,6 +451,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     const Square square(kingSquareIndex);
 
     Bitboard attackBitboard = Bitboard::GetKingAttacks(square);
+    attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
     if (onlyTactical)
     {
         attackBitboard &= opponentSide.OccupiedExcludingKing();
@@ -463,9 +460,6 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
     {
         const Square targetSquare(toIndex);
-
-        // can't capture own piece
-        if (currentSide.Occupied() & targetSquare.GetBitboard()) return;
 
         Move move = Move::Invalid();
         move.fromSquare = square;
@@ -554,6 +548,7 @@ bool Position::IsSquareVisible(const Square square, const Color sideColor) const
     return GetAttackers(square, sideColor) != 0;
 }
 
+NO_INLINE
 bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = mColors[(uint8_t)sideColor];

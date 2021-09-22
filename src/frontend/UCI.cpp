@@ -17,7 +17,7 @@ static const uint32_t c_DefaultTTSize = 1024 * 1024;
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
     mGame.Reset(Position(Position::InitPositionFEN));
-    mSearch.GetTranspositionTable().Resize(c_DefaultTTSize);
+    mTranspositionTable.Resize(c_DefaultTTSize);
 
     for (int i = 1; i < argc; ++i)
     {
@@ -167,10 +167,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ttinfo")
     {
         std::unique_lock<std::mutex> lock(mMutex);
-        const size_t numEntriesUsed = mSearch.GetTranspositionTable().GetNumUsedEntries();
-        const float percentage = 100.0f * (float)numEntriesUsed / (float)mSearch.GetTranspositionTable().GetSize();
+        const size_t numEntriesUsed = mTranspositionTable.GetNumUsedEntries();
+        const float percentage = 100.0f * (float)numEntriesUsed / (float)mTranspositionTable.GetSize();
         std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
-        std::cout << "TT collisions: " << mSearch.GetTranspositionTable().GetNumCollisions() << std::endl;
+        std::cout << "TT collisions: " << mTranspositionTable.GetNumCollisions() << std::endl;
     }
     else if (command == "ttprobe")
     {
@@ -193,6 +193,26 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     if (args.size() >= 2 && args[1] == "startpos")
     {
         pos.FromFEN(Position::InitPositionFEN);
+
+        if (args.size() >= 4 && args[2] == "moves")
+        {
+            extraMovesStart = 2;
+        }
+    }
+
+    if (args.size() >= 2 && args[1] == "random")
+    {
+        MaterialKey material;
+        material.numWhitePawns = 4;
+        material.numBlackPawns = 4;
+        material.numWhiteRooks = 4;
+        material.numBlackRooks = 4;
+
+        if (!GenerateRandomPosition(material, pos))
+        {
+            std::cout << "Failed to generate random position" << std::endl;
+            return false;
+        }
 
         if (args.size() >= 4 && args[2] == "moves")
         {
@@ -246,7 +266,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         
         if (!pos.FromFEN(fenString))
         {
-            std::cout << "Invalid FEN" << std::endl;
             return false;
         }
     }
@@ -377,7 +396,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
     }
 
-    mSearchCtx = std::make_unique<SearchTaskContext>();
+    mSearchCtx = std::make_unique<SearchTaskContext>(mTranspositionTable);
 
     // calculate time for move based on total remaining time and other heuristics
     {
@@ -439,18 +458,25 @@ void UniversalChessInterface::RunSearchTask()
         // only report best move in non-pondering mode or if "stop" was called during ponder search
         if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
         {
-            const auto& bestLine = mSearchCtx->searchResult[0].moves;
-
-            if (!bestLine.empty())
+            bool hasMove = false;
+            if (!mSearchCtx->searchResult.empty())
             {
-                std::cout << "bestmove " << bestLine[0].ToString();
+                const auto& bestLine = mSearchCtx->searchResult[0].moves;
 
-                if (bestLine.size() > 1)
+                if (!bestLine.empty())
                 {
-                    std::cout << " ponder " << bestLine[1].ToString();
+                    hasMove = true;
+
+                    std::cout << "bestmove " << bestLine[0].ToString();
+
+                    if (bestLine.size() > 1)
+                    {
+                        std::cout << " ponder " << bestLine[1].ToString();
+                    }
                 }
             }
-            else // null move
+
+            if (!hasMove) // null move
             {
                 std::cout << "bestmove 0000";
             }
@@ -553,7 +579,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
         size_t numEntries = hashSize / sizeof(TTEntry);
-        mSearch.GetTranspositionTable().Resize(numEntries);
+        mTranspositionTable.Resize(numEntries);
     }
 #ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")
@@ -584,7 +610,7 @@ bool UniversalChessInterface::Command_TTProbe()
 
     TTEntry ttEntry;
 
-    if (mSearch.GetTranspositionTable().Read(mGame.GetPosition(), ttEntry))
+    if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {
         const char* boundsStr =
             ttEntry.flag == TTEntry::Flag_Exact ? "exact" :

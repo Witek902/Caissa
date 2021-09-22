@@ -7,11 +7,6 @@
 
 namespace nn {
 
-static const float cAdamLearningRate = 0.001f;
-static const float cAdamBeta1 = 0.9f;
-static const float cAdamBeta2 = 0.999f;
-static const float cAdamEpsilon = 1.0e-8f;
-
 // min/max value of a weight
 static const float cWeightsRange = 127.0f;
 
@@ -26,19 +21,18 @@ Layer::Layer(size_t inputSize, size_t outputSize)
 
     nextError.resize(input.size() + 1);
     gradient.resize(weights.size());
-    adam_m.resize(weights.size(), 0.0f);
-    adam_v.resize(weights.size(), 0.0f);
+    m.resize(weights.size(), 0.0f);
+    v.resize(weights.size(), 0.0f);
 }
 
 void Layer::InitWeights()
 {
-    //const float scale = 0.1f;
     const float scale = 1.0f / sqrtf((float)input.size());
 
     for (size_t i = 0; i < weights.size(); i++)
     {
-        adam_m[i] = 0.0f;
-        adam_v[i] = 0.0f;
+        m[i] = 0.0f;
+        v[i] = 0.0f;
     }
 
     size_t offs = 0;
@@ -220,9 +214,6 @@ bool NeuralNetwork::Load(const char* filePath)
         return false;
     }
 
-    adamBeta1 = cAdamBeta1;
-    adamBeta2 = cAdamBeta2;
-
     uint32_t numInputs = 0;
     if (1 != fread(&numInputs, sizeof(uint32_t), 1, file))
     {
@@ -279,9 +270,6 @@ bool NeuralNetwork::Load(const char* filePath)
 
 void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSizes)
 {
-    adamBeta1 = cAdamBeta1;
-    adamBeta2 = cAdamBeta2;
-
     layers.reserve(layersSizes.size());
     size_t prevLayerSize = inputSize;
 
@@ -309,7 +297,7 @@ const Layer::Values& NeuralNetwork::Run(const Layer::Values& input)
     return layers.back().GetOutput();
 }
 
-void NeuralNetwork::UpdateLayerWeights(Layer& layer, float scale) const
+void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
 {
     const size_t inputSize = layer.input.size();
 
@@ -321,19 +309,43 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer, float scale) const
         {
             const size_t idx = offs + j;
 
-            float& m = layer.adam_m[idx];
-            float& v = layer.adam_v[idx];
+            float& m = layer.m[idx];
+            float& v = layer.v[idx];
             float& w = layer.weights[idx];
             const float g = layer.gradient[idx];
 
+            /*
+            // ADADELTA algorithm
+            const float rho = 0.01f;
+            v = rho * v + (1.0f - rho) * g * g;
+            const float delta = -sqrtf(m / v) * g;
+            m = rho * m + (1.0f - rho) * delta;
+            w += delta * scale;
+            */
+
+            const float cRho = 0.95f;
+            const float cEpsilon = 1.0e-6f;
+            const float cLearningRate = 1.0f;
+
+            // ADADELTA algorithm
+            m = cRho * m + (1.0f - cRho) * g * g;
+            float delta = sqrtf((v + cEpsilon) / (m + cEpsilon)) * g;
+            v = cRho * v + (1.0f - cRho) * delta * delta;
+            w -= delta * cLearningRate;
+
+            /*
+            const float cAdamLearningRate = 1.0f;
+            const float cAdamBeta1 = 0.9f;
+            const float cAdamBeta2 = 0.999f;
+            const float cAdamEpsilon = 1.0e-8f;
+
+            // ADAM algorithm
             m = cAdamBeta1 * m + (1.0f - cAdamBeta1) * g;
             v = cAdamBeta2 * v + (1.0f - cAdamBeta2) * g * g;
-            float hm = m / (1.0f - adamBeta1); // +(1.0f - cAdamBeta1) * g / (1.0f - adamBeta1);
+            float hm = m / (1.0f - adamBeta1) + (1.0f - cAdamBeta1) * g / (1.0f - adamBeta1);
             float hv = v / (1.0f - adamBeta2);
-
             w -= hm / (sqrtf(hv) + cAdamEpsilon) * scale;
-
-            //w -= g * scale;
+            */
 
             assert(!std::isnan(m));
             assert(!std::isnan(v));
@@ -392,20 +404,11 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
             }
         }
 
-        //const float updateScale = cAdamLearningRate / (float)batchSize;
-        const float updateScale = cAdamLearningRate;
-
         for (size_t i = layers.size(); i-- > 0; )
         {
-            UpdateLayerWeights(layers[i], updateScale);
+            UpdateLayerWeights(layers[i]);
         }
     }
-}
-
-void NeuralNetwork::NextEpoch()
-{
-    adamBeta1 *= cAdamBeta1;
-    adamBeta2 *= cAdamBeta2;
 }
 
 } // namespace nn

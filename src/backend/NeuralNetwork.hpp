@@ -78,8 +78,8 @@ private:
     // used for learning
     Values gradient;
     Values nextError;
-    Values adam_m;
-    Values adam_v;
+    Values m;
+    Values v;
 
     ActivationFunction activationFunction;
 };
@@ -103,8 +103,6 @@ public:
 
     // Train the neural network
     void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize);
-
-    void NextEpoch();
 
     Layer& GetLayer(size_t idx)
     {
@@ -133,14 +131,12 @@ public:
 
 private:
 
-    void UpdateLayerWeights(Layer& layer, float scale) const;
+    void UpdateLayerWeights(Layer& layer) const;
 
     std::vector<Layer> layers;
 
     // used for learning
     Layer::Values tempError;
-    float adamBeta1;
-    float adamBeta2;
 };
 
 } // namespace nn

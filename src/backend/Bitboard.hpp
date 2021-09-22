@@ -52,7 +52,7 @@ struct Bitboard
         };
     }
 
-    INLINE const Bitboard Flipped() const
+    const Bitboard Flipped() const
     {
         const uint64_t h1 = 0x5555555555555555ull;
         const uint64_t h2 = 0x3333333333333333ull;
@@ -67,6 +67,19 @@ struct Bitboard
         x = ((x >> 8) & v1) | ((x & v1) << 8);
         x = ((x >> 16) & v2) | ((x & v2) << 16);
         x = (x >> 32) | (x << 32);
+        return x;
+    }
+
+    const Bitboard MirroredHorizontally() const
+    {
+        const uint64_t k1 = 0x5555555555555555ull;
+        const uint64_t k2 = 0x3333333333333333ull;
+        const uint64_t k4 = 0x0f0f0f0f0f0f0f0full;
+
+        uint64_t x = value;
+        x = ((x >> 1) & k1) + 2u * (x & k1);
+        x = ((x >> 2) & k2) + 4u * (x & k2);
+        x = ((x >> 4) & k4) + 16u * (x & k4);
         return x;
     }
 

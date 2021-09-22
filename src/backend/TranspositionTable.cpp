@@ -35,11 +35,12 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
 #endif
 
-TranspositionTable::TranspositionTable()
+TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
     , numClusters(0)
     , numCollisions(0)
 {
+    Resize(initialSize);
 }
 
 TranspositionTable::~TranspositionTable()

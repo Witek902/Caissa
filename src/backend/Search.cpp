@@ -2,6 +2,7 @@
 #include "Game.hpp"
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
+#include "TranspositionTable.hpp"
 
 #ifdef USE_TABLE_BASES
     #include "tablebase/tbprobe.h"
@@ -107,12 +108,10 @@ int64_t SearchParam::GetElapsedTime() const
 
 Search::Search()
 {
-    mTranspositionTable.Resize(1024 * 1024);
 }
 
 Search::~Search()
 {
-
 }
 
 void Search::StopSearch()
@@ -145,7 +144,7 @@ bool Search::CheckStopCondition(const SearchContext& ctx) const
     return false;
 }
 
-std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& pos, uint32_t maxLength) const
+std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength)
 {
     std::vector<Move> moves;
 
@@ -173,7 +172,7 @@ std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& po
             if (iteratedPosition.GetNumLegalMoves() == 0) break;
 
             TTEntry ttEntry;
-            if (!mTranspositionTable.Read(iteratedPosition, ttEntry)) break;
+            if (!tt.Read(iteratedPosition, ttEntry)) break;
 
             const Move move = iteratedPosition.MoveFromPacked(ttEntry.move);
 
@@ -206,6 +205,17 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     if (numPvLines == 0u)
     {
         // early exit in case of no legal moves
+        if (param.debugLog)
+        {
+            if (!game.GetPosition().IsInCheck(game.GetPosition().GetSideToMove()))
+            {
+                std::cout << "info depth 0 score cp 0" << std::endl;
+            }
+            if (game.GetPosition().IsInCheck(game.GetPosition().GetSideToMove()))
+            {
+                std::cout << "info depth 0 score mate 0" << std::endl;
+            }
+        }
         return;
     }
 
@@ -288,7 +298,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             const ScoreType score = AspirationWindowSearch(thread, aspirationWindowSearchParam);
             ASSERT(score > -CheckmateValue && score < CheckmateValue);
 
-            std::vector<Move> pvLine = GetPvLine(thread, game.GetPosition(), depth);
+            std::vector<Move> pvLine = GetPvLine(thread, game.GetPosition(), param.transpositionTable, depth);
             ASSERT(!pvLine.empty());
 
             // store for multi-PV filtering in next iteration
@@ -625,7 +635,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     if (UseTranspositionTableInQSearch)
     {
         TTEntry ttEntry;
-        if (mTranspositionTable.Read(position, ttEntry))
+        if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
         {
             ttMove = ttEntry.move;
             staticEval = ttEntry.staticEval;
@@ -714,7 +724,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             continue;
         }
 
-        mTranspositionTable.Prefetch(childPosition);
+        if (UseTranspositionTableInQSearch)
+        {
+            ctx.searchParam.transpositionTable.Prefetch(childPosition);
+        }
 
         moveIndex++;
 
@@ -763,7 +776,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             bestValue > oldAlpha ? TTEntry::Flag_Exact :
             TTEntry::Flag_UpperBound;
 
-        mTranspositionTable.Write(position, entry);
+        ctx.searchParam.transpositionTable.Write(position, entry);
 
         ctx.stats.ttWrites++;
     }
@@ -852,7 +865,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     PackedMove ttMove;
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
-    if (mTranspositionTable.Read(position, ttEntry))
+    if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
         ttMove = ttEntry.move;
         staticEval = ttEntry.staticEval;
@@ -938,7 +951,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     entry.depth = bounds == TTEntry::Flag_Exact ? UINT8_MAX : (uint8_t)node.depth;
                     entry.flag = bounds;
 
-                    mTranspositionTable.Write(position, entry);
+                    ctx.searchParam.transpositionTable.Write(position, entry);
 
                     ctx.stats.ttWrites++;
 
@@ -1089,6 +1102,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     Move tbMove = Move::Invalid();
 #ifdef USE_TABLE_BASES
+    /*
     if ((isPvNode || node.isTbNode) && !hasMoveFilter && HasTablebases())
     {
         const uint32_t probeResult = tb_probe_root(
@@ -1129,6 +1143,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
     }
+    */
 #endif // USE_TABLE_BASES
 
     Move bestMove = Move::Invalid();
@@ -1153,7 +1168,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
-        mTranspositionTable.Prefetch(childPosition);
+        ctx.searchParam.transpositionTable.Prefetch(childPosition);
 
         moveIndex++;
 
@@ -1170,6 +1185,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // endgame tablebase walk extension
         if (performTablebaseWalk)
+        {
+            moveExtension++;
+        }
+
+        // extend if there's only one legal move
+        if (moveIndex == 1 && i + 1 == moves.Size())
         {
             moveExtension++;
         }
@@ -1350,7 +1371,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
         entry.score = ScoreToTT(bestValue, node.height);
 
-        mTranspositionTable.Write(position, entry);
+        ctx.searchParam.transpositionTable.Write(position, entry);
 
         ctx.stats.ttWrites++;
 
@@ -1386,7 +1407,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         entry.depth = (uint8_t)node.depth;
         entry.flag = flag;
 
-        mTranspositionTable.Write(position, entry);
+        ctx.searchParam.transpositionTable.Write(position, entry);
 
         ctx.stats.ttWrites++;
     }
