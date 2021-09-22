@@ -353,7 +353,7 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
             assert(fabsf(w) < cWeightsRange);
 
             // clamp
-            //w = std::max(-cWeightsRange, std::min(cWeightsRange, w));
+            w = std::max(-cWeightsRange, std::min(cWeightsRange, w));
         }
 
         offs += inputSize + 1;

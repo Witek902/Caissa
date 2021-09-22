@@ -5,9 +5,9 @@
 #include "MoveOrderer.hpp"
 
 #include <chrono>
+#include <atomic>
 
-class Game;
-class TranspositionTable;
+using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct SearchLimits
 {
@@ -30,7 +30,7 @@ struct SearchParam
     TranspositionTable& transpositionTable;
 
     // used to track total time spend on search
-    std::chrono::time_point<std::chrono::high_resolution_clock> startTimePoint;
+    TimePoint startTimePoint;
 
     // search limits
     SearchLimits limits;

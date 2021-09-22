@@ -81,9 +81,9 @@ void Waitable::OnFinished()
 //////////////////////////////////////////////////////////////////////////
 
 WorkerThread::WorkerThread(ThreadPool* pool, uint32_t id)
-    : mId(id)
+    : mThread{&ThreadPool::SchedulerCallback, pool, this}
+    , mId(id)
     , mStarted(true)
-    , mThread{&ThreadPool::SchedulerCallback, pool, this}
 {
 }
 

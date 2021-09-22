@@ -654,7 +654,6 @@ bool Position::DoMove(const Move& move)
     ASSERT(IsValid());          // board position must be valid
 
     SidePosition& opponentSide = GetOpponentSide();
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
     // move piece
     RemovePiece(move.fromSquare, move.piece, mSideToMove);

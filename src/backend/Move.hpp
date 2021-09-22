@@ -7,7 +7,7 @@
 
 class MoveList;
 
-struct Move;
+union Move;
 
 struct PackedMove
 {
@@ -36,28 +36,30 @@ struct PackedMove
         return value != 0u;
     }
 
+    INLINE bool operator == (const PackedMove& rhs) const
+    {
+        return value == rhs.value;
+    }
+
     std::string ToString() const;
 };
 
 static_assert(sizeof(PackedMove) == 2, "Invalid PackedMove size");
 
-struct Move
+union Move
 {
-    UNNAMED_STRUCT union
+    UNNAMED_STRUCT struct
     {
-        UNNAMED_STRUCT struct
-        {
-            Square fromSquare;
-            Square toSquare;
-            Piece piece;                // piece that is moved
-            Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
-            bool isCapture : 1;
-            bool isEnPassant : 1;       // is en passant capture
-            bool isCastling : 1;        // only valid if piece is king
-        };
-
-        uint32_t value;
+        Square fromSquare;
+        Square toSquare;
+        Piece piece;                // piece that is moved
+        Piece promoteTo : 4;        // select target piece after promotion (only valid is piece is pawn)
+        bool isCapture : 1;
+        bool isEnPassant : 1;       // is en passant capture
+        bool isCastling : 1;        // only valid if piece is king
     };
+
+    uint32_t value;
 
     INLINE static const Move Invalid()
     {

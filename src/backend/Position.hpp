@@ -19,7 +19,7 @@ enum CastlingRights : uint8_t
 
 union MaterialKey
 {
-    struct
+    UNNAMED_STRUCT struct
     {
         uint64_t numWhitePawns : 6;
         uint64_t numWhiteKnights : 6;
@@ -140,10 +140,6 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
     ASSERT(index <= (uint32_t)Piece::King);
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
-
-struct Move;
-struct PackedMove;
-class MoveList;
 
 #define MOVE_GEN_ONLY_TACTICAL 1
 

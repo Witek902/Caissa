@@ -10,7 +10,6 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
 #include "../backend/ThreadPool.hpp"
-#include "../backend/tablebase/tbprobe.h"
 
 #include <chrono>
 #include <random>

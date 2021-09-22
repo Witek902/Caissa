@@ -378,7 +378,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                     for (uint32_t i = 0; i <= maxMoveIndex; ++i)
                     {
                         const uint64_t value = searchContext.stats.betaCutoffHistogram[i];
-                        printf("    %u : %llu (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
+                        printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
                     }
                 }
             }

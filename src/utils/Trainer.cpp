@@ -10,7 +10,6 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
 #include "../backend/ThreadPool.hpp"
-#include "../backend/tablebase/tbprobe.h"
 
 #include <iostream>
 #include <iomanip>
@@ -90,6 +89,7 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
     outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
 }
 
+static const uint32_t cMaxIterations = 100000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 1000;
 static const uint32_t cNumValidationVectorsPerIteration = 1000;
 static const uint32_t cBatchSize = 10;
@@ -140,7 +140,7 @@ bool Train()
     uint32_t numTrainingVectorsPassed = 0;
     uint32_t numTrainingVectorsPassedInEpoch = 0;
 
-    for (uint32_t iteration = 0; ; ++iteration)
+    for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
         // pick random test entries
         std::uniform_int_distribution<size_t> distrib(0, numEntries - 1);
@@ -187,9 +187,9 @@ bool Train()
         float epoch = (float)numTrainingVectorsPassed / (float)numEntries;
         std::cout << epoch << "\t" << errorSum << "\t" << minError << "\t" << maxError;
         std::cout << std::endl;
-    }
 
-    network.Save("network.dat");
+        network.Save("network.dat");
+    }
 
     return true;
 }
@@ -311,8 +311,6 @@ static void PositionToVector_KPvKP(const Position& pos, nn::TrainingVector& outV
     ASSERT(inputOffset == outVector.input.size());
 }
 
-#pragma optimize("",off)
-
 bool TrainEndgame()
 {
     TranspositionTable tt{ 128 * 1024 * 1024 };
@@ -397,7 +395,7 @@ bool TrainEndgame()
         uint32_t numTrainingVectorsPassed = 0;
         uint32_t numTrainingVectorsPassedInEpoch = 0;
 
-        for (uint32_t iteration = 0; ; ++iteration)
+        for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
         {
             generateTrainingSet(trainingSet, trainingPositions);
             network.Train(trainingSet, tempValues, cBatchSize);
@@ -407,10 +405,10 @@ bool TrainEndgame()
 
             generateTrainingSet(validationSet, validationPositions);
             
-            float nnMinError = FLT_MAX;
+            float nnMinError = std::numeric_limits<float>::max();
             float nnMaxError = 0.0f, nnErrorSum = 0.0f;
 
-            float evalMinError = FLT_MAX;
+            float evalMinError = -std::numeric_limits<float>::max();
             float evalMaxError = 0.0f, evalErrorSum = 0.0f;
 
             for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
