@@ -1,9 +1,13 @@
 #include "Endgame.hpp"
+#include "Evaluate.hpp"
 #include "Position.hpp"
 #include "Move.hpp"
+#include "PackedNeuralNetwork.hpp"
 
 #include <bitset>
 #include <vector>
+
+static nn::PackedNeuralNetwork g_pawnsEndgameNeuralNetwork;
 
 // KPK evaluation is based on Stockfish bitbase:
 // https://github.com/official-stockfish/Stockfish/blob/master/src/bitbase.cpp
@@ -182,7 +186,20 @@ Result KPKPosition::classify(const std::vector<KPKPosition>& db)
 
 } // KPKEndgame
 
+enum MaterialMask : uint32_t
+{
+    MaterialMask_WhitePawn   = 1 << 0,
+    MaterialMask_WhiteKnight = 1 << 1,
+    MaterialMask_WhiteBishop = 1 << 2,
+    MaterialMask_WhiteRook   = 1 << 3,
+    MaterialMask_WhiteQueen  = 1 << 4,
 
+    MaterialMask_BlackPawn   = 1 << 5,
+    MaterialMask_BlackKnight = 1 << 6,
+    MaterialMask_BlackBishop = 1 << 7,
+    MaterialMask_BlackRook   = 1 << 8,
+    MaterialMask_BlackQueen  = 1 << 9,
+};
 
 INLINE static constexpr uint32_t BuildMaterialMask(
     uint32_t wp, uint32_t wk, uint32_t wb, uint32_t wr, uint32_t wq,
@@ -208,6 +225,8 @@ INLINE static constexpr uint32_t BuildMaterialMask(
 void InitEndgame()
 {
     KPKEndgame::Init();
+
+    g_pawnsEndgameNeuralNetwork.Load("D:/DEV/CURRENT/Chess/src/frontend/pawns.nn");
 }
 
 bool EvaluateEndgame(const Position& pos, int32_t& outScore)
@@ -228,21 +247,21 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
         whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens,
         blackPawns, blackKnights, blackBishops, blackRooks, blackQueens);
 
-    const Square whiteKing(FirstBitSet(pos.Whites().king));
-    const Square blackKing(FirstBitSet(pos.Blacks().king));
+    Square whiteKing(FirstBitSet(pos.Whites().king));
+    Square blackKing(FirstBitSet(pos.Blacks().king));
 
     switch (mask)
     {
 
     // King vs King
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 0, 0, 0, 0):
+    case 0:
     {
         outScore = 0;
         return true;
     }
 
     // Knight(s) vs King
-    case BuildMaterialMask(0, 1, 0, 0, 0, 0, 0, 0, 0, 0):
+    case MaterialMask_WhiteKnight:
     {
         if (whiteKnights <= 2)
         {
@@ -261,7 +280,7 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
     }
 
     // King vs Knight(s)
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 1, 0, 0, 0):
+    case MaterialMask_BlackKnight:
     {
         if (blackKnights <= 2)
         {
@@ -280,8 +299,8 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
     }
 
     // Bishop(s) vs Knight
-    case BuildMaterialMask(0, 0, 1, 0, 0, 0, 0, 0, 0, 0):
-    case BuildMaterialMask(0, 0, 1, 0, 0, 0, 1, 0, 0, 0):
+    case MaterialMask_WhiteBishop:
+    case MaterialMask_WhiteBishop | MaterialMask_BlackKnight:
     {
         const uint32_t numLightSquareBishops = (pos.Whites().bishops & Bitboard::LightSquares()).Count();
         const uint32_t numDarkSquareBishops = (pos.Whites().bishops & Bitboard::DarkSquares()).Count();
@@ -304,8 +323,8 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
     }
 
     // Knight vs Bishop(s)
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 0, 1, 0, 0):
-    case BuildMaterialMask(0, 1, 0, 0, 0, 0, 0, 1, 0, 0):
+    case MaterialMask_BlackBishop:
+    case MaterialMask_BlackBishop | MaterialMask_WhiteKnight:
     {
         const uint32_t numLightSquareBishops = (pos.Blacks().bishops & Bitboard::LightSquares()).Count();
         const uint32_t numDarkSquareBishops = (pos.Blacks().bishops & Bitboard::DarkSquares()).Count();
@@ -376,7 +395,7 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
     }
 
     // Pawn vs King
-    case BuildMaterialMask(1, 0, 0, 0, 0, 0, 0, 0, 0, 0):
+    case MaterialMask_WhitePawn:
     {
         if (whitePawns == 1)
         {
@@ -407,7 +426,7 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
     }
 
     // King vs Pawn
-    case BuildMaterialMask(0, 0, 0, 0, 0, 1, 0, 0, 0, 0):
+    case MaterialMask_BlackPawn:
     {
         if (blackPawns == 1)
         {
@@ -437,6 +456,88 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
         }
         break;
     }
+
+    // TODO WIP
+    /*
+    // Pawns vs Pawns
+    case MaterialMask_WhitePawn|MaterialMask_BlackPawn:
+    {
+        if (g_pawnsEndgameNeuralNetwork.IsValid())
+        {
+            Square kingA = whiteKing;
+            Square kingB = blackKing;
+            Bitboard pawnsA = pos.Whites().pawns;
+            Bitboard pawnsB = pos.Blacks().pawns;
+
+            if (pos.GetSideToMove() == Color::Black)
+            {
+                kingA = blackKing.FlippedRank();
+                kingB = whiteKing.FlippedRank();
+                pawnsA = pos.Blacks().pawns.FlippedVertically();
+                pawnsB = pos.Whites().pawns.FlippedVertically();
+            }
+
+            if (kingA.File() >= 4)
+            {
+                kingA = kingA.FlippedFile();
+                kingB = kingB.FlippedFile();
+                pawnsA = pawnsA.MirroredHorizontally();
+                pawnsB = pawnsB.MirroredHorizontally();
+            }
+
+            constexpr uint32_t maxFeatures = 18; // kings + max pawns
+            uint32_t features[18];
+
+            uint32_t numFeatures = 0;
+            uint32_t inputOffset = 0;
+
+            // white king
+            {
+                const uint32_t whiteKingIndex = 4 * kingA.Rank() + kingA.File();
+                features[numFeatures++] = whiteKingIndex;
+                inputOffset += 32;
+            }
+
+            // black king
+            {
+                features[numFeatures++] = inputOffset + kingB.Index();
+                inputOffset += 64;
+            }
+
+            {
+                for (uint32_t i = 0; i < 48u; ++i)
+                {
+                    const uint32_t squreIndex = i + 8u;
+                    if ((pawnsA >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
+                }
+                inputOffset += 48;
+            }
+
+            {
+                for (uint32_t i = 0; i < 48u; ++i)
+                {
+                    const uint32_t squreIndex = i + 8u;
+                    if ((pawnsB >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
+                }
+                inputOffset += 48;
+            }
+
+            ASSERT(numFeatures >= 4);
+            ASSERT(numFeatures <= maxFeatures);
+
+            const int32_t rawNetworkOutput = g_pawnsEndgameNeuralNetwork.Run(numFeatures, features);
+            const float winProbability = (float)rawNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
+            const float pawnsValue = WinProbabilityToPawns(winProbability);
+
+            outScore = (int32_t)(0.5f + 100.0f * std::clamp(pawnsValue, -64.0f, 64.0f));
+
+            if (pos.GetSideToMove() == Color::Black) outScore = -outScore;
+
+            //return true;
+        }
+        break;
+    }
+    */
 
     }
 

@@ -262,6 +262,10 @@ public:
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;
 
+    // convert position to neural network input features (active indices list)
+    // returns number of active features
+    uint32_t ToFeaturesVector(uint32_t* outFeatures) const;
+
 private:
 
     friend class Search;
