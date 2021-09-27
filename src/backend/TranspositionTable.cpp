@@ -9,22 +9,86 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
 #if defined(_MSC_VER)
 
-    static void* Malloc(size_t size, size_t alignment)
+#include <Windows.h>
+
+    static bool EnableLargePagesSupport()
     {
-        return _aligned_malloc(size, alignment);
+        HANDLE hToken;
+        TOKEN_PRIVILEGES tp;
+
+        // open process token
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+        {
+            std::cerr << "OpenProcessToken failed, error code: " << GetLastError() << std::endl;
+            return false;
+        }
+
+        // get the luid
+        if (!LookupPrivilegeValue(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
+        {
+            std::cerr << "LookupPrivilegeValue failed, error code: " << GetLastError() << std::endl;
+            return false;
+        }
+
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+        // enable or disable privilege
+        BOOL status = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+
+        // It is possible for AdjustTokenPrivileges to return TRUE and still not succeed.
+        // So always check for the last error value.
+        DWORD error = GetLastError();
+        if (!status || (error != ERROR_SUCCESS))
+        {
+            std::cerr << "AdjustTokenPrivileges failed, error code: " << error << std::endl;
+            return false;
+        }
+
+        CloseHandle(hToken);
+
+        std::cout << "Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
+        return true;
+    }
+
+    NO_INLINE static void* Malloc(size_t size)
+    {
+        void* ptr = nullptr;
+
+        // try large pages first
+        const size_t largePageMinNumpages = 4;
+        const size_t minLargePageSize = largePageMinNumpages * ::GetLargePageMinimum();
+        if (size >= minLargePageSize)
+        {
+            const size_t roundedSize = ((size + minLargePageSize - 1) / minLargePageSize) * minLargePageSize;
+            //ptr = ::VirtualAlloc(NULL, roundedSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+        }
+
+        // fallback to regular pages
+        if (!ptr)
+        {
+            ptr = ::VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        }
+
+        return ptr;
     }
 
     static void Free(void* ptr)
     {
-        _aligned_free(ptr);
+        ::VirtualFree(ptr, 0, MEM_RELEASE);
     }
 
 #elif defined(__GNUC__) || defined(__clang__)
 
-    static void* Malloc(size_t size, size_t alignment)
+    static bool EnableLargePagesSupport()
+    {
+        return false;
+    }
+
+    static void* Malloc(size_t size)
     {
         void* ptr = nullptr;
-        int ret = posix_memalign(&ptr, alignment, size);
+        int ret = posix_memalign(&ptr, CACHELINE_SIZE, size);
         return ret != 0 ? nullptr : ptr;
     }
 
@@ -34,6 +98,11 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
     }
 
 #endif
+
+void TranspositionTable::Init()
+{
+    EnableLargePagesSupport();
+}
 
 TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
@@ -53,11 +122,24 @@ void TranspositionTable::Clear()
     memset(clusters, 0, numClusters * sizeof(TTCluster));
 }
 
-void TranspositionTable::Resize(size_t newSize)
+uint64_t NextPowerOfTwo(uint64_t v)
 {
-    ASSERT(IsPowerOfTwo(newSize));
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    v++;
+    return v;
 
-    const size_t newNumClusters = (newSize + NumEntriesPerCluster - 1) / NumEntriesPerCluster;
+}
+
+void TranspositionTable::Resize(size_t newSizeInBytes)
+{
+    const size_t newNumClusters = NextPowerOfTwo(newSizeInBytes) / sizeof(TTCluster);
+    const size_t newSize = newNumClusters / NumEntriesPerCluster;
 
     if (numClusters == newNumClusters)
     {
@@ -75,7 +157,7 @@ void TranspositionTable::Resize(size_t newSize)
     Free(clusters);
     clusters = nullptr;
 
-    clusters = (TTCluster*)Malloc(newNumClusters * sizeof(TTCluster), CACHELINE_SIZE);
+    clusters = (TTCluster*)Malloc(newNumClusters * sizeof(TTCluster));
     numClusters = newNumClusters;
     ASSERT(clusters);
     ASSERT((size_t)clusters % CACHELINE_SIZE == 0);

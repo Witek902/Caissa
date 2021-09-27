@@ -578,8 +578,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "hash")
     {
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
-        size_t numEntries = hashSize / sizeof(TTEntry);
-        mTranspositionTable.Resize(numEntries);
+        mTranspositionTable.Resize(hashSize);
     }
 #ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")
