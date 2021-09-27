@@ -4,9 +4,10 @@
 #include "../backend/Search.hpp"
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/ThreadPool.hpp"
+
+#include "../backend/nnue-probe/nnue.h"
 
 #include <chrono>
 #include <mutex>
@@ -304,11 +305,11 @@ void PositionTests()
             Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e2e4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e2);
-            TEST_EXPECT(move.toSquare == Square_e4);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_e2);
+            TEST_EXPECT(move.ToSquare() == Square_e4);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -320,11 +321,11 @@ void PositionTests()
             Position pos("rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
             const Move move = pos.MoveFromString("e2e4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e2);
-            TEST_EXPECT(move.toSquare == Square_e4);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_e2);
+            TEST_EXPECT(move.ToSquare() == Square_e4);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -333,10 +334,10 @@ void PositionTests()
             Position pos("rnbqkbnr/pppp1ppp/8/8/4p3/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
             const Move move = pos.MoveFromString("e2e4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e2);
-            TEST_EXPECT(move.toSquare == Square_e4);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_e2);
+            TEST_EXPECT(move.ToSquare() == Square_e4);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -345,10 +346,10 @@ void PositionTests()
             Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
             const Move move = pos.MoveFromString("f7f5");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_f7);
-            TEST_EXPECT(move.toSquare == Square_f5);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_f7);
+            TEST_EXPECT(move.ToSquare() == Square_f5);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -357,12 +358,12 @@ void PositionTests()
             Position pos("rnbqkbnr/p1pppppp/8/1p6/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 1");
             const Move move = pos.MoveFromString("c4b5");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_c4);
-            TEST_EXPECT(move.toSquare == Square_b5);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == true);
-            TEST_EXPECT(move.isEnPassant == false);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_c4);
+            TEST_EXPECT(move.ToSquare() == Square_b5);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == true);
+            TEST_EXPECT(move.IsEnPassant() == false);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -374,12 +375,12 @@ void PositionTests()
             Position pos("rnbqkbnr/pp1ppppp/8/2pP4/8/8/PPP1PPPP/RNBQKBNR w KQkq c6 0 1");
             const Move move = pos.MoveFromString("d5c6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_d5);
-            TEST_EXPECT(move.toSquare == Square_c6);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == true);
-            TEST_EXPECT(move.isEnPassant == true);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_d5);
+            TEST_EXPECT(move.ToSquare() == Square_c6);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == true);
+            TEST_EXPECT(move.IsEnPassant() == true);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -391,12 +392,12 @@ void PositionTests()
             Position pos("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d3 0 1");
             const Move move = pos.MoveFromString("e2d3");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e2);
-            TEST_EXPECT(move.toSquare == Square_d3);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == true);
-            TEST_EXPECT(move.isEnPassant == true);
-            TEST_EXPECT(move.promoteTo == Piece::None);
+            TEST_EXPECT(move.FromSquare() == Square_e2);
+            TEST_EXPECT(move.ToSquare() == Square_d3);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == true);
+            TEST_EXPECT(move.IsEnPassant() == true);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -405,11 +406,11 @@ void PositionTests()
             Position pos("1k6/5P2/8/8/8/8/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("f7f8k");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_f7);
-            TEST_EXPECT(move.toSquare == Square_f8);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.promoteTo == Piece::King);
+            TEST_EXPECT(move.FromSquare() == Square_f7);
+            TEST_EXPECT(move.ToSquare() == Square_f8);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::King);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -418,11 +419,11 @@ void PositionTests()
             Position pos("1k6/5P2/8/8/8/8/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("f7f8q");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_f7);
-            TEST_EXPECT(move.toSquare == Square_f8);
-            TEST_EXPECT(move.piece == Piece::Pawn);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.promoteTo == Piece::Queen);
+            TEST_EXPECT(move.FromSquare() == Square_f7);
+            TEST_EXPECT(move.ToSquare() == Square_f8);
+            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.GetPromoteTo() == Piece::Queen);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -434,10 +435,10 @@ void PositionTests()
             Position pos("4k3/8/8/8/8/3N4/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("d3f4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_d3);
-            TEST_EXPECT(move.toSquare == Square_f4);
-            TEST_EXPECT(move.piece == Piece::Knight);
-            TEST_EXPECT(move.isCapture == false);
+            TEST_EXPECT(move.FromSquare() == Square_d3);
+            TEST_EXPECT(move.ToSquare() == Square_f4);
+            TEST_EXPECT(move.GetPiece() == Piece::Knight);
+            TEST_EXPECT(move.IsCapture() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -449,10 +450,10 @@ void PositionTests()
             Position pos("4k3/8/8/8/5q2/3N4/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("d3f4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_d3);
-            TEST_EXPECT(move.toSquare == Square_f4);
-            TEST_EXPECT(move.piece == Piece::Knight);
-            TEST_EXPECT(move.isCapture == true);
+            TEST_EXPECT(move.FromSquare() == Square_d3);
+            TEST_EXPECT(move.ToSquare() == Square_f4);
+            TEST_EXPECT(move.GetPiece() == Piece::Knight);
+            TEST_EXPECT(move.IsCapture() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -464,11 +465,11 @@ void PositionTests()
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -480,11 +481,11 @@ void PositionTests()
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w Qkq - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -493,11 +494,11 @@ void PositionTests()
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3KBNR w KQkq - 0 1");
             const Move move = pos.MoveFromString("e1c1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_c1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_c1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -509,11 +510,11 @@ void PositionTests()
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3KBNR w Kkq - 0 1");
             const Move move = pos.MoveFromString("e1c1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_c1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_c1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -522,11 +523,11 @@ void PositionTests()
             Position pos("rnbqk2r/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
             const Move move = pos.MoveFromString("e8g8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e8);
-            TEST_EXPECT(move.toSquare == Square_g8);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e8);
+            TEST_EXPECT(move.ToSquare() == Square_g8);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -538,11 +539,11 @@ void PositionTests()
             Position pos("rnbqk2r/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQq - 0 1");
             const Move move = pos.MoveFromString("e8g8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e8);
-            TEST_EXPECT(move.toSquare == Square_g8);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e8);
+            TEST_EXPECT(move.ToSquare() == Square_g8);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -551,11 +552,11 @@ void PositionTests()
             Position pos("r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
             const Move move = pos.MoveFromString("e8c8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e8);
-            TEST_EXPECT(move.toSquare == Square_c8);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e8);
+            TEST_EXPECT(move.ToSquare() == Square_c8);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -567,11 +568,11 @@ void PositionTests()
             Position pos("r3kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQk - 0 1");
             const Move move = pos.MoveFromString("e8c8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e8);
-            TEST_EXPECT(move.toSquare == Square_c8);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e8);
+            TEST_EXPECT(move.ToSquare() == Square_c8);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -580,11 +581,11 @@ void PositionTests()
             Position pos("4k3/4r3/8/8/8/8/8/R3K2R w KQ - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -593,11 +594,11 @@ void PositionTests()
             Position pos("4kr2/8/8/8/8/8/8/R3K2R w KQ - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_e1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == true);
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
             TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
@@ -606,11 +607,11 @@ void PositionTests()
         Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
         const Move move = pos.MoveFromString("a1b1");
         TEST_EXPECT(move.IsValid());
-        TEST_EXPECT(move.fromSquare == Square_a1);
-        TEST_EXPECT(move.toSquare == Square_b1);
-        TEST_EXPECT(move.piece == Piece::Rook);
-        TEST_EXPECT(move.isCapture == false);
-        TEST_EXPECT(move.isCastling == false);
+        TEST_EXPECT(move.FromSquare() == Square_a1);
+        TEST_EXPECT(move.ToSquare() == Square_b1);
+        TEST_EXPECT(move.GetPiece() == Piece::Rook);
+        TEST_EXPECT(move.IsCapture() == false);
+        TEST_EXPECT(move.IsCastling() == false);
         TEST_EXPECT(pos.IsMoveValid(move));
         TEST_EXPECT(pos.IsMoveLegal(move));
         TEST_EXPECT(pos.DoMove(move));
@@ -622,11 +623,11 @@ void PositionTests()
             Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
             const Move move = pos.MoveFromString("h1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_h1);
-            TEST_EXPECT(move.toSquare == Square_g1);
-            TEST_EXPECT(move.piece == Piece::Rook);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(move.FromSquare() == Square_h1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::Rook);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -638,11 +639,11 @@ void PositionTests()
             Position pos("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1");
             const Move move = pos.MoveFromString("a8b8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_a8);
-            TEST_EXPECT(move.toSquare == Square_b8);
-            TEST_EXPECT(move.piece == Piece::Rook);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(move.FromSquare() == Square_a8);
+            TEST_EXPECT(move.ToSquare() == Square_b8);
+            TEST_EXPECT(move.GetPiece() == Piece::Rook);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -654,11 +655,11 @@ void PositionTests()
             Position pos("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1");
             const Move move = pos.MoveFromString("h8g8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_h8);
-            TEST_EXPECT(move.toSquare == Square_g8);
-            TEST_EXPECT(move.piece == Piece::Rook);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(move.FromSquare() == Square_h8);
+            TEST_EXPECT(move.ToSquare() == Square_g8);
+            TEST_EXPECT(move.GetPiece() == Piece::Rook);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
@@ -670,11 +671,11 @@ void PositionTests()
             Position pos("7K/8/5k2/8/8/8/8/8 w - - 0 1");
             const Move move = pos.MoveFromString("h8g7");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_h8);
-            TEST_EXPECT(move.toSquare == Square_g7);
-            TEST_EXPECT(move.piece == Piece::King);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(move.FromSquare() == Square_h8);
+            TEST_EXPECT(move.ToSquare() == Square_g7);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(!pos.IsMoveLegal(move));
         }
@@ -684,11 +685,11 @@ void PositionTests()
             Position pos("k7/8/q7/8/R7/8/8/K7 w - - 0 1");
             const Move move = pos.MoveFromString("a4b4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.fromSquare == Square_a4);
-            TEST_EXPECT(move.toSquare == Square_b4);
-            TEST_EXPECT(move.piece == Piece::Rook);
-            TEST_EXPECT(move.isCapture == false);
-            TEST_EXPECT(move.isCastling == false);
+            TEST_EXPECT(move.FromSquare() == Square_a4);
+            TEST_EXPECT(move.ToSquare() == Square_b4);
+            TEST_EXPECT(move.GetPiece() == Piece::Rook);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(!pos.IsMoveLegal(move));
         }
@@ -1007,11 +1008,22 @@ void RunSearchTests()
 
     SearchParam param{ tt };
     param.debugLog = false;
-    param.limits.maxDepth = 4;
     param.numPvLines = UINT32_MAX;
+
+    // zero depth search should return zero result
+    {
+        param.limits.maxDepth = 0;
+
+        game.Reset(Position(Position::InitPositionFEN));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 0);
+    }
 
     // incufficient material draw
     {
+        param.limits.maxDepth = 4;
+
         game.Reset(Position("4k2K/8/8/8/8/8/8/8 w - - 0 1"));
         search.DoSearch(game, param, result);
 
@@ -1023,6 +1035,8 @@ void RunSearchTests()
 
     // stalemate (no legal move)
     {
+        param.limits.maxDepth = 1;
+
         game.Reset(Position("k7/2Q5/1K6/8/8/8/8/8 b - - 0 1"));
         search.DoSearch(game, param, result);
 
@@ -1031,6 +1045,8 @@ void RunSearchTests()
 
     // mate in one
     {
+        param.limits.maxDepth = 4;
+
         game.Reset(Position("k7/7Q/1K6/8/8/8/8/8 w - - 0 1"));
         search.DoSearch(game, param, result);
 
@@ -1041,8 +1057,10 @@ void RunSearchTests()
         TEST_EXPECT(result[3].score == CheckmateValue - 1);
     }
 
-    // winnnig KPK
+    // winnnig KPvK
     {
+        param.limits.maxDepth = 1;
+
         game.Reset(Position("4k3/8/8/8/8/8/5P2/5K2 w - - 0 1"));
         search.DoSearch(game, param, result);
 
@@ -1055,8 +1073,10 @@ void RunSearchTests()
         TEST_EXPECT(result[5].score == 0);
     }
 
-    // drawing KPK
+    // drawing KPvK
     {
+        param.limits.maxDepth = 1;
+
         game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
         search.DoSearch(game, param, result);
 
@@ -1065,6 +1085,25 @@ void RunSearchTests()
         TEST_EXPECT(result[1].score == 0);
         TEST_EXPECT(result[2].score == 0);
         TEST_EXPECT(result[3].score == 0);
+    }
+
+    // chess-rook skewer
+    {
+        param.limits.maxDepth = 1;
+
+        game.Reset(Position("3k3r/8/8/8/8/8/8/KR6 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 15);
+
+        TEST_EXPECT(result[0].moves.front() == Move::Make(Square_b1, Square_b8, Piece::Rook));
+        TEST_EXPECT(result[0].score >= KnownWinValue);      // Rb8 is winning
+
+        TEST_EXPECT(result[1].score < KnownWinValue);       // draw
+        TEST_EXPECT(result[13].score < KnownWinValue);      // draw
+
+        TEST_EXPECT(result[14].moves.front() == Move::Make(Square_b1, Square_h1, Piece::Rook));
+        TEST_EXPECT(result[14].score <= -KnownWinValue);    // Rh1 is loosing
     }
 }
 
@@ -1314,9 +1353,9 @@ bool RunPerformanceTests(const char* path)
 
 int main(int argc, const char* argv[])
 {
-    InitBitboards();
-    InitZobristHash();
-    InitEndgame();
+    InitEngine();
+
+    nnue_init("D:/CHESS/NNUE/nn-04cf2b4ed1da.nnue");
 
     if (argc > 1 && strcmp(argv[1], "unittest") == 0)
     {

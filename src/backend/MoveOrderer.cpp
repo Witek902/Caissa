@@ -93,7 +93,7 @@ void MoveOrderer::Clear()
 
 void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
 {
-    if (move.isCapture)
+    if (move.IsCapture())
     {
         return;
     }
@@ -103,7 +103,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
     // update history heuristics
     if (node.depth > 0)
     {
-        uint32_t& historyCounter = searchHistory[color][move.fromSquare.Index()][move.toSquare.Index()];
+        uint32_t& historyCounter = searchHistory[color][move.FromSquare().Index()][move.ToSquare().Index()];
 
         const uint64_t historyBonus = std::min(1024, node.depth * node.depth);
 
@@ -123,8 +123,8 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
 
     if (node.previousMove.IsValid())
     {
-        const uint8_t fromIndex = node.previousMove.fromSquare.mIndex;
-        const uint8_t toIndex = node.previousMove.toSquare.mIndex;
+        const uint8_t fromIndex = node.previousMove.FromSquare().mIndex;
+        const uint8_t toIndex = node.previousMove.ToSquare().mIndex;
         counterMoveHistory[color][fromIndex][toIndex] = move;
     }
 }
@@ -151,14 +151,14 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 
         int64_t score = 0;
 
-        if (move.isEnPassant)
+        if (move.IsEnPassant())
         {
             score += c_MvvLvaScoreBaseValue;
         }
-        else if (move.isCapture)
+        else if (move.IsCapture())
         {
-            const Piece attackingPiece = move.piece;
-            const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.toSquare);
+            const Piece attackingPiece = move.GetPiece();
+            const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
             score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
         }
         else
@@ -166,16 +166,16 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
             score += ScoreQuietMove(pos, move);
         }
 
-        if (move.piece == Piece::Pawn && move.promoteTo != Piece::None)
+        if (move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None)
         {
-            const uint32_t pieceIndex = (uint32_t)move.promoteTo;
+            const uint32_t pieceIndex = (uint32_t)move.GetPromoteTo();
             ASSERT(pieceIndex > 1 && pieceIndex < 6);
             score += c_PromotionScores[pieceIndex];
         }
 
         // history heuristics
         {
-            score += searchHistory[color][move.fromSquare.Index()][move.toSquare.Index()];
+            score += searchHistory[color][move.FromSquare().Index()][move.ToSquare().Index()];
         }
 
         // killer moves heuristics
@@ -193,8 +193,8 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
         // counter move heuristics
         if (node.previousMove.IsValid() && !node.isNullMove)
         {
-            const uint8_t fromIndex = node.previousMove.fromSquare.mIndex;
-            const uint8_t toIndex = node.previousMove.toSquare.mIndex;
+            const uint8_t fromIndex = node.previousMove.FromSquare().mIndex;
+            const uint8_t toIndex = node.previousMove.ToSquare().mIndex;
 
             if (move == counterMoveHistory[color][fromIndex][toIndex])
             {
