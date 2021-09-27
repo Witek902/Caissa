@@ -2,11 +2,11 @@
 
 #include "../backend/Position.hpp"
 #include "../backend/Endgame.hpp"
-
-#include <iostream>
+#include "../backend/TranspositionTable.hpp"
 
 int main(int argc, const char* argv[])
 {
+    TranspositionTable::Init();
     InitBitboards(); 
     InitZobristHash();
     InitEndgame();

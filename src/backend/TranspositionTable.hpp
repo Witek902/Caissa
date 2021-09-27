@@ -61,7 +61,7 @@ public:
 
     // resize the table
     // old entries will be preserved if possible
-    void Resize(size_t newSize);
+    void Resize(size_t newSizeInBytes);
 
     size_t GetSize() const { return numClusters * NumEntriesPerCluster; }
 
@@ -69,6 +69,8 @@ public:
     size_t GetNumUsedEntries() const;
 
     uint64_t GetNumCollisions() const { return numCollisions; }
+
+    static void Init();
 
 private:
 
