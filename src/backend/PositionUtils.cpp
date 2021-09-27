@@ -400,7 +400,7 @@ std::string Position::Print() const
 
 std::string Position::MoveToString(const Move& move) const
 {
-    ASSERT(move.piece != Piece::None);
+    ASSERT(move.GetPiece() != Piece::None);
 
     Position afterMove(*this);
     if (!afterMove.DoMove(move))
@@ -410,30 +410,30 @@ std::string Position::MoveToString(const Move& move) const
 
     std::string str;
 
-    if (move.piece == Piece::Pawn)
+    if (move.GetPiece() == Piece::Pawn)
     {
-        if (move.isCapture)
+        if (move.IsCapture())
         {
-            str += move.fromSquare.ToString();
+            str += move.FromSquare().ToString();
             str += 'x';
         }
 
-        str += move.toSquare.ToString();
-        if (move.toSquare.Rank() == 7u && move.promoteTo != Piece::None)
+        str += move.ToSquare().ToString();
+        if (move.ToSquare().Rank() == 7u && move.GetPromoteTo() != Piece::None)
         {
             str += "=";
-            str += PieceToChar(move.promoteTo);
+            str += PieceToChar(move.GetPromoteTo());
         }
     }
     else
     {
-        if (move.piece == Piece::King && move.isCastling)
+        if (move.GetPiece() == Piece::King && move.IsCastling())
         {
-            if (move.toSquare.File() == 2u)
+            if (move.ToSquare().File() == 2u)
             {
                 str = "O-O-O";
             }
-            else if (move.toSquare.File() == 6u)
+            else if (move.ToSquare().File() == 6u)
             {
                 str = "O-O";
             }
@@ -444,11 +444,11 @@ std::string Position::MoveToString(const Move& move) const
         }
         else
         {
-            str = PieceToChar(move.piece);
+            str = PieceToChar(move.GetPiece());
 
             {
                 const SidePosition& currentSide = GetCurrentSide();
-                const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.piece);
+                const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.GetPiece());
 
                 bool ambiguous = false;
                 {
@@ -458,9 +458,9 @@ std::string Position::MoveToString(const Move& move) const
                     for (uint32_t i = 0; i < moves.numMoves; ++i)
                     {
                         const Move& otherMove = moves[i].move;
-                        if (otherMove.piece == move.piece &&
-                            otherMove.toSquare == move.toSquare &&
-                            otherMove.fromSquare != move.fromSquare)
+                        if (otherMove.GetPiece() == move.GetPiece() &&
+                            otherMove.ToSquare() == move.ToSquare() &&
+                            otherMove.FromSquare() != move.FromSquare())
                         {
                             ambiguous = true;
                             break;
@@ -470,30 +470,30 @@ std::string Position::MoveToString(const Move& move) const
 
                 if (ambiguous)
                 {
-                    if ((movedPieceBitboard & Bitboard::RankBitboard(move.fromSquare.Rank())).Count() > 1)
+                    if ((movedPieceBitboard & Bitboard::RankBitboard(move.FromSquare().Rank())).Count() > 1)
                     {
-                        str += 'a' + move.fromSquare.File();
+                        str += 'a' + move.FromSquare().File();
                     }
-                    else if ((movedPieceBitboard & Bitboard::FileBitboard(move.fromSquare.File())).Count() > 1)
+                    else if ((movedPieceBitboard & Bitboard::FileBitboard(move.FromSquare().File())).Count() > 1)
                     {
-                        str += '1' + move.fromSquare.Rank();
+                        str += '1' + move.FromSquare().Rank();
                     }
                     else
                     {
-                        str += move.fromSquare.ToString();
+                        str += move.FromSquare().ToString();
                     }
                 }
             }
 
-            if (move.isCapture)
+            if (move.IsCapture())
             {
                 str += 'x';
             }
-            str += move.toSquare.ToString();
+            str += move.ToSquare().ToString();
         }
     }
 
-    if (move.isCapture && move.isEnPassant)
+    if (move.IsCapture() && move.IsEnPassant())
     {
         str += " e.p.";
     }
@@ -562,18 +562,14 @@ Move Position::MoveFromString(const std::string& str) const
     const Piece movedPiece = currentSide.GetPieceAtSquare(fromSquare);
     const Piece targetPiece = opponentSide.GetPieceAtSquare(toSquare);
 
-    Move move = Move::Invalid();
-    move.fromSquare = fromSquare;
-    move.toSquare = toSquare;
-    move.piece = movedPiece;
-    move.isCapture = targetPiece != Piece::None;
-    move.isEnPassant = false;
-    move.isCastling = movedPiece == Piece::King && IsMoveCastling(fromSquare, toSquare);
+    bool isCapture = targetPiece != Piece::None;
+    bool isEnPassant = false;
+    bool isCastling = movedPiece == Piece::King && IsMoveCastling(fromSquare, toSquare);
 
     if (movedPiece == Piece::Pawn && toSquare == mEnPassantSquare)
     {
-        move.isCapture = true;
-        move.isEnPassant = true;
+        isCapture = true;
+        isEnPassant = true;
     }
 
     Piece promoteTo = Piece::None;
@@ -585,16 +581,15 @@ Move Position::MoveFromString(const std::string& str) const
             return {};
         }
     }
-    move.promoteTo = promoteTo;
 
-    return move;
+    return Move::Make(fromSquare, toSquare, movedPiece, promoteTo, isCapture, isEnPassant, isCastling);
 }
 
 bool Position::IsMoveValid(const Move& move) const
 {
     ASSERT(move.IsValid());
 
-    if (move.fromSquare == move.toSquare)
+    if (move.FromSquare() == move.ToSquare())
     {
         fprintf(stderr, "IsMoveValid: Cannot move piece to the same square\n");
         return {};
@@ -603,8 +598,8 @@ bool Position::IsMoveValid(const Move& move) const
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
-    const Piece movedPiece = currentSide.GetPieceAtSquare(move.fromSquare);
-    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.toSquare);
+    const Piece movedPiece = currentSide.GetPieceAtSquare(move.FromSquare());
+    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
 
     if (movedPiece == Piece::None)
     {
@@ -612,13 +607,13 @@ bool Position::IsMoveValid(const Move& move) const
         return false;
     }
 
-    if (opponentSide.GetPieceAtSquare(move.fromSquare) != Piece::None)
+    if (opponentSide.GetPieceAtSquare(move.FromSquare()) != Piece::None)
     {
         fprintf(stderr, "IsMoveValid: Cannot move opponent's piece\n");
         return false;
     }
 
-    if (currentSide.GetPieceAtSquare(move.toSquare) != Piece::None)
+    if (currentSide.GetPieceAtSquare(move.ToSquare()) != Piece::None)
     {
         fprintf(stderr, "IsMoveValid: Cannot capture own piece\n");
         return false;
@@ -630,7 +625,7 @@ bool Position::IsMoveValid(const Move& move) const
         return false;
     }
 
-    if (move.isEnPassant && move.piece != Piece::Pawn)
+    if (move.IsEnPassant() && move.GetPiece() != Piece::Pawn)
     {
         fprintf(stderr, "IsMoveValid: Only pawn can do en passant capture");
         return false;
@@ -638,13 +633,13 @@ bool Position::IsMoveValid(const Move& move) const
 
     MoveList moveList;
 
-    if (move.piece == Piece::Pawn)
+    if (move.GetPiece() == Piece::Pawn)
     {
-        if ((mSideToMove == Color::White && move.toSquare.Rank() == 7) ||
-            (mSideToMove == Color::Black && move.toSquare.Rank() == 0))
+        if ((mSideToMove == Color::White && move.ToSquare().Rank() == 7) ||
+            (mSideToMove == Color::Black && move.ToSquare().Rank() == 0))
         {
-            if (move.promoteTo != Piece::Queen && move.promoteTo != Piece::Rook &&
-                move.promoteTo != Piece::Bishop && move.promoteTo != Piece::Knight)
+            if (move.GetPromoteTo() != Piece::Queen && move.GetPromoteTo() != Piece::Rook &&
+                move.GetPromoteTo() != Piece::Bishop && move.GetPromoteTo() != Piece::Knight)
             {
                 fprintf(stderr, "IsMoveValid: Invalid promotion\n");
                 return false;
@@ -653,23 +648,23 @@ bool Position::IsMoveValid(const Move& move) const
 
         GeneratePawnMoveList(moveList);
     }
-    else if (move.piece == Piece::Knight)
+    else if (move.GetPiece() == Piece::Knight)
     {
         GenerateKnightMoveList(moveList);
     }
-    else if (move.piece == Piece::Bishop)
+    else if (move.GetPiece() == Piece::Bishop)
     {
         GenerateBishopMoveList(moveList);
     }
-    else if (move.piece == Piece::Rook)
+    else if (move.GetPiece() == Piece::Rook)
     {
         GenerateRookMoveList(moveList);
     }
-    else if (move.piece == Piece::Queen)
+    else if (move.GetPiece() == Piece::Queen)
     {
         GenerateQueenMoveList(moveList);
     }
-    else if (move.piece == Piece::King)
+    else if (move.GetPiece() == Piece::King)
     {
         GenerateKingMoveList(moveList);
     }
@@ -681,20 +676,20 @@ bool Position::IsMoveValid(const Move& move) const
         const Move refMove = moveList.GetMove(i);
 
         bool isSame =
-            refMove.fromSquare == move.fromSquare &&
-            refMove.toSquare == move.toSquare &&
-            refMove.piece == move.piece &&
-            refMove.isCapture == move.isCapture;
+            refMove.FromSquare() == move.FromSquare() &&
+            refMove.ToSquare() == move.ToSquare() &&
+            refMove.GetPiece() == move.GetPiece() &&
+            refMove.IsCapture() == move.IsCapture();
 
-        if (move.piece == Piece::King)
+        if (move.GetPiece() == Piece::King)
         {
-            isSame &= refMove.isCastling == move.isCastling;
+            isSame &= refMove.IsCastling() == move.IsCastling();
         }
 
-        if (move.piece == Piece::Pawn)
+        if (move.GetPiece() == Piece::Pawn)
         {
-            isSame &= refMove.promoteTo == move.promoteTo;
-            isSame &= refMove.isEnPassant == move.isEnPassant;
+            isSame &= refMove.GetPromoteTo() == move.GetPromoteTo();
+            isSame &= refMove.IsEnPassant() == move.IsEnPassant();
         }
 
         if (isSame)
@@ -710,25 +705,25 @@ bool Position::IsMoveValid(const Move& move) const
 bool Position::IsMoveValid_Fast(const PackedMove& move) const
 {
     ASSERT(move.IsValid());
-    ASSERT(move.fromSquare != move.toSquare);
+    ASSERT(move.FromSquare() != move.ToSquare());
 
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
-    const Piece movedPiece = currentSide.GetPieceAtSquare(move.fromSquare);
-    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.toSquare);
+    const Piece movedPiece = currentSide.GetPieceAtSquare(move.FromSquare());
+    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
 
     if (movedPiece == Piece::None)
     {
         return false;
     }
 
-    if (opponentSide.GetPieceAtSquare(move.fromSquare) != Piece::None)
+    if (opponentSide.GetPieceAtSquare(move.FromSquare()) != Piece::None)
     {
         return false;
     }
 
-    if (currentSide.GetPieceAtSquare(move.toSquare) != Piece::None)
+    if (currentSide.GetPieceAtSquare(move.ToSquare()) != Piece::None)
     {
         // cannot capture own piece
         return false;

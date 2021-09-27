@@ -191,6 +191,13 @@ std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& po
 
 void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult)
 {
+    outResult.clear();
+
+    if (param.limits.maxDepth == 0)
+    {
+        return;
+    }
+
     mStopSearch = false;
 
     // clamp number of PV lines (there can't be more than number of max moves)
@@ -199,7 +206,6 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves(&legalMoves);
     const uint32_t numPvLines = std::min(param.numPvLines, numLegalMoves);
 
-    outResult.clear();
     outResult.resize(numPvLines);
 
     if (numPvLines == 0u)
@@ -302,6 +308,10 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ASSERT(!pvLine.empty());
 
             // store for multi-PV filtering in next iteration
+            for (const Move prevMove : pvMovesSoFar)
+            {
+                ASSERT(prevMove != pvLine.front());
+            }
             pvMovesSoFar.push_back(pvLine.front());
 
             // write PV line into result struct
@@ -572,7 +582,7 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
         // because these moves are irreversible
         if (prevNode->previousMove.IsValid())
         {
-            if (prevNode->previousMove.piece == Piece::Pawn || prevNode->previousMove.isCapture)
+            if (prevNode->previousMove.GetPiece() == Piece::Pawn || prevNode->previousMove.IsCapture())
             {
                 break;
             }
@@ -659,18 +669,26 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     const bool isInCheck = position.IsInCheck(node.color);
 
-    if (staticEval == InvalidValue)
-    {
-        staticEval = ColorMultiplier(node.color) * Evaluate(position);
-    }
-
-    ScoreType alpha = std::max(staticEval, node.alpha);
+    ScoreType alpha = node.alpha;
     ScoreType oldAlpha = alpha;
     ScoreType beta = node.beta;
+    ScoreType bestValue = -InfValue;
 
-    if (alpha >= beta)
+    // do not consider stand pat if in check
+    if (!isInCheck)
     {
-        return staticEval;
+        if (staticEval == InvalidValue)
+        {
+            staticEval = ColorMultiplier(node.color) * Evaluate(position);
+        }
+
+        alpha = std::max(staticEval, node.alpha);
+        bestValue = staticEval;
+
+        if (alpha >= beta)
+        {
+            return staticEval;
+        }
     }
 
     NodeInfo childNodeParam;
@@ -704,7 +722,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     }
 
     Move bestMove = Move::Invalid();
-    ScoreType bestValue = staticEval;
     uint32_t moveIndex = 0;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
@@ -1127,9 +1144,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 MoveList::MoveEntry& moveEntry = moves[i];
 
-                if (moveEntry.move.fromSquare == TB_GET_FROM(probeResult) &&
-                    moveEntry.move.toSquare == TB_GET_TO(probeResult) &&
-                    moveEntry.move.promoteTo == TranslatePieceType(TB_GET_PROMOTES(probeResult)))
+                if (moveEntry.move.FromSquare() == TB_GET_FROM(probeResult) &&
+                    moveEntry.move.ToSquare() == TB_GET_TO(probeResult) &&
+                    moveEntry.move.GetPromoteTo() == TranslatePieceType(TB_GET_PROMOTES(probeResult)))
                 {
                     tbMove = moveEntry.move;
                     break;
@@ -1178,7 +1195,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         const bool performTablebaseWalk = HasTablebases() && (tbMove == move || hasMoveFilter);
 
         // promotion extension
-        if (move.promoteTo != Piece::None)
+        if (move.GetPromoteTo() != Piece::None)
         {
             moveExtension++;
         }

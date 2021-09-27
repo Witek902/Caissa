@@ -101,7 +101,7 @@ INLINE constexpr bool IsPowerOfTwo(const T n)
     return (n & (n - 1)) == 0;
 }
 
-union Move;
+struct Move;
 struct PackedMove;
 class MoveList;
 class Game;
@@ -116,3 +116,6 @@ static constexpr ScoreType TablebaseWinValue  = 31000;
 static constexpr ScoreType KnownWinValue      = 20000;
 
 static constexpr ScoreType MaxSearchDepth = 256;
+
+// initialize all engine subsystems
+EXPORT void InitEngine();

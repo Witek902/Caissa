@@ -23,16 +23,16 @@ std::string PackedMove::ToString() const
 
 std::string Move::ToString() const
 {
-    ASSERT(piece != Piece::None);
+    ASSERT(GetPiece() != Piece::None);
 
     std::string str;
 
-    str += fromSquare.ToString();
-    str += toSquare.ToString();
+    str += FromSquare().ToString();
+    str += ToSquare().ToString();
 
-    if (promoteTo != Piece::None)
+    if (GetPromoteTo() != Piece::None)
     {
-        str += PieceToChar(promoteTo, false);
+        str += PieceToChar(GetPromoteTo(), false);
     }
 
     return str;

@@ -34,6 +34,11 @@ public:
     void Push(const Move move)
     {
         ASSERT(numMoves < MaxMoves);
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            ASSERT(move != moves[i].move);
+        }
+
         uint32_t index = numMoves++;
         moves[index] = { move, 0 };
     }

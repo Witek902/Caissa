@@ -144,11 +144,11 @@ static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t eg
 int32_t ScoreQuietMove(const Position& position, const Move& move)
 {
     ASSERT(move.IsValid());
-    ASSERT(!move.isCapture);
-    ASSERT(!move.isEnPassant);
+    ASSERT(!move.IsCapture());
+    ASSERT(!move.IsEnPassant());
 
-    uint32_t fromSquare = move.fromSquare.Index();
-    uint32_t toSquare = move.toSquare.Index();
+    uint32_t fromSquare = move.FromSquare().Index();
+    uint32_t toSquare = move.ToSquare().Index();
 
     if (position.GetSideToMove() == Color::White)
     {
@@ -159,7 +159,7 @@ int32_t ScoreQuietMove(const Position& position, const Move& move)
     int32_t scoreMG = 0;
     int32_t scoreEG = 0;
 
-    switch (move.piece)
+    switch (move.GetPiece())
     {
     case Piece::Pawn:
         scoreMG = PawnPSQT[toSquare].mg - PawnPSQT[fromSquare].mg;

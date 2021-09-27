@@ -197,4 +197,4 @@ struct Bitboard
     static Bitboard GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers);
 };
 
-EXPORT void InitBitboards();
+void InitBitboards();
