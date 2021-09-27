@@ -3,6 +3,8 @@
 
 namespace nn {
 
+class PackedNeuralNetwork;
+
 struct TrainingVector
 {
     std::vector<float> input;
@@ -28,13 +30,17 @@ inline float SigmoidDerivative(float x)
     return s * (1.0f - s);
 }
 
-inline float ReLu(float x)
+inline float ClippedReLu(float x)
 {
-    return x < 0.0f ? 0.0f : x;
+    if (x <= 0.0f) return 0.0f;
+    if (x >= 1.0f) return 1.0f;
+    return x;
 }
-inline float ReLuDerivative(float x)
+inline float ClippedReLuDerivative(float x)
 {
-    return x < 0.0f ? 0.0f : 1.0f;
+    if (x <= 0.0f) return 0.0f;
+    if (x >= 1.0f) return 0.0f;
+    return 1.0f;
 }
 
 enum class ActivationFunction
@@ -45,11 +51,8 @@ enum class ActivationFunction
     ATan,
 };
 
-class Layer
+struct Layer
 {
-    friend class NeuralNetwork;
-
-public:
     using Values = std::vector<float>;
 
     Layer(size_t inputSize, size_t outputSize);
@@ -64,11 +67,6 @@ public:
 
     // Set a new weight for a specific neuron input
     void SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth);
-
-    const Layer::Values& GetOutput() const { return output; }
-    const Layer::Values& GetNextError() const { return nextError; }
-
-private:
 
     Values linearValue;
     Values output;
@@ -98,11 +96,16 @@ public:
     // load from file
     bool Load(const char* filePath);
 
+    // convert to packed (quantized) network
+    bool ToPackedNetwork(PackedNeuralNetwork& outNetwork) const;
+
     // Calculate neural network output based on input
     const Layer::Values& Run(const Layer::Values& input);
 
     // Train the neural network
     void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize);
+
+    void PrintStats() const;
 
     Layer& GetLayer(size_t idx)
     {
@@ -126,7 +129,7 @@ public:
 
     const Layer::Values& GetOutput() const
     {
-        return layers.back().GetOutput();
+        return layers.back().output;
     }
 
 private:

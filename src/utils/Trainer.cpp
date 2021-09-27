@@ -9,6 +9,7 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
+#include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/ThreadPool.hpp"
 
 #include <iostream>
@@ -21,27 +22,6 @@
 
 using namespace threadpool;
 
-static float PawnToWinProbability(float cp)
-{
-    return 1.0f / (1.0f + powf(10.0, -cp / 4.0f));
-}
-
-uint64_t RotateBitboard180(uint64_t x)
-{
-    const uint64_t h1 = 0x5555555555555555ull;
-    const uint64_t h2 = 0x3333333333333333ull;
-    const uint64_t h4 = 0x0F0F0F0F0F0F0F0Full;
-    const uint64_t v1 = 0x00FF00FF00FF00FFull;
-    const uint64_t v2 = 0x0000FFFF0000FFFFull;
-    x = ((x >> 1) & h1) | ((x & h1) << 1);
-    x = ((x >> 2) & h2) | ((x & h2) << 2);
-    x = ((x >> 4) & h4) | ((x & h4) << 4);
-    x = ((x >> 8) & v1) | ((x & v1) << 8);
-    x = ((x >> 16) & v2) | ((x & v2) << 16);
-    x = (x >> 32) | (x << 32);
-    return x;
-}
-
 void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVector& outVector)
 {
     outVector.input.resize(12 * 64);
@@ -50,19 +30,19 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
     PositionEntry flippedEntry = entry;
     if (entry.sideToMove == 1)
     {
-        flippedEntry.whiteKing = RotateBitboard180(entry.blackKing);
-        flippedEntry.whitePawns = RotateBitboard180(entry.blackPawns);
-        flippedEntry.whiteKnights = RotateBitboard180(entry.blackKnights);
-        flippedEntry.whiteBishops = RotateBitboard180(entry.blackBishops);
-        flippedEntry.whiteRooks = RotateBitboard180(entry.blackRooks);
-        flippedEntry.whiteQueens = RotateBitboard180(entry.blackQueens);
+        flippedEntry.whiteKing = Bitboard(entry.blackKing).Rotated180();
+        flippedEntry.whitePawns = Bitboard(entry.blackPawns).Rotated180();
+        flippedEntry.whiteKnights = Bitboard(entry.blackKnights).Rotated180();
+        flippedEntry.whiteBishops = Bitboard(entry.blackBishops).Rotated180();
+        flippedEntry.whiteRooks = Bitboard(entry.blackRooks).Rotated180();
+        flippedEntry.whiteQueens = Bitboard(entry.blackQueens).Rotated180();
 
-        flippedEntry.blackKing = RotateBitboard180(entry.whiteKing);
-        flippedEntry.blackPawns = RotateBitboard180(entry.whitePawns);
-        flippedEntry.blackKnights = RotateBitboard180(entry.whiteKnights);
-        flippedEntry.blackBishops = RotateBitboard180(entry.whiteBishops);
-        flippedEntry.blackRooks = RotateBitboard180(entry.whiteRooks);
-        flippedEntry.blackQueens = RotateBitboard180(entry.whiteQueens);
+        flippedEntry.blackKing = Bitboard(entry.whiteKing).Rotated180();
+        flippedEntry.blackPawns = Bitboard(entry.whitePawns).Rotated180();
+        flippedEntry.blackKnights = Bitboard(entry.whiteKnights).Rotated180();
+        flippedEntry.blackBishops = Bitboard(entry.whiteBishops).Rotated180();
+        flippedEntry.blackRooks = Bitboard(entry.whiteRooks).Rotated180();
+        flippedEntry.blackQueens = Bitboard(entry.whiteQueens).Rotated180();
 
         flippedEntry.eval *= -1;
         flippedEntry.gameResult *= -1;
@@ -92,7 +72,7 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
 static const uint32_t cMaxIterations = 100000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 1000;
 static const uint32_t cNumValidationVectorsPerIteration = 1000;
-static const uint32_t cBatchSize = 10;
+static const uint32_t cBatchSize = 100;
 
 bool Train()
 {
@@ -194,133 +174,37 @@ bool Train()
     return true;
 }
 
-static const uint32_t networkInputs = 32 + 64 + 2 * 64 + 2 * 48;
+//static const uint32_t networkInputs = 32 + 64 + 2 * 64 + 2 * 48;
+static const uint32_t networkInputs = 32 + 64 + 2 * 48;
 
-static uint32_t ComputeNetworkInputs(const MaterialKey& key)
+static void PositionToVector(const Position& pos, nn::TrainingVector& outVector, std::vector<uint32_t>& outFeatures)
 {
-    uint32_t inputs = 0;
-
-    if (key.numWhitePawns > 0 || key.numBlackPawns > 0)
-    {
-        // has pawns, so can't exploit vertical/diagonal symmetry
-        inputs += 32; // white king on left files
-        inputs += 64; // black king on any file
-    }
-    else
-    {
-        // pawnless position, can exploit vertical/horizonal/diagonal symmetry
-        inputs += 16; // white king on files A-D, ranks 1-4
-        inputs += 36; // black king on bottom-right triangle (a1, b1, b2, c1, c2, c3, ...)
-    }
-
-    // knights/bishops/rooks/queens on any square
-    if (key.numWhiteQueens)     inputs += 64;
-    if (key.numBlackQueens)     inputs += 64;
-    if (key.numWhiteRooks)      inputs += 64;
-    if (key.numBlackRooks)      inputs += 64;
-    if (key.numWhiteBishops)    inputs += 64;
-    if (key.numBlackBishops)    inputs += 64;
-    if (key.numWhiteKnights)    inputs += 64;
-    if (key.numBlackKnights)    inputs += 64;
-
-    // pawns on ranks 2-7
-    if (key.numWhitePawns)      inputs += 48;
-    if (key.numBlackPawns)      inputs += 48;
-
-    return inputs;
-}
-
-static void PositionToVector_KPvKP(const Position& pos, nn::TrainingVector& outVector)
-{
-    Square whiteKingSquare = Square(FirstBitSet(pos.Whites().king));
-    Square blackKingSquare = Square(FirstBitSet(pos.Blacks().king));
-
-    Bitboard whiteRooks = pos.Whites().rooks;
-    Bitboard blackRooks = pos.Blacks().rooks;
-    Bitboard whitePawns = pos.Whites().pawns;
-    Bitboard blackPawns = pos.Blacks().pawns;
-
-    if (whiteKingSquare.File() >= 4)
-    {
-        whiteKingSquare = whiteKingSquare.FlippedFile();
-        blackKingSquare = blackKingSquare.FlippedFile();
-        whiteRooks = whiteRooks.MirroredHorizontally();
-        blackPawns = blackPawns.MirroredHorizontally();
-        whitePawns = whitePawns.MirroredHorizontally();
-        blackPawns = blackPawns.MirroredHorizontally();
-    }
+    uint32_t features[32];
+    uint32_t numFeatures = pos.ToFeaturesVector(features);
 
     outVector.input.resize(networkInputs);
     outVector.output.resize(1);
+    outFeatures.clear();
 
     memset(outVector.input.data(), 0, sizeof(float) * networkInputs);
 
-    uint32_t inputOffset = 0;
-
-    // white king
+    for (uint32_t i = 0; i < numFeatures; ++i)
     {
-        const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
-        outVector.input[whiteKingIndex] = 1.0f;
-        inputOffset += 32;
+        outFeatures.push_back(features[i]);
+        outVector.input[features[i]] = 1.0f;
     }
-
-    // black king
-    {
-        outVector.input[inputOffset + blackKingSquare.Index()] = 1.0f;
-        inputOffset += 64;
-    }
-
-    if (whiteRooks)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            outVector.input[inputOffset + i] = (float)((whiteRooks >> i) & 1);
-        }
-        inputOffset += 64;
-    }
-
-    if (blackRooks)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            outVector.input[inputOffset + i] = (float)((blackRooks >> i) & 1);
-        }
-        inputOffset += 64;
-    }
-
-    if (whitePawns)
-    {
-        for (uint32_t i = 0; i < 48u; ++i)
-        {
-            const uint32_t squreIndex = i + 8u;
-            outVector.input[inputOffset + i] = (float)((whitePawns >> squreIndex) & 1);
-        }
-        inputOffset += 48;
-    }
-
-    if (blackPawns)
-    {
-        for (uint32_t i = 0; i < 48u; ++i)
-        {
-            const uint32_t squreIndex = i + 8u;
-            outVector.input[inputOffset + i] = (float)((blackPawns >> squreIndex) & 1);
-        }
-        inputOffset += 48;
-    }
-
-    ASSERT(inputOffset == outVector.input.size());
 }
 
 bool TrainEndgame()
 {
-    TranspositionTable tt{ 128 * 1024 * 1024 };
+    TranspositionTable tt{ 256 * 1024 * 1024 };
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
     SearchParam searchParam{ tt };
-    searchParam.limits.maxDepth = 10;
+    searchParam.limits.maxDepth = 8;
     searchParam.debugLog = false;
 
-    const auto generateTrainingSet = [&](std::vector<nn::TrainingVector>& outSet, std::vector<Position>& outPositions)
+    const auto generateTrainingSet = [&](std::vector<nn::TrainingVector>& outSet, std::vector<std::vector<uint32_t>>& outFeatures, std::vector<Position>& outPositions)
     {
         Waitable waitable;
         {
@@ -334,10 +218,8 @@ bool TrainEndgame()
                     Position pos;
 
                     MaterialKey material;
-                    material.numWhitePawns = 3;
-                    material.numBlackPawns = 3;
-                    material.numWhiteRooks = 1;
-                    material.numBlackRooks = 1;
+                    material.numWhitePawns = 1 + (rand() % 7);
+                    material.numBlackPawns = 1 + (rand() % 7);
 
                     GenerateRandomPosition(material, pos);
 
@@ -356,7 +238,7 @@ bool TrainEndgame()
                         continue;
                     }
 
-                    PositionToVector_KPvKP(pos, outSet[i]);
+                    PositionToVector(pos, outSet[i], outFeatures[i]);
 
                     Game game;
                     game.Reset(pos);
@@ -365,7 +247,7 @@ bool TrainEndgame()
                     search.DoSearch(game, searchParam, searchResult);
 
                     float score = searchResult.empty() ? 0.0f : (float)searchResult[0].score;
-                    score = std::clamp(score / 100.0f, -10.0f, 10.0f);
+                    score = std::clamp(score / 100.0f, -15.0f, 15.0f);
                     outSet[i].output[0] = PawnToWinProbability(score);
                     outPositions[i] = pos;
 
@@ -378,15 +260,20 @@ bool TrainEndgame()
 
     {
         nn::NeuralNetwork network;
-        network.Init(networkInputs, { 64, 32, 1 });
+        network.Init(networkInputs, { nn::FirstLayerSize, nn::SecondLayerSize, 1 });
+
+        nn::PackedNeuralNetwork packedNetwork;
 
         std::vector<nn::TrainingVector> trainingSet, validationSet;
         trainingSet.resize(cNumTrainingVectorsPerIteration);
         validationSet.resize(cNumValidationVectorsPerIteration);
 
         std::vector<Position> trainingPositions, validationPositions;
+        std::vector<std::vector<uint32_t>> trainingFeatures, validationFeatures;
         trainingPositions.resize(cNumTrainingVectorsPerIteration);
+        trainingFeatures.resize(cNumTrainingVectorsPerIteration);
         validationPositions.resize(cNumValidationVectorsPerIteration);
+        validationFeatures.resize(cNumValidationVectorsPerIteration);
 
         nn::TrainingVector validationVector;
 
@@ -397,35 +284,45 @@ bool TrainEndgame()
 
         for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
         {
-            generateTrainingSet(trainingSet, trainingPositions);
+            generateTrainingSet(trainingSet, trainingFeatures, trainingPositions);
             network.Train(trainingSet, tempValues, cBatchSize);
+            //network.PrintStats();
+            network.ToPackedNetwork(packedNetwork);
+            packedNetwork.Save("pawns.nn");
 
             numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
             numTrainingVectorsPassedInEpoch += cNumTrainingVectorsPerIteration;
 
-            generateTrainingSet(validationSet, validationPositions);
+            generateTrainingSet(validationSet, validationFeatures, validationPositions);
             
             float nnMinError = std::numeric_limits<float>::max();
             float nnMaxError = 0.0f, nnErrorSum = 0.0f;
 
-            float evalMinError = -std::numeric_limits<float>::max();
+            float nnPackedMinError = std::numeric_limits<float>::max();
+            float nnPackedMaxError = 0.0f, nnPackedErrorSum = 0.0f;
+
+            float evalMinError = std::numeric_limits<float>::max();
             float evalMaxError = 0.0f, evalErrorSum = 0.0f;
 
             for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
             {
                 tempValues = network.Run(validationSet[i].input);
+                int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)validationFeatures[i].size(), validationFeatures[i].data());
 
                 const float expectedValue = validationSet[i].output[0];
-                const float nnValue = std::clamp(tempValues[0], 0.0f, 1.0f);
+                const float nnValue = tempValues[0];
+                const float nnPackedValue = (float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
                 const float evalValue = PawnToWinProbability((float)Evaluate(validationPositions[i]) / 100.0f);
 
+                /*
                 if (i < 10)
                 {
                     std::cout << validationPositions[i].ToFEN() << std::endl;
-                    std::cout << "Score:       " << expectedValue << std::endl;
-                    std::cout << "Static eval: " << evalValue << std::endl;
-                    std::cout << "NN eval:     " << nnValue << std::endl;
-                }
+                    std::cout << " Score:            " << expectedValue << std::endl;
+                    std::cout << " NN eval:          " << nnValue << std::endl;
+                    std::cout << " Packed NN eval:   " << nnPackedValue << std::endl;
+                    std::cout << " Static eval:      " << evalValue << std::endl;
+                }*/
 
                 {
                     const float error = expectedValue - nnValue;
@@ -436,6 +333,14 @@ bool TrainEndgame()
                 }
 
                 {
+                    const float error = expectedValue - nnPackedValue;
+                    const float errorDiff = std::abs(error);
+                    nnPackedErrorSum += error * error;
+                    nnPackedMinError = std::min(nnPackedMinError, errorDiff);
+                    nnPackedMaxError = std::max(nnPackedMaxError, errorDiff);
+                }
+
+                {
                     const float error = expectedValue - evalValue;
                     const float errorDiff = std::abs(error);
                     evalErrorSum += error * error;
@@ -443,17 +348,22 @@ bool TrainEndgame()
                     evalMaxError = std::max(evalMaxError, errorDiff);
                 }
             }
+
             nnErrorSum = sqrtf(nnErrorSum / cNumValidationVectorsPerIteration);
+            nnPackedErrorSum = sqrtf(nnPackedErrorSum / cNumValidationVectorsPerIteration);
             evalErrorSum = sqrtf(evalErrorSum / cNumValidationVectorsPerIteration);
 
             std::cout
-                << std::setw(8) << numTrainingVectorsPassed << " | \t"
-                << std::setw(8) << std::setprecision(4) << nnErrorSum << "\t"
-                << std::setw(8) << std::setprecision(4) << nnMinError << "\t"
-                << std::setw(8) << std::setprecision(4) << nnMaxError << " | \t"
-                << std::setw(8) << std::setprecision(4) << evalErrorSum << "\t"
-                << std::setw(8) << std::setprecision(4) << evalMinError << "\t"
-                << std::setw(8) << std::setprecision(4) << evalMaxError
+                << std::setw(5) << numTrainingVectorsPassed << " | \t"
+                << std::setw(5) << std::setprecision(3) << nnErrorSum << "\t"
+                << std::setw(5) << std::setprecision(3) << nnMinError << "\t"
+                << std::setw(5) << std::setprecision(3) << nnMaxError << " | \t"
+                << std::setw(5) << std::setprecision(3) << nnPackedErrorSum << "\t"
+                << std::setw(5) << std::setprecision(3) << nnPackedMinError << "\t"
+                << std::setw(5) << std::setprecision(3) << nnPackedMaxError << " | \t"
+                << std::setw(5) << std::setprecision(3) << evalErrorSum << "\t"
+                << std::setw(5) << std::setprecision(3) << evalMinError << "\t"
+                << std::setw(5) << std::setprecision(3) << evalMaxError
                 << std::endl;
         }
 

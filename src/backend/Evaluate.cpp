@@ -5,13 +5,6 @@
 
 #include "nnue-probe/nnue.h"
 
-static nn::NeuralNetwork s_neuralNetwork;
-
-bool LoadNeuralNetwork(const char* name)
-{
-    return s_neuralNetwork.Load(name);
-}
-
 struct PieceScore
 {
     int16_t mg;
@@ -237,62 +230,6 @@ bool CheckInsufficientMaterial(const Position& position)
 
     return false;
 }
-
-#ifdef USE_NN_EVALUATION
-
-static float WinProbabilityToPawn(float w)
-{
-    w = std::max(0.00001f, std::min(0.99999f, w));
-    return 4.0f * log10f(w / (1.0f - w));
-}
-
-static void PositionToNeuralNetworkInput(const Position& position, nn::Layer::Values& outValues)
-{
-    outValues.resize(12 * 64);
-
-    SidePosition whitePosition = position.Whites();
-    SidePosition blackPosition = position.Whites();
-
-    if (position.GetSideToMove() == Color::Black)
-    {
-        std::swap(whitePosition, blackPosition);
-    }
-
-    for (uint32_t i = 0; i < 64u; ++i)
-    {
-        outValues[0 * 64 + i] = (float)((whitePosition.king >> i) & 1);
-        outValues[1 * 64 + i] = (float)((whitePosition.pawns >> i) & 1);
-        outValues[2 * 64 + i] = (float)((whitePosition.knights >> i) & 1);
-        outValues[3 * 64 + i] = (float)((whitePosition.bishops >> i) & 1);
-        outValues[4 * 64 + i] = (float)((whitePosition.rooks >> i) & 1);
-        outValues[5 * 64 + i] = (float)((whitePosition.queens >> i) & 1);
-
-        outValues[6 * 64 + i] = (float)((blackPosition.king >> i) & 1);
-        outValues[7 * 64 + i] = (float)((blackPosition.pawns >> i) & 1);
-        outValues[8 * 64 + i] = (float)((blackPosition.knights >> i) & 1);
-        outValues[9 * 64 + i] = (float)((blackPosition.bishops >> i) & 1);
-        outValues[10 * 64 + i] = (float)((blackPosition.rooks >> i) & 1);
-        outValues[11 * 64 + i] = (float)((blackPosition.queens >> i) & 1);
-    }
-}
-
-int32_t Evaluate(const Position& position)
-{
-    nn::Layer::Values networkInput;
-    PositionToNeuralNetworkInput(position, networkInput);
-
-    const nn::Layer::Values& networkOutput = s_neuralNetwork.Run(networkInput);
-    float winProbability = networkOutput[0];
-
-    if (position.GetSideToMove() == Color::Black)
-    {
-        winProbability = -winProbability;
-    }
-
-    return static_cast<int32_t>(100.0f * WinProbabilityToPawn(winProbability));
-}
-
-#else
 
 static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
 {
@@ -554,7 +491,7 @@ ScoreType Evaluate(const Position& position)
     // white passed pawns
     {
         const int32_t numPassedWhitePawns = CountPassedPawns(position.Whites().pawns, position.Blacks().pawns);
-        const int32_t numPassedBlackPawns = CountPassedPawns(position.Blacks().pawns.Flipped(), position.Whites().pawns.Flipped());
+        const int32_t numPassedBlackPawns = CountPassedPawns(position.Blacks().pawns.FlippedVertically(), position.Whites().pawns.FlippedVertically());
 
         value += (numPassedWhitePawns - numPassedBlackPawns) * c_passedPawnBonus;
     }
@@ -600,5 +537,3 @@ ScoreType Evaluate(const Position& position)
 
     return (ScoreType)value;
 }
-
-#endif // USE_NN_EVALUATION
