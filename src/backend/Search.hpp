@@ -22,6 +22,12 @@ struct SearchLimits
 
     // maximum allowed searched nodes
     uint64_t maxNodes = UINT64_MAX;
+
+    // enable mate search, disables all prunning
+    bool mateSearch = false;
+
+    // in analysis mode full PV lines are searched
+    bool analysisMode = false;
 };
 
 struct SearchParam
@@ -93,7 +99,6 @@ struct NodeInfo
     Color color;
 
     bool isPvNode = false;
-    bool isTbNode = false;
     bool isNullMove = false;
 };
 
@@ -107,6 +112,8 @@ public:
     void DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult);
 
     void StopSearch();
+
+    const MoveOrderer& GetMoveOrderer() const;
 
 private:
 
@@ -177,8 +184,6 @@ private:
 
     // check if one of generated moves is in TT
     const Move FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
-
-    ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta);
 
     // check for repetition in the searched node
     bool IsRepetition(const NodeInfo& node, const Game& game) const;

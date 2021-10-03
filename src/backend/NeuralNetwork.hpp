@@ -134,7 +134,7 @@ public:
 
 private:
 
-    void UpdateLayerWeights(Layer& layer) const;
+    void UpdateLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const;
 
     std::vector<Layer> layers;
 

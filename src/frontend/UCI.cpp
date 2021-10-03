@@ -100,6 +100,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default nn-04cf2b4ed1da.nnue\n";
         std::cout << "option name SyzygyPath type string default <empty>\n";
+        std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -175,6 +176,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ttprobe")
     {
         Command_TTProbe();
+    }
+    else if (command == "moveordererstats")
+    {
+        mSearch.GetMoveOrderer().DebugPrint();
     }
     else
     {
@@ -324,6 +329,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     int32_t whiteTimeIncrement = 0;
     int32_t blacksTimeIncrement = 0;
     uint32_t movesToGo = UINT32_MAX;
+    uint32_t mateSearchDepth = 0;
 
     std::vector<Move> rootMoves;
 
@@ -332,6 +338,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         if (args[i] == "depth" && i + 1 < args.size())
         {
             maxDepth = atoi(args[i + 1].c_str());
+        }
+        if (args[i] == "mate" && i + 1 < args.size())
+        {
+            mateSearchDepth = atoi(args[i + 1].c_str());
         }
         else if (args[i] == "infinite")
         {
@@ -425,6 +435,12 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         mSearchCtx->searchParam.limits.maxTime = hardLimit;
     }
 
+    if (mateSearchDepth > 0)
+    {
+        // mate depth is in moves, not plies
+        maxDepth = 2 * mateSearchDepth;
+    }
+
     // TODO
     // Instead of pondering on suggested move, maybe undo last move and ponder on oponent's position instead.
     // This way we can consider all possible oponent's replies, not just focus on predicted one... UCI is lame...
@@ -433,6 +449,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.startTimePoint = startTimePoint;
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
+    mSearchCtx->searchParam.limits.mateSearch = mateSearchDepth > 0;
+    mSearchCtx->searchParam.limits.analysisMode = !isPonder && (isInfinite || mOptions.analysisMode); // run full analysis when pondering
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
@@ -549,21 +567,23 @@ bool UniversalChessInterface::Command_Perft(const std::vector<std::string>& args
     return true;
 }
 
-static void ToLower(std::string& str)
+static std::string ToLower(const std::string& str)
 {
-    for (char& c : str)
+    std::string result = str;
+    for (char& c : result)
     {
         if (c <= 'Z' && c >= 'A')
         {
             c = (c - ('Z' - 'z'));
         }
     }
+    return result;
 }
 
 bool UniversalChessInterface::Command_SetOption(const std::string& name, const std::string& value)
 {
-    std::string lowerCaseName = name;
-    ToLower(lowerCaseName);
+    std::string lowerCaseName = ToLower(name);
+    std::string lowerCaseValue = ToLower(value);
 
     if (lowerCaseName == "multipv")
     {
@@ -575,10 +595,16 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         mOptions.threads = atoi(value.c_str());
         mOptions.threads = std::max(1u, std::min(64u, mOptions.threads));
     }
-    else if (lowerCaseName == "hash")
+    else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
         mTranspositionTable.Resize(hashSize);
+    }
+    else if (lowerCaseName == "uci_analysemode" || lowerCaseName == "uci_analyzemode" || lowerCaseName == "analysis" || lowerCaseName == "analysismode")
+    {
+        if (lowerCaseValue == "true" || lowerCaseValue == "1")          mOptions.analysisMode = true;
+        else if (lowerCaseValue == "false" || lowerCaseValue == "0")    mOptions.analysisMode = false;
+        else                                                            return false;
     }
 #ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")

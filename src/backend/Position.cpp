@@ -540,12 +540,12 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 
 bool Position::IsMate() const
 {
-    return GetNumLegalMoves() > 0u && IsInCheck(mSideToMove);
+    return GetNumLegalMoves() == 0u && IsInCheck(mSideToMove);
 }
 
 bool Position::IsStalemate() const
 {
-    return GetNumLegalMoves() > 0u && !IsInCheck(mSideToMove);
+    return GetNumLegalMoves() == 0u && !IsInCheck(mSideToMove);
 }
 
 bool Position::IsMoveLegal(const Move& move) const

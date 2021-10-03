@@ -20,6 +20,13 @@ struct PackedMove
     };
 
     INLINE constexpr PackedMove() : value(0u) { }
+
+    INLINE constexpr PackedMove(const Square fromSquare, const Square toSquare, Piece promoteTo)
+        : fromSquare(fromSquare.mIndex)
+        , toSquare(toSquare.mIndex)
+        , promoteTo((uint8_t)promoteTo)
+    { }
+
     INLINE constexpr PackedMove(const PackedMove&) = default;
     INLINE constexpr PackedMove& operator = (const PackedMove&) = default;
 

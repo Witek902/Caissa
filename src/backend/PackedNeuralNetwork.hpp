@@ -7,7 +7,7 @@
 
 namespace nn {
 
-static constexpr uint32_t FirstLayerSize = 128;
+static constexpr uint32_t FirstLayerSize = 64;
 static constexpr uint32_t SecondLayerSize = 32;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -18,6 +18,13 @@ static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 
 static constexpr int32_t OutputScaleShift = 8;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
+
+static constexpr float InputLayerWeightQuantizationScale = InputScale;
+static constexpr float InputLayerBiasQuantizationScale = InputScale;
+static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
+static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * InputScale;
+static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / InputScale;
+static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
 using WeightTypeLayer0 = int16_t;
 using BiasTypeLayer0 = int16_t;

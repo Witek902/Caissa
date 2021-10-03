@@ -6,7 +6,6 @@
 #include <iostream>
 #include <intrin.h>
 
-
 #define USE_AVX2
 
 namespace nn {
@@ -50,7 +49,7 @@ void Accumulator::Refresh(
         _mm256_store_si256(reinterpret_cast<__m256i*>(&values[i * registerWidth]), regs[i]);
     }
 #else
-    WeightTypeLayer0 regs[FirstLayerSize];
+    int32_t regs[FirstLayerSize];
 
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
     {
@@ -70,7 +69,9 @@ void Accumulator::Refresh(
 
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
     {
-        values[i] = regs[i];
+        ASSERT(regs[i] <= std::numeric_limits<WeightTypeLayer0>::max());
+        ASSERT(regs[i] >= std::numeric_limits<WeightTypeLayer0>::min());
+        values[i] = static_cast<WeightTypeLayer0>(regs[i]);
     }
 #endif
 }
@@ -147,7 +148,7 @@ void Accumulator::Update(
 #endif
 }
 
-INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const WeightTypeLayer0* input)
+static void ClippedReLU_16(uint32_t size, IntermediateType* output, const WeightTypeLayer0* input)
 {
 #ifdef USE_AVX2
     static_assert(std::is_same_v<WeightTypeLayer0, int16_t>, "Invalid type");
@@ -182,7 +183,7 @@ INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const
 #endif
 }
 
-INLINE static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
+static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
 {
 #if defined (USE_VNNI)
     acc = _mm256_dpbusd_epi32(acc, a, b);
@@ -193,7 +194,7 @@ INLINE static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
 #endif
 }
 
-INLINE static __m128i m256_haddx4(__m256i a, __m256i b, __m256i c, __m256i d)
+static __m128i m256_haddx4(__m256i a, __m256i b, __m256i c, __m256i d)
 {
     a = _mm256_hadd_epi32(a, b);
     c = _mm256_hadd_epi32(c, d);
@@ -203,7 +204,7 @@ INLINE static __m128i m256_haddx4(__m256i a, __m256i b, __m256i c, __m256i d)
     return _mm_add_epi32(sum128lo, sum128hi);
 }
 
-INLINE static int32_t m256_hadd(__m256i a)
+static int32_t m256_hadd(__m256i a)
 {
     const __m256i sum1 = _mm256_hadd_epi32(a, a);
     const __m256i sum2 = _mm256_hadd_epi32(sum1, sum1);
@@ -211,7 +212,7 @@ INLINE static int32_t m256_hadd(__m256i a)
     return _mm_cvtsi128_si32(_mm_add_epi32(_mm256_castsi256_si128(sum2), sum3));
 }
 
-INLINE static void LinearLayer(const LayerData12& layer, int32_t* output, const IntermediateType* input)
+static void LinearLayer(const LayerData12& layer, int32_t* output, const IntermediateType* input)
 {
 #ifdef USE_AVX2
     constexpr uint32_t registerWidth = 256 / 8;
@@ -256,19 +257,19 @@ INLINE static void LinearLayer(const LayerData12& layer, int32_t* output, const 
         _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
     }
 #else
-    for (uint32_t j = 0; j < layer.numOutputs; ++j)
+    for (uint32_t i = 0; i < layer.numOutputs; ++i)
     {
-        int32_t val = layer.biases[j];
-        for (uint32_t i = 0; i < layer.numInputs; ++i)
+        int32_t val = layer.biases[i];
+        for (uint32_t j = 0; j < layer.numInputs; ++j)
         {
-            val += layer.weights[i * layer.numInputs + j] * (int32_t)input[i];
+            val += layer.weights[i * layer.numInputs + j] * (int32_t)input[j];
         }
-        output[j] = val >> WeightScaleShift;
+        output[i] = val >> WeightScaleShift;
     }
 #endif
 }
 
-INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_t* input)
+static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_t* input)
 {
 #ifdef USE_AVX2
     constexpr uint32_t inRegisterWidth = 256 / 32;

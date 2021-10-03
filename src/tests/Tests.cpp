@@ -32,8 +32,10 @@ void RunPerft()
     std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
 }
 
-void PositionTests()
+static void RunPositionTests()
 {
+    std::cout << "Running Position tests..." << std::endl;
+
     // empty board
     TEST_EXPECT(!Position().IsValid());
 
@@ -604,18 +606,18 @@ void PositionTests()
 
         // move rook, loose castling rights
         {
-        Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
-        const Move move = pos.MoveFromString("a1b1");
-        TEST_EXPECT(move.IsValid());
-        TEST_EXPECT(move.FromSquare() == Square_a1);
-        TEST_EXPECT(move.ToSquare() == Square_b1);
-        TEST_EXPECT(move.GetPiece() == Piece::Rook);
-        TEST_EXPECT(move.IsCapture() == false);
-        TEST_EXPECT(move.IsCastling() == false);
-        TEST_EXPECT(pos.IsMoveValid(move));
-        TEST_EXPECT(pos.IsMoveLegal(move));
-        TEST_EXPECT(pos.DoMove(move));
-        TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R b Kkq - 1 1");
+            Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+            const Move move = pos.MoveFromString("a1b1");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(move.FromSquare() == Square_a1);
+            TEST_EXPECT(move.ToSquare() == Square_b1);
+            TEST_EXPECT(move.GetPiece() == Piece::Rook);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == false);
+            TEST_EXPECT(pos.IsMoveValid(move));
+            TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(pos.DoMove(move));
+            TEST_EXPECT(pos.ToFEN() == "r3k2r/8/8/8/8/8/8/1R2K2R b Kkq - 1 1");
         }
 
         // move rook, loose castling rights
@@ -745,6 +747,32 @@ void PositionTests()
             TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
         }
     }
+
+    // IsStaleMate
+    {
+        {
+            const Position pos("7K/5k2/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(!pos.IsStalemate());
+        }
+
+        {
+            const Position pos("7K/5k1P/8/8/8/8/8/8 w - - 0 1");
+            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(pos.IsStalemate());
+        }
+
+        {
+            const Position pos("7k/8/7r/K2P3q/P7/8/8/1r6 w - - 0 1");
+            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(pos.IsStalemate());
+        }
+    }
+}
+
+static void RunPerftTests()
+{
+    std::cout << "Running perft tests..." << std::endl;
 
     {
         const Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
@@ -930,7 +958,7 @@ void PositionTests()
     }
 }
 
-void EvalTests()
+static void RunEvalTests()
 {
     // incufficient material
     {
@@ -1001,8 +1029,10 @@ void EvalTests()
 // this test suite runs full search on well known/easy positions
 void RunSearchTests()
 {
+    std::cout << "Running Search tests..." << std::endl;
+
     Search search;
-    TranspositionTable tt{ 1024 * 1024 };
+    TranspositionTable tt{ 16 * 1024 };
     SearchResult result;
     Game game;
 
@@ -1013,6 +1043,7 @@ void RunSearchTests()
     // zero depth search should return zero result
     {
         param.limits.maxDepth = 0;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position(Position::InitPositionFEN));
         search.DoSearch(game, param, result);
@@ -1023,6 +1054,7 @@ void RunSearchTests()
     // incufficient material draw
     {
         param.limits.maxDepth = 4;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k2K/8/8/8/8/8/8/8 w - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1036,6 +1068,7 @@ void RunSearchTests()
     // stalemate (no legal move)
     {
         param.limits.maxDepth = 1;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("k7/2Q5/1K6/8/8/8/8/8 b - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1046,6 +1079,7 @@ void RunSearchTests()
     // mate in one
     {
         param.limits.maxDepth = 4;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("k7/7Q/1K6/8/8/8/8/8 w - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1057,9 +1091,42 @@ void RunSearchTests()
         TEST_EXPECT(result[3].score == CheckmateValue - 1);
     }
 
+    // mate in two
+    {
+        param.limits.maxDepth = 4;
+        param.limits.mateSearch = true;
+        param.numPvLines = 1;
+
+        game.Reset(Position("K4BB1/1Q6/5p2/8/2R2r1r/N2N2q1/kp1p1p1p/b7 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score == CheckmateValue - 3);
+        TEST_EXPECT(result[0].moves.front() == Move::Make(Square_b7, Square_f3, Piece::Queen));
+
+        param.limits.mateSearch = false;
+    }
+
+    // perpetual check
+    {
+        param.limits.maxDepth = 12;
+        param.limits.mateSearch = true;
+        param.numPvLines = 1;
+
+        game.Reset(Position("6k1/6p1/8/6KQ/1r6/q2b4/8/8 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(result[0].moves.front() == Move::Make(Square_h5, Square_e8, Piece::Queen));
+
+        param.limits.mateSearch = false;
+    }
+
     // winnnig KPvK
     {
         param.limits.maxDepth = 1;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/5P2/5K2 w - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1076,6 +1143,7 @@ void RunSearchTests()
     // drawing KPvK
     {
         param.limits.maxDepth = 1;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1090,6 +1158,7 @@ void RunSearchTests()
     // chess-rook skewer
     {
         param.limits.maxDepth = 1;
+        param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("3k3r/8/8/8/8/8/8/KR6 w - - 0 1"));
         search.DoSearch(game, param, result);
@@ -1109,10 +1178,13 @@ void RunSearchTests()
 
 void RunUnitTests()
 {
-    PositionTests();
-    EvalTests();
+    RunPositionTests();
+    RunEvalTests();
     RunSearchTests();
+    RunPerftTests();
 }
+
+#pragma optimize("",off)
 
 bool RunPerformanceTests(const char* path)
 {
@@ -1220,7 +1292,7 @@ bool RunPerformanceTests(const char* path)
 
     bool verbose = false;
 
-    TranspositionTable tt(64 * 1024 * 1024);
+    TranspositionTable tt(2048ull * 1024ull * 1024ull);
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
     for (uint32_t depth = minDepth; depth <= maxDepth; ++depth)
