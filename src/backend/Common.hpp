@@ -101,6 +101,7 @@ INLINE constexpr bool IsPowerOfTwo(const T n)
     return (n & (n - 1)) == 0;
 }
 
+class Position;
 struct Move;
 struct PackedMove;
 class MoveList;

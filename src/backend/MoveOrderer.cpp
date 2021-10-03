@@ -9,10 +9,10 @@ static const int32_t c_PromotionScores[] =
 {
     0,          // none
     0,          // pawn
-    9000000,    // knight
+    20000000,   // knight
     0,          // bishop
     0,          // rook
-    9000001,    // queen
+    20000000,   // queen
 };
 
 static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
@@ -105,7 +105,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
     {
         uint32_t& historyCounter = searchHistory[color][move.FromSquare().Index()][move.ToSquare().Index()];
 
-        const uint64_t historyBonus = std::min(1024, node.depth * node.depth);
+        const uint64_t historyBonus = node.depth * node.depth;
 
         const uint64_t newValue = std::min<uint64_t>(UINT32_MAX, (uint64_t)historyCounter + historyBonus);
         historyCounter = (uint32_t)newValue;

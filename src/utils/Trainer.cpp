@@ -69,10 +69,10 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
     outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
 }
 
+static const uint32_t cMaxSearchDepth = 12;
 static const uint32_t cMaxIterations = 100000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 1000;
-static const uint32_t cNumValidationVectorsPerIteration = 1000;
-static const uint32_t cBatchSize = 100;
+static const uint32_t cBatchSize = 10;
 
 bool Train()
 {
@@ -118,7 +118,6 @@ bool Train()
     nn::Layer::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
-    uint32_t numTrainingVectorsPassedInEpoch = 0;
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
@@ -132,17 +131,11 @@ bool Train()
         network.Train(trainingSet, tempValues, cBatchSize);
 
         numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
-        numTrainingVectorsPassedInEpoch += cNumTrainingVectorsPerIteration;
-
-        if (numTrainingVectorsPassedInEpoch > numEntries)
-        {
-            numTrainingVectorsPassedInEpoch = 0;
-        }
 
         float minError = std::numeric_limits<float>::max();
         float maxError = -std::numeric_limits<float>::max();
         float errorSum = 0.0f;
-        for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
+        for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
             const PositionEntry& entry = entries[distrib(gen)];
             PositionEntryToTrainingVector(entry, validationVector);
@@ -162,7 +155,7 @@ bool Train()
             const float sqrError = error * error;
             errorSum += sqrError;
         }
-        errorSum = sqrtf(errorSum / cNumValidationVectorsPerIteration);
+        errorSum = sqrtf(errorSum / cNumTrainingVectorsPerIteration);
 
         float epoch = (float)numTrainingVectorsPassed / (float)numEntries;
         std::cout << epoch << "\t" << errorSum << "\t" << minError << "\t" << maxError;
@@ -197,65 +190,73 @@ static void PositionToVector(const Position& pos, nn::TrainingVector& outVector,
 
 bool TrainEndgame()
 {
-    TranspositionTable tt{ 256 * 1024 * 1024 };
+    TranspositionTable tt{ 8192ull * 1024ull * 1024ull };
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
     SearchParam searchParam{ tt };
-    searchParam.limits.maxDepth = 8;
+    searchParam.limits.maxDepth = cMaxSearchDepth;
+    searchParam.limits.analysisMode = true;
     searchParam.debugLog = false;
 
-    const auto generateTrainingSet = [&](std::vector<nn::TrainingVector>& outSet, std::vector<std::vector<uint32_t>>& outFeatures, std::vector<Position>& outPositions)
+    const auto generateTrainingSet = [&](TaskBuilder& taskBuilder, std::vector<nn::TrainingVector>& outSet, std::vector<std::vector<uint32_t>>& outFeatures, std::vector<Position>& outPositions)
     {
-        Waitable waitable;
+        taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext& context, const uint32_t i)
         {
-            TaskBuilder taskBuilder(waitable);
-            taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext& context, const uint32_t i)
+            Search& search = searchArray[context.threadId];
+
+            for (;;)
             {
-                Search& search = searchArray[context.threadId];
+                Position pos;
 
-                for (;;)
+                MaterialKey material;
+                material.numWhitePawns = 1;// +(rand() % 7);
+                material.numBlackPawns = 1;// +(rand() % 7);
+
+                GenerateRandomPosition(material, pos);
+
+                // don't generate positions where side to move is in check
+                if (pos.IsInCheck(pos.GetSideToMove()))
                 {
-                    Position pos;
-
-                    MaterialKey material;
-                    material.numWhitePawns = 1 + (rand() % 7);
-                    material.numBlackPawns = 1 + (rand() % 7);
-
-                    GenerateRandomPosition(material, pos);
-
-                    // don't generate positions where side to move is in check
-                    if (pos.IsInCheck(pos.GetSideToMove()))
-                    {
-                        continue;
-                    }
-
-                    // generate only quiet position
-                    MoveList moves;
-                    pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
-
-                    if (moves.Size() > 0)
-                    {
-                        continue;
-                    }
-
-                    PositionToVector(pos, outSet[i], outFeatures[i]);
-
-                    Game game;
-                    game.Reset(pos);
-
-                    SearchResult searchResult;
-                    search.DoSearch(game, searchParam, searchResult);
-
-                    float score = searchResult.empty() ? 0.0f : (float)searchResult[0].score;
-                    score = std::clamp(score / 100.0f, -15.0f, 15.0f);
-                    outSet[i].output[0] = PawnToWinProbability(score);
-                    outPositions[i] = pos;
-
-                    break;
+                    continue;
                 }
-            });
-        }
-        waitable.Wait();
+
+                // generate only quiet position
+                MoveList moves;
+                pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
+
+                if (moves.Size() > 0)
+                {
+                    continue;
+                }
+
+                PositionToVector(pos, outSet[i], outFeatures[i]);
+
+                Game game;
+                game.Reset(pos);
+
+                SearchResult searchResult;
+                search.DoSearch(game, searchParam, searchResult);
+
+                const bool isStalemate = pos.IsStalemate();
+                if (!isStalemate)
+                {
+                    if (searchResult.empty())
+                    {
+                        std::cout << "Broken position: " << std::endl;
+                        std::cout << pos.Print() << std::endl;
+                    }
+
+                    ASSERT(!searchResult.empty());
+                }
+
+                float score = isStalemate ? 0.0f : (float)searchResult[0].score;
+                score = std::clamp(score / 100.0f, -15.0f, 15.0f);
+                outSet[i].output[0] = PawnToWinProbability(score);
+                outPositions[i] = pos;
+
+                break;
+            }
+        });
     };
 
     {
@@ -266,45 +267,72 @@ bool TrainEndgame()
 
         std::vector<nn::TrainingVector> trainingSet, validationSet;
         trainingSet.resize(cNumTrainingVectorsPerIteration);
-        validationSet.resize(cNumValidationVectorsPerIteration);
+        validationSet.resize(cNumTrainingVectorsPerIteration);
 
         std::vector<Position> trainingPositions, validationPositions;
         std::vector<std::vector<uint32_t>> trainingFeatures, validationFeatures;
         trainingPositions.resize(cNumTrainingVectorsPerIteration);
         trainingFeatures.resize(cNumTrainingVectorsPerIteration);
-        validationPositions.resize(cNumValidationVectorsPerIteration);
-        validationFeatures.resize(cNumValidationVectorsPerIteration);
+        validationPositions.resize(cNumTrainingVectorsPerIteration);
+        validationFeatures.resize(cNumTrainingVectorsPerIteration);
 
         nn::TrainingVector validationVector;
 
         nn::Layer::Values tempValues;
 
         uint32_t numTrainingVectorsPassed = 0;
-        uint32_t numTrainingVectorsPassedInEpoch = 0;
+
+        {
+            Waitable waitable;
+            {
+                TaskBuilder childTaskBuilder(waitable);
+                generateTrainingSet(childTaskBuilder, validationSet, validationFeatures, validationPositions);
+            }
+            waitable.Wait();
+        }
 
         for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
         {
-            generateTrainingSet(trainingSet, trainingFeatures, trainingPositions);
-            network.Train(trainingSet, tempValues, cBatchSize);
-            //network.PrintStats();
-            network.ToPackedNetwork(packedNetwork);
-            packedNetwork.Save("pawns.nn");
+            // use validation set from previous iteration as training set in the current one
+            trainingSet = validationSet;
+            trainingFeatures = validationFeatures;
+            trainingPositions = validationPositions;
+
+            // validation vectors generation can be done in parallel with training
+            Waitable waitable;
+            {
+                TaskBuilder taskBuilder(waitable);
+
+                taskBuilder.Task("Train", [&](const TaskContext&)
+                {
+                    network.Train(trainingSet, tempValues, cBatchSize);
+                    network.PrintStats();
+
+                    network.ToPackedNetwork(packedNetwork);
+                    packedNetwork.Save("pawns.nn");
+                });
+
+                taskBuilder.Task("GenerateSet", [&](const TaskContext& ctx)
+                {
+                    TaskBuilder childTaskBuilder(ctx);
+                    generateTrainingSet(childTaskBuilder, validationSet, validationFeatures, validationPositions);
+                });
+            }
+            waitable.Wait();
 
             numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
-            numTrainingVectorsPassedInEpoch += cNumTrainingVectorsPerIteration;
-
-            generateTrainingSet(validationSet, validationFeatures, validationPositions);
             
             float nnMinError = std::numeric_limits<float>::max();
             float nnMaxError = 0.0f, nnErrorSum = 0.0f;
 
+            float nnPackedQuantizationErrorSum = 0.0f;
             float nnPackedMinError = std::numeric_limits<float>::max();
             float nnPackedMaxError = 0.0f, nnPackedErrorSum = 0.0f;
 
             float evalMinError = std::numeric_limits<float>::max();
             float evalMaxError = 0.0f, evalErrorSum = 0.0f;
 
-            for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
+            for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
             {
                 tempValues = network.Run(validationSet[i].input);
                 int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)validationFeatures[i].size(), validationFeatures[i].data());
@@ -314,7 +342,8 @@ bool TrainEndgame()
                 const float nnPackedValue = (float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
                 const float evalValue = PawnToWinProbability((float)Evaluate(validationPositions[i]) / 100.0f);
 
-                /*
+                nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
+
                 if (i < 10)
                 {
                     std::cout << validationPositions[i].ToFEN() << std::endl;
@@ -322,7 +351,7 @@ bool TrainEndgame()
                     std::cout << " NN eval:          " << nnValue << std::endl;
                     std::cout << " Packed NN eval:   " << nnPackedValue << std::endl;
                     std::cout << " Static eval:      " << evalValue << std::endl;
-                }*/
+                }
 
                 {
                     const float error = expectedValue - nnValue;
@@ -349,22 +378,30 @@ bool TrainEndgame()
                 }
             }
 
-            nnErrorSum = sqrtf(nnErrorSum / cNumValidationVectorsPerIteration);
-            nnPackedErrorSum = sqrtf(nnPackedErrorSum / cNumValidationVectorsPerIteration);
-            evalErrorSum = sqrtf(evalErrorSum / cNumValidationVectorsPerIteration);
+            nnErrorSum = sqrtf(nnErrorSum / cNumTrainingVectorsPerIteration);
+            nnPackedErrorSum = sqrtf(nnPackedErrorSum / cNumTrainingVectorsPerIteration);
+            evalErrorSum = sqrtf(evalErrorSum / cNumTrainingVectorsPerIteration);
+            nnPackedQuantizationErrorSum = sqrtf(nnPackedQuantizationErrorSum / cNumTrainingVectorsPerIteration);
 
-            std::cout
-                << std::setw(5) << numTrainingVectorsPassed << " | \t"
-                << std::setw(5) << std::setprecision(3) << nnErrorSum << "\t"
-                << std::setw(5) << std::setprecision(3) << nnMinError << "\t"
-                << std::setw(5) << std::setprecision(3) << nnMaxError << " | \t"
-                << std::setw(5) << std::setprecision(3) << nnPackedErrorSum << "\t"
-                << std::setw(5) << std::setprecision(3) << nnPackedMinError << "\t"
-                << std::setw(5) << std::setprecision(3) << nnPackedMaxError << " | \t"
-                << std::setw(5) << std::setprecision(3) << evalErrorSum << "\t"
-                << std::setw(5) << std::setprecision(3) << evalMinError << "\t"
-                << std::setw(5) << std::setprecision(3) << evalMaxError
-                << std::endl;
+            std::cout << std::right << std::setw(6) << numTrainingVectorsPassed; std::cout << "  |  ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnErrorSum; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnMinError; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnMaxError; std::cout << "  |  ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedErrorSum; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedQuantizationErrorSum; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedMinError; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedMaxError; std::cout << "  |  ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << evalErrorSum; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << evalMinError; std::cout << " ";
+            std::cout << std::right << std::fixed << std::setprecision(4) << evalMaxError;
+            std::cout << std::endl;
+
+            if (iteration % 10 == 0)
+            {
+                const auto ttUsage = tt.GetNumUsedEntries();
+                std::cout << "transposition table usage: " << ttUsage << " entries (" <<
+                    std::fixed << std::setprecision(4) << (float)ttUsage / (float)tt.GetSize() * 100.0f << "%)" << std::endl;
+            }
         }
 
         network.Save("network.dat");
