@@ -704,7 +704,7 @@ static void RunPositionTests()
             Position pos("7k/8/1p6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
         }
 
         // hanging pawn
@@ -712,7 +712,7 @@ static void RunPositionTests()
             Position pos("7k/8/1p6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
         }
 
         // queen takes pawn protected by another pawn
@@ -720,7 +720,10 @@ static void RunPositionTests()
             Position pos("7k/p7/1p6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(0 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -801));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -800));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -799));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 0));
         }
 
         // queen trade
@@ -728,7 +731,9 @@ static void RunPositionTests()
             Position pos("7k/p7/1q6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -1));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
         }
 
         // rook trade
@@ -736,7 +741,9 @@ static void RunPositionTests()
             Position pos("7k/p7/1q6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -1));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
         }
 
         // (rook+bishop) vs. 2 knights -> bishop
@@ -744,7 +751,35 @@ static void RunPositionTests()
             Position pos("7k/3n4/1n6/8/8/1R2B3/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(1 == pos.StaticExchangeEvaluation(move));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 100));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 200));
+        }
+
+        // 4 rooks and 4 bishops
+        {
+            Position pos("kB2r2b/8/8/1r2p2R/8/8/1B5b/K3R3 w - - 0 1");
+            const Move move = pos.MoveFromString("b2e5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -200));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -199));
+        }
+
+        // 2 rooks battery
+        {
+            Position pos("K2R4/3R4/8/8/8/3r2r1/8/7k w - - 0 1");
+            const Move move = pos.MoveFromString("d7d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
+        }
+
+        // pawns and bishops on diagonal
+        {
+            Position pos("7k/b7/8/2p5/3P4/4B3/8/7K w - - 0 1");
+            const Move move = pos.MoveFromString("d4c5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 100));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 101));
         }
     }
 
