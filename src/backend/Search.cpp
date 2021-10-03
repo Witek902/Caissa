@@ -1138,6 +1138,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
+    if (ctx.searchParam.verboseStats)
+    {
+        thread.moveOrderer.ScoreMoves(node, moves);
+        numScoredMoves = moves.numMoves;
+
+        moves.Print();
+    }
+
     Move bestMove = Move::Invalid();
     uint32_t moveIndex = 0;
     int32_t numReducedMoves = 0;

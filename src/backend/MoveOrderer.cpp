@@ -3,13 +3,15 @@
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 
-static const int32_t c_MvvLvaScoreBaseValue = 10000000;
+static const int32_t c_GoodCaptureValue =     20000000;
+
+static const int32_t c_MvvLvaScoreBaseValue =   10000000;
 
 static const int32_t c_PromotionScores[] =
 {
     0,          // none
     0,          // pawn
-    20000000,   // knight
+    10000000,   // knight
     0,          // bishop
     0,          // rook
     20000000,   // queen
@@ -138,6 +140,8 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 
     const uint32_t color = (uint32_t)node.color;
 
+    const Move previousMove = node.previousMove;
+
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         const Move move = moves[i].move;
@@ -159,7 +163,22 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
         {
             const Piece attackingPiece = move.GetPiece();
             const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
-            score += ComputeMvvLvaScore(attackingPiece, capturedPiece);
+
+            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
+            {
+                score += c_GoodCaptureValue + 100u * (int32_t)capturedPiece - (int32_t)attackingPiece;
+            }
+            else
+            {
+                if (pos.StaticExchangeEvaluation(move, 100))
+                {
+                    score += c_GoodCaptureValue;
+                }
+                else if (pos.StaticExchangeEvaluation(move, 0))
+                {
+                    score += c_MvvLvaScoreBaseValue;
+                }
+            }
         }
         else
         {

@@ -195,7 +195,10 @@ public:
     // check if board state is valid (proper number of pieces, no double checks etc.)
     bool IsValid() const;
 
-    // get bitboard of attacking squares
+    // get pieces attacking given square
+    const Bitboard GetAttackers(const Square square) const;
+
+    // get pieces of one side attacking given square
     const Bitboard GetAttackers(const Square square, const Color sideColor) const;
 
     // check if given square is visible by any other piece
@@ -230,7 +233,7 @@ public:
     bool DoNullMove();
 
     // evaluate material exchange on a single square
-    int32_t StaticExchangeEvaluation(const Move& move) const;
+    bool StaticExchangeEvaluation(const Move& move, int32_t treshold) const;
 
     // compute (SLOW) Zobrist hash
     uint64_t ComputeHash() const;

@@ -184,6 +184,9 @@ struct Bitboard
 
     static Bitboard GetRay(const Square square, const RayDir dir);
 
+    template<Color color>
+    static Bitboard GetPawnAttacks(const Square square);
+
     static Bitboard GetPawnAttacks(const Square square, const Color color);
     static Bitboard GetKingAttacks(const Square square);
     static Bitboard GetKnightAttacks(const Square square);

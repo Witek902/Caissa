@@ -416,22 +416,30 @@ Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
     return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
 }
 
-Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
 {
     Bitboard bitboard;
-
-    if (color == Color::White)
-    {
-        bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
-        bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
-    }
-    else
-    {
-        bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
-        bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
-    }
-
+    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
+    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
     return bitboard;
+}
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Square square)
+{
+    Bitboard bitboard;
+    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
+    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
+    return bitboard;
+}
+
+Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
+{
+    return color == Color::White ?
+        GetPawnAttacks<Color::White>(square) :
+        GetPawnAttacks<Color::Black>(square);
 }
 
 Bitboard Bitboard::GetKingAttacks(const Square square)
