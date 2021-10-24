@@ -398,7 +398,7 @@ std::string Position::Print() const
     return str;
 }
 
-std::string Position::MoveToString(const Move& move) const
+std::string Position::MoveToString(const Move& move, MoveNotation notation) const
 {
     ASSERT(move.GetPiece() != Piece::None);
 
@@ -410,100 +410,114 @@ std::string Position::MoveToString(const Move& move) const
 
     std::string str;
 
-    if (move.GetPiece() == Piece::Pawn)
+    if (notation == MoveNotation::LAN)
     {
-        if (move.IsCapture())
-        {
-            str += move.FromSquare().ToString();
-            str += 'x';
-        }
-
-        str += move.ToSquare().ToString();
-        if (move.ToSquare().Rank() == 7u && move.GetPromoteTo() != Piece::None)
-        {
-            str += "=";
-            str += PieceToChar(move.GetPromoteTo());
-        }
+        str = move.ToString();
     }
-    else
+    else if (notation == MoveNotation::SAN)
     {
-        if (move.GetPiece() == Piece::King && move.IsCastling())
+
+        if (move.GetPiece() == Piece::Pawn)
         {
-            if (move.ToSquare().File() == 2u)
+            if (move.IsCapture())
             {
-                str = "O-O-O";
+                str += move.FromSquare().ToString();
+                str += 'x';
             }
-            else if (move.ToSquare().File() == 6u)
+
+            str += move.ToSquare().ToString();
+            if (move.ToSquare().Rank() == 7u && move.GetPromoteTo() != Piece::None)
             {
-                str = "O-O";
-            }
-            else
-            {
-                str = "?";
+                str += "=";
+                str += PieceToChar(move.GetPromoteTo());
             }
         }
         else
         {
-            str = PieceToChar(move.GetPiece());
-
+            if (move.GetPiece() == Piece::King && move.IsCastling())
             {
-                const SidePosition& currentSide = GetCurrentSide();
-                const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.GetPiece());
-
-                bool ambiguous = false;
+                if (move.ToSquare().File() == 2u)
                 {
-                    MoveList moves;
-                    GenerateMoveList(moves);
+                    str = "O-O-O";
+                }
+                else if (move.ToSquare().File() == 6u)
+                {
+                    str = "O-O";
+                }
+                else
+                {
+                    str = "?";
+                }
+            }
+            else
+            {
+                str = PieceToChar(move.GetPiece());
 
-                    for (uint32_t i = 0; i < moves.numMoves; ++i)
+                {
+                    const SidePosition& currentSide = GetCurrentSide();
+                    const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.GetPiece());
+
+                    bool ambiguous = false;
                     {
-                        const Move& otherMove = moves[i].move;
-                        if (otherMove.GetPiece() == move.GetPiece() &&
-                            otherMove.ToSquare() == move.ToSquare() &&
-                            otherMove.FromSquare() != move.FromSquare())
+                        MoveList moves;
+                        GenerateMoveList(moves);
+
+                        for (uint32_t i = 0; i < moves.numMoves; ++i)
                         {
-                            ambiguous = true;
-                            break;
+                            const Move& otherMove = moves[i].move;
+                            if (otherMove.GetPiece() == move.GetPiece() &&
+                                otherMove.ToSquare() == move.ToSquare() &&
+                                otherMove.FromSquare() != move.FromSquare())
+                            {
+                                ambiguous = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (ambiguous)
+                    {
+                        if ((movedPieceBitboard & Bitboard::RankBitboard(move.FromSquare().Rank())).Count() > 1)
+                        {
+                            str += 'a' + move.FromSquare().File();
+                        }
+                        else if ((movedPieceBitboard & Bitboard::FileBitboard(move.FromSquare().File())).Count() > 1)
+                        {
+                            str += '1' + move.FromSquare().Rank();
+                        }
+                        else
+                        {
+                            str += move.FromSquare().ToString();
                         }
                     }
                 }
 
-                if (ambiguous)
+                if (move.IsCapture())
                 {
-                    if ((movedPieceBitboard & Bitboard::RankBitboard(move.FromSquare().Rank())).Count() > 1)
-                    {
-                        str += 'a' + move.FromSquare().File();
-                    }
-                    else if ((movedPieceBitboard & Bitboard::FileBitboard(move.FromSquare().File())).Count() > 1)
-                    {
-                        str += '1' + move.FromSquare().Rank();
-                    }
-                    else
-                    {
-                        str += move.FromSquare().ToString();
-                    }
+                    str += 'x';
                 }
+                str += move.ToSquare().ToString();
             }
+        }
 
-            if (move.IsCapture())
-            {
-                str += 'x';
-            }
-            str += move.ToSquare().ToString();
+        if (move.IsCapture() && move.IsEnPassant())
+        {
+            str += " e.p.";
+        }
+
+        if (afterMove.IsMate())
+        {
+            str += '#';
+        }
+        else if (afterMove.IsInCheck(afterMove.GetSideToMove()))
+        {
+            str += '+';
         }
     }
-
-    if (move.IsCapture() && move.IsEnPassant())
+    else
     {
-        str += " e.p.";
+        DEBUG_BREAK();
     }
-
-    if (afterMove.IsInCheck(afterMove.GetSideToMove()))
-    {
-        str += '+';
-    }
-
-    // TODO! checkmate
 
     return str;
 }

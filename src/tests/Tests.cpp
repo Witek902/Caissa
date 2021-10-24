@@ -4,6 +4,7 @@
 #include "../backend/Search.hpp"
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/ThreadPool.hpp"
 
@@ -1219,8 +1220,6 @@ void RunUnitTests()
     RunPerftTests();
 }
 
-#pragma optimize("",off)
-
 bool RunPerformanceTests(const char* path)
 {
     using MovesListType = std::vector<std::string>;
@@ -1322,20 +1321,17 @@ bool RunPerformanceTests(const char* path)
     }
     std::cout << testVector.size() << " test positions loaded" << std::endl;
 
-    const uint32_t minDepth = 1;
-    const uint32_t maxDepth = 30;
-
     bool verbose = false;
 
     TranspositionTable tt(2048ull * 1024ull * 1024ull);
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
-    for (uint32_t depth = minDepth; depth <= maxDepth; ++depth)
+    uint32_t maxSearchTime = 4;
+
+    for (;;)
     {
         std::mutex mutex;
         std::atomic<uint32_t> success = 0;
-
-        tt.Clear();
 
         auto startTimeAll = std::chrono::high_resolution_clock::now();
 
@@ -1345,7 +1341,7 @@ bool RunPerformanceTests(const char* path)
 
             for (const TestCaseEntry& testCase : testVector)
             {
-                taskBuilder.Task("SearchTest", [testCase, &searchArray, depth, &mutex, verbose, &success, &tt](const TaskContext& ctx)
+                taskBuilder.Task("SearchTest", [testCase, &searchArray, maxSearchTime, &mutex, verbose, &success, &tt](const TaskContext& ctx)
                 {
                     Search& search = searchArray[ctx.threadId];
 
@@ -1357,12 +1353,16 @@ bool RunPerformanceTests(const char* path)
 
                     SearchParam searchParam{ tt };
                     searchParam.debugLog = false;
-                    searchParam.limits.maxDepth = depth;
+                    searchParam.numThreads = 1;
+                    searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
+                    searchParam.limits.maxDepth = UINT8_MAX;
+                    searchParam.limits.maxTime = maxSearchTime;
+                    searchParam.limits.maxTimeSoft = maxSearchTime / 2;
 
                     SearchResult searchResult;
                     search.DoSearch(game, searchParam, searchResult);
 
-                    Move foundMove;
+                    Move foundMove = Move::Invalid();
                     if (!searchResult[0].moves.empty())
                     {
                         foundMove = searchResult[0].moves[0];
@@ -1445,11 +1445,16 @@ bool RunPerformanceTests(const char* path)
         const float factor = passRate / time;
 
         std::cout
-            << depth << "; "
+            << maxSearchTime << "; "
             << success << "; "
             << passRate << "; "
             << time << "; "
             << factor << std::endl;
+
+        maxSearchTime *= 3;
+        maxSearchTime /= 2;
+
+        tt.Clear();
 
         //std::cout << "Passed: " << success << "/" << testVector.size() << std::endl;
         //std::cout << "Time:   " << std::chrono::duration_cast<std::chrono::milliseconds>(endTimeAll - startTimeAll).count() << "ms" << std::endl << std::endl;
@@ -1463,6 +1468,8 @@ int main(int argc, const char* argv[])
     InitEngine();
 
     nnue_init("D:/CHESS/NNUE/nn-04cf2b4ed1da.nnue");
+
+    LoadTablebase("C:/Program Files (x86)/syzygy/");
 
     if (argc > 1 && strcmp(argv[1], "unittest") == 0)
     {

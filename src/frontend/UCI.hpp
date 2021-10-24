@@ -14,6 +14,7 @@ struct Options
     uint32_t multiPV = 1;
     uint32_t threads = 1;
     bool analysisMode = false;
+    bool useStandardAlgebraicNotation = false;
 };
 
 struct SearchTaskContext

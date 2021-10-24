@@ -646,3 +646,4 @@ r1b2rk1/p4ppp/1p1Qp3/4P2N/1P6/8/P3qPPP/3R1RK1 w - - bm Nf6+; id "WAC.288";
 b2b1r1k/3R1ppp/4qP2/4p1PQ/4P3/5B2/4N1K1/8 w - - bm g6; id "WAC.300";
 8/8/7p/3KNN1k/2p4p/8/3P2p1/8 w - - bm Kc6; id "Behting Study";
 2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - bm Qg3; id "Mate in 3";
+8/8/1b1ppNbB/nQr2k2/n1p3N1/1P2p1p1/2Kp1q2/1B1R1R2 w - - 0 1 bm Rc1; id "Mate in 2";

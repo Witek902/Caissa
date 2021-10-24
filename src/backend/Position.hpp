@@ -151,6 +151,12 @@ struct PackedPosition
     uint8_t piecesData[16];     // 4 bits per occupied square
 };
 
+enum class MoveNotation : uint8_t
+{
+    SAN,    // Standard Algebraic Notation
+    LAN,    // Long Algebraic Notation
+};
+
 // class representing whole board state
 class Position
 {
@@ -164,17 +170,17 @@ public:
     // compare position (not hash)
     bool operator == (const Position& rhs) const;
 
-    // load position from Forsyth�Edwards Notation
+    // load position from Forsyth-Edwards Notation
     bool FromFEN(const std::string& fenString);
 
-    // save position to Forsyth�Edwards Notation
+    // save position to Forsyth-Edwards Notation
     std::string ToFEN() const;
 
     // print board as ASCI art
     std::string Print() const;
 
     // convert move to string
-    std::string MoveToString(const Move& move) const;
+    std::string MoveToString(const Move& move, MoveNotation notation = MoveNotation::SAN) const;
 
     // parse move from string
     Move MoveFromString(const std::string& str) const;
@@ -232,14 +238,20 @@ public:
     // apply null move
     bool DoNullMove();
 
+    // check what is theoretically possible best move value (without generating and analyzing actual moves)
+    int32_t BestPossibleMoveValue() const;
+
     // evaluate material exchange on a single square
-    bool StaticExchangeEvaluation(const Move& move, int32_t treshold) const;
+    bool StaticExchangeEvaluation(const Move& move, int32_t treshold = 0) const;
 
     // compute (SLOW) Zobrist hash
     uint64_t ComputeHash() const;
 
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
+
+    void MirrorVertically();
+    void MirrorHorizontally();
 
     // run performance test
     uint64_t Perft(uint32_t depth, bool print = true) const;
@@ -253,14 +265,21 @@ public:
     INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
     INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
 
+    INLINE uint32_t GetNumPieces() const { return (Whites().Occupied() | Blacks().Occupied()).Count(); }
+
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
     // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
 
+    INLINE void SetSideToMove(Color color) { mSideToMove = color; }
+
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
+
+    // check if the position features only pawns and kings
+    bool IsPawnsOnly() const;
 
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;

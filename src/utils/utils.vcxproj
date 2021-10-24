@@ -15,6 +15,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="EndgamePieceSquareTables.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Trainer.cpp" />

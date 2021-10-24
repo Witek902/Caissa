@@ -53,6 +53,7 @@ public:
     ~TranspositionTable();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Flags flag, PackedMove move = PackedMove());
     void Write(const Position& position, const TTEntry& entry);
     void Prefetch(const Position& position) const;
 

@@ -209,6 +209,31 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Flags flag, PackedMove move)
+{
+    TTEntry entry;
+    entry.score = score;
+    entry.staticEval = staticEval;
+    entry.move = move;
+    entry.depth = depth;
+    entry.flag = flag;
+
+    Write(position, entry);
+
+    /*
+    if (position.Blacks().pawns == 0 && position.Whites().pawns == 0 && position.GetNumPieces() <= 6)
+    {
+        Position positionMirrorV = position; positionMirrorV.MirrorVertically();
+        Position positionMirrorH = position; positionMirrorH.MirrorHorizontally();
+        Position positionMirrorVH = positionMirrorV; positionMirrorVH.MirrorHorizontally();
+
+        Write(positionMirrorV, entry);
+        Write(positionMirrorH, entry);
+        Write(positionMirrorVH, entry);
+    }
+    */
+}
+
 void TranspositionTable::Write(const Position& position, const TTEntry& entry)
 {
     ASSERT(entry.IsValid());
@@ -260,7 +285,7 @@ void TranspositionTable::Write(const Position& position, const TTEntry& entry)
     targetEntry.key = hash ^ entry.packed;
     targetEntry.data = entry;
 
-    //// preserve existing move
+    // preserve existing move
     //if (entry.move.IsValid() || targetEntry.hash != entry.hash)
     //{
     //    targetEntry.move = entry.move;

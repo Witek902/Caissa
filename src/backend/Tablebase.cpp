@@ -42,11 +42,11 @@ static Piece TranslatePieceType(uint32_t tbPromotes)
     return Piece::None;
 }
 
-Move ProbeTablebase_Root(const Position& pos)
+bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistanceToZero, int32_t* outWDL)
 {
     if (!HasTablebases())
     {
-        return Move::Invalid();
+        return false;
     }
 
     const uint32_t probeResult = tb_probe_root(
@@ -66,12 +66,30 @@ Move ProbeTablebase_Root(const Position& pos)
 
     if (probeResult == TB_RESULT_FAILED)
     {
-        return Move::Invalid();
+        return false;
     }
 
-    PackedMove packedMove(Square(TB_GET_FROM(probeResult)), TB_GET_TO(probeResult), TranslatePieceType(TB_GET_PROMOTES(probeResult)));
+    const PackedMove packedMove(
+        Square(TB_GET_FROM(probeResult)),
+        TB_GET_TO(probeResult),
+        TranslatePieceType(TB_GET_PROMOTES(probeResult)));
 
-    return pos.MoveFromPacked(packedMove);
+    outMove = pos.MoveFromPacked(packedMove);
+
+    if (outDistanceToZero)
+    {
+        *outDistanceToZero = TB_GET_DTZ(probeResult);
+    }
+
+    if (outWDL)
+    {
+        *outWDL = 0;
+
+        if (TB_GET_WDL(probeResult) == TB_WIN) *outWDL = 1;
+        if (TB_GET_WDL(probeResult) == TB_LOSS) *outWDL = -1;
+    }
+
+    return true;
 }
 
 #else // !USE_TABLE_BASES
@@ -84,9 +102,9 @@ bool HasTablebases()
 void LoadTablebase(const char*) { }
 void UnloadTablebase() { }
 
-Move ProbeTablebase_Root(const Position&)
+bool ProbeTablebase_Root(const Position&, Move&, uint32_t*, int32_t*)
 {
-    return Move::Invalid();
+    return false;
 }
 
 #endif // USE_TABLE_BASES

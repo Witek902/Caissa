@@ -8,4 +8,4 @@ void LoadTablebase(const char* path);
 
 void UnloadTablebase();
 
-Move ProbeTablebase_Root(const Position& pos);
+bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistanceToZero = nullptr, int32_t* outWDL = nullptr);
