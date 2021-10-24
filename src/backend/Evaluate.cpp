@@ -491,7 +491,7 @@ ScoreType Evaluate(const Position& position)
     // white passed pawns
     {
         const int32_t numPassedWhitePawns = CountPassedPawns(position.Whites().pawns, position.Blacks().pawns);
-        const int32_t numPassedBlackPawns = CountPassedPawns(position.Blacks().pawns.FlippedVertically(), position.Whites().pawns.FlippedVertically());
+        const int32_t numPassedBlackPawns = CountPassedPawns(position.Blacks().pawns.MirroredVertically(), position.Whites().pawns.MirroredVertically());
 
         value += (numPassedWhitePawns - numPassedBlackPawns) * c_passedPawnBonus;
     }

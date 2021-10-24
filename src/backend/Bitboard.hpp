@@ -70,7 +70,7 @@ struct Bitboard
         return x;
     }
 
-    INLINE const Bitboard FlippedVertically() const
+    INLINE const Bitboard MirroredVertically() const
     {
         return _byteswap_uint64(value);
     }

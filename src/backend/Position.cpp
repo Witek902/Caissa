@@ -51,12 +51,12 @@ uint64_t Position::ComputeHash() const
     {
         const SidePosition& pos = mColors[color];
 
-        pos.pawns.Iterate([&](uint32_t square)      { hash ^= s_PiecePositionHash[color][0][square]; });
-        pos.knights.Iterate([&](uint32_t square)    { hash ^= s_PiecePositionHash[color][1][square]; });
-        pos.bishops.Iterate([&](uint32_t square)    { hash ^= s_PiecePositionHash[color][2][square]; });
-        pos.rooks.Iterate([&](uint32_t square)      { hash ^= s_PiecePositionHash[color][3][square]; });
-        pos.queens.Iterate([&](uint32_t square)     { hash ^= s_PiecePositionHash[color][4][square]; });
-        pos.king.Iterate([&](uint32_t square)       { hash ^= s_PiecePositionHash[color][5][square]; });
+        pos.pawns.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][0][square]; });
+        pos.knights.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][1][square]; });
+        pos.bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][2][square]; });
+        pos.rooks.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][3][square]; });
+        pos.queens.Iterate([&](uint32_t square)  INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][4][square]; });
+        pos.king.Iterate([&](uint32_t square)    INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][5][square]; });
     }
 
     if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= s_CastlingRightsHash[0][0];
@@ -535,12 +535,37 @@ const Bitboard Position::GetAttackers(const Square square, const Color sideColor
     return bitboard;
 }
 
+NO_INLINE
 bool Position::IsSquareVisible(const Square square, const Color sideColor) const
 {
-    return GetAttackers(square, sideColor) != 0;
+    const SidePosition& side = mColors[(uint8_t)sideColor];
+    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+
+    if (Bitboard::GetKingAttacks(square) & side.king)   return true;
+
+    if (side.knights)
+    {
+        if (Bitboard::GetKnightAttacks(square) & side.knights) return true;
+    }
+
+    if (side.pawns)
+    {
+        if (Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns) return true;
+    }
+
+    if (side.bishops | side.queens)
+    {
+        if (Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens)) return true;
+    }
+
+    if (side.rooks | side.queens)
+    {
+        if (Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens)) return true;
+    }
+
+    return false;
 }
 
-NO_INLINE
 bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = mColors[(uint8_t)sideColor];
@@ -774,6 +799,57 @@ bool Position::DoNullMove()
     return true;
 }
 
+void Position::MirrorVertically()
+{
+    mColors[0].king     = mColors[0].king.MirroredVertically();
+    mColors[0].queens   = mColors[0].queens.MirroredVertically();
+    mColors[0].rooks    = mColors[0].rooks.MirroredVertically();
+    mColors[0].bishops  = mColors[0].bishops.MirroredVertically();
+    mColors[0].knights  = mColors[0].knights.MirroredVertically();
+    mColors[0].pawns    = mColors[0].pawns.MirroredVertically();
+
+    mColors[1].king     = mColors[1].king.MirroredVertically();
+    mColors[1].queens   = mColors[1].queens.MirroredVertically();
+    mColors[1].rooks    = mColors[1].rooks.MirroredVertically();
+    mColors[1].bishops  = mColors[1].bishops.MirroredVertically();
+    mColors[1].knights  = mColors[1].knights.MirroredVertically();
+    mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
+
+    mHash = ComputeHash();
+}
+
+void Position::MirrorHorizontally()
+{
+    mColors[0].king     = mColors[0].king.MirroredHorizontally();
+    mColors[0].queens   = mColors[0].queens.MirroredHorizontally();
+    mColors[0].rooks    = mColors[0].rooks.MirroredHorizontally();
+    mColors[0].bishops  = mColors[0].bishops.MirroredHorizontally();
+    mColors[0].knights  = mColors[0].knights.MirroredHorizontally();
+    mColors[0].pawns    = mColors[0].pawns.MirroredHorizontally();
+
+    mColors[1].king     = mColors[1].king.MirroredHorizontally();
+    mColors[1].queens   = mColors[1].queens.MirroredHorizontally();
+    mColors[1].rooks    = mColors[1].rooks.MirroredHorizontally();
+    mColors[1].bishops  = mColors[1].bishops.MirroredHorizontally();
+    mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
+    mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
+
+    mHash = ComputeHash();
+}
+
+bool Position::IsPawnsOnly() const
+{
+    return
+        mColors[0].queens == 0 &&
+        mColors[0].rooks == 0 &&
+        mColors[0].bishops == 0 &&
+        mColors[0].knights == 0 &&
+        mColors[1].queens == 0 &&
+        mColors[1].rooks == 0 &&
+        mColors[1].bishops == 0 &&
+        mColors[1].knights == 0;
+}
+
 const MaterialKey Position::GetMaterialKey() const
 {
     MaterialKey key;
@@ -977,19 +1053,39 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
     return numFeatures;
 }
 
+static const int32_t pawnValue = 100;
+static const int32_t knightValue = 300;
+static const int32_t bishopValue = 300;
+static const int32_t rookValue = 500;
+static const int32_t queenValue = 900;
+static const int32_t kingValue = INT32_MAX;
 
+int32_t Position::BestPossibleMoveValue() const
+{
+    int32_t value = 0;
+
+    const SidePosition& side = GetOpponentSide();
+
+    // can capture most valuable piece
+         if (side.queens)   value = queenValue;
+    else if (side.rooks)    value = rookValue;
+    else if (side.knights)  value = knightValue;
+    else if (side.bishops)  value = bishopValue;
+    else if (side.pawns)    value = pawnValue;
+
+    // can promote to queen
+    if (GetCurrentSide().pawns & (mSideToMove == Color::White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
+    {
+        value += queenValue - pawnValue;
+    }
+
+    return value;
+}
 
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
 {
     const Square toSquare = move.ToSquare();
     const Square fromSquare = move.FromSquare();
-
-    const int32_t pawnValue     = 100;
-    const int32_t knightValue   = 300;
-    const int32_t bishopValue   = 300;
-    const int32_t rookValue     = 500;
-    const int32_t queenValue    = 900;
-    const int32_t kingValue     = INT32_MAX;
 
     const int32_t c_seePieceValues[] =
     {

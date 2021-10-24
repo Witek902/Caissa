@@ -55,6 +55,9 @@ struct SearchParam
     // print UCI-style output
     bool debugLog = true;
 
+    // move notation for PV lines printing
+    MoveNotation moveNotation = MoveNotation::LAN;
+
     // print move scores for the root nodes
     bool printMoves = false;
 
@@ -96,8 +99,6 @@ struct NodeInfo
 
     uint8_t pvIndex;
 
-    Color color;
-
     bool isPvNode = false;
     bool isNullMove = false;
 };
@@ -118,6 +119,13 @@ public:
 private:
 
     Search(const Search&) = delete;
+
+    enum class BoundsType : uint8_t
+    {
+        Exact = 0,
+        LowerBound = 1,
+        UpperBound = 2,
+    };
 
     struct SearchStats
     {
@@ -149,6 +157,7 @@ private:
         const Move* moveFilter = nullptr;
         uint32_t moveFilterCount = 0;
         ScoreType previousScore;                  // score in previous ID iteration
+        uint32_t threadID = 0;
     };
 
     struct ThreadData
@@ -173,14 +182,16 @@ private:
     
     std::vector<ThreadData> mThreadData;
 
+    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const std::chrono::high_resolution_clock::duration searchTime) const;
+
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
-    ScoreType AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param);
+    void AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const;
 
-    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx);
-    ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx);
+    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
+    ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
 
     // check if one of generated moves is in TT
     const Move FindTTMove(const PackedMove& ttMove, MoveList& moves) const;

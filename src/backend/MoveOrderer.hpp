@@ -8,8 +8,14 @@ class MoveOrderer
 {
 public:
 
-    static constexpr int32_t PVMoveValue = INT32_MAX;
-    static constexpr int32_t TTMoveValue = PVMoveValue - 1;
+    static constexpr int32_t PVMoveValue            = INT32_MAX;
+    static constexpr int32_t TTMoveValue            = PVMoveValue - 1;
+
+    static constexpr int32_t WinningCaptureValue    = 20000000;
+    static constexpr int32_t GoodCaptureValue       = 10000000;
+    static constexpr int32_t KillerMoveBonus        = 100000;
+    static constexpr int32_t CounterMoveBonus       = 0;
+    static constexpr int32_t LosingCaptureValue     = 0;
 
     void Clear();
 

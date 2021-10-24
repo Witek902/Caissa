@@ -27,10 +27,3 @@ struct PositionEntry
     uint16_t moveNumber;
     uint16_t totalMovesInGame;
 };
-
-
-void SelfPlay();
-
-bool Train();
-
-bool TrainEndgame();

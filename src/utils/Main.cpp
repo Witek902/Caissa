@@ -4,6 +4,11 @@
 
 #include "../backend/nnue-probe/nnue.h"
 
+extern void SelfPlay();
+extern bool Train();
+extern bool TrainEndgame();
+extern void GenerateEndgamePieceSquareTables();
+
 int main(int argc, const char* argv[])
 {
     (void)argc;
@@ -18,8 +23,8 @@ int main(int argc, const char* argv[])
 
     // TODO
     //SelfPlay();
-
-    TrainEndgame();
+    //TrainEndgame();
+    GenerateEndgamePieceSquareTables();
 
     return 0;
 }

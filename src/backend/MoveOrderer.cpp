@@ -3,10 +3,6 @@
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 
-static const int32_t c_GoodCaptureValue =     20000000;
-
-static const int32_t c_MvvLvaScoreBaseValue =   10000000;
-
 static const int32_t c_PromotionScores[] =
 {
     0,          // none
@@ -17,9 +13,9 @@ static const int32_t c_PromotionScores[] =
     20000000,   // queen
 };
 
-static int32_t ComputeMvvLvaScore(const Piece attackingPiece, const Piece capturedPiece)
+static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
 {
-    return c_MvvLvaScoreBaseValue + 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
+    return 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
 }
 
 void MoveOrderer::DebugPrint() const
@@ -100,7 +96,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
         return;
     }
 
-    const uint32_t color = (uint32_t)node.color;
+    const uint32_t color = (uint32_t)node.position->GetSideToMove();
 
     // update history heuristics
     if (node.depth > 0)
@@ -135,10 +131,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 {
     const Position& pos = *node.position;
 
-    const uint32_t KillerMoveBonus  = 100000;
-    const uint32_t CounterMoveBonus = 0;
-
-    const uint32_t color = (uint32_t)node.color;
+    const uint32_t color = (uint32_t)node.position->GetSideToMove();
 
     const Move previousMove = node.previousMove;
 
@@ -157,26 +150,31 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 
         if (move.IsEnPassant())
         {
-            score += c_MvvLvaScoreBaseValue;
+            score += MoveOrderer::GoodCaptureValue;
         }
         else if (move.IsCapture())
         {
             const Piece attackingPiece = move.GetPiece();
             const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+            const int32_t mvvLva = ComputeMvvLvaScore(capturedPiece, attackingPiece);
 
             if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
             {
-                score += c_GoodCaptureValue + 100u * (int32_t)capturedPiece - (int32_t)attackingPiece;
+                score += WinningCaptureValue + mvvLva;
             }
             else
             {
                 if (pos.StaticExchangeEvaluation(move, 100))
                 {
-                    score += c_GoodCaptureValue;
+                    score += WinningCaptureValue + mvvLva;
                 }
                 else if (pos.StaticExchangeEvaluation(move, 0))
                 {
-                    score += c_MvvLvaScoreBaseValue;
+                    score += GoodCaptureValue + mvvLva;
+                }
+                else
+                {
+                    score += LosingCaptureValue + mvvLva;
                 }
             }
         }
@@ -220,6 +218,8 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 score += CounterMoveBonus;
             }
         }
+
+        //score += rand() % 2;
 
         moves[i].score = (int32_t)std::min<uint64_t>(score, INT32_MAX);
     }

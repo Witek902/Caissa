@@ -16,6 +16,9 @@ static const uint32_t c_DefaultTTSize = 1024 * 1024;
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
+    // init threadpool
+    threadpool::ThreadPool::GetInstance();
+
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
 
@@ -101,6 +104,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name EvalFile type string default nn-04cf2b4ed1da.nnue\n";
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name UCI_AnalyseMode type check default false\n";
+        std::cout << "option name UseSAN type check default false\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -410,16 +414,16 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
-        const int32_t moveOverhead = 10; // make configurable
+        const int32_t moveOverhead = 5; // make configurable
         const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
-        int32_t timeEstimatedMs = INT32_MAX;
 
+        // soft limit
         if (remainingTime != INT32_MAX)
         {
             const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft((float)mGame.GetMoves().size());
             const float timeEstimated = std::min((float)remainingTime, (float)remainingTime / movesLeftEstimated + (float)remainingTimeInc);
-            timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated) + 0.5f);
+            const int32_t timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated) + 0.5f);
 
             // use at least 75% of estimated time
             // TODO some better heuristics:
@@ -427,12 +431,13 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
             mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
         }
 
-        int32_t hardLimit = remainingTime;
-        hardLimit = std::min(hardLimit, moveTime);
-        hardLimit -= moveOverhead;
-        hardLimit = std::max(0, hardLimit);
-
-        mSearchCtx->searchParam.limits.maxTime = hardLimit;
+        // hard limit
+        int32_t hardLimit = std::min(remainingTime, moveTime);
+        if (hardLimit != INT32_MAX)
+        {
+            hardLimit = std::max(0, hardLimit - moveOverhead);
+            mSearchCtx->searchParam.limits.maxTime = hardLimit;
+        }
     }
 
     if (mateSearchDepth > 0)
@@ -456,6 +461,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
     mSearchCtx->searchParam.printMoves = printMoves;
     mSearchCtx->searchParam.verboseStats = verboseStats;
+    mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
 
     RunSearchTask();
 
@@ -476,25 +482,28 @@ void UniversalChessInterface::RunSearchTask()
         // only report best move in non-pondering mode or if "stop" was called during ponder search
         if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
         {
-            bool hasMove = false;
+            Move bestMove = Move::Invalid();
             if (!mSearchCtx->searchResult.empty())
             {
                 const auto& bestLine = mSearchCtx->searchResult[0].moves;
+                const MoveNotation notation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
 
                 if (!bestLine.empty())
                 {
-                    hasMove = true;
+                    bestMove = bestLine[0];
 
-                    std::cout << "bestmove " << bestLine[0].ToString();
+                    std::cout << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
 
                     if (bestLine.size() > 1)
                     {
-                        std::cout << " ponder " << bestLine[1].ToString();
+                        Position posAfterBestMove = mGame.GetPosition();
+                        posAfterBestMove.DoMove(bestMove);
+                        std::cout << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
                     }
                 }
             }
 
-            if (!hasMove) // null move
+            if (!bestMove.IsValid()) // null move
             {
                 std::cout << "bestmove 0000";
             }
@@ -508,7 +517,7 @@ void UniversalChessInterface::RunSearchTask()
         }
     };
 
-    threadpool::ThreadPool().GetInstance().CreateAndDispatchTask(taskDesc);
+    threadpool::ThreadPool::GetInstance().CreateAndDispatchTask(taskDesc);
 }
 
 bool UniversalChessInterface::Command_Stop()
@@ -580,6 +589,21 @@ static std::string ToLower(const std::string& str)
     return result;
 }
 
+static bool ParseBool(const std::string& str, bool& outValue)
+{
+    if (str == "true" || str == "1")
+    {
+        outValue = true;
+        return true;
+    }
+    else if (str == "false" || str == "0")
+    {
+        outValue = false;
+        return true;
+    }
+    return false;
+}
+
 bool UniversalChessInterface::Command_SetOption(const std::string& name, const std::string& value)
 {
     std::string lowerCaseName = ToLower(name);
@@ -600,11 +624,21 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
         mTranspositionTable.Resize(hashSize);
     }
+    else if (lowerCaseName == "usesan" || lowerCaseName == "usestandardalgebraicnotation")
+    {
+        if (!ParseBool(lowerCaseValue, mOptions.useStandardAlgebraicNotation))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
+    }
     else if (lowerCaseName == "uci_analysemode" || lowerCaseName == "uci_analyzemode" || lowerCaseName == "analysis" || lowerCaseName == "analysismode")
     {
-        if (lowerCaseValue == "true" || lowerCaseValue == "1")          mOptions.analysisMode = true;
-        else if (lowerCaseValue == "false" || lowerCaseValue == "0")    mOptions.analysisMode = false;
-        else                                                            return false;
+        if (!ParseBool(lowerCaseValue, mOptions.analysisMode))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
     }
 #ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")
