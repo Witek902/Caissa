@@ -60,7 +60,7 @@ void SelfPlay()
             for (;; ++halfMoveNumber)
             {
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 8;
+                searchParam.limits.maxDepth = 5;
                 searchParam.numPvLines = 2;
                 searchParam.debugLog = false;
 

@@ -95,9 +95,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 
     if (command == "uci")
     {
-        std::cout << "id name MWCE\n";
+        std::cout << "id name Caissa 0.1\n";
         std::cout << "id author Michal Witanowski\n";
-        std::cout << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
         std::cout << "option name Ponder type check default false\n";
@@ -208,8 +207,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             extraMovesStart = 2;
         }
     }
-
-    if (args.size() >= 2 && args[1] == "random")
+    else if (args.size() >= 2 && args[1] == "random")
     {
         MaterialKey material;
         material.numWhitePawns = 4;
@@ -228,8 +226,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             extraMovesStart = 2;
         }
     }
-
-    if (args.size() > 2 && args[1] == "fen")
+    else if (args.size() > 2 && args[1] == "fen")
     {
         size_t numFenElements = 0;
 
@@ -277,6 +274,10 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         {
             return false;
         }
+    }
+    else
+    {
+        return false;
     }
 
     Command_Stop();
