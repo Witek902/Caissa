@@ -394,8 +394,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 threadID,
             };
 
-            AspirationWindowSearch(thread, aspirationWindowSearchParam, outResult);
-            const PvLine& pvLine = outResult[pvIndex];
+            const PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam, outResult);
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
@@ -430,7 +429,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     }
 }
 
-void Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const
+PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const
 {
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
@@ -518,15 +517,14 @@ void Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSe
             }
         }
 
-        // should always have a valid PV line after each iteration
-        ASSERT(outResult[0].moves.size() > 0);
-
         // stop the search when exact score is found
         if (boundsType == BoundsType::Exact)
         {
             break;
         }
     }
+
+    return pvLine;
 }
 
 static INLINE ScoreType ColorMultiplier(Color color)

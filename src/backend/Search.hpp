@@ -188,7 +188,7 @@ private:
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
-    void AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const;
+    PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const;
 
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
