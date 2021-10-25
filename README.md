@@ -1,5 +1,5 @@
 # Caissa Chess Engine
-UCI command-line chess engine written in C++. Currently compiles only for Windows.
+UCI command-line chess engine written in C++. Currently compiles only for Windows, Linux version is on the way.
 
 Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 
