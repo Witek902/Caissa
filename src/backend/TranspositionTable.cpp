@@ -107,6 +107,7 @@ void TranspositionTable::Init()
 TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
     , numClusters(0)
+    , generation(0)
     , numCollisions(0)
 {
     Resize(initialSize);
@@ -122,7 +123,7 @@ void TranspositionTable::Clear()
     memset(clusters, 0, numClusters * sizeof(TTCluster));
 }
 
-uint64_t NextPowerOfTwo(uint64_t v)
+static uint64_t NextPowerOfTwo(uint64_t v)
 {
     v--;
     v |= v >> 1;
@@ -171,6 +172,11 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
     Clear();
 }
 
+void TranspositionTable::NextGeneration()
+{
+    generation++;
+}
+
 void TranspositionTable::Prefetch(const Position& position) const
 {
     if (clusters)
@@ -188,18 +194,20 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     {
         const size_t hashmapMask = numClusters - 1;
 
-        const TTCluster& cluster = clusters[position.GetHash() & hashmapMask];
+        TTCluster& cluster = clusters[position.GetHash() & hashmapMask];
 
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
-            const InternalEntry& entry = cluster[i];
+            uint64_t hash;
+            TTEntry data;
+            cluster[i].Load(hash, data);
 
-            const uint64_t key = entry.key;
-            const TTEntry data = entry.data;
-
-            // Xor trick by Robert Hyatt and Tim Mann
-            if (((key ^ data.packed) == position.GetHash()) && data.flag != TTEntry::Flag_Invalid)
+            if (hash == position.GetHash() && data.bounds != TTEntry::Bounds::Invalid)
             {
+                // update entry generation
+                data.generation = generation;
+                cluster[i].Store(hash, data);
+
                 outEntry = data;
                 return true;
             }
@@ -209,14 +217,14 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Flags flag, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Bounds bounds, PackedMove move)
 {
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;
     entry.move = move;
     entry.depth = depth;
-    entry.flag = flag;
+    entry.bounds = bounds;
 
     Write(position, entry);
 
@@ -234,7 +242,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     */
 }
 
-void TranspositionTable::Write(const Position& position, const TTEntry& entry)
+void TranspositionTable::Write(const Position& position, TTEntry entry)
 {
     ASSERT(entry.IsValid());
 
@@ -243,53 +251,68 @@ void TranspositionTable::Write(const Position& position, const TTEntry& entry)
         return;
     }
 
-    const uint64_t hash = position.GetHash();
+    const uint64_t positionHash = position.GetHash();
     const size_t hashmapMask = numClusters - 1;
 
-    TTCluster& cluster = clusters[hash & hashmapMask];
+    TTCluster& cluster = clusters[positionHash & hashmapMask];
 
-    // find target entry in the cluster
-    uint32_t targetIndex = 0;
-    uint32_t minDepthInCluster = MaxSearchDepth;
+    uint32_t replaceIndex = 0;
+    uint8_t minDepthInCluster = UINT8_MAX;
+    uint64_t prevHash = 0;
+    TTEntry prevEntry;
+
+    // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
-        InternalEntry& existingEntry = cluster[i];
+        uint64_t hash;
+        TTEntry data;
+        cluster[i].Load(hash, data);
 
-        const uint64_t key = existingEntry.key;
-        const TTEntry data = existingEntry.data;
-
-        // found entry with same hash and bouds type
-        if (((key ^ data.packed) == hash) && data.flag == entry.flag)
+        // found entry with same hash
+        if (hash == positionHash)
         {
-            // if there's already an entry with higher depth, don't overwrite it
-            if (data.depth > entry.depth)
-            {
-                return;
-            }
-
-            targetIndex = i;
+            replaceIndex = i;
+            prevHash = hash;
+            prevEntry = data;
             break;
         }
 
-        // if no entry with same hash is found, use one with lowest value
         if (data.depth < minDepthInCluster)
         {
             minDepthInCluster = data.depth;
-            targetIndex = i;
+            replaceIndex = i;
+            prevHash = hash;
+            prevEntry = data;
         }
     }
 
-    InternalEntry& targetEntry = cluster[targetIndex];
+    if (positionHash == prevHash)
+    {
+        // don't overwrite entries with worse depth when preserving bounds
+        if (entry.depth < prevEntry.depth &&
+            entry.bounds == prevEntry.bounds)
+        {
+            return;
+        }
 
-    // Xor trick by Robert Hyatt and Tim Mann
-    targetEntry.key = hash ^ entry.packed;
-    targetEntry.data = entry;
+        // don't demote Exact to Lower/UpperBound if overwriting entry with same depth
+        if (entry.depth == prevEntry.depth &&
+            prevEntry.bounds == TTEntry::Bounds::Exact &&
+            entry.bounds != TTEntry::Bounds::Exact)
+        {
+            return;
+        }
 
-    // preserve existing move
-    //if (entry.move.IsValid() || targetEntry.hash != entry.hash)
-    //{
-    //    targetEntry.move = entry.move;
-    //}
+        // preserve existing move
+        if (!entry.move.IsValid())
+        {
+            entry.move = prevEntry.move;
+        }
+    }
+
+    entry.generation = generation;
+
+    cluster[replaceIndex].Store(positionHash, entry);
 }
 
 size_t TranspositionTable::GetNumUsedEntries() const
@@ -302,7 +325,7 @@ size_t TranspositionTable::GetNumUsedEntries() const
         for (size_t j = 0; j < NumEntriesPerCluster; ++j)
         {
             const InternalEntry& entry = cluster[j];
-            if (entry.data.load().IsValid())
+            if (entry.data.load(std::memory_order_relaxed).IsValid())
             {
                 num++;
             }

@@ -114,7 +114,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ucinewgame")
     {
         std::unique_lock<std::mutex> lock(mMutex);
-        // TODO
+        mTranspositionTable.Clear();
     }
     else if (command == "setoption")
     {
@@ -673,15 +673,16 @@ bool UniversalChessInterface::Command_TTProbe()
     if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {
         const char* boundsStr =
-            ttEntry.flag == TTEntry::Flag_Exact ? "exact" :
-            ttEntry.flag == TTEntry::Flag_UpperBound ? "upper" :
-            ttEntry.flag == TTEntry::Flag_LowerBound ? "lower" :
+            ttEntry.bounds == TTEntry::Bounds::Exact ? "exact" :
+            ttEntry.bounds == TTEntry::Bounds::UpperBound ? "upper" :
+            ttEntry.bounds == TTEntry::Bounds::LowerBound ? "lower" :
             "invalid";
 
         std::cout << "Score:      " << ttEntry.score << std::endl;
         std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
         std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
+        std::cout << "Generation: " << ttEntry.generation << std::endl;
     }
     else
     {

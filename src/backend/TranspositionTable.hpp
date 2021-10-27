@@ -9,12 +9,12 @@ class Position;
 
 union TTEntry
 {
-    enum Flags : uint8_t
+    enum class Bounds : uint8_t
     {
-        Flag_Invalid        = 0,
-        Flag_Exact          = 1,
-        Flag_LowerBound     = 2,
-        Flag_UpperBound     = 3,
+        Invalid        = 0,
+        Exact          = 1,
+        LowerBound     = 2,
+        UpperBound     = 3,
     };
 
     UNNAMED_STRUCT struct
@@ -23,16 +23,17 @@ union TTEntry
         ScoreType staticEval;
         PackedMove move;
         uint8_t depth;
-        Flags flag;
+        Bounds bounds : 2;
+        uint8_t generation : 6;
     };
 
     uint64_t packed;
 
     INLINE TTEntry() : packed(0) { }
 
-    bool IsValid() const
+    INLINE bool IsValid() const
     {
-        return flag != TTEntry::Flag_Invalid;
+        return bounds != Bounds::Invalid;
     }
 };
 
@@ -43,6 +44,22 @@ public:
     {
         std::atomic<uint64_t> key;
         std::atomic<TTEntry> data;
+
+        INLINE void Load(uint64_t& outHash, TTEntry& outData) const
+        {
+            const uint64_t k = key.load();
+            const TTEntry d = data.load();
+            // Xor trick by Robert Hyatt and Tim Mann
+            outHash = key ^ d.packed;
+            outData = d;
+        }
+
+        INLINE void Store(uint64_t hash, TTEntry newData)
+        {
+            // Xor trick by Robert Hyatt and Tim Mann
+            key = hash ^ newData.packed;
+            data = newData;
+        }
     };
 
     // one cluster occupies one cache line
@@ -52,9 +69,12 @@ public:
     TranspositionTable(size_t initialSize = 0);
     ~TranspositionTable();
 
+    // should be called before running a new search
+    void NextGeneration();
+
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Flags flag, PackedMove move = PackedMove());
-    void Write(const Position& position, const TTEntry& entry);
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove());
+    void Write(const Position& position, TTEntry entry);
     void Prefetch(const Position& position) const;
 
     // invalidate all entries
@@ -75,8 +95,10 @@ public:
 
 private:
 
-    TTCluster* clusters;
+    mutable TTCluster* clusters;
     size_t numClusters;
+
+    uint8_t generation;
 
     uint64_t numCollisions;
 };

@@ -225,8 +225,6 @@ INLINE static constexpr uint32_t BuildMaterialMask(
 void InitEndgame()
 {
     KPKEndgame::Init();
-
-    g_pawnsEndgameNeuralNetwork.Load("D:/DEV/CURRENT/Chess/src/frontend/pawns.nn");
 }
 
 bool EvaluateEndgame(const Position& pos, int32_t& outScore)

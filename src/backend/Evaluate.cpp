@@ -368,6 +368,7 @@ ScoreType Evaluate(const Position& position)
         int32_t endgameScore;
         if (EvaluateEndgame(position, endgameScore))
         {
+            ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
             return (ScoreType)endgameScore;
         }
     }
@@ -523,7 +524,7 @@ ScoreType Evaluate(const Position& position)
     // accumulate middle/end game scores
     value += InterpolateScore(position, valueMG, valueEG);
 
-    ASSERT(value < TablebaseWinValue&& value > -TablebaseWinValue);
+    ASSERT(value < KnownWinValue&& value > -KnownWinValue);
 
     constexpr int32_t nnueTreshold = 1024;
 
