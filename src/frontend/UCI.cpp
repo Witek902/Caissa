@@ -7,12 +7,20 @@
 
 #include <math.h>
 
+static const char* c_EngineName = "Caissa 0.1";
+static const char* c_Author = "Michal Witanowski";
+
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
 static const uint32_t c_DefaultTTSize = 16 * 1024 * 1024;
 #else
 static const uint32_t c_DefaultTTSize = 1024 * 1024;
 #endif
+
+static const uint32_t c_MaxNumThreads = 64;
+static const char* c_DefaultEvalFile = "nn-04cf2b4ed1da.nnue";
+
+using UniqueLock = std::unique_lock<std::mutex>;
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
@@ -21,6 +29,8 @@ UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
+
+    std::cout << c_EngineName << " by " << c_Author << std::endl;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -95,12 +105,13 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 
     if (command == "uci")
     {
-        std::cout << "id name Caissa 0.1\n";
-        std::cout << "id author Michal Witanowski\n";
+        std::cout << "id name " << c_EngineName << "\n";
+        std::cout << "id author " << c_Author << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
+        std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
-        std::cout << "option name EvalFile type string default nn-04cf2b4ed1da.nnue\n";
+        std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
@@ -108,19 +119,19 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "isready")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         std::cout << "readyok" << std::endl;
     }
     else if (command == "ucinewgame")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         mTranspositionTable.Clear();
     }
     else if (command == "setoption")
     {
         if (args[1] == "name" && args[3] == "value")
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            UniqueLock lock(mMutex);
             Command_SetOption(args[2], args.size() > 4 ? args[4] : "");
         }
         else
@@ -130,27 +141,27 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "position")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         Command_Position(args);
     }
     else if (command == "go")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         Command_Go(args);
     }
     else if (command == "ponderhit")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         Command_PonderHit();
     }
     else if (command == "stop")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         Command_Stop();
     }
     else if (command == "quit")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         Command_Stop();
         return false;
     }
@@ -160,7 +171,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "print")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         std::cout << "Init:  " << mGame.GetInitialPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
         std::cout << mGame.GetPosition().Print() << std::endl;
     }
@@ -170,7 +181,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "ttinfo")
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        UniqueLock lock(mMutex);
         const size_t numEntriesUsed = mTranspositionTable.GetNumUsedEntries();
         const float percentage = 100.0f * (float)numEntriesUsed / (float)mTranspositionTable.GetSize();
         std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
@@ -618,7 +629,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "threads")
     {
         mOptions.threads = atoi(value.c_str());
-        mOptions.threads = std::max(1u, std::min(64u, mOptions.threads));
+        mOptions.threads = std::max(1u, std::min(c_MaxNumThreads, mOptions.threads));
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
@@ -666,7 +677,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 
 bool UniversalChessInterface::Command_TTProbe()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
+    UniqueLock lock(mMutex);
 
     TTEntry ttEntry;
 
