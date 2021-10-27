@@ -604,6 +604,16 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
 
     for (uint32_t i = 1; ; ++i)
     {
+        // don't need to check more moves if reached pawn push or capture,
+        // because these moves are irreversible
+        if (prevNode->previousMove.IsValid())
+        {
+            if (prevNode->previousMove.GetPiece() == Piece::Pawn || prevNode->previousMove.IsCapture())
+            {
+                return false;
+            }
+        }
+
         prevNode = prevNode->parentNode;
 
         // reached end of the stack
@@ -616,22 +626,14 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
         if (i % 2 == 0)
         {
             ASSERT(prevNode->position);
+            ASSERT(prevNode->position->GetSideToMove() == node.position->GetSideToMove());
+
             if (prevNode->position->GetHash() == node.position->GetHash())
             {
                 if (*prevNode->position == *node.position)
                 {
                     return true;
                 }
-            }
-        }
-
-        // don't need to check more moves if reached pawn push or capture,
-        // because these moves are irreversible
-        if (prevNode->previousMove.IsValid())
-        {
-            if (prevNode->previousMove.GetPiece() == Piece::Pawn || prevNode->previousMove.IsCapture())
-            {
-                break;
             }
         }
     }
@@ -1257,6 +1259,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             move.IsQuiet())
         {
             // reduce depth gradually
+            // TODO cache this
             depthReduction = int32_t(0.5f + 0.25f * sqrtf(float(node.depth - LateMoveReductionStartDepth + 1)) + 0.25f * sqrtf(float(numReducedMoves)));
 
             depthReduction += node.isPvNode ? 0 : 1;
