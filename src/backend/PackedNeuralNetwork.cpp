@@ -361,7 +361,7 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
     FILE* file = fopen(filePath, "wb");
     if (!file)
     {
-        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
+        std::cerr << "Failed to save neural network: " << "cannot open file" << std::endl;
         return false;
     }
 

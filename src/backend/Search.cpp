@@ -703,9 +703,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
                 ScoreType ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
                 ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-                if ((ttEntry.flag == TTEntry::Flag_Exact) ||
-                    (ttEntry.flag == TTEntry::Flag_LowerBound && ttScore >= node.beta) ||
-                    (ttEntry.flag == TTEntry::Flag_UpperBound && ttScore <= node.alpha))
+                if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
+                    (ttEntry.bounds == TTEntry::Bounds::LowerBound && ttScore >= node.beta) ||
+                    (ttEntry.bounds == TTEntry::Bounds::UpperBound && ttScore <= node.alpha))
                 {
                     return ttScore;
                 }
@@ -725,14 +725,16 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         if (staticEval == InvalidValue)
         {
-            staticEval = ColorMultiplier(position.GetSideToMove()) * Evaluate(position);
+            const ScoreType evalScore = Evaluate(position);
+            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
 
         bestValue = staticEval;
 
         if (bestValue >= beta)
         {
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Flag_LowerBound);
+            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Bounds::LowerBound);
             return bestValue;
         }
 
@@ -849,11 +851,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     // store value in transposition table
     if (!CheckStopCondition(ctx))
     {
-        const TTEntry::Flags flag =
-            bestValue >= beta ? TTEntry::Flag_LowerBound :
-            (isPvNode && bestValue > oldAlpha) ? TTEntry::Flag_Exact : TTEntry::Flag_UpperBound;
+        const TTEntry::Bounds bounds =
+            bestValue >= beta ? TTEntry::Bounds::LowerBound :
+            (isPvNode && bestValue > oldAlpha) ? TTEntry::Bounds::Exact :
+            TTEntry::Bounds::UpperBound;
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, flag, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, bounds, bestMove);
 
         ctx.stats.ttWrites++;
     }
@@ -920,7 +923,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (ctx.searchParam.limits.mateSearch)
         {
-            return ColorMultiplier(position.GetSideToMove()) * Evaluate(position);
+            const ScoreType evalScore = Evaluate(position);
+            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            return ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
         return QuiescenceNegaMax(thread, node, ctx);
     }
@@ -951,16 +956,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
             ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-            if (ttEntry.flag == TTEntry::Flag_Exact)
+            if (ttEntry.bounds == TTEntry::Bounds::Exact)
             {
                 return ttScore;
             }
-            else if (ttEntry.flag == TTEntry::Flag_UpperBound)
+            else if (ttEntry.bounds == TTEntry::Bounds::UpperBound)
             {
                 if (ttScore <= alpha) return alpha;
                 if (ttScore < beta) beta = ttScore;
             }
-            else if (ttEntry.flag == TTEntry::Flag_LowerBound)
+            else if (ttEntry.bounds == TTEntry::Bounds::LowerBound)
             {
                 if (ttScore >= beta) return beta;
                 if (ttScore > alpha) alpha = ttScore;
@@ -1009,21 +1014,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 const ScoreType tbValue =
                     probeResult == TB_LOSS ? -(TablebaseWinValue - (ScoreType)node.height) :
                     probeResult == TB_WIN  ?  (TablebaseWinValue - (ScoreType)node.height) : 0;
+                ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
 
                 // only draws are exact, we don't know exact value for win/loss just based on WDL value
-                const TTEntry::Flags bounds =
-                    probeResult == TB_LOSS ? TTEntry::Flag_UpperBound :
-                    probeResult == TB_WIN  ? TTEntry::Flag_LowerBound :
-                    TTEntry::Flag_Exact;
+                const TTEntry::Bounds bounds =
+                    probeResult == TB_LOSS ? TTEntry::Bounds::UpperBound :
+                    probeResult == TB_WIN  ? TTEntry::Bounds::LowerBound :
+                    TTEntry::Bounds::Exact;
 
-                if (    bounds == TTEntry::Flag_Exact
-                    || (bounds == TTEntry::Flag_LowerBound && tbValue >= beta)
-                    || (bounds == TTEntry::Flag_UpperBound && tbValue <= alpha))
+                if (    bounds == TTEntry::Bounds::Exact
+                    || (bounds == TTEntry::Bounds::LowerBound && tbValue >= beta)
+                    || (bounds == TTEntry::Bounds::UpperBound && tbValue <= alpha))
                 {
                     ctx.searchParam.transpositionTable.Write(
                         position,
                         ScoreToTT(tbValue, node.height), staticEval,
-                        bounds == TTEntry::Flag_Exact ? UINT8_MAX : (uint8_t)node.depth,
+                        bounds == TTEntry::Bounds::Exact ? UINT8_MAX : (uint8_t)node.depth,
                         bounds);
 
                     ctx.stats.ttWrites++;
@@ -1033,7 +1039,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
                 if (isPvNode)
                 {
-                    if (bounds == TTEntry::Flag_LowerBound)
+                    if (bounds == TTEntry::Bounds::LowerBound)
                     {
                         bestValue = tbValue;
                         alpha = std::max(alpha, tbValue);
@@ -1096,7 +1102,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (staticEval == InvalidValue)
         {
-            staticEval = ColorMultiplier(position.GetSideToMove()) * Evaluate(position);
+            const ScoreType evalScore = Evaluate(position);
+            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
 
         const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
@@ -1155,18 +1163,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             //    }
             //}
         //}
-    }
-
-    {
-        Move tbMove;
-        if (ProbeTablebase_Root(position, tbMove))
-        {
-            if (moves.HasMove(tbMove))
-            {
-                moves.Clear();
-                moves.Push(tbMove);
-            }
-        }
     }
 
     // resolve move scoring
@@ -1410,7 +1406,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (canWriteTT)
         {
             // checkmate/stalemate score is always exact so we can even extend TT entry depth to infinity
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, UINT8_MAX, TTEntry::Flag_Exact, bestMove);
+            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, UINT8_MAX, TTEntry::Bounds::Exact, bestMove);
             ctx.stats.ttWrites++;
         }
 
@@ -1428,11 +1424,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // skip root nodes when searching secondary PV lines, as they don't contain best moves
     if (canWriteTT)
     {
-        const TTEntry::Flags flag =
-            bestValue >= beta ? TTEntry::Flag_LowerBound :
-            bestValue > oldAlpha ? TTEntry::Flag_Exact : TTEntry::Flag_UpperBound;
+        const TTEntry::Bounds bounds =
+            bestValue >= beta ? TTEntry::Bounds::LowerBound :
+            bestValue > oldAlpha ? TTEntry::Bounds::Exact :
+            TTEntry::Bounds::UpperBound;
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, (uint8_t)node.depth, flag, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, (uint8_t)node.depth, bounds, bestMove);
         ctx.stats.ttWrites++;
     }
 
