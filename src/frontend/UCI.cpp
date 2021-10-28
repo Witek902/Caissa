@@ -6,8 +6,12 @@
 #include "../backend/nnue-probe/nnue.h"
 
 #include <math.h>
+#include <fstream>
 
-static const char* c_EngineName = "Caissa 0.1";
+#define NOMINMAX
+#include <Windows.h>
+
+static const char* c_EngineName = "Caissa 0.2";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
@@ -22,6 +26,52 @@ static const char* c_DefaultEvalFile = "nn-04cf2b4ed1da.nnue";
 
 using UniqueLock = std::unique_lock<std::mutex>;
 
+static std::string GetExecutablePath()
+{
+    char path[MAX_PATH];
+
+    HMODULE hModule = GetModuleHandle(NULL);
+    if (hModule != NULL)
+    {
+        // Use GetModuleFileName() with module handle to get the path
+        GetModuleFileNameA(hModule, path, (sizeof(path)));
+        return std::string(path);
+    }
+    else
+    {
+        return std::string{};
+    }
+}
+
+static std::string GetDefaultEvalFilePath()
+{
+    std::string path = GetExecutablePath();
+
+    if (!path.empty())
+    {
+        path = path.substr(0, path.find_last_of("/\\")); // remove exec name
+        path += "/";
+        path += c_DefaultEvalFile;
+    }
+
+    return path;
+}
+
+static void TryLoadingDefaultEvalFile()
+{
+    std::string path = GetDefaultEvalFilePath();
+    if (!path.empty())
+    {
+        // check if file exists
+        {
+            std::ifstream f(path.c_str());
+            if (!f.good()) return;
+        }
+
+        nnue_init(path.c_str());
+    }
+}
+
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
     // init threadpool
@@ -31,6 +81,8 @@ UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
     mTranspositionTable.Resize(c_DefaultTTSize);
 
     std::cout << c_EngineName << " by " << c_Author << std::endl;
+
+    TryLoadingDefaultEvalFile();
 
     for (int i = 1; i < argc; ++i)
     {
