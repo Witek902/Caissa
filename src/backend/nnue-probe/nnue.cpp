@@ -1274,7 +1274,7 @@ void nnue_init(const char* evalFile)
 
   if (load_eval_file(evalFile)) {
     is_nnue_loaded = true;
-    printf("NNUE loaded !\n");
+    printf("NNUE loaded!\n");
     fflush(stdout);
     return;
   }
