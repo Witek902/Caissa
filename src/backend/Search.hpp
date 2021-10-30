@@ -4,8 +4,14 @@
 #include "MoveList.hpp"
 #include "MoveOrderer.hpp"
 
+#include "nnue-probe/nnue.h"
+
 #include <chrono>
 #include <atomic>
+
+#ifndef CONFIGURATION_FINAL
+#define COLLECT_SEARCH_STATS
+#endif // CONFIGURATION_FINAL
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
@@ -101,6 +107,8 @@ struct NodeInfo
 
     bool isPvNode = false;
     bool isNullMove = false;
+
+    NNUEdata nnueData;
 };
 
 class Search
@@ -129,15 +137,16 @@ private:
 
     struct SearchStats
     {
-        uint64_t fh = 0;
-        uint64_t fhf = 0;
         std::atomic<uint64_t> nodes = 0;
         uint64_t quiescenceNodes = 0;
+        uint32_t maxDepth = 0;
+
+#ifdef COLLECT_SEARCH_STATS
         uint64_t ttHits = 0;
         uint64_t ttWrites = 0;
         uint64_t tbHits = 0;
-        uint32_t maxDepth = 0;
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
+#endif // COLLECT_SEARCH_STATS
     };
 
     struct SearchContext

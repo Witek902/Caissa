@@ -1362,6 +1362,8 @@ bool RunPerformanceTests(const char* path)
 
         auto startTimeAll = std::chrono::high_resolution_clock::now();
 
+        tt.NextGeneration();
+
         Waitable waitable;
         {
             TaskBuilder taskBuilder(waitable);

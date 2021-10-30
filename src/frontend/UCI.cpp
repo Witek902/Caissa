@@ -229,7 +229,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "eval")
     {
-        std::cout << Evaluate(mGame.GetPosition()) << std::endl;
+        std::cout << Evaluate(mGame.GetPosition(), nullptr) << std::endl;
     }
     else if (command == "ttinfo")
     {
@@ -370,13 +370,12 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     return true;
 }
 
-static float EstimateMovesLeft(const float ply)
+static float EstimateMovesLeft(const uint32_t moves)
 {
     // based on LeelaChessZero 
-    const float move = ply / 2.0f;
     const float midpoint = 50.0f;
     const float steepness = 6.0f;
-    return midpoint * std::pow(1.0f + 2.0f * std::pow(move / midpoint, steepness), 1.0f / steepness) - move;
+    return midpoint * std::pow(1.0f + 2.0f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
@@ -389,6 +388,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     bool isPonder = false;
     bool printMoves = false;
     bool verboseStats = false;
+    bool waitForSearch = false;
     uint32_t maxDepth = UINT8_MAX;
     uint64_t maxNodes = UINT64_MAX;
     int32_t moveTime = INT32_MAX;
@@ -418,6 +418,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         else if (args[i] == "ponder")
         {
             isPonder = true;
+        }
+        else if (args[i] == "wait")
+        {
+            waitForSearch = true;
         }
         else if (args[i] == "printmoves")
         {
@@ -485,7 +489,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         // soft limit
         if (remainingTime != INT32_MAX)
         {
-            const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft((float)mGame.GetMoves().size());
+            const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft(mGame.GetPosition().GetMoveCount());
             const float timeEstimated = std::min((float)remainingTime, (float)remainingTime / movesLeftEstimated + (float)remainingTimeInc);
             const int32_t timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated) + 0.5f);
 
@@ -529,6 +533,11 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     RunSearchTask();
 
+    if (mSearchCtx->searchParam.limits.maxTime != UINT32_MAX && waitForSearch)
+    {
+        mSearchCtx->waitable.Wait();
+    }
+
     return true;
 }
 
@@ -538,6 +547,8 @@ void UniversalChessInterface::RunSearchTask()
     taskDesc.waitable = &mSearchCtx->waitable;
     taskDesc.function = [this](const threadpool::TaskContext&)
     {
+        mTranspositionTable.NextGeneration();
+
         mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
         const auto endTimePoint = std::chrono::high_resolution_clock::now();

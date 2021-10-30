@@ -277,6 +277,7 @@ public:
 
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
+    INLINE uint16_t GetMoveCount() const { return mMoveCount; }
 
     // check if the position features only pawns and kings
     bool IsPawnsOnly() const;
