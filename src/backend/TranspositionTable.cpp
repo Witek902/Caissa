@@ -99,6 +99,47 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
 #endif
 
+
+ScoreType ScoreToTT(ScoreType v, int32_t height)
+{
+    ASSERT(v >= -CheckmateValue && v <= CheckmateValue);
+    ASSERT(height < MaxSearchDepth);
+
+    return ScoreType(
+        v >= ( TablebaseWinValue - MaxSearchDepth) ? v + height :
+        v <= (-TablebaseWinValue + MaxSearchDepth) ? v - height :
+        v);
+}
+
+ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
+{
+    ASSERT(height < MaxSearchDepth);
+
+    // based on Stockfish
+
+    if (v >= TablebaseWinValue - MaxSearchDepth)  // TB win or better
+    {
+        if ((v >= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue - v > 99 - fiftyMoveRuleCount))
+        {
+            // do not return a potentially false mate score
+            return CheckmateValue - MaxSearchDepth - 1;
+        }
+        return ScoreType(v - height);
+    }
+
+    if (v <= -TablebaseWinValue + MaxSearchDepth) // TB loss or worse
+    {
+        if ((v <= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue + v > 99 - fiftyMoveRuleCount))
+        {
+            // do not return a potentially false mate score
+            return CheckmateValue - MaxSearchDepth + 1;
+        }
+        return ScoreType(v + height);
+    }
+
+    return v;
+}
+
 void TranspositionTable::Init()
 {
     EnableLargePagesSupport();
@@ -257,7 +298,7 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
     TTCluster& cluster = clusters[positionHash & hashmapMask];
 
     uint32_t replaceIndex = 0;
-    uint8_t minDepthInCluster = UINT8_MAX;
+    int32_t minDepthInCluster = INT32_MAX;
     uint64_t prevHash = 0;
     TTEntry prevEntry;
 
@@ -268,8 +309,8 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
         TTEntry data;
         cluster[i].Load(hash, data);
 
-        // found entry with same hash
-        if (hash == positionHash)
+        // found entry with same hash or empty entry
+        if (hash == positionHash || !data.IsValid())
         {
             replaceIndex = i;
             prevHash = hash;
@@ -277,9 +318,11 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
             break;
         }
 
-        if (data.depth < minDepthInCluster)
+        const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
+
+        if ((int32_t)data.depth - entryAge < minDepthInCluster)
         {
-            minDepthInCluster = data.depth;
+            minDepthInCluster = (int32_t)data.depth - entryAge;
             replaceIndex = i;
             prevHash = hash;
             prevEntry = data;

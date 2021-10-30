@@ -3,6 +3,8 @@
 #include "Position.hpp"
 #include "Move.hpp"
 
+#include "nnue-probe/nnue.h"
+
 #include <math.h>
 #include <algorithm>
 
@@ -20,5 +22,5 @@ inline float WinProbabilityToPawns(float w)
 }
 
 int32_t ScoreQuietMove(const Position& position, const Move& move);
-ScoreType Evaluate(const Position& position);
+ScoreType Evaluate(const Position& position, NNUEdata** nnueData = nullptr);
 bool CheckInsufficientMaterial(const Position& position);

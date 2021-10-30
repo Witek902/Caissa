@@ -361,7 +361,7 @@ static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueDa
     return score;
 }
 
-ScoreType Evaluate(const Position& position)
+ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
 {
     // check endgame evaluation first
     {
@@ -531,7 +531,7 @@ ScoreType Evaluate(const Position& position)
     // use NNUE for balanced positions
     if (nnue_is_valid() && value < nnueTreshold && value > -nnueTreshold)
     {
-        const int32_t nnueValue = EvaluateStockfishNNUE(position, nullptr);
+        const int32_t nnueValue = EvaluateStockfishNNUE(position, nnueData);
         const int32_t nnueFactor = std::abs(value);
         value = (nnueFactor * value + nnueValue * (nnueTreshold - 1 - nnueFactor)) / nnueTreshold;
     }

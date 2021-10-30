@@ -44,53 +44,6 @@ static const int32_t AlphaMarginBias = 150;
 static const int32_t QSearchDeltaMargin = 80;
 static const int32_t QSearchSeeMargin = 120;
 
-// value_to_tt() adjusts a mate or TB score from "plies to mate from the root" to
-// "plies to mate from the current position". Standard scores are unchanged.
-// The function is called before storing a value in the transposition table.
-
-// convert from score that is relative to root to an TT score (absolute, position dependent)
-static ScoreType ScoreToTT(ScoreType v, int32_t height)
-{
-    ASSERT(v >= -CheckmateValue && v <= CheckmateValue);
-    ASSERT(height < MaxSearchDepth);
-
-    return ScoreType(
-        v >= ( TablebaseWinValue - MaxSearchDepth) ? v + height :
-        v <= (-TablebaseWinValue + MaxSearchDepth) ? v - height :
-        v);
-}
-
-
-// convert TT score (absolute, position dependent) to search node score (relative to root)
-ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
-{
-    ASSERT(height < MaxSearchDepth);
-
-    // based on Stockfish
-
-    if (v >= TablebaseWinValue - MaxSearchDepth)  // TB win or better
-    {
-        if ((v >= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue - v > 99 - fiftyMoveRuleCount))
-        {
-            // do not return a potentially false mate score
-            return CheckmateValue - MaxSearchDepth - 1;
-        }
-        return ScoreType(v - height);
-    }
-
-    if (v <= -TablebaseWinValue + MaxSearchDepth) // TB loss or worse
-    {
-        if ((v <= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue + v > 99 - fiftyMoveRuleCount))
-        {
-            // do not return a potentially false mate score
-            return CheckmateValue - MaxSearchDepth + 1;
-        }
-        return ScoreType(v + height);
-    }
-
-    return v;
-}
-
 int64_t SearchParam::GetElapsedTime() const
 {
     auto endTimePoint = std::chrono::high_resolution_clock::now();
@@ -310,14 +263,12 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     std::cout << " nodes " << param.searchContext.stats.nodes;
     std::cout << " nps " << (int32_t)(1.0e9f * (float)param.searchContext.stats.nodes / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(searchTime).count());
 
-    //std::cout << " qnodes " << searchContext.stats.quiescenceNodes;
-    //std::cout << " tthit " << searchContext.stats.ttHits;
-    //std::cout << " ttwrite " << searchContext.stats.ttWrites;
-
+#ifdef COLLECT_SEARCH_STATS
     if (param.searchContext.stats.tbHits)
     {
         std::cout << " tbhit " << param.searchContext.stats.tbHits;
     }
+#endif // COLLECT_SEARCH_STATS
 
     std::cout << " pv ";
     {
@@ -334,6 +285,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
     std::cout << std::endl << std::flush;
 
+#ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
         std::cout << "Beta cutoff histogram\n";
@@ -353,6 +305,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
         }
     }
+#endif // COLLECT_SEARCH_STATS
 }
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
@@ -602,7 +555,17 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
 {
     const NodeInfo* prevNode = &node;
 
-    for (uint32_t i = 1; ; ++i)
+    // TODO optimize this
+    // no need to lookup game history if there's zeroing move in search tree
+
+    uint32_t count = game.GetRepetitionCount(*node.position);
+
+    if (count >= 2)
+    {
+        return true;
+    }
+
+    for (uint32_t ply = 1; ; ++ply)
     {
         // don't need to check more moves if reached pawn push or capture,
         // because these moves are irreversible
@@ -623,7 +586,7 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
         }
 
         // only check every second previous node, because side to move must be the same
-        if (i % 2 == 0)
+        if (ply % 2 == 0)
         {
             ASSERT(prevNode->position);
             ASSERT(prevNode->position->GetSideToMove() == node.position->GetSideToMove());
@@ -632,13 +595,16 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
             {
                 if (*prevNode->position == *node.position)
                 {
-                    return true;
+                    if (++count >= 2)
+                    {
+                        return true;
+                    }
                 }
             }
         }
     }
 
-    return game.GetRepetitionCount(*node.position) > 0;
+    return false;
 }
 
 bool Search::IsDraw(const NodeInfo& node, const Game& game) const
@@ -700,7 +666,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
             if (ttEntry.depth >= node.depth && !isRootNode && !isPvNode)
             {
+#ifdef COLLECT_SEARCH_STATS
                 ctx.stats.ttHits++;
+#endif // COLLECT_SEARCH_STATS
 
                 ScoreType ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
                 ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
@@ -860,7 +828,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, bounds, bestMove);
 
+#ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
+#endif // COLLECT_SEARCH_STATS
     }
 
     return bestValue;
@@ -953,7 +923,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // don't early exit in root node, because we may have better quality score (higher depth) discovered in one of the child nodes
         if (!isRootNode && ttEntry.depth >= node.depth)
         {
+#ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
+#endif // COLLECT_SEARCH_STATS
 
             ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
             ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
@@ -1010,7 +982,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             if (probeResult != TB_RESULT_FAILED)
             {
+#ifdef COLLECT_SEARCH_STATS
                 ctx.stats.tbHits++;
+#endif // COLLECT_SEARCH_STATS
 
                 // convert the WDL value to a score
                 const ScoreType tbValue =
@@ -1034,7 +1008,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                         bounds == TTEntry::Bounds::Exact ? UINT8_MAX : (uint8_t)node.depth,
                         bounds);
 
+#ifdef COLLECT_SEARCH_STATS
                     ctx.stats.ttWrites++;
+#endif // COLLECT_SEARCH_STATS
 
                     return tbValue;
                 }
@@ -1378,9 +1354,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 else
                 {
                     ASSERT(moveIndex > 0);
-                    ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
                     ASSERT(score >= beta);
                     ASSERT(alpha < beta);
+
+#ifdef COLLECT_SEARCH_STATS
+                    ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
+#endif // COLLECT_SEARCH_STATS
+
                     break;
                 }
             }
@@ -1399,20 +1379,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         thread.moveOrderer.OnBetaCutoff(node, bestMove);
     }
 
-    const bool canWriteTT = !(isRootNode && node.pvIndex > 0);
+    const bool canWriteTT = !(isRootNode && node.pvIndex > 0) && !CheckStopCondition(ctx);
 
     // no legal moves
     if (!searchAborted && moveIndex == 0u)
     {
         bestValue = isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
-
-        if (canWriteTT)
-        {
-            // checkmate/stalemate score is always exact so we can even extend TT entry depth to infinity
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, UINT8_MAX, TTEntry::Bounds::Exact, bestMove);
-            ctx.stats.ttWrites++;
-        }
-
         return bestValue;
     }
 
@@ -1432,8 +1404,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             bestValue > oldAlpha ? TTEntry::Bounds::Exact :
             TTEntry::Bounds::UpperBound;
 
+        if (!isPvNode)
+        {
+            ASSERT(bounds != TTEntry::Bounds::Exact);
+        }
+
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, (uint8_t)node.depth, bounds, bestMove);
+
+#ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
+#endif // COLLECT_SEARCH_STATS
     }
 
     return bestValue;

@@ -9,6 +9,9 @@ class Position;
 
 union TTEntry
 {
+    static constexpr uint32_t GenerationBits = 6;
+    static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
+
     enum class Bounds : uint8_t
     {
         Invalid        = 0,
@@ -24,7 +27,7 @@ union TTEntry
         PackedMove move;
         uint8_t depth;
         Bounds bounds : 2;
-        uint8_t generation : 6;
+        uint8_t generation : GenerationBits;
     };
 
     uint64_t packed;
@@ -102,3 +105,9 @@ private:
 
     uint64_t numCollisions;
 };
+
+// convert from score that is relative to root to an TT score (absolute, position dependent)
+ScoreType ScoreToTT(ScoreType v, int32_t height);
+
+// convert TT score (absolute, position dependent) to search node score (relative to root)
+ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount);

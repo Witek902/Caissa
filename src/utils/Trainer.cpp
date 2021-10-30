@@ -69,9 +69,9 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
     outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
 }
 
-static const uint32_t cMaxSearchDepth = 12;
+static const uint32_t cMaxSearchDepth = 8;
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 1000;
+static const uint32_t cNumTrainingVectorsPerIteration = 500;
 static const uint32_t cBatchSize = 10;
 
 bool Train()
@@ -209,8 +209,8 @@ bool TrainEndgame()
                 Position pos;
 
                 MaterialKey material;
-                material.numWhitePawns = 1;// +(rand() % 7);
-                material.numBlackPawns = 1;// +(rand() % 7);
+                material.numWhitePawns = 1 + (rand() % 4);
+                material.numBlackPawns = 1 + (rand() % 4);
 
                 GenerateRandomPosition(material, pos);
 
@@ -250,6 +250,12 @@ bool TrainEndgame()
                 }
 
                 float score = isStalemate ? 0.0f : (float)searchResult[0].score;
+
+                if (score > 1000.0f || score < -1000.0f)
+                {
+                    continue;
+                }
+
                 score = std::clamp(score / 100.0f, -15.0f, 15.0f);
                 outSet[i].output[0] = PawnToWinProbability(score);
                 outPositions[i] = pos;
@@ -293,6 +299,8 @@ bool TrainEndgame()
 
         for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
         {
+            tt.NextGeneration();
+
             // use validation set from previous iteration as training set in the current one
             trainingSet = validationSet;
             trainingFeatures = validationFeatures;
@@ -306,7 +314,7 @@ bool TrainEndgame()
                 taskBuilder.Task("Train", [&](const TaskContext&)
                 {
                     network.Train(trainingSet, tempValues, cBatchSize);
-                    network.PrintStats();
+                    //network.PrintStats();
 
                     network.ToPackedNetwork(packedNetwork);
                     packedNetwork.Save("pawns.nn");
@@ -396,12 +404,12 @@ bool TrainEndgame()
             std::cout << std::right << std::fixed << std::setprecision(4) << evalMaxError;
             std::cout << std::endl;
 
-            if (iteration % 10 == 0)
-            {
-                const auto ttUsage = tt.GetNumUsedEntries();
-                std::cout << "transposition table usage: " << ttUsage << " entries (" <<
-                    std::fixed << std::setprecision(4) << (float)ttUsage / (float)tt.GetSize() * 100.0f << "%)" << std::endl;
-            }
+            //if (iteration % 10 == 0)
+            //{
+            //    const auto ttUsage = tt.GetNumUsedEntries();
+            //    std::cout << "transposition table usage: " << ttUsage << " entries (" <<
+            //        std::fixed << std::setprecision(4) << (float)ttUsage / (float)tt.GetSize() * 100.0f << "%)" << std::endl;
+            //}
         }
 
         network.Save("network.dat");

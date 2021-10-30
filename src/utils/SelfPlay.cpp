@@ -23,7 +23,7 @@ void SelfPlay()
 {
     FILE* dumpFile = fopen("selfplay.dat", "wb");
 
-    TranspositionTable tt(1024 * 1024);
+    TranspositionTable tt(512 * 1024 * 1024);
 
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
     
@@ -60,7 +60,7 @@ void SelfPlay()
             for (;; ++halfMoveNumber)
             {
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 5;
+                searchParam.limits.maxDepth = 8;
                 searchParam.numPvLines = 2;
                 searchParam.debugLog = false;
 
