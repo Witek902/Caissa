@@ -1,6 +1,7 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <xmmintrin.h>
 
@@ -258,13 +259,13 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Bounds bounds, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
 {
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;
     entry.move = move;
-    entry.depth = depth;
+    entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
     entry.bounds = bounds;
 
     Write(position, entry);

@@ -116,7 +116,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
 
     pos.GetPieceBitBoard(piece) |= mask;
-    pos.occupied |= mask;
 }
 
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
@@ -126,9 +125,7 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     Bitboard& targetBitboard = pos.GetPieceBitBoard(piece);
 
     ASSERT((targetBitboard & mask) == mask);
-    ASSERT((pos.occupied & mask) == mask);
     targetBitboard &= ~mask;
-    pos.occupied &= ~mask;
 
     const uint32_t colorIndex = (uint32_t)color;
     const uint32_t pieceIndex = (uint32_t)piece - 1;
@@ -298,14 +295,14 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
     });
 }
 
-NO_INLINE
 void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) const
 {
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
+    const Bitboard occupiedByOpponent = opponentSide.Occupied();
     Bitboard filter = ~currentSide.Occupied(); // can't capture own piece
-    if (flags & MOVE_GEN_ONLY_TACTICAL) filter &= opponentSide.occupied;
+    if (flags & MOVE_GEN_ONLY_TACTICAL) filter &= occupiedByOpponent;
     filter &= ~opponentSide.king; // can't capture king
 
     currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
@@ -317,7 +314,7 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             const Square targetSquare(toIndex);
-            const bool isCapture = opponentSide.occupied & targetSquare.GetBitboard();
+            const bool isCapture = occupiedByOpponent & targetSquare.GetBitboard();
 
             outMoveList.Push(Move::Make(square, targetSquare, Piece::Knight, Piece::None, isCapture));
         });
@@ -329,6 +326,7 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
+    const Bitboard occupiedByOpponent = opponentSide.Occupied();
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
     currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
@@ -337,12 +335,12 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
 
         Bitboard attackBitboard = Bitboard::GenerateRookAttacks(square, occupiedSquares);
         attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
-        if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= opponentSide.occupied;
+        if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= occupiedByOpponent;
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             const Square targetSquare(toIndex);
-            const bool isCapture = opponentSide.occupied & targetSquare.GetBitboard();
+            const bool isCapture = occupiedByOpponent & targetSquare.GetBitboard();
 
             outMoveList.Push(Move::Make(square, targetSquare, Piece::Rook, Piece::None, isCapture));
         });
@@ -416,10 +414,12 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 
     ASSERT(currentSide.king);
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
-    const Square square(kingSquareIndex);
+    const Square kingSquare(kingSquareIndex);
+    const Square opponentKingSquare(FirstBitSet(opponentSide.king));
 
-    Bitboard attackBitboard = Bitboard::GetKingAttacks(square);
+    Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
     attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
+    attackBitboard &= ~Bitboard::GetKingAttacks(opponentKingSquare); // can't move to piece controlled by opponent's king
     if (onlyTactical)
     {
         attackBitboard &= opponentSide.OccupiedExcludingKing();
@@ -430,7 +430,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         const Square targetSquare(toIndex);
         const bool isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
 
-        outMoveList.Push(Move::Make(square, targetSquare, Piece::King, Piece::None, isCapture));
+        outMoveList.Push(Move::Make(kingSquare, targetSquare, Piece::King, Piece::None, isCapture));
     });
 
     if (!onlyTactical && (currentSideCastlingRights & CastlingRights_All))
@@ -451,7 +451,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 ((opponentAttacks & longCastleKingCrossedSquares) == 0u))
             {
                 // TODO Chess960 support?
-                outMoveList.Push(Move::Make(square, Square(2u, square.Rank()), Piece::King, Piece::None, false, false, true));
+                outMoveList.Push(Move::Make(kingSquare, Square(2u, kingSquare.Rank()), Piece::King, Piece::None, false, false, true));
             }
 
             if ((currentSideCastlingRights & CastlingRights_ShortCastleAllowed) &&
@@ -459,7 +459,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 ((opponentAttacks & shortCastleKingCrossedSquares) == 0u))
             {
                 // TODO Chess960 support?
-                outMoveList.Push(Move::Make(square, Square(6u, square.Rank()), Piece::King, Piece::None, false, false, true));
+                outMoveList.Push(Move::Make(kingSquare, Square(6u, kingSquare.Rank()), Piece::King, Piece::None, false, false, true));
             }
         }
     }
@@ -797,6 +797,28 @@ bool Position::DoNullMove()
     ASSERT(ComputeHash() == GetHash());
 
     return true;
+}
+
+Position Position::SwappedColors() const
+{
+    Position result;
+    result.mColors[0].king     = mColors[1].king.MirroredVertically();
+    result.mColors[0].queens   = mColors[1].queens.MirroredVertically();
+    result.mColors[0].rooks    = mColors[1].rooks.MirroredVertically();
+    result.mColors[0].bishops  = mColors[1].bishops.MirroredVertically();
+    result.mColors[0].knights  = mColors[1].knights.MirroredVertically();
+    result.mColors[0].pawns    = mColors[1].pawns.MirroredVertically();
+    result.mColors[1].king     = mColors[0].king.MirroredVertically();
+    result.mColors[1].queens   = mColors[0].queens.MirroredVertically();
+    result.mColors[1].rooks    = mColors[0].rooks.MirroredVertically();
+    result.mColors[1].bishops  = mColors[0].bishops.MirroredVertically();
+    result.mColors[1].knights  = mColors[0].knights.MirroredVertically();
+    result.mColors[1].pawns    = mColors[0].pawns.MirroredVertically();
+    result.mSideToMove = GetOppositeColor(mSideToMove);
+    result.mMoveCount = mMoveCount;
+    result.mHalfMoveCount = mHalfMoveCount;
+    result.mHash = result.ComputeHash();
+    return result;
 }
 
 void Position::MirrorVertically()

@@ -41,7 +41,6 @@ static const int32_t AlphaPruningDepth = 4;
 static const int32_t AlphaMarginMultiplier = 600;
 static const int32_t AlphaMarginBias = 150;
 
-static const int32_t QSearchDeltaMargin = 80;
 static const int32_t QSearchSeeMargin = 120;
 
 int64_t SearchParam::GetElapsedTime() const
@@ -367,12 +366,18 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         if (finishSearchAtDepth)
         {
-            ASSERT(outResult[0].moves.size() > 0);
+            if (isMainThread)
+            {
+                ASSERT(outResult[0].moves.size() > 0);
+            }
             break;
         }
 
-        // rememeber PV lines so they can be used in next iteration
-        thread.prevPvLines = outResult;
+        if (isMainThread)
+        {
+            // rememeber PV lines so they can be used in next iteration
+            thread.prevPvLines = outResult;
+        }
 
         // check soft time limit every depth iteration
         if (!param.isPonder && param.limits.maxTimeSoft < UINT32_MAX && param.GetElapsedTime() >= param.limits.maxTimeSoft)
@@ -460,8 +465,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         const bool isMainThread = param.threadID == 0;
 
         // don't report line if search was aborted, because the result comes from incomplete search
-        if (isMainThread && !stopSearch && !pvLine.moves.empty())
+        if (isMainThread && !stopSearch)
         {
+            ASSERT(!pvLine.moves.empty());
+
             outResult[param.pvIndex] = pvLine;
 
             if (param.searchParam.debugLog)
@@ -555,16 +562,6 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
 {
     const NodeInfo* prevNode = &node;
 
-    // TODO optimize this
-    // no need to lookup game history if there's zeroing move in search tree
-
-    uint32_t count = game.GetRepetitionCount(*node.position);
-
-    if (count >= 2)
-    {
-        return true;
-    }
-
     for (uint32_t ply = 1; ; ++ply)
     {
         // don't need to check more moves if reached pawn push or capture,
@@ -595,16 +592,13 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
             {
                 if (*prevNode->position == *node.position)
                 {
-                    if (++count >= 2)
-                    {
-                        return true;
-                    }
+                    return true;
                 }
             }
         }
     }
 
-    return false;
+    return game.GetRepetitionCount(*node.position) >= 2;
 }
 
 bool Search::IsDraw(const NodeInfo& node, const Game& game) const
@@ -704,7 +698,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         if (bestValue >= beta)
         {
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Bounds::LowerBound);
+            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, TTEntry::Bounds::LowerBound);
             return bestValue;
         }
 
@@ -712,20 +706,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             alpha = bestValue;
         }
-
-        // Delta Pruning - skip everything if there's no possible move that will beat alpha
-        //const int32_t delta = QSearchDeltaMargin + position.BestPossibleMoveValue();
-        //if (staticEval + delta < alpha)
-        //{
-        //    return alpha;
-        //}
     }
 
     NodeInfo childNodeParam;
     childNodeParam.parentNode = &node;
     childNodeParam.pvIndex = node.pvIndex;
     childNodeParam.isPvNode = node.isPvNode;
-    childNodeParam.depth = 0;
+    childNodeParam.depth = node.depth - 1;
     childNodeParam.height = node.height + 1;
 
     uint32_t moveGenFlags = 0;
@@ -826,7 +813,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             (isPvNode && bestValue > oldAlpha) ? TTEntry::Bounds::Exact :
             TTEntry::Bounds::UpperBound;
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
@@ -1005,7 +992,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     ctx.searchParam.transpositionTable.Write(
                         position,
                         ScoreToTT(tbValue, node.height), staticEval,
-                        bounds == TTEntry::Bounds::Exact ? UINT8_MAX : (uint8_t)node.depth,
+                        bounds == TTEntry::Bounds::Exact ? INT8_MAX : node.depth,
                         bounds);
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1033,7 +1020,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // USE_TABLE_BASES
 
     // Null Move Prunning
-    if (!isPvNode &&
+    if (!isRootNode &&
+        !isPvNode &&
         !isInCheck &&
         !ctx.searchParam.limits.mateSearch &&
         node.depth >= NullMovePrunningStartDepth &&
@@ -1073,16 +1061,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     // Futility Pruning
-    if (!isPvNode &&
+    if (!isRootNode && 
+        !isPvNode &&
         !isInCheck &&
         !ctx.searchParam.limits.mateSearch &&
         alpha < 1000)
     {
+        bool wasEvaluated = true;
         if (staticEval == InvalidValue)
         {
             const ScoreType evalScore = Evaluate(position);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+            wasEvaluated = false;
         }
 
         const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
@@ -1091,12 +1082,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Alpha Pruning
         if (node.depth <= AlphaPruningDepth && (staticEval + alphaMargin <= alpha))
         {
+            if (!wasEvaluated)
+            {
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
+            }
             return (ScoreType)std::min<int32_t>(TablebaseWinValue, staticEval);
         }
 
         // Beta Pruning
         if (node.depth <= BetaPruningDepth && (staticEval - betaMargin >= beta))
         {
+            if (!wasEvaluated)
+            {
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
+            }
             return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
         }
     }
@@ -1217,6 +1216,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             moveExtension++;
         }
+
+
+        /*
+        // passed pawn extension
+        if (move.GetPiece() == Piece::Pawn)
+        {
+            const uint8_t seventhRank = position.GetSideToMove() == Color::White ? 6 : 1;
+            if (move.ToSquare().Rank() == seventhRank)
+            {
+                moveExtension++;
+            }
+        }
+        */
 
         childNodeParam.position = &childPosition;
         childNodeParam.depth = node.depth + moveExtension - 1;
@@ -1339,14 +1351,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             bestValue = score;
             bestMove = move;
+
+            if (isPvNode)
+            {
+                thread.UpdatePvArray(node.height, move);
+            }
             
             if (score > alpha) // update lower bound
             {
-                if (isPvNode)
-                {
-                    thread.UpdatePvArray(node.height, move);
-                }
-
                 if (isPvNode && score < beta) // keep alpha < beta
                 {
                     alpha = score;
@@ -1409,7 +1421,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ASSERT(bounds != TTEntry::Bounds::Exact);
         }
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, (uint8_t)node.depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
