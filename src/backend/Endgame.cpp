@@ -2,6 +2,7 @@
 #include "Evaluate.hpp"
 #include "Position.hpp"
 #include "Move.hpp"
+#include "MoveList.hpp"
 #include "PackedNeuralNetwork.hpp"
 
 #include <bitset>
@@ -188,356 +189,452 @@ Result KPKPosition::classify(const std::vector<KPKPosition>& db)
 
 enum MaterialMask : uint32_t
 {
-    MaterialMask_WhitePawn   = 1 << 0,
-    MaterialMask_WhiteKnight = 1 << 1,
-    MaterialMask_WhiteBishop = 1 << 2,
-    MaterialMask_WhiteRook   = 1 << 3,
-    MaterialMask_WhiteQueen  = 1 << 4,
+    MaterialMask_WhitePawn      = 1 << 0,
+    MaterialMask_WhiteKnight    = 1 << 1,
+    MaterialMask_WhiteBishop    = 1 << 2,
+    MaterialMask_WhiteRook      = 1 << 3,
+    MaterialMask_WhiteQueen     = 1 << 4,
 
-    MaterialMask_BlackPawn   = 1 << 5,
-    MaterialMask_BlackKnight = 1 << 6,
-    MaterialMask_BlackBishop = 1 << 7,
-    MaterialMask_BlackRook   = 1 << 8,
-    MaterialMask_BlackQueen  = 1 << 9,
+    MaterialMask_BlackPawn      = 1 << 5,
+    MaterialMask_BlackKnight    = 1 << 6,
+    MaterialMask_BlackBishop    = 1 << 7,
+    MaterialMask_BlackRook      = 1 << 8,
+    MaterialMask_BlackQueen     = 1 << 9,
+
+    MaterialMask_MAX            = 1 << 10,
+    MaterialMask_WhitesMAX      = MaterialMask_BlackPawn,
 };
 
-INLINE static constexpr uint32_t BuildMaterialMask(
-    uint32_t wp, uint32_t wk, uint32_t wb, uint32_t wr, uint32_t wq,
-    uint32_t bp, uint32_t bk, uint32_t bb, uint32_t br, uint32_t bq)
+INLINE constexpr MaterialMask operator | (MaterialMask a, MaterialMask b)
 {
-    uint32_t mask = 0;
+    return static_cast<MaterialMask>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
 
-    if (wp > 0) mask |= 1 << 0;
-    if (wk > 0) mask |= 1 << 1;
-    if (wb > 0) mask |= 1 << 2;
-    if (wr > 0) mask |= 1 << 3;
-    if (wq > 0) mask |= 1 << 4;
+INLINE static MaterialMask BuildMaterialMask(const Position& pos)
+{
+    MaterialMask mask = (MaterialMask)0;
 
-    if (bp > 0) mask |= 1 << 5;
-    if (bk > 0) mask |= 1 << 6;
-    if (bb > 0) mask |= 1 << 7;
-    if (br > 0) mask |= 1 << 8;
-    if (bq > 0) mask |= 1 << 9;
+    if (pos.Whites().pawns)     mask = mask | MaterialMask_WhitePawn;
+    if (pos.Whites().knights)   mask = mask | MaterialMask_WhiteKnight;
+    if (pos.Whites().bishops)   mask = mask | MaterialMask_WhiteBishop;
+    if (pos.Whites().rooks)     mask = mask | MaterialMask_WhiteRook;
+    if (pos.Whites().queens)    mask = mask | MaterialMask_WhiteQueen;
+
+    if (pos.Blacks().pawns)     mask = mask | MaterialMask_BlackPawn;
+    if (pos.Blacks().knights)   mask = mask | MaterialMask_BlackKnight;
+    if (pos.Blacks().bishops)   mask = mask | MaterialMask_BlackBishop;
+    if (pos.Blacks().rooks)     mask = mask | MaterialMask_BlackRook;
+    if (pos.Blacks().queens)    mask = mask | MaterialMask_BlackQueen;
 
     return mask;
+}
+
+INLINE static MaterialMask FlipColor(const MaterialMask mask)
+{
+    return MaterialMask((mask >> 5) | ((mask & 0x1F) << 5));
+}
+
+using EndgameEvaluationFunc = bool (*)(const Position&, int32_t&);
+
+// map: material mask -> function index
+static uint8_t s_endgameEvaluationMap[MaterialMask_MAX] = { UINT8_MAX };
+
+// all registered functions
+static EndgameEvaluationFunc s_endgameEvaluationFunctions[UINT8_MAX];
+static uint8_t s_numEndgameEvaluationFunctions = 0;
+
+static void RegisterEndgameFunction(MaterialMask materialMask, const EndgameEvaluationFunc& func)
+{
+    ASSERT(materialMask < MaterialMask_MAX);
+    ASSERT(s_numEndgameEvaluationFunctions < UINT8_MAX);
+
+    // function already registered
+    ASSERT(s_endgameEvaluationMap[materialMask] == UINT8_MAX);
+    ASSERT(s_endgameEvaluationMap[FlipColor(materialMask)] == UINT8_MAX);
+
+    const uint8_t functionIndex = s_numEndgameEvaluationFunctions++;
+    s_endgameEvaluationFunctions[functionIndex] = func;
+    s_endgameEvaluationMap[materialMask] = functionIndex;
+}
+
+static void RegisterEndgameFunction(MaterialMask materialMask, const uint8_t functionIndex)
+{
+    ASSERT(materialMask < MaterialMask_MAX);
+
+    // function already registered
+    ASSERT(s_endgameEvaluationMap[materialMask] == UINT8_MAX);
+    ASSERT(s_endgameEvaluationMap[FlipColor(materialMask)] == UINT8_MAX);
+
+    s_endgameEvaluationMap[materialMask] = functionIndex;
+}
+
+// Rook(s) and/or Queen(s) vs. lone king
+static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
+
+    const Square whiteKing(FirstBitSet(pos.Whites().king));
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+
+    if (pos.GetSideToMove() == Color::Black)
+    {
+        MoveList moves;
+        pos.GenerateKingMoveList(moves);
+
+        // detect stalemate
+        if (moves.Size() == 0)
+        {
+            outScore = 0;
+            return true;
+        }
+
+        // check if a piece can be captured immediately
+        if (pos.Whites().Occupied().Count() == 1)
+        {
+            for (uint32_t i = 0; i < moves.Size(); ++i)
+            {
+                if (moves.GetMove(i).IsCapture())
+                {
+                    outScore = 0;
+                    return true;
+                }
+            }
+        }
+    }
+
+    outScore = KnownWinValue;
+    outScore += 900 * pos.Whites().queens.Count();
+    outScore += 500 * pos.Whites().rooks.Count();
+    outScore += 300 * (pos.Whites().bishops | pos.Whites().knights).Count();
+    outScore += 100 * pos.Whites().pawns.Count();
+    outScore += 8 * (3 - blackKing.EdgeDistance()); // push king to edge
+    outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
+    outScore = std::clamp(outScore, -TablebaseWinValue + 1, TablebaseWinValue - 1);
+
+    // TODO put rook on a rank/file that limits king movement
+
+    return true;
+}
+
+// knight(s) vs. lone king
+static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
+
+    const Square whiteKing(FirstBitSet(pos.Whites().king));
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+    const int32_t numKnights = pos.Whites().knights.Count();
+
+    if (numKnights <= 2)
+    {
+        // NOTE: there are checkmates with two knights, but they cannot be forced from all positions
+        outScore = 0;
+    }
+    else // whiteKnights >= 3
+    {
+        outScore = numKnights > 3 ? KnownWinValue : 0;
+        outScore += 300 * (numKnights - 3); // prefer keeping the knights
+        outScore += 8 * (3 - blackKing.AnyCornerDistance()); // push king to corner
+        outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
+    }
+
+    return true;
+}
+
+// bishop(s) vs. lone king
+static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Blacks().pawns == 0);
+    ASSERT(pos.Blacks().bishops == 0);
+    ASSERT(pos.Blacks().rooks == 0);
+    ASSERT(pos.Blacks().queens == 0);
+
+    const Square whiteKing(FirstBitSet(pos.Whites().king));
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+    const int32_t whiteBishops = pos.Whites().bishops.Count();
+    const int32_t blackKnights = pos.Blacks().knights.Count();
+
+    const uint32_t numLightSquareBishops = (pos.Whites().bishops & Bitboard::LightSquares()).Count();
+    const uint32_t numDarkSquareBishops = (pos.Whites().bishops & Bitboard::DarkSquares()).Count();
+
+    if (blackKnights <= 1 && (numLightSquareBishops == 0 || numDarkSquareBishops == 0))
+    {
+        outScore = 0;
+        return true;
+    }
+    else if (blackKnights <= 1 && (numLightSquareBishops >= 1 || numDarkSquareBishops >= 1))
+    {
+        outScore = KnownWinValue;
+        if (blackKnights) outScore = 0; // drawish score when opponent have a knight
+        outScore += 64 * (whiteBishops - 2); // prefer keeping the bishops on board
+        outScore += 8 * (3 - blackKing.AnyCornerDistance()); // push king to corner
+        outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
+        return true;
+    }
+    return false;
+}
+
+// knight + bishop vs. lone king
+static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0);
+    ASSERT(pos.Whites().bishops > 0);
+    ASSERT(pos.Whites().knights > 0);
+    ASSERT(pos.Whites().rooks == 0);
+    ASSERT(pos.Whites().queens == 0);
+
+    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
+
+    const Square whiteKing(FirstBitSet(pos.Whites().king));
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+    const int32_t whiteBishops = pos.Whites().bishops.Count();
+    const int32_t whiteKnights = pos.Whites().knights.Count();
+
+    // push king to 'right' board corner
+    const Square kingSquare = (pos.Whites().bishops & Bitboard::DarkSquares()) ? blackKing : blackKing.FlippedFile();
+
+    outScore = KnownWinValue;
+    outScore += 300 * (whiteBishops - 1); // prefer keeping the knights
+    outScore += 300 * (whiteKnights - 1); // prefer keeping the knights
+    outScore += 8 * (7 - kingSquare.DarkCornerDistance()); // push king to corner
+    outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
+
+    return true;
+}
+
+// pawn(s) vs. lone king
+static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns.Count() > 0);
+    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
+
+    const Square whiteKing(FirstBitSet(pos.Whites().king));
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+    const int32_t numPawns = pos.Whites().pawns.Count();
+
+    Square strongKingSq = whiteKing;
+    Square weakKingSq = blackKing;
+    Square pawnSquare = FirstBitSet(pos.Whites().pawns);
+
+    if (numPawns == 1)
+    {
+        if (pawnSquare.File() >= 4)
+        {
+            strongKingSq = strongKingSq.FlippedFile();
+            weakKingSq = weakKingSq.FlippedFile();
+            pawnSquare = pawnSquare.FlippedFile();
+        }
+
+        if (!KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, pos.GetSideToMove()))
+        {
+            // bitbase draw
+            outScore = 0;
+            return true;
+        }
+
+        outScore = KnownWinValue;
+        outScore += 8 * pawnSquare.Rank();
+        outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
+        outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
+        return true;
+    }
+    else if (numPawns == 2)
+    {
+        // connected passed pawns
+        if (Bitboard::GetKingAttacks(pawnSquare) & pos.Whites().pawns)
+        {
+            outScore = KnownWinValue;
+            outScore += 8 * pawnSquare.Rank();
+            outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
+            outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// bishop(s) + pawn(s) vs. lone king
+static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns > 0);
+    ASSERT(pos.Whites().bishops > 0);
+    ASSERT(pos.Whites().knights == 0);
+    ASSERT(pos.Whites().rooks == 0);
+    ASSERT(pos.Whites().queens == 0);
+
+    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
+
+    const Square blackKing(FirstBitSet(pos.Blacks().king));
+
+    // if all pawns are on A/H file and we have a wrong bishop, then it's a draw
+    {
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<0>()) == 0) &&
+            ((pos.Whites().bishops & Bitboard::LightSquares()) == 0) &&
+            (Square::Distance(blackKing, Square_a8) <= 1))
+        {
+            outScore = 0;
+            return true;
+        }
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<7>()) == 0) &&
+            ((pos.Whites().bishops & Bitboard::DarkSquares()) == 0) &&
+            (Square::Distance(blackKing, Square_h8) <= 1))
+        {
+            outScore = 0;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void InitEndgame()
 {
     KPKEndgame::Init();
+
+    // clear map
+    for (uint32_t i = 0; i < MaterialMask_MAX; ++i)
+    {
+        s_endgameEvaluationMap[i] = UINT8_MAX;
+    }
+
+    // Rook/Queen + anything vs. lone king
+    {
+        const uint8_t functionIndex = s_numEndgameEvaluationFunctions++;
+        s_endgameEvaluationFunctions[functionIndex] = EvaluateEndgame_KXvK;
+
+        for (uint32_t mask = 0; mask < MaterialMask_WhitesMAX; ++mask)
+        {
+            if (mask & (MaterialMask_WhiteRook | MaterialMask_WhiteQueen))
+            {
+                RegisterEndgameFunction((MaterialMask)mask, functionIndex);
+            }
+        }
+    }
+
+    RegisterEndgameFunction(MaterialMask_WhiteKnight, EvaluateEndgame_KNvK);
+
+    RegisterEndgameFunction(MaterialMask_WhiteBishop, EvaluateEndgame_KBvK);
+    RegisterEndgameFunction(MaterialMask_WhiteBishop|MaterialMask_BlackKnight, EvaluateEndgame_KBvK);
+
+    RegisterEndgameFunction(MaterialMask_WhiteBishop|MaterialMask_WhiteKnight, EvaluateEndgame_KNBvK);
+
+    RegisterEndgameFunction(MaterialMask_WhiteBishop|MaterialMask_WhitePawn, EvaluateEndgame_KBPvK);
+
+    RegisterEndgameFunction(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);
 }
 
 bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 {
-    const int32_t whiteQueens   = pos.Whites().queens.Count();
-    const int32_t whiteRooks    = pos.Whites().rooks.Count();
-    const int32_t whiteBishops  = pos.Whites().bishops.Count();
-    const int32_t whiteKnights  = pos.Whites().knights.Count();
-    const int32_t whitePawns    = pos.Whites().pawns.Count();
-
-    const int32_t blackQueens   = pos.Blacks().queens.Count();
-    const int32_t blackRooks    = pos.Blacks().rooks.Count();
-    const int32_t blackBishops  = pos.Blacks().bishops.Count();
-    const int32_t blackKnights  = pos.Blacks().knights.Count();
-    const int32_t blackPawns    = pos.Blacks().pawns.Count();
-
-    const uint32_t mask = BuildMaterialMask(
-        whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens,
-        blackPawns, blackKnights, blackBishops, blackRooks, blackQueens);
-
-    Square whiteKing(FirstBitSet(pos.Whites().king));
-    Square blackKing(FirstBitSet(pos.Blacks().king));
-
-    switch (mask)
-    {
+    MaterialMask materialMask = BuildMaterialMask(pos);
+    ASSERT(materialMask < MaterialMask_MAX);
 
     // King vs King
-    case 0:
+    if (materialMask == 0)
     {
         outScore = 0;
         return true;
     }
 
-    // Knight(s) vs King
-    case MaterialMask_WhiteKnight:
+    // find registered function (regular)
+    uint8_t evaluationFuncIndex = s_endgameEvaluationMap[materialMask];
+    if (evaluationFuncIndex != UINT8_MAX)
     {
-        if (whiteKnights <= 2)
-        {
-            // NOTE: there are checkmates with two knights, but they cannot be forced from all positions
-            outScore = 0;
-            return true;
-        }
-        else // whiteKnights >= 3
-        {
-            outScore = whiteKnights > 3 ? KnownWinValue : 0;
-            outScore += 8 * (whiteKnights - 3); // prefer keeping the knights
-            outScore += (3 - blackKing.AnyCornerDistance()); // push king to corner
-            return true;
-        }
-        break;
+        const EndgameEvaluationFunc& func = s_endgameEvaluationFunctions[evaluationFuncIndex];
+        outScore = InvalidValue;
+        const bool result = func(pos, outScore);
+        if (result) { ASSERT(outScore != InvalidValue); }
+        return result;
     }
 
-    // King vs Knight(s)
-    case MaterialMask_BlackKnight:
+    // find registered function (flipped color)
+    evaluationFuncIndex = s_endgameEvaluationMap[FlipColor(materialMask)];
+    if (evaluationFuncIndex != UINT8_MAX)
     {
-        if (blackKnights <= 2)
-        {
-            // NOTE: there are checkmates with two knights, but they cannot be forced from all positions
-            outScore = 0;
-            return true;
-        }
-        else // blackKnights >= 3
-        {
-            outScore = blackKnights > 3 ? -KnownWinValue : 0;
-            outScore -= 8 * (blackKnights - 3); // prefer keeping the knights
-            outScore -= (3 - whiteKing.AnyCornerDistance()); // push king to corner
-            return true;
-        }
-        break;
-    }
-
-    // Bishop(s) vs Knight
-    case MaterialMask_WhiteBishop:
-    case MaterialMask_WhiteBishop | MaterialMask_BlackKnight:
-    {
-        const uint32_t numLightSquareBishops = (pos.Whites().bishops & Bitboard::LightSquares()).Count();
-        const uint32_t numDarkSquareBishops = (pos.Whites().bishops & Bitboard::DarkSquares()).Count();
-
-        if (blackKnights <= 1 && (numLightSquareBishops == 0 || numDarkSquareBishops == 0))
-        {
-            outScore = 0;
-            return true;
-        }
-        else if (blackKnights <= 1 && (numLightSquareBishops >= 1 || numDarkSquareBishops >= 1))
-        {
-            outScore = KnownWinValue;
-            if (blackKnights) outScore = 0; // drawish score when opponent have a knight
-            outScore += 64 * (whiteBishops - 2); // prefer keeping the bishops on board
-            outScore += 8 * (3 - blackKing.AnyCornerDistance()); // push king to corner
-            outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-            return true;
-        }
-        break;
-    }
-
-    // Knight vs Bishop(s)
-    case MaterialMask_BlackBishop:
-    case MaterialMask_BlackBishop | MaterialMask_WhiteKnight:
-    {
-        const uint32_t numLightSquareBishops = (pos.Blacks().bishops & Bitboard::LightSquares()).Count();
-        const uint32_t numDarkSquareBishops = (pos.Blacks().bishops & Bitboard::DarkSquares()).Count();
-
-        if (whiteKnights <= 1 && (numLightSquareBishops == 0 || numDarkSquareBishops == 0))
-        {
-            outScore = 0;
-            return true;
-        }
-        else if (whiteKnights <= 1 && (numLightSquareBishops >= 1 || numDarkSquareBishops >= 1))
-        {
-            outScore = -KnownWinValue;
-            if (whiteKnights) outScore = 0; // drawish score when opponent have a knight
-            outScore -= 64 * (blackBishops - 2); // prefer keeping the bishops on board
-            outScore -= 8 * (3 - whiteKing.AnyCornerDistance()); // push king to corner
-            outScore -= (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-            return true;
-        }
-        break;
-    }
-
-    // Queens/Rooks vs King
-    // TODO extend to "Queen/Rook+anything vs King"
-    case BuildMaterialMask(0, 0, 0, 1, 0, 0, 0, 0, 0, 0):
-    case BuildMaterialMask(0, 0, 0, 0, 1, 0, 0, 0, 0, 0):
-    case BuildMaterialMask(0, 0, 0, 1, 1, 0, 0, 0, 0, 0):
-    {
-        outScore = KnownWinValue + 1000;
-        outScore += 8 * (3 - blackKing.EdgeDistance()); // push king to edge
-        outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-        return true;
-    }
-
-    // King vs Queens/Rooks
-    // TODO extend to "King vs Queen/Rook+anything"
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 0, 0, 1, 0):
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 0, 0, 0, 1):
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 0, 0, 1, 1):
-    {
-        outScore = -(KnownWinValue + 1000);
-        outScore -= 8 * (3 - whiteKing.EdgeDistance()); // push king to edge
-        outScore -= (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-        return true;
-    }
-
-    // Knight+Bishop vs King
-    case BuildMaterialMask(0, 1, 1, 0, 0, 0, 0, 0, 0, 0):
-    {
-        // push king to 'right' board corner
-        const Square kingSquare = (pos.Whites().bishops & Bitboard::DarkSquares()) ? blackKing : blackKing.FlippedFile();
-
-        outScore = KnownWinValue;
-        outScore += 8 * (7 - kingSquare.DarkCornerDistance()); // push king to corner
-        outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-        return true;
-    }
-
-    // King vs Knight+Bishop
-    case BuildMaterialMask(0, 0, 0, 0, 0, 0, 1, 1, 0, 0):
-    {
-        // push king to 'right' board corner
-        const Square kingSquare = (pos.Blacks().bishops & Bitboard::DarkSquares()) ? whiteKing : whiteKing.FlippedFile();
-
-        outScore = -KnownWinValue;
-        outScore -= 8 * (7 - kingSquare.DarkCornerDistance()); // push king to corner
-        outScore -= (7 - Square::Distance(blackKing, whiteKing)); // push kings close
-        return true;
-    }
-
-    // Pawn vs King
-    case MaterialMask_WhitePawn:
-    {
-        if (whitePawns == 1)
-        {
-            Square strongKingSq = whiteKing;
-            Square weakKingSq = blackKing;
-            Square pawnSquare = FirstBitSet(pos.Whites().pawns);
-
-            if (pawnSquare.File() >= 4)
-            {
-                strongKingSq = strongKingSq.FlippedFile();
-                weakKingSq = weakKingSq.FlippedFile();
-                pawnSquare = pawnSquare.FlippedFile();
-            }
-
-            if (!KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, pos.GetSideToMove()))
-            {
-                // bitbase draw
-                outScore = 0;
-                return true;
-            }
-
-            outScore = KnownWinValue;
-            outScore += 8 * pawnSquare.Rank();
-            outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
-            return true;
-        }
-        break;
-    }
-
-    // King vs Pawn
-    case MaterialMask_BlackPawn:
-    {
-        if (blackPawns == 1)
-        {
-            // swap black/white, because KPKEndgame::Probe assumes that white is up a pawn
-            Square strongKingSq = blackKing.FlippedRank();
-            Square weakKingSq = whiteKing.FlippedRank();
-            Square pawnSquare = Square(FirstBitSet(pos.Blacks().pawns)).FlippedRank();
-
-            if (pawnSquare.File() >= 4)
-            {
-                strongKingSq = strongKingSq.FlippedFile();
-                weakKingSq = weakKingSq.FlippedFile();
-                pawnSquare = pawnSquare.FlippedFile();
-            }
-
-            if (!KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, GetOppositeColor(pos.GetSideToMove())))
-            {
-                // bitbase draw
-                outScore = 0;
-                return true;
-            }
-
-            outScore = -KnownWinValue;
-            outScore -= 8 * pawnSquare.Rank();
-            outScore -= 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
-            return true;
-        }
-        break;
-    }
-
-    // TODO WIP
-    /*
-    // Pawns vs Pawns
-    case MaterialMask_WhitePawn|MaterialMask_BlackPawn:
-    {
-        if (g_pawnsEndgameNeuralNetwork.IsValid())
-        {
-            Square kingA = whiteKing;
-            Square kingB = blackKing;
-            Bitboard pawnsA = pos.Whites().pawns;
-            Bitboard pawnsB = pos.Blacks().pawns;
-
-            if (pos.GetSideToMove() == Color::Black)
-            {
-                kingA = blackKing.FlippedRank();
-                kingB = whiteKing.FlippedRank();
-                pawnsA = pos.Blacks().pawns.FlippedVertically();
-                pawnsB = pos.Whites().pawns.FlippedVertically();
-            }
-
-            if (kingA.File() >= 4)
-            {
-                kingA = kingA.FlippedFile();
-                kingB = kingB.FlippedFile();
-                pawnsA = pawnsA.MirroredHorizontally();
-                pawnsB = pawnsB.MirroredHorizontally();
-            }
-
-            constexpr uint32_t maxFeatures = 18; // kings + max pawns
-            uint32_t features[18];
-
-            uint32_t numFeatures = 0;
-            uint32_t inputOffset = 0;
-
-            // white king
-            {
-                const uint32_t whiteKingIndex = 4 * kingA.Rank() + kingA.File();
-                features[numFeatures++] = whiteKingIndex;
-                inputOffset += 32;
-            }
-
-            // black king
-            {
-                features[numFeatures++] = inputOffset + kingB.Index();
-                inputOffset += 64;
-            }
-
-            {
-                for (uint32_t i = 0; i < 48u; ++i)
-                {
-                    const uint32_t squreIndex = i + 8u;
-                    if ((pawnsA >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
-                }
-                inputOffset += 48;
-            }
-
-            {
-                for (uint32_t i = 0; i < 48u; ++i)
-                {
-                    const uint32_t squreIndex = i + 8u;
-                    if ((pawnsB >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
-                }
-                inputOffset += 48;
-            }
-
-            ASSERT(numFeatures >= 4);
-            ASSERT(numFeatures <= maxFeatures);
-
-            const int32_t rawNetworkOutput = g_pawnsEndgameNeuralNetwork.Run(numFeatures, features);
-            const float winProbability = (float)rawNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
-            const float pawnsValue = WinProbabilityToPawns(winProbability);
-
-            outScore = (int32_t)(0.5f + 100.0f * std::clamp(pawnsValue, -64.0f, 64.0f));
-
-            if (pos.GetSideToMove() == Color::Black) outScore = -outScore;
-
-            //return true;
-        }
-        break;
-    }
-    */
-
+        const EndgameEvaluationFunc& func = s_endgameEvaluationFunctions[evaluationFuncIndex];
+        int32_t score = InvalidValue;
+        const bool result = func(pos.SwappedColors(), score);
+        if (result) { ASSERT(score != InvalidValue); }
+        outScore = -score;
+        return result;
     }
 
     return false;
 }
+
+/*
+    // Pawns vs Pawns
+    if (g_pawnsEndgameNeuralNetwork.IsValid())
+    {
+        Square kingA = whiteKing;
+        Square kingB = blackKing;
+        Bitboard pawnsA = pos.Whites().pawns;
+        Bitboard pawnsB = pos.Blacks().pawns;
+
+        if (pos.GetSideToMove() == Color::Black)
+        {
+            kingA = blackKing.FlippedRank();
+            kingB = whiteKing.FlippedRank();
+            pawnsA = pos.Blacks().pawns.FlippedVertically();
+            pawnsB = pos.Whites().pawns.FlippedVertically();
+        }
+
+        if (kingA.File() >= 4)
+        {
+            kingA = kingA.FlippedFile();
+            kingB = kingB.FlippedFile();
+            pawnsA = pawnsA.MirroredHorizontally();
+            pawnsB = pawnsB.MirroredHorizontally();
+        }
+
+        constexpr uint32_t maxFeatures = 18; // kings + max pawns
+        uint32_t features[18];
+
+        uint32_t numFeatures = 0;
+        uint32_t inputOffset = 0;
+
+        // white king
+        {
+            const uint32_t whiteKingIndex = 4 * kingA.Rank() + kingA.File();
+            features[numFeatures++] = whiteKingIndex;
+            inputOffset += 32;
+        }
+
+        // black king
+        {
+            features[numFeatures++] = inputOffset + kingB.Index();
+            inputOffset += 64;
+        }
+
+        {
+            for (uint32_t i = 0; i < 48u; ++i)
+            {
+                const uint32_t squreIndex = i + 8u;
+                if ((pawnsA >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
+            }
+            inputOffset += 48;
+        }
+
+        {
+            for (uint32_t i = 0; i < 48u; ++i)
+            {
+                const uint32_t squreIndex = i + 8u;
+                if ((pawnsB >> squreIndex) & 1) features[numFeatures++] = inputOffset + i;
+            }
+            inputOffset += 48;
+        }
+
+        ASSERT(numFeatures >= 4);
+        ASSERT(numFeatures <= maxFeatures);
+
+        const int32_t rawNetworkOutput = g_pawnsEndgameNeuralNetwork.Run(numFeatures, features);
+        const float winProbability = (float)rawNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
+        const float pawnsValue = WinProbabilityToPawns(winProbability);
+
+        outScore = (int32_t)(0.5f + 100.0f * std::clamp(pawnsValue, -64.0f, 64.0f));
+
+        if (pos.GetSideToMove() == Color::Black) outScore = -outScore;
+
+        //return true;
+    }
+*/

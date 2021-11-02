@@ -25,7 +25,7 @@ union TTEntry
         ScoreType score;
         ScoreType staticEval;
         PackedMove move;
-        uint8_t depth;
+        int8_t depth;
         Bounds bounds : 2;
         uint8_t generation : GenerationBits;
     };
@@ -76,7 +76,7 @@ public:
     void NextGeneration();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint8_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove());
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove());
     void Write(const Position& position, TTEntry entry);
     void Prefetch(const Position& position) const;
 

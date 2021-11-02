@@ -679,8 +679,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.GetPiece() == Piece::King);
             TEST_EXPECT(move.IsCapture() == false);
             TEST_EXPECT(move.IsCastling() == false);
-            TEST_EXPECT(pos.IsMoveValid(move));
-            TEST_EXPECT(!pos.IsMoveLegal(move));
+            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // pin
@@ -1059,6 +1058,18 @@ static void RunEvalTests()
         TEST_EXPECT(0 == Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 w - - 0 1")));
         TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 w - - 0 1")));
         TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 b - - 0 1")));
+
+        // KBPvK (drawn)
+        TEST_EXPECT(0 == Evaluate(Position("k7/P7/8/K7/3B4/8/P7/B7 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("7k/7P/8/8/2B5/3B4/7P/6K1 w - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("b7/p7/8/3b4/k7/8/p7/K7 b - - 0 1")));
+        TEST_EXPECT(0 == Evaluate(Position("6k1/7p/3b4/2b5/8/8/7p/7K b - - 0 1")));
+
+        // KBPvK (winning)
+        TEST_EXPECT(0 < Evaluate(Position("7k/7P/8/8/2B5/3B4/6P1/6K1 w - - 0 1")));
+        TEST_EXPECT(0 < Evaluate(Position("7k/7P/8/8/2B5/8/3B3P/6K1 w - - 0 1")));
+        TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/4B3/1P6/1K6 w - - 0 1")));
+        TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/8/P3B3/1K6 w - - 0 1")));
     }
 }
 

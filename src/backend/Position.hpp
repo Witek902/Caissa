@@ -91,12 +91,12 @@ struct SidePosition
 
     INLINE Bitboard Occupied() const
     {
-        return occupied;
+        return pawns | knights | bishops | rooks | queens | king;
     }
 
     INLINE Bitboard OccupiedExcludingKing() const
     {
-        return occupied & ~king;
+        return pawns | knights | bishops | rooks | queens;
     }
 
     INLINE Square GetKingSquare() const
@@ -122,7 +122,6 @@ struct SidePosition
     Bitboard rooks = 0;
     Bitboard queens = 0;
     Bitboard king = 0;
-    Bitboard occupied = 0;
 };
 
 INLINE Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -250,6 +249,9 @@ public:
     // get bitboard of attacked squares
     Bitboard GetAttackedSquares(Color side) const;
 
+    // return position where colors are swapped (but the board is not flipped)
+    Position SwappedColors() const;
+
     void MirrorVertically();
     void MirrorHorizontally();
 
@@ -289,6 +291,13 @@ public:
     // returns number of active features
     uint32_t ToFeaturesVector(uint32_t* outFeatures) const;
 
+    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateRookMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+
 private:
 
     friend class Search;
@@ -298,13 +307,6 @@ private:
 
     INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
     INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
-
-    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateRookMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
@@ -330,7 +332,7 @@ private:
     uint64_t mHash; // whole position hash
 };
 
-static_assert(sizeof(Position) == 128, "Invalid position size");
+static_assert(sizeof(Position) == 112, "Invalid position size");
 
 void InitZobristHash();
 
