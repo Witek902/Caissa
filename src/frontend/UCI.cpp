@@ -400,6 +400,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     uint32_t mateSearchDepth = 0;
 
     std::vector<Move> rootMoves;
+    std::vector<Move> excludedMoves;
 
     for (size_t i = 1; i < args.size(); ++i)
     {
@@ -472,6 +473,23 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
                 }
             }
         }
+        else if (args[i] == "excludemoves" && i + 1 < args.size())
+        {
+            // exclude moves from search
+            for (size_t j = i + 1; j < args.size(); ++j)
+            {
+                const Move move = mGame.GetPosition().MoveFromString(args[j]);
+                if (move.IsValid())
+                {
+                    excludedMoves.push_back(move);
+                }
+                else
+                {
+                    std::cout << "Invalid move: " << args[j] << std::endl;
+                    return false;
+                }
+            }
+        }
         else if (args[i] == "movestogo" && i + 1 < args.size())
         {
             movesToGo = atoi(args[i + 1].c_str());
@@ -527,6 +545,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
+    mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.printMoves = printMoves;
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
