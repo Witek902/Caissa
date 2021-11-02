@@ -55,6 +55,9 @@ struct SearchParam
     // if not empty, only consider this moves
     std::vector<Move> rootMoves;
 
+    // exclude this root moves from the search
+    std::vector<Move> excludedMoves;
+
     // in pondering we don't care about limits
     bool isPonder = false;
 
@@ -85,17 +88,12 @@ struct NodeInfo
 {
     const Position* position = nullptr;
     NodeInfo* parentNode = nullptr;
-    ScoreType alpha;
-    ScoreType beta;
-    Move previousMove = Move::Invalid();
 
     // ignore given moves in search, used for multi-PV search
     const Move* moveFilter = nullptr;
-    uint32_t moveFilterCount = 0;
 
     // consider only this moves at root node, used for "searchmoves" UCI command
     const Move* rootMoves = nullptr;
-    uint32_t rootMovesCount = 0;
 
     // remaining depth
     int32_t depth;
@@ -103,12 +101,18 @@ struct NodeInfo
     // depth in ply (depth counting from root)
     uint32_t height;
 
+    uint8_t moveFilterCount = 0;
+    uint8_t rootMovesCount = 0;
+
+    ScoreType alpha;
+    ScoreType beta;
+
+    Move previousMove = Move::Invalid();
+
     uint8_t pvIndex;
 
     bool isPvNode = false;
     bool isNullMove = false;
-
-    NNUEdata nnueData;
 };
 
 class Search
@@ -164,7 +168,7 @@ private:
         uint32_t pvIndex;
         SearchContext& searchContext;
         const Move* moveFilter = nullptr;
-        uint32_t moveFilterCount = 0;
+        uint8_t moveFilterCount = 0;
         ScoreType previousScore;                  // score in previous ID iteration
         uint32_t threadID = 0;
     };

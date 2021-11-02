@@ -15,6 +15,8 @@
 #include <thread>
 #include <math.h>
 
+static_assert(sizeof(NodeInfo) <= 64, "Invalid NodeInfo size");
+
 static const bool UsePVS = true;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
@@ -321,6 +323,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     ThreadData& thread = mThreadData[threadID];
 
     std::vector<Move> pvMovesSoFar;
+    pvMovesSoFar.reserve(param.excludedMoves.size() + numPvLines);
 
     outResult.resize(numPvLines);
 
@@ -334,6 +337,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
     {
         pvMovesSoFar.clear();
+        pvMovesSoFar = param.excludedMoves;
 
         bool finishSearchAtDepth = false;
 
@@ -350,8 +354,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 depth,
                 pvIndex,
                 searchContext,
-                pvIndex > 0u ? pvMovesSoFar.data() : nullptr,
-                pvIndex > 0u ? (uint32_t)pvMovesSoFar.size() : 0u,
+                !pvMovesSoFar.empty() ? pvMovesSoFar.data() : nullptr,
+                !pvMovesSoFar.empty() ? (uint8_t)pvMovesSoFar.size() : 0u,
                 prevPvLine.score,
                 threadID,
             };
@@ -454,7 +458,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.rootMoves = param.searchParam.rootMoves.data();
-        rootNode.rootMovesCount = (uint32_t)param.searchParam.rootMoves.size();
+        rootNode.rootMovesCount = (uint8_t)std::min<size_t>(UINT8_MAX, param.searchParam.rootMoves.size());
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
 
@@ -1150,31 +1154,34 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     MoveList moves;
     position.GenerateMoveList(moves);
 
-    if (isRootNode)
+    // apply node filter (also used for multi-PV search for 2nd, 3rd, etc. moves)
+    if (hasMoveFilter)
     {
-        // apply node filter (used for multi-PV search for 2nd, 3rd, etc. moves)
-        if (hasMoveFilter)
+        for (uint32_t i = 0; i < node.moveFilterCount; ++i)
         {
-            for (uint32_t i = 0; i < node.moveFilterCount; ++i)
+            const Move& move = node.moveFilter[i];
+            moves.RemoveMove(move);
+
+            // clear out TT move
+            if (move == ttMove)
             {
-                const Move& move = node.moveFilter[i];
-                moves.RemoveMove(move);
+                ttMove = Move::Invalid();
             }
         }
-
-        // TODO
-        // apply node filter (used for "searchmoves" UCI command)
-        //if (!node.rootMoves.empty())
-        //{
-            //for (const Move& move : node.rootMoves)
-            //{
-            //    if (!moves.HasMove(move))
-            //    {
-            //        moves.RemoveMove(move);
-            //    }
-            //}
-        //}
     }
+
+    // TODO
+    // apply node filter (used for "searchmoves" UCI command)
+    //if (!node.rootMoves.empty())
+    //{
+        //for (const Move& move : node.rootMoves)
+        //{
+        //    if (!moves.HasMove(move))
+        //    {
+        //        moves.RemoveMove(move);
+        //    }
+        //}
+    //}
 
     // resolve move scoring
     // the idea here is to defer scoring if we have a TT/PV move
@@ -1414,7 +1421,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         thread.moveOrderer.OnBetaCutoff(node, bestMove);
     }
 
-    const bool canWriteTT = !(isRootNode && node.pvIndex > 0) && !CheckStopCondition(ctx);
+    const bool canWriteTT = !(isRootNode && !hasMoveFilter) && !CheckStopCondition(ctx);
 
     // no legal moves
     if (!searchAborted && moveIndex == 0u)
