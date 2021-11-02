@@ -17,6 +17,9 @@
 
 static const bool UsePVS = true;
 
+static const uint32_t DefaultMaxPvLineLength = 20;
+static const uint32_t MateCountStopCondition = 5;
+
 static const int32_t TablebaseProbeDepth = 0;
 
 static const int32_t NullMovePrunningStartDepth = 3;
@@ -307,6 +310,11 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #endif // COLLECT_SEARCH_STATS
 }
 
+static bool IsMate(const ScoreType score)
+{
+    return score > CheckmateValue - MaxSearchDepth || score < -CheckmateValue + MaxSearchDepth;
+}
+
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
 {
     const bool isMainThread = threadID == 0;
@@ -319,6 +327,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.moveOrderer.Clear();
     thread.prevPvLines.clear();
     thread.prevPvLines.resize(numPvLines);
+
+    uint32_t mateCounter = 0;
 
     // main iterative deepening loop
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
@@ -350,6 +360,15 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
+            if (IsMate(pvLine.score))
+            {
+                mateCounter++;
+            }
+            else
+            {
+                mateCounter = 0;
+            }
+
             // store for multi-PV filtering in next iteration
             for (const Move prevMove : pvMovesSoFar)
             {
@@ -380,7 +399,17 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         }
 
         // check soft time limit every depth iteration
-        if (!param.isPonder && param.limits.maxTimeSoft < UINT32_MAX && param.GetElapsedTime() >= param.limits.maxTimeSoft)
+        if (!param.isPonder &&
+            param.limits.maxTimeSoft < UINT32_MAX &&
+            param.GetElapsedTime() >= param.limits.maxTimeSoft)
+        {
+            break;
+        }
+
+        // stop the search if found mate in multiple depths in a row
+        if (!param.isPonder && !param.limits.analysisMode &&
+            mateCounter >= MateCountStopCondition &&
+            param.limits.maxDepth == UINT8_MAX)
         {
             break;
         }
@@ -432,7 +461,12 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
 
-        pvLine.moves = GetPvLine(thread, param.position, param.searchParam.transpositionTable, param.depth);
+        // limit PV line length so the output is not flooded
+        {
+            uint32_t maxPvLength = param.depth;
+            if (!param.searchParam.limits.analysisMode) maxPvLength = std::min(maxPvLength, DefaultMaxPvLineLength);
+            pvLine.moves = GetPvLine(thread, param.position, param.searchParam.transpositionTable, maxPvLength);
+        }
 
         const auto endTime = std::chrono::high_resolution_clock::now();
         const std::chrono::high_resolution_clock::duration searchTime = endTime - startTime;
@@ -1157,6 +1191,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (fullTTMove.IsValid()) numScoredMoves++;
     }
 
+#ifndef CONFIGURATION_FINAL
     if (isRootNode)
     {
         if (ctx.searchParam.printMoves)
@@ -1164,6 +1199,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             moves.Print();
         }
     }
+#endif // CONFIGURATION_FINAL
 
     /*
     if (ctx.searchParam.verboseStats)
@@ -1216,19 +1252,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             moveExtension++;
         }
-
-
-        /*
-        // passed pawn extension
-        if (move.GetPiece() == Piece::Pawn)
-        {
-            const uint8_t seventhRank = position.GetSideToMove() == Color::White ? 6 : 1;
-            if (move.ToSquare().Rank() == seventhRank)
-            {
-                moveExtension++;
-            }
-        }
-        */
 
         childNodeParam.position = &childPosition;
         childNodeParam.depth = node.depth + moveExtension - 1;

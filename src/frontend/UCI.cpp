@@ -389,7 +389,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     bool printMoves = false;
     bool verboseStats = false;
     bool waitForSearch = false;
-    uint32_t maxDepth = UINT8_MAX;
+    uint32_t maxDepth = UINT32_MAX;
     uint64_t maxNodes = UINT64_MAX;
     int32_t moveTime = INT32_MAX;
     int32_t whiteRemainingTime = INT32_MAX;

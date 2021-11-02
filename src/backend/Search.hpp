@@ -17,9 +17,6 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct SearchLimits
 {
-    // maximum allowed base search depth (excluding quisence, extensions, etc.)
-    uint32_t maxDepth = 8;
-
     // suggested search time in milliseconds, it's checked every iteration so can be exceeded
     uint32_t maxTimeSoft = UINT32_MAX;
 
@@ -28,6 +25,9 @@ struct SearchLimits
 
     // maximum allowed searched nodes
     uint64_t maxNodes = UINT64_MAX;
+
+    // maximum allowed base search depth (excluding quisence, extensions, etc.)
+    uint8_t maxDepth = UINT8_MAX;
 
     // enable mate search, disables all prunning
     bool mateSearch = false;
