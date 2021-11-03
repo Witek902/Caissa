@@ -96,7 +96,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
         return;
     }
 
-    const uint32_t color = (uint32_t)node.position->GetSideToMove();
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     // update history heuristics
     if (node.depth > 0)
@@ -129,9 +129,9 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
 
 void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 {
-    const Position& pos = *node.position;
+    const Position& pos = node.position;
 
-    const uint32_t color = (uint32_t)node.position->GetSideToMove();
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     const Move previousMove = node.previousMove;
 

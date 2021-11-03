@@ -15,8 +15,6 @@
 #include <thread>
 #include <math.h>
 
-static_assert(sizeof(NodeInfo) <= 64, "Invalid NodeInfo size");
-
 static const bool UsePVS = true;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
@@ -464,7 +462,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
 
         NodeInfo rootNode;
-        rootNode.position = &param.position;
+        rootNode.position = param.position;
         rootNode.isPvNode = true;
         rootNode.depth = param.depth;
         rootNode.height = 0;
@@ -637,12 +635,11 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
         // only check every second previous node, because side to move must be the same
         if (ply % 2 == 0)
         {
-            ASSERT(prevNode->position);
-            ASSERT(prevNode->position->GetSideToMove() == node.position->GetSideToMove());
+            ASSERT(prevNode->position.GetSideToMove() == node.position.GetSideToMove());
 
-            if (prevNode->position->GetHash() == node.position->GetHash())
+            if (prevNode->position.GetHash() == node.position.GetHash())
             {
-                if (*prevNode->position == *node.position)
+                if (prevNode->position == node.position)
                 {
                     return true;
                 }
@@ -650,17 +647,17 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
         }
     }
 
-    return game.GetRepetitionCount(*node.position) >= 2;
+    return game.GetRepetitionCount(node.position) >= 2;
 }
 
 bool Search::IsDraw(const NodeInfo& node, const Game& game) const
 {
-    if (node.position->GetHalfMoveCount() >= 100)
+    if (node.position.GetHalfMoveCount() >= 100)
     {
         return true;
     }
 
-    if (CheckInsufficientMaterial(*node.position))
+    if (CheckInsufficientMaterial(node.position))
     {
         return true;
     }
@@ -694,7 +691,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         return 0;
     }
 
-    const Position& position = *node.position;
+    const Position& position = node.position;
 
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.isPvNode;
@@ -815,17 +812,16 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         //    }
         //}
 
-        Position childPosition = position;
-        if (!childPosition.DoMove(move))
+        childNodeParam.position = position;
+        if (!childNodeParam.position.DoMove(move))
         {
             continue;
         }
 
-        ctx.searchParam.transpositionTable.Prefetch(childPosition);
+        ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
 
         moveIndex++;
 
-        childNodeParam.position = &childPosition;
         childNodeParam.alpha = -beta;
         childNodeParam.beta = -alpha;
         ScoreType score = -QuiescenceNegaMax(thread, childNodeParam, ctx);
@@ -927,7 +923,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         return 0;
     }
 
-    const Position& position = *node.position;
+    const Position& position = node.position;
 
     // maximum search depth reached, enter quisence search to find final evaluation
     if (node.depth <= 0)
@@ -1090,18 +1086,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         if (doNullMove)
         {
-            Position childPosition = position;
-            childPosition.DoNullMove();
-
             NodeInfo childNodeParam;
             childNodeParam.parentNode = &node;
             childNodeParam.pvIndex = node.pvIndex;
-            childNodeParam.position = &childPosition;
+            childNodeParam.position = position;
             childNodeParam.alpha = -beta;
             childNodeParam.beta = -beta + 1;
             childNodeParam.isNullMove = true;
             childNodeParam.height = node.height + 1;
             childNodeParam.depth = node.depth - NullMovePrunningDepthReduction;
+
+            childNodeParam.position.DoNullMove();
 
             const int32_t nullMoveScore = -NegaMax(thread, childNodeParam, ctx);
 
@@ -1249,13 +1244,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
 
-        Position childPosition = position;
-        if (!childPosition.DoMove(move))
+        childNodeParam.position = position;
+        if (!childNodeParam.position.DoMove(move))
         {
             continue;
         }
 
-        ctx.searchParam.transpositionTable.Prefetch(childPosition);
+        ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
 
         moveIndex++;
 
@@ -1273,7 +1268,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             moveExtension++;
         }
 
-        childNodeParam.position = &childPosition;
         childNodeParam.depth = node.depth + moveExtension - 1;
         childNodeParam.previousMove = move;
 
