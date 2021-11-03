@@ -195,6 +195,11 @@ private:
     
     std::vector<ThreadData> mThreadData;
 
+    static constexpr uint32_t MaxReducedMoves = 64;
+    uint8_t mMoveReductionTable[MaxSearchDepth][MaxReducedMoves];
+
+    void BuildMoveReductionTable();
+
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const std::chrono::high_resolution_clock::duration searchTime) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);

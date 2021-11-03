@@ -56,11 +56,25 @@ int64_t SearchParam::GetElapsedTime() const
 
 Search::Search()
 {
+    BuildMoveReductionTable();
     mThreadData.resize(1);
 }
 
 Search::~Search()
 {
+}
+
+void Search::BuildMoveReductionTable()
+{
+    for (uint32_t depth = 0; depth < MaxSearchDepth; ++depth)
+    {
+        for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
+        {
+            const int32_t reduction = (depth - LateMoveReductionStartDepth - 1 >= 0) ?
+                int32_t(0.5f + 0.25f * sqrtf(float(depth - LateMoveReductionStartDepth - 1)) + 0.25f * sqrtf(float(moveIndex))) : 0;
+            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
+        }
+    }
 }
 
 const MoveOrderer& Search::GetMoveOrderer() const
@@ -1099,8 +1113,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     // Futility Pruning
-    if (!isRootNode && 
-        !isPvNode &&
+    if (!isPvNode &&
         !isInCheck &&
         !ctx.searchParam.limits.mateSearch &&
         alpha < 1000)
@@ -1277,8 +1290,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             move.IsQuiet())
         {
             // reduce depth gradually
-            // TODO cache this
-            depthReduction = int32_t(0.5f + 0.25f * sqrtf(float(node.depth - LateMoveReductionStartDepth + 1)) + 0.25f * sqrtf(float(numReducedMoves)));
+            depthReduction = mMoveReductionTable[node.depth][std::min(numReducedMoves, MaxReducedMoves - 1)];
 
             depthReduction += node.isPvNode ? 0 : 1;
 
