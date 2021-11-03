@@ -86,7 +86,8 @@ using SearchResult = std::vector<PvLine>;
 
 struct NodeInfo
 {
-    const Position* position = nullptr;
+    Position position;
+
     NodeInfo* parentNode = nullptr;
 
     // ignore given moves in search, used for multi-PV search
