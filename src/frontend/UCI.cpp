@@ -11,7 +11,7 @@
 #define NOMINMAX
 #include <Windows.h>
 
-static const char* c_EngineName = "Caissa 0.2";
+static const char* c_EngineName = "Caissa 0.3";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
