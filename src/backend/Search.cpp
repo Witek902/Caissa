@@ -22,12 +22,10 @@ static const uint32_t MateCountStopCondition = 5;
 
 static const int32_t TablebaseProbeDepth = 0;
 
-static const int32_t NullMovePrunningStartDepth = 3;
-static const int32_t NullMovePrunningDepthReduction = 3;
+static const int32_t NullMovePrunningStartDepth = 2;
+static const int32_t NullMovePrunningDepthReduction = 4;
 
-static const bool UseLateMoveReduction = true;
 static const int32_t LateMoveReductionStartDepth = 2;
-static const int32_t LateMoveReductionRate = 8;
 
 static const int32_t LateMovePrunningStartDepth = 3;
 
@@ -36,12 +34,12 @@ static const int32_t AspirationWindowMax = 60;
 static const int32_t AspirationWindowMin = 10;
 static const int32_t AspirationWindowStep = 5;
 
-static const int32_t BetaPruningDepth = 6;
-static const int32_t BetaMarginMultiplier = 80;
+static const int32_t BetaPruningDepth = 7;
+static const int32_t BetaMarginMultiplier = 150;
 static const int32_t BetaMarginBias = 10;
 
 static const int32_t AlphaPruningDepth = 4;
-static const int32_t AlphaMarginMultiplier = 600;
+static const int32_t AlphaMarginMultiplier = 400;
 static const int32_t AlphaMarginBias = 150;
 
 static const int32_t QSearchSeeMargin = 120;
@@ -328,6 +326,8 @@ static bool IsMate(const ScoreType score)
 {
     return score > CheckmateValue - MaxSearchDepth || score < -CheckmateValue + MaxSearchDepth;
 }
+
+
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
 {
@@ -1067,14 +1067,55 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 #endif // USE_TABLE_BASES
 
+    // Futility Pruning
+    if (!isPvNode &&
+        !isInCheck &&
+        !ctx.searchParam.limits.mateSearch &&
+        alpha < 1000)
+    {
+        bool wasEvaluated = true;
+        if (staticEval == InvalidValue)
+        {
+            const ScoreType evalScore = Evaluate(position);
+            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+            wasEvaluated = false;
+        }
+
+        const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
+        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * node.depth;
+
+        // Alpha Pruning
+        if (node.depth <= AlphaPruningDepth &&
+            (staticEval + alphaMargin <= alpha))
+        {
+            if (!wasEvaluated)
+            {
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
+            }
+            return (ScoreType)std::min<int32_t>(TablebaseWinValue, staticEval);
+        }
+
+        // Beta Pruning
+        if (node.depth <= BetaPruningDepth &&
+            (staticEval - betaMargin >= beta) &&
+            staticEval <= KnownWinValue)
+        {
+            if (!wasEvaluated)
+            {
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
+            }
+            return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
+        }
+    }
+
     // Null Move Prunning
     if (!isRootNode &&
         !isPvNode &&
         !isInCheck &&
-        !ctx.searchParam.limits.mateSearch &&
         node.depth >= NullMovePrunningStartDepth &&
-        ttScore >= beta &&
-        !ttMove.IsValid() &&
+        !ctx.searchParam.limits.mateSearch &&
+        (!ttMove.IsValid() || (ttEntry.bounds != TTEntry::Bounds::UpperBound) || (ttScore >= beta)) &&
         !position.IsPawnsOnly())
     {
         // don't allow null move if parent or grandparent node was null move
@@ -1104,45 +1145,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 return beta;
             }
-        }
-    }
-
-    // Futility Pruning
-    if (!isPvNode &&
-        !isInCheck &&
-        !ctx.searchParam.limits.mateSearch &&
-        alpha < 1000)
-    {
-        bool wasEvaluated = true;
-        if (staticEval == InvalidValue)
-        {
-            const ScoreType evalScore = Evaluate(position);
-            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-            staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
-            wasEvaluated = false;
-        }
-
-        const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
-        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * node.depth;
-
-        // Alpha Pruning
-        if (node.depth <= AlphaPruningDepth && (staticEval + alphaMargin <= alpha))
-        {
-            if (!wasEvaluated)
-            {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
-            }
-            return (ScoreType)std::min<int32_t>(TablebaseWinValue, staticEval);
-        }
-
-        // Beta Pruning
-        if (node.depth <= BetaPruningDepth && (staticEval - betaMargin >= beta))
-        {
-            if (!wasEvaluated)
-            {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::UpperBound);
-            }
-            return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
         }
     }
 
