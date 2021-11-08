@@ -73,9 +73,16 @@ void SelfPlay()
                     break;
                 }
 
+                // sort moves by score
+                std::sort(searchResult.begin(), searchResult.end(), [](const PvLine& a, const PvLine& b)
+                {
+                    return a.score > b.score;
+                });
+
                 // if one of the move is much worse than the best candidate, ignore it and the rest
                 for (size_t i = 1; i < searchResult.size(); ++i)
                 {
+                    ASSERT(searchResult[i].score <= searchResult[0].score);
                     int32_t diff = searchResult[i].score - searchResult[0].score;
                     if (diff > scoreDiffTreshold || diff < -scoreDiffTreshold)
                     {
