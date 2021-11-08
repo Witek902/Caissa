@@ -231,6 +231,11 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         std::cout << Evaluate(mGame.GetPosition(), nullptr) << std::endl;
     }
+    else if (command == "scoremoves")
+    {
+        UniqueLock lock(mMutex);
+        Command_ScoreMoves();
+    }
     else if (command == "ttinfo")
     {
         UniqueLock lock(mMutex);
@@ -781,6 +786,21 @@ bool UniversalChessInterface::Command_TTProbe()
     {
         std::cout << "(no entry found)" << std::endl;
     }
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_ScoreMoves()
+{
+    MoveList moves;
+    mGame.GetPosition().GenerateMoveList(moves);
+
+    NodeInfo nodeInfo;
+    nodeInfo.position = mGame.GetPosition();
+
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves);
+
+    moves.Print();
 
     return true;
 }
