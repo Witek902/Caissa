@@ -15,6 +15,10 @@
 #include <thread>
 #include <math.h>
 
+static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
+static const uint32_t SingularitySearchMinDepth = 7;
+static const int32_t SingularitySearchScoreTreshold = 400;
+
 static const bool UsePVS = true;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
@@ -327,8 +331,6 @@ static bool IsMate(const ScoreType score)
     return score > CheckmateValue - MaxSearchDepth || score < -CheckmateValue + MaxSearchDepth;
 }
 
-
-
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
 {
     const bool isMainThread = threadID == 0;
@@ -348,6 +350,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     // main iterative deepening loop
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
     {
+        SearchResult tempResult;
+        tempResult.resize(numPvLines);
+
         pvMovesSoFar.clear();
         pvMovesSoFar = param.excludedMoves;
 
@@ -364,7 +369,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 game.GetPosition(),
                 param,
                 depth,
-                pvIndex,
+                (uint8_t)pvIndex,
                 searchContext,
                 !pvMovesSoFar.empty() ? pvMovesSoFar.data() : nullptr,
                 !pvMovesSoFar.empty() ? (uint8_t)pvMovesSoFar.size() : 0u,
@@ -372,7 +377,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 threadID,
             };
 
-            const PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam, outResult);
+            PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam);
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
@@ -397,6 +402,16 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             {
                 finishSearchAtDepth = true;
             }
+            else
+            {
+                if (isMainThread)
+                {
+                    ASSERT(!pvLine.moves.empty());
+                    outResult[pvIndex] = pvLine;
+                }
+            }
+
+            tempResult[pvIndex] = std::move(pvLine);
         }
 
         if (finishSearchAtDepth)
@@ -408,11 +423,41 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
-        if (isMainThread)
+        // check for singular root move
+        if (numPvLines == 1 &&
+            depth >= SingularitySearchMinDepth &&
+            std::abs(tempResult[0].score) < KnownWinValue &&
+            param.limits.rootSingularityTime < UINT32_MAX &&
+            param.GetElapsedTime() >= param.limits.rootSingularityTime)
         {
-            // rememeber PV lines so they can be used in next iteration
-            thread.prevPvLines = outResult;
+            SearchContext searchContext{ game, param, SearchStats{} };
+
+            const uint32_t singularDepth = depth / 2;
+            const ScoreType singularBeta = tempResult[0].score - SingularitySearchScoreTreshold;
+
+            NodeInfo rootNode;
+            rootNode.position = game.GetPosition();
+            rootNode.isPvNode = false;
+            rootNode.depth = singularDepth;
+            rootNode.height = 0;
+            rootNode.pvIndex = SingularitySearchPvIndex;
+            rootNode.alpha = singularBeta - 1;
+            rootNode.beta = singularBeta;
+            rootNode.moveFilter = &tempResult[0].moves[0];
+            rootNode.moveFilterCount = 1;
+
+            ScoreType score = NegaMax(thread, rootNode, searchContext);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+            if (score < singularBeta)
+            {
+                //std::cout << "info string singular move found - second best move score is " << score << std::endl;
+                break;
+            }
         }
+
+        // rememeber PV lines so they can be used in next iteration
+        thread.prevPvLines = std::move(tempResult);
 
         // check soft time limit every depth iteration
         if (!param.isPonder &&
@@ -432,7 +477,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     }
 }
 
-PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const
+PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
 {
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
@@ -466,7 +511,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.isPvNode = true;
         rootNode.depth = param.depth;
         rootNode.height = 0;
-        rootNode.pvIndex = (uint8_t)param.pvIndex;
+        rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.rootMoves = param.searchParam.rootMoves.data();
@@ -515,11 +560,9 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         const bool isMainThread = param.threadID == 0;
 
         // don't report line if search was aborted, because the result comes from incomplete search
-        if (isMainThread && !stopSearch)
+        if (isMainThread && !stopSearch && param.pvIndex != SingularitySearchPvIndex)
         {
             ASSERT(!pvLine.moves.empty());
-
-            outResult[param.pvIndex] = pvLine;
 
             if (param.searchParam.debugLog)
             {
@@ -544,7 +587,7 @@ static INLINE ScoreType ColorMultiplier(Color color)
 
 const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves) const
 {
-    if (!node.isPvNode || prevPvLines.empty())
+    if (!node.isPvNode || prevPvLines.empty() || node.pvIndex == SingularitySearchPvIndex)
     {
         return Move::Invalid();
     }
