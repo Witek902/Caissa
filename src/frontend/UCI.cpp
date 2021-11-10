@@ -520,6 +520,9 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
             // TODO some better heuristics:
             // for example, estimate time spent in each iteration based on previous searches
             mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
+
+            // activate root singularity search after 1/8th of estimated time passed
+            mSearchCtx->searchParam.limits.rootSingularityTime = timeEstimatedMs / 8;
         }
 
         // hard limit

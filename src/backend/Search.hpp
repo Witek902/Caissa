@@ -17,6 +17,9 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 struct SearchLimits
 {
+    // minimum time after which root singularity search kicks in
+    uint32_t rootSingularityTime = UINT32_MAX;
+
     // suggested search time in milliseconds, it's checked every iteration so can be exceeded
     uint32_t maxTimeSoft = UINT32_MAX;
 
@@ -166,7 +169,7 @@ private:
         const Position& position;
         const SearchParam& searchParam;
         uint32_t depth;
-        uint32_t pvIndex;
+        uint8_t pvIndex;
         SearchContext& searchContext;
         const Move* moveFilter = nullptr;
         uint8_t moveFilterCount = 0;
@@ -207,7 +210,9 @@ private:
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
-    PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param, SearchResult& outResult) const;
+    bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
+
+    PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
 
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
