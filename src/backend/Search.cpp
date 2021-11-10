@@ -773,7 +773,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     MoveList moves;
     position.GenerateMoveList(moves, moveGenFlags);
 
-    const int32_t sseTreshold = std::max(0, alpha - staticEval) - QSearchSeeMargin;
+    //const int32_t sseTreshold = std::max(0, alpha - staticEval) - QSearchSeeMargin;
 
     // resolve move scoring
     // the idea here is to defer scoring if we have a TT/PV move

@@ -71,6 +71,7 @@ void Waitable::OnFinished()
 {
     const bool oldState = mFinished.exchange(true);
     assert(!oldState);
+    (void)oldState;
 
     std::unique_lock<std::mutex> lock(mMutex);
     mConditionVariable.notify_all();
@@ -204,6 +205,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
             {
                 const Task::State oldState = task->mState.exchange(Task::State::Executing);
                 assert(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
+                (void)oldState;
             }
 
             // execute
@@ -213,6 +215,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
             {
                 const Task::State oldState = task->mState.exchange(Task::State::Finished);
                 assert(Task::State::Executing == oldState); // Task is expected to be in 'Executing' state
+                (void)oldState;
             }
         }
         else
@@ -221,6 +224,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
 
             const Task::State oldState = task->mState.exchange(Task::State::Finished);
             assert(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
+            (void)oldState;
         }
 
         FinishTask(context.taskId);
@@ -284,6 +288,7 @@ void ThreadPool::EnqueueTaskInternal_NoLock(TaskID taskID)
     const Task::State oldState = task.mState.exchange(Task::State::Queued);
     assert(Task::State::Created == oldState); // Task is expected to be in 'Created' state
     assert((Task::Flag_IsDispatched | Task::Flag_DependencyFullfilled) == task.mDependencyState);
+    (void)oldState;
 
     // push to queue
     {
@@ -301,6 +306,7 @@ void ThreadPool::FreeTask_NoLock(TaskID taskID)
 
     const Task::State oldState = task.mState.exchange(Task::State::Invalid);
     assert(Task::State::Finished == oldState); // Task is expected to be in 'Finished' state
+    (void)oldState;
 
     task.mNextFree = mFirstFreeTask;
     mFirstFreeTask = taskID;
@@ -317,6 +323,7 @@ TaskID ThreadPool::AllocateTask_NoLock()
 
     const Task::State oldState = task.mState.exchange(Task::State::Queued);
     assert(Task::State::Invalid == oldState); // Task is expected to be in 'Invalid' state
+    (void)oldState;
 
     TaskID newNextFree = task.mNextFree;
     TaskID taskID = mFirstFreeTask;

@@ -62,7 +62,7 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
         if (size >= minLargePageSize)
         {
             const size_t roundedSize = ((size + minLargePageSize - 1) / minLargePageSize) * minLargePageSize;
-            //ptr = ::VirtualAlloc(NULL, roundedSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+            ptr = ::VirtualAlloc(NULL, roundedSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
         }
 
         // fallback to regular pages

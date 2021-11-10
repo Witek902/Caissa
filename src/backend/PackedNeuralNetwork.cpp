@@ -218,7 +218,6 @@ static void LinearLayer(const LayerData12& layer, int32_t* output, const Interme
     constexpr uint32_t registerWidth = 256 / 8;
     ASSERT(layer.numInputs % registerWidth == 0);
     ASSERT(layer.numOutputs % 4u == 0);
-    const uint32_t numInChunks = layer.numInputs / registerWidth;
     const uint32_t numOutChunks = layer.numOutputs / 4u;
 
     for (uint32_t i = 0; i < numOutChunks; ++i)
@@ -319,7 +318,6 @@ static int32_t LinearLayer_SingleOutput(const LayerData12& layer, const Intermed
     constexpr uint32_t registerWidth = 256 / 8;
     ASSERT(layer.numInputs % registerWidth == 0);
     ASSERT(layer.numOutputs % 4u == 0);
-    const uint32_t numInChunks = layer.numInputs / registerWidth;
 
     // Accumulation starts from 0, we add the bias only at the end.
     __m256i sum = _mm256_setzero_si256();
