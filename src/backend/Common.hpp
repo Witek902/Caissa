@@ -48,14 +48,14 @@
     INLINE uint32_t FirstBitSet(const uint64_t x)
     {
         unsigned long index;
-        const auto ret = _BitScanForward64(&index, x);
+        _BitScanForward64(&index, x);
         return (uint32_t)index;
     }
 
     INLINE uint32_t LastBitSet(const uint64_t x)
     {
         unsigned long index;
-        const auto ret = _BitScanReverse64(&index, x);
+        _BitScanReverse64(&index, x);
         return (uint32_t)index;
     }
 

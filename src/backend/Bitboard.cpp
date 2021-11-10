@@ -274,6 +274,7 @@ static void InitRookMagicBitboards()
             gRookAttackTable[squareIndex][tableIndex] = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
         }
 
+#ifndef CONFIGURATION_FINAL
         // validate
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
@@ -283,6 +284,7 @@ static void InitRookMagicBitboards()
             ASSERT(gRookAttackTable[squareIndex][tableIndex] == expected);
             ASSERT(Bitboard::GenerateRookAttacks(square, blockerBitboard) == expected);
         }
+#endif // CONFIGURATION_FINAL
     }
 }
 
@@ -313,6 +315,7 @@ static void InitBishopMagicBitboards()
             gBishopAttackTable[squareIndex][tableIndex] = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
         }
 
+#ifndef CONFIGURATION_FINAL
         // validate
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
@@ -322,6 +325,7 @@ static void InitBishopMagicBitboards()
             ASSERT(gBishopAttackTable[squareIndex][tableIndex] == expected);
             ASSERT(Bitboard::GenerateBishopAttacks(square, blockerBitboard) == expected);
         }
+#endif // CONFIGURATION_FINAL
     }
 }
 

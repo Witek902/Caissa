@@ -53,7 +53,7 @@ public:
             const uint64_t k = key.load();
             const TTEntry d = data.load();
             // Xor trick by Robert Hyatt and Tim Mann
-            outHash = key ^ d.packed;
+            outHash = k ^ d.packed;
             outData = d;
         }
 

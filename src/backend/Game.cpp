@@ -81,6 +81,7 @@ std::string Game::ToPGN() const
 
         const bool moveResult = pos.DoMove(mMoves[i]);
         ASSERT(moveResult);
+        (void)moveResult;
     }
 
     ASSERT(pos == mPosition);

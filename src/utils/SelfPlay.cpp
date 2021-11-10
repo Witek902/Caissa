@@ -142,6 +142,7 @@ void SelfPlay()
 
                 const bool moveSuccess = game.DoMove(move);
                 ASSERT(moveSuccess);
+                (void)moveSuccess;
 
                 // check for draw
                 if (game.IsDrawn() || halfMoveNumber > maxMoves)
