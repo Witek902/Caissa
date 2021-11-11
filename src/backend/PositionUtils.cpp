@@ -813,7 +813,7 @@ bool GenerateRandomPosition(const MaterialKey material, Position& outPosition)
         const uint32_t numLegalSquares = mask.Count();
         const uint32_t maskedSquareIndex = distr(randomGenerator) % numLegalSquares;
 
-        const uint64_t squareMask = _pdep_u64(1ull << maskedSquareIndex, mask);
+        const uint64_t squareMask = ParallelBitsDeposit(1ull << maskedSquareIndex, mask);
         ASSERT(squareMask);
 
         return Square(FirstBitSet(squareMask));

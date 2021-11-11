@@ -266,7 +266,7 @@ static void InitRookMagicBitboards()
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
             // reconstruct (masked) blockers bitboard
-            const Bitboard blockerBitboard = _pdep_u64(blockersIndex + 1u, attackMask);
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             ASSERT(tableIndex < RookAttackTableSize);
@@ -278,7 +278,7 @@ static void InitRookMagicBitboards()
         // validate
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
-            const Bitboard blockerBitboard = _pdep_u64(blockersIndex + 1u, attackMask);
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             const Bitboard expected = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
             ASSERT(gRookAttackTable[squareIndex][tableIndex] == expected);
@@ -307,7 +307,7 @@ static void InitBishopMagicBitboards()
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
             // reconstruct (masked) blockers bitboard
-            const Bitboard blockerBitboard = _pdep_u64(blockersIndex + 1u, attackMask);
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             ASSERT(tableIndex < BishopAttackTableSize);
@@ -319,7 +319,7 @@ static void InitBishopMagicBitboards()
         // validate
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
-            const Bitboard blockerBitboard = _pdep_u64(blockersIndex + 1u, attackMask);
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             const Bitboard expected = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
             ASSERT(gBishopAttackTable[squareIndex][tableIndex] == expected);
@@ -371,7 +371,7 @@ static void InitMagicBitboards()
             for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
             {
                 // reconstruct (masked) blockers bitboard
-                const Bitboard blockerBitboard = _pdep_u64(blockersIndex + 1u, attackMask);
+                const Bitboard blockerBitboard = ParallelBitsDeposit(blockersIndex + 1u, attackMask);
 
                 const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> (64u - attacksTableSizeBits));
 

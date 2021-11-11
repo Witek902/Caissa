@@ -4,21 +4,13 @@
 #include <string.h>
 #include <stdlib.h>
 
-//--------------------
-#ifdef _MSC_VER
-#  define USE_AVX2   1
-#  define USE_SSE41  1
-#  define USE_SSE3   1
-#  define USE_SSE2   1
-#  define USE_SSE    1
-#  define IS_64BIT   1
-#endif
-//-------------------
+#define IS_64BIT   1
+
 
 #if defined(USE_AVX2)
 #include <immintrin.h>
 
-#elif defined(USE_SSE41)
+#elif defined(USE_SSE4)
 #include <smmintrin.h>
 
 #elif defined(USE_SSSE3)
@@ -327,7 +319,7 @@ INLINE int32_t affine_propagate(clipped_t *input, int32_t *biases,
   __m128i sum = _mm_add_epi32(_mm_add_epi32(p0, p1), _mm_add_epi32(p2, p3));
 #endif
   sum = _mm_add_epi32(sum, _mm_shuffle_epi32(sum, 0xb));
-#if defined(USE_SSE41)
+#if defined(USE_SSE4)
   return _mm_cvtsi128_si32(sum) + _mm_extract_epi32(sum, 1) + biases[0];
 #else
   sum = _mm_add_epi32(sum, _mm_shuffle_epi32(sum, 0x1));
@@ -569,7 +561,7 @@ INLINE void affine_txfm(int8_t *input, void *output, unsigned inDims,
     outVec[1] = _mm_packs_epi16(out16_2, out16_3);
     outMask[1] = _mm_movemask_epi8(_mm_cmpgt_epi8(outVec[1], kZeros[0]));
   } else {
-#if defined(USE_SSE41)
+#if defined(USE_SSE4)
     outVec[0] = _mm_max_epi8(_mm_packs_epi16(out16_0, out16_1), kZeros[0]);
     outVec[1] = _mm_max_epi8(_mm_packs_epi16(out16_2, out16_3), kZeros[0]);
 #else
@@ -631,9 +623,9 @@ INLINE void affine_txfm(clipped_t *input, void *output, unsigned inDims,
   __m128i *outVec = (__m128i *)output;
   if (pack8_and_calc_mask) {
     outVec[0] = _mm_packs_epi16(out16_0, out16_1);
-    outMask[0] = _mm_movemask_epi8(_mm_cmpgt_epi8(outVec[0], kZeros[0]));
+    outMask[0] = (mask_t)_mm_movemask_epi8(_mm_cmpgt_epi8(outVec[0], kZeros[0]));
     outVec[1] = _mm_packs_epi16(out16_2, out16_3);
-    outMask[1] = _mm_movemask_epi8(_mm_cmpgt_epi8(outVec[1], kZeros[0]));
+    outMask[1] = (mask_t)_mm_movemask_epi8(_mm_cmpgt_epi8(outVec[1], kZeros[0]));
   } else {
     const __m128i kx07f = _mm_set1_epi16(127);
     outVec[0] = _mm_min_epi16(_mm_max_epi16(out16_0, kZeros[0]), kx07f);
@@ -869,7 +861,7 @@ INLINE void affine_txfm(clipped_t *input, void *output, unsigned inDims,
 {
   (void)inMask; (void)outMask; (void)pack8_and_calc_mask;
 
-  int32_t tmp[outDims];
+  int32_t tmp[32];
 
   for (unsigned i = 0; i < outDims; i++)
     tmp[i] = biases[i];
@@ -881,7 +873,7 @@ INLINE void affine_txfm(clipped_t *input, void *output, unsigned inDims,
 
   clipped_t *outVec = (clipped_t *)output;
   for (unsigned i = 0; i < outDims; i++)
-    outVec[i] = clamp(tmp[i] >> SHIFT, 0, 127);
+    outVec[i] = (clipped_t)clamp(tmp[i] >> SHIFT, 0, 127);
 }
 #endif
 
@@ -1052,13 +1044,13 @@ INLINE void transform(NNUEPosition *pos, clipped_t *output, mask_t *outMask)
       vec16_t s0 = ((vec16_t *)(*accumulation)[perspectives[p]])[i * 2];
       vec16_t s1 = ((vec16_t *)(*accumulation)[perspectives[p]])[i * 2 + 1];
       out[i] = vec_packs(s0, s1);
-      *outMask++ = vec_mask_pos(out[i]);
+      *outMask++ = (mask_t)vec_mask_pos(out[i]);
     }
 
 #else
     for (unsigned i = 0; i < kHalfDimensions; i++) {
       int16_t sum = (*accumulation)[perspectives[p]][i];
-      output[offset + i] = clamp(sum, 0, 127);
+      output[offset + i] = (clipped_t)clamp(sum, 0, 127);
     }
 
 #endif
