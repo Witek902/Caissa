@@ -6,8 +6,6 @@
 #include <iostream>
 #include <intrin.h>
 
-#define USE_AVX2
-
 namespace nn {
 
 using IntermediateType = int8_t;
