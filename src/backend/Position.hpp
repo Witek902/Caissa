@@ -281,8 +281,8 @@ public:
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
 
-    // check if the position features only pawns and kings
-    bool IsPawnsOnly() const;
+    // check if a side features non-pawn pieces
+    bool HasNonPawnMaterial(Color color) const;
 
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;

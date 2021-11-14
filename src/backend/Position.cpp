@@ -859,17 +859,13 @@ void Position::MirrorHorizontally()
     mHash = ComputeHash();
 }
 
-bool Position::IsPawnsOnly() const
+bool Position::HasNonPawnMaterial(Color color) const
 {
     return
-        mColors[0].queens == 0 &&
-        mColors[0].rooks == 0 &&
-        mColors[0].bishops == 0 &&
-        mColors[0].knights == 0 &&
-        mColors[1].queens == 0 &&
-        mColors[1].rooks == 0 &&
-        mColors[1].bishops == 0 &&
-        mColors[1].knights == 0;
+        mColors[(uint32_t)color].queens     != 0 ||
+        mColors[(uint32_t)color].rooks      != 0 ||
+        mColors[(uint32_t)color].bishops    != 0 ||
+        mColors[(uint32_t)color].knights    != 0;
 }
 
 const MaterialKey Position::GetMaterialKey() const

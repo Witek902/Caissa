@@ -1221,6 +1221,21 @@ void RunSearchTests()
         TEST_EXPECT(result[14].moves.front() == Move::Make(Square_b1, Square_h1, Piece::Rook));
         TEST_EXPECT(result[14].score <= -KnownWinValue);    // Rh1 is loosing
     }
+
+    // Lasker-Reichhelm (TT test)
+    {
+        param.limits.maxDepth = 25;
+        param.numPvLines = 1;
+
+        game.Reset(Position("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score >= 100);
+        TEST_EXPECT(result[0].moves.front() == Move::Make(Square_a1, Square_b1, Piece::King));
+
+        param.limits.mateSearch = false;
+    }
 }
 
 void RunGameTests()
