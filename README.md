@@ -35,9 +35,15 @@ Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 * Winning/Losing Captures (Static Exchange Evaluation)
 * Killer/History Heuristic
 
+#### Time Management
+* Heuristics based on approximate move count left
+* Reducing search time for singular root moves
+
+
 #### Misc
 * Large Pages Support for Transposition Table
 * Magic Bitboards
+* Analysis Mode (search full PV lines and disable any time and depth limits)
 
 
 ## Modules

@@ -610,7 +610,7 @@ void UniversalChessInterface::RunSearchTask()
                 std::cout << "bestmove 0000";
             }
 
-            std::cout << std::endl;
+            std::cout << std::endl << std::flush;
         }
 
         if (mSearchCtx->searchParam.verboseStats)
@@ -775,8 +775,8 @@ bool UniversalChessInterface::Command_TTProbe()
     {
         const char* boundsStr =
             ttEntry.bounds == TTEntry::Bounds::Exact ? "exact" :
-            ttEntry.bounds == TTEntry::Bounds::UpperBound ? "upper" :
-            ttEntry.bounds == TTEntry::Bounds::LowerBound ? "lower" :
+            ttEntry.bounds == TTEntry::Bounds::Upper ? "upper" :
+            ttEntry.bounds == TTEntry::Bounds::Lower ? "lower" :
             "invalid";
 
         std::cout << "Score:      " << ttEntry.score << std::endl;

@@ -14,10 +14,10 @@ union TTEntry
 
     enum class Bounds : uint8_t
     {
-        Invalid        = 0,
-        Exact          = 1,
-        LowerBound     = 2,
-        UpperBound     = 3,
+        Invalid = 0,
+        Lower   = 1,
+        Upper   = 2,
+        Exact   = Lower|Upper,
     };
 
     UNNAMED_STRUCT struct
@@ -105,6 +105,11 @@ private:
 
     uint64_t numCollisions;
 };
+
+INLINE TTEntry::Bounds operator & (const TTEntry::Bounds a, const TTEntry::Bounds b)
+{
+    return static_cast<TTEntry::Bounds>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+}
 
 // convert from score that is relative to root to an TT score (absolute, position dependent)
 ScoreType ScoreToTT(ScoreType v, int32_t height);
