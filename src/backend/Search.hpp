@@ -179,6 +179,8 @@ private:
 
     struct ThreadData
     {
+        bool isMainThread = false;
+
         // principial variation moves tracking for current search
         PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
         uint8_t pvLengths[MaxSearchDepth];

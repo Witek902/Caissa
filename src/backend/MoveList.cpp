@@ -2,6 +2,13 @@
 
 #include <algorithm>
 #include <cstring>
+#include <random>
+
+void MoveList::Shuffle()
+{
+    static std::atomic<uint32_t> shuffleSeed = 0;
+    std::shuffle(moves, moves + numMoves, std::default_random_engine(shuffleSeed++));
+}
 
 void MoveList::RemoveMove(const Move& move)
 {
