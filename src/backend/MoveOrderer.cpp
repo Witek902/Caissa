@@ -127,7 +127,7 @@ void MoveOrderer::OnBetaCutoff(const NodeInfo& node, const Move move)
     }
 }
 
-void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
+void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shuffleMask) const
 {
     const Position& pos = node.position;
 
@@ -219,7 +219,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
             }
         }
 
-        //score += rand() % 2;
+        if (shuffleMask)
+        {
+            score += rand() & shuffleMask;
+        }
 
         moves[i].score = (int32_t)std::min<uint64_t>(score, INT32_MAX);
     }

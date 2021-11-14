@@ -219,13 +219,14 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     }
 
     mThreadData.resize(param.numThreads);
+    mThreadData[0].isMainThread = true;
 
     if (param.numThreads > 1)
     {
         std::vector<std::thread> threads;
         threads.reserve(param.numThreads);
 
-        for (uint32_t i = 0; i < param.numThreads; ++i)
+        for (uint32_t i = param.numThreads; i-- > 0; )
         {
             threads.emplace_back([this, i, numPvLines, &game, &param, &outResult]() INLINE_LAMBDA
             {
@@ -240,7 +241,6 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     }
     else
     {
-        mThreadData.resize(param.numThreads);
         Search_Internal(0, numPvLines, game, param, outResult);
     }
 }
@@ -1263,16 +1263,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 #endif // CONFIGURATION_FINAL
 
-    /*
-    if (ctx.searchParam.verboseStats)
+    // randomize move order for root node on secondary threads
+    const bool shuffleMoves = isRootNode && !thread.isMainThread;
+    if (shuffleMoves)
     {
-        thread.moveOrderer.ScoreMoves(node, moves);
-        numScoredMoves = moves.numMoves;
-
-        std::cout << position.ToFEN() << std::endl;
-        moves.Print();
+        moves.Shuffle();
     }
-    */
 
     Move bestMove = Move::Invalid();
     uint32_t moveIndex = 0;
@@ -1281,10 +1277,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        if (i == numScoredMoves)
+        if (i == numScoredMoves && !shuffleMoves)
         {
-            // we reached a point where moves are not scored anymore, so score them now
-            thread.moveOrderer.ScoreMoves(node, moves);
+            // We reached a point where moves are not scored anymore, so score them now
+            // Randomize move order a bit for non-main threads
+            thread.moveOrderer.ScoreMoves(node, moves, thread.isMainThread ? 0 : 0b11);
         }
 
         int32_t moveScore = 0;

@@ -93,6 +93,8 @@ public:
         return false;
     }
 
+    void Shuffle();
+
     void Print(bool sorted = true) const;
 
 private:
