@@ -17,9 +17,13 @@ public:
     static constexpr int32_t CounterMoveBonus       = 0;
     static constexpr int32_t LosingCaptureValue     = 0;
 
+    using CounterType = int16_t;
+
     void Clear();
 
-    void OnBetaCutoff(const NodeInfo& node, const Move move);
+    void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
+
+    void UpdateKillerMove(const NodeInfo& node, const Move move);
 
     // assign scores to move list
     void ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shuffleMask = 0) const;
@@ -27,10 +31,15 @@ public:
     void DebugPrint() const;
 
 private:
-    uint32_t searchHistory[2][64][64];
 
-    static constexpr uint32_t NumKillerMoves = 4;
+    static void UpdateHistoryCounter(CounterType& counter, int32_t delta);
+
+    alignas(CACHELINE_SIZE)
+
+    CounterType searchHistory[2][64][64];
+    CounterType continuationHistory[6][64][6][64];
+    CounterType followupHistory[6][64][6][64];
+
+    static constexpr uint32_t NumKillerMoves = 2;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
-
-    PackedMove counterMoveHistory[2][64][64]; // TODO piece type?
 };
