@@ -29,9 +29,7 @@ static const int32_t TablebaseProbeDepth = 0;
 static const int32_t NullMovePrunningStartDepth = 2;
 static const int32_t NullMovePrunningDepthReduction = 4;
 
-static const int32_t LateMoveReductionStartDepth = 2;
-
-static const int32_t LateMovePrunningStartDepth = 3;
+static const int32_t LateMoveReductionStartDepth = 3;
 
 static const int32_t AspirationWindowSearchStartDepth = 2;
 static const int32_t AspirationWindowMax = 60;
@@ -66,12 +64,13 @@ Search::~Search()
 
 void Search::BuildMoveReductionTable()
 {
-    for (uint32_t depth = 0; depth < MaxSearchDepth; ++depth)
+    for (int32_t depth = 0; depth < MaxSearchDepth; ++depth)
     {
         for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
         {
-            const int32_t reduction = (depth - LateMoveReductionStartDepth - 1 >= 0) ?
-                int32_t(0.5f + 0.25f * sqrtf(float(depth - LateMoveReductionStartDepth - 1)) + 0.25f * sqrtf(float(moveIndex))) : 0;
+            const int32_t reduction = int32_t(0.5f + logf(float(depth + 1)) * logf(float(moveIndex + 1)) / 2.0f);
+
+            ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
         }
     }
@@ -254,7 +253,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     {
         std::cout << " multipv " << (param.pvIndex + 1);
     }
-    std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(searchTime).count();
 
     if (pvLine.score > CheckmateValue - MaxSearchDepth)
     {
@@ -277,6 +275,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     {
         std::cout << " upperbound";
     }
+
+    std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(searchTime).count();
 
     std::cout << " nodes " << param.searchContext.stats.nodes;
     std::cout << " nps " << (int32_t)(1.0e9 * (double)param.searchContext.stats.nodes / (double)std::chrono::duration_cast<std::chrono::nanoseconds>(searchTime).count());
@@ -1004,12 +1004,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             (node.depth == 0 || !isPvNode) &&
             !hasMoveFilter)
         {
+            ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
+            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
-
-            ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
             if (ttEntry.bounds == TTEntry::Bounds::Exact)
             {
@@ -1277,6 +1277,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     uint32_t numReducedMoves = 0;
     bool searchAborted = false;
 
+    Move quietMovesTried[256];
+    uint32_t numQuietMovesTried = 0;
+
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         if (i == numScoredMoves && !shuffleMoves)
@@ -1299,6 +1302,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
 
         moveIndex++;
+
+        if (move.IsQuiet()) quietMovesTried[numQuietMovesTried++] = move;
 
         int32_t moveExtension = extension;
 
@@ -1342,14 +1347,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 moveExtension++;
             }
-            else if (singularBeta >= beta)
-            {
-                return singularBeta;
-            }
-            else if (ttScore >= beta)
-            {
-                moveExtension--;
-            }
         }
 
         // avoid search explosion
@@ -1362,7 +1359,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // Late Move Reduction
         // don't reduce PV moves, while in check, good captures, promotions, etc.
-        if (moveIndex > 2 &&
+        if (moveIndex > 1 &&
             !isRootNode &&
             node.depth >= LateMoveReductionStartDepth &&
             bestValue > -CheckmateValue &&
@@ -1371,15 +1368,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             move.IsQuiet())
         {
             // reduce depth gradually
-            depthReduction = mMoveReductionTable[node.depth][std::min(numReducedMoves, MaxReducedMoves - 1)];
+            depthReduction = mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
 
             depthReduction += node.isPvNode ? 0 : 1;
 
             // reduce good moves less
-            if (moveScore >= MoveOrderer::GoodCaptureValue) depthReduction--;
+            if (moveScore >= MoveOrderer::GoodCaptureValue && depthReduction > 0)
+            {
+                depthReduction--;
+            }
 
             // don't drop into QS
-            depthReduction = std::max(depthReduction, 1);
             depthReduction = std::min(depthReduction, node.depth + moveExtension - 1);
 
             numReducedMoves++;
@@ -1511,7 +1510,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     if (bestValue >= beta)
     {
-        thread.moveOrderer.OnBetaCutoff(node, bestMove);
+        if (bestMove.IsQuiet())
+        {
+            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMove, node.depth);
+            thread.moveOrderer.UpdateKillerMove(node, bestMove);
+        }
     }
 
     // no legal moves
