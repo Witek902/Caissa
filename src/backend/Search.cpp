@@ -999,8 +999,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ttMove = ttEntry.move;
         staticEval = ttEntry.staticEval;
 
-        // don't early exit in root node, because we may have better quality score (higher depth) discovered in one of the child nodes
-        if (!isRootNode && !hasMoveFilter && ttEntry.depth >= node.depth)
+        // don't prune in PV nodes, because TT does not contain path information
+        if (ttEntry.depth >= node.depth &&
+            (node.depth == 0 || !isPvNode) &&
+            !hasMoveFilter)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
