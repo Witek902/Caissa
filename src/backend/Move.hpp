@@ -37,6 +37,9 @@ struct PackedMove
     INLINE Square ToSquare() const { return toSquare; }
     INLINE Piece GetPromoteTo() const { return (Piece)promoteTo; }
 
+    INLINE void SetFromSquare(Square sq) { fromSquare = sq.Index(); }
+    INLINE void SetToSquare(Square sq) { toSquare = sq.Index(); }
+
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
     bool constexpr IsValid() const
@@ -142,3 +145,70 @@ INLINE PackedMove::PackedMove(const Move rhs)
 }
 
 static_assert(sizeof(Move) <= 4, "Invalid Move size");
+
+
+template<typename MoveType, uint32_t MaxSize>
+class MovesArray
+{
+public:
+
+    INLINE MoveType& operator[](uint32_t i) { return moves[i]; }
+    INLINE const MoveType operator[](uint32_t i) const { return moves[i]; }
+
+    INLINE MoveType* Data() { return moves; }
+    INLINE const MoveType* Data() const { return moves; }
+
+    template<typename MoveType2>
+    void Remove(const MoveType2 move)
+    {
+        for (uint32_t j = 0; j < MaxSize; ++j)
+        {
+            if (move == moves[j])
+            {
+                // push remaining moves to the front
+                for (uint32_t i = j; i < MaxSize - 1; ++j)
+                {
+                    moves[i] = moves[i + 1];
+                }
+                moves[MaxSize - 1] = MoveType();
+
+                break;
+            }
+        }
+    }
+
+    template<typename MoveType2, uint32_t MaxSize2>
+    uint32_t MergeWith(const MovesArray<MoveType2, MaxSize2>& other)
+    {
+        uint32_t outSize = 0;
+        for (uint32_t i = 0; i < MaxSize; ++i)
+        {
+            if (!moves[i].IsValid()) break;
+            outSize++;
+        }
+
+        for (uint32_t i = 0; i < MaxSize2 && outSize < MaxSize; ++i)
+        {
+            if (!other.moves[i].IsValid()) break;
+            bool moveExists = false;
+            for (uint32_t j = 0; j < outSize; ++j)
+            {
+                if (moves[j] == other.moves[i])
+                {
+                    moveExists = true;
+                    break;
+                }
+            }
+            if (!moveExists)
+            {
+                moves[outSize++] = other.moves[i];
+            }
+        }
+
+        ASSERT(outSize <= MaxSize);
+
+        return outSize;
+    }
+
+    MoveType moves[MaxSize];
+};

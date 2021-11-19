@@ -55,9 +55,6 @@ struct SearchParam
     // number of PV lines to report
     uint32_t numPvLines = 1;
 
-    // if not empty, only consider this moves
-    std::vector<Move> rootMoves;
-
     // exclude this root moves from the search
     std::vector<Move> excludedMoves;
 
@@ -96,9 +93,6 @@ struct NodeInfo
     // ignore given moves in search, used for multi-PV search
     const Move* moveFilter = nullptr;
 
-    // consider only this moves at root node, used for "searchmoves" UCI command
-    const Move* rootMoves = nullptr;
-
     // remaining depth
     int32_t depth;
 
@@ -106,7 +100,6 @@ struct NodeInfo
     uint32_t height;
 
     uint8_t moveFilterCount = 0;
-    uint8_t rootMovesCount = 0;
 
     ScoreType alpha;
     ScoreType beta;
@@ -117,6 +110,19 @@ struct NodeInfo
 
     bool isPvNode = false;
     bool isNullMove = false;
+
+    bool ShouldCheckMove(const Move move) const
+    {
+        for (uint32_t i = 0; i < moveFilterCount; ++i)
+        {
+            if (move == moveFilter[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 };
 
 class Search
@@ -218,9 +224,6 @@ private:
 
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
-
-    // check if one of generated moves is in TT
-    const Move FindTTMove(const PackedMove& ttMove, MoveList& moves) const;
 
     // check for repetition in the searched node
     bool IsRepetition(const NodeInfo& node, const Game& game) const;

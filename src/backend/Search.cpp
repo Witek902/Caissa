@@ -143,7 +143,7 @@ std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& po
             TTEntry ttEntry;
             if (!tt.Read(iteratedPosition, ttEntry)) break;
 
-            const Move move = iteratedPosition.MoveFromPacked(ttEntry.move);
+            const Move move = iteratedPosition.MoveFromPacked(ttEntry.moves[0]);
 
             // Note: move in transpostion table may be invalid due to hash collision
             if (!move.IsValid()) break;
@@ -514,8 +514,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
-        rootNode.rootMoves = param.searchParam.rootMoves.data();
-        rootNode.rootMovesCount = (uint8_t)std::min<size_t>(UINT8_MAX, param.searchParam.rootMoves.size());
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
 
@@ -620,23 +618,6 @@ const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves)
     return pvMove;
 }
 
-const Move Search::FindTTMove(const PackedMove& ttMove, MoveList& moves) const
-{
-    if (ttMove.IsValid())
-    {
-        for (uint32_t i = 0; i < moves.numMoves; ++i)
-        {
-            if (moves[i].move == ttMove)
-            {
-                moves[i].score = MoveOrderer::TTMoveValue;
-                return moves[i].move;
-            }
-        }
-    }
-
-    return Move::Invalid();
-}
-
 void Search::ThreadData::UpdatePvArray(uint32_t depth, const Move move)
 {
     if (depth + 1 < MaxSearchDepth)
@@ -718,6 +699,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ASSERT(node.depth <= 0);
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
+    ASSERT(node.moveFilterCount == 0);
 
     // clean PV line
     if (node.height < MaxSearchDepth)
@@ -738,34 +720,29 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.isPvNode;
-    const bool hasMoveFilter = node.moveFilterCount > 0u;
 
     ScoreType staticEval = InvalidValue;
 
     // transposition table lookup
-    PackedMove ttMove;
+    TTEntry ttEntry;
+    if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
-        TTEntry ttEntry;
-        if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
-        {
-            ttMove = ttEntry.move;
-            staticEval = ttEntry.staticEval;
+        staticEval = ttEntry.staticEval;
 
-            if (ttEntry.depth >= node.depth && !isRootNode && !isPvNode)
-            {
+        if (ttEntry.depth >= node.depth && !isRootNode && !isPvNode)
+        {
 #ifdef COLLECT_SEARCH_STATS
-                ctx.stats.ttHits++;
+            ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-                ScoreType ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-                ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+            ScoreType ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
+            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-                if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
-                    (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= node.beta) ||
-                    (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= node.alpha))
-                {
-                    return ttScore;
-                }
+            if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
+                (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= node.beta) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= node.alpha))
+            {
+                return ttScore;
             }
         }
     }
@@ -827,13 +804,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         numScoredMoves = 0;
 
-        if (FindTTMove(ttMove, moves).IsValid())
+        if (moves.AssignTTScores(ttEntry).IsValid())
         {
             numScoredMoves++;
         }
     }
 
-    Move bestMove = Move::Invalid();
+    Move bestMoves[TTEntry::NumMoves];
+    uint32_t numBestMoves = 0;
     uint32_t moveIndex = 0;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
@@ -872,8 +850,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         if (score > bestValue) // new best move found
         {
+            // push new best move to the beginning of the list
+            for (uint32_t j = 1; j <= numBestMoves && j < TTEntry::NumMoves; ++j)
+            {
+                bestMoves[j] = bestMoves[j - 1];
+            }
+            numBestMoves = std::min(TTEntry::NumMoves, numBestMoves + 1);
+            bestMoves[0] = move;
             bestValue = score;
-            bestMove = move;
 
             if (score > alpha) // update lower bound
             {
@@ -898,14 +882,22 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     }
 
     // store value in transposition table
-    if (!hasMoveFilter && !CheckStopCondition(ctx))
+    if (!CheckStopCondition(ctx))
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
             (isPvNode && bestValue > oldAlpha) ? TTEntry::Bounds::Exact :
             TTEntry::Bounds::Upper;
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, bestMove);
+        MovesArray<PackedMove, TTEntry::NumMoves> packedBestMoves;
+        for (uint32_t i = 0; i < numBestMoves; ++i)
+        {
+            ASSERT(bestMoves[i].IsValid());
+            packedBestMoves[i] = bestMoves[i];
+        }
+        numBestMoves = packedBestMoves.MergeWith(ttEntry.moves);
+
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, numBestMoves, packedBestMoves.Data());
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
@@ -991,12 +983,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType staticEval = InvalidValue;
 
     // transposition table lookup
-    PackedMove ttMove;
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
-        ttMove = ttEntry.move;
         staticEval = ttEntry.staticEval;
 
         // don't prune in PV nodes, because TT does not contain path information
@@ -1096,18 +1086,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     return tbValue;
                 }
 
-                if (isPvNode)
-                {
-                    if (bounds == TTEntry::Bounds::Lower)
-                    {
-                        bestValue = tbValue;
-                        alpha = std::max(alpha, tbValue);
-                    }
-                    else
-                    {
-                        maxValue = tbValue;
-                    }
-                }
+                //if (isPvNode)
+                //{
+                //    if (bounds == TTEntry::Bounds::Lower)
+                //    {
+                //        bestValue = tbValue;
+                //        alpha = std::max(alpha, tbValue);
+                //    }
+                //    else
+                //    {
+                //        maxValue = tbValue;
+                //    }
+                //}
             }
         }
     }
@@ -1162,7 +1152,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         !hasMoveFilter &&
         node.depth >= NullMovePrunningStartDepth &&
         !ctx.searchParam.limits.mateSearch &&
-        (!ttMove.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
+        (!ttEntry.moves[0].IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
         position.HasNonPawnMaterial(position.GetSideToMove()))
     {
         // don't allow null move if parent or grandparent node was null move
@@ -1211,35 +1201,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     MoveList moves;
     position.GenerateMoveList(moves);
 
-    // apply node filter (also used for multi-PV search for 2nd, 3rd, etc. moves)
-    if (hasMoveFilter)
-    {
-        for (uint32_t i = 0; i < node.moveFilterCount; ++i)
-        {
-            const Move& move = node.moveFilter[i];
-            moves.RemoveMove(move);
-
-            // clear out TT move
-            if (move == ttMove)
-            {
-                ttMove = Move::Invalid();
-            }
-        }
-    }
-
-    // TODO
-    // apply node filter (used for "searchmoves" UCI command)
-    //if (!node.rootMoves.empty())
-    //{
-        //for (const Move& move : node.rootMoves)
-        //{
-        //    if (!moves.HasMove(move))
-        //    {
-        //        moves.RemoveMove(move);
-        //    }
-        //}
-    //}
-
     // resolve move scoring
     // the idea here is to defer scoring if we have a TT/PV move
     // most likely we'll get beta cutoff on it so we won't need to score any other move
@@ -1247,12 +1208,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (moves.numMoves > 1u)
     {
         const Move pvMove = thread.FindPvMove(node, moves);
-        const Move fullTTMove = FindTTMove(ttMove, moves);
+        const Move ttMove = moves.AssignTTScores(ttEntry);
 
         numScoredMoves = 0;
 
         if (pvMove.IsValid()) numScoredMoves++;
-        if (fullTTMove.IsValid()) numScoredMoves++;
+        if (ttMove.IsValid()) numScoredMoves++;
     }
 
 #ifndef CONFIGURATION_FINAL
@@ -1272,10 +1233,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         moves.Shuffle();
     }
 
-    Move bestMove = Move::Invalid();
+    Move bestMoves[TTEntry::NumMoves] = { Move::Invalid() };
+    uint32_t numBestMoves = 0;
+
     uint32_t moveIndex = 0;
     uint32_t numReducedMoves = 0;
     bool searchAborted = false;
+    bool filteredSomeMove = false;
 
     Move quietMovesTried[256];
     uint32_t numQuietMovesTried = 0;
@@ -1292,6 +1256,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         int32_t moveScore = 0;
         const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
+
+        // apply node filter (multi-PV search, singularity search, etc.)
+        if (!node.ShouldCheckMove(move))
+        {
+            filteredSomeMove = true;
+            continue;
+        }
 
         childNodeParam.position = position;
         if (!childNodeParam.position.DoMove(move))
@@ -1323,7 +1294,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (moveExtension <= 1 &&
             !isRootNode &&
             !hasMoveFilter &&
-            move == ttMove &&
+            move == ttEntry.moves[0] &&
             node.depth >= SingularitySearchMinDepth &&
             std::abs(ttScore) < KnownWinValue &&
             ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
@@ -1471,8 +1442,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         if (score > bestValue) // new best move found
         {
+            // push new best move to the beginning of the list
+            for (uint32_t j = 1; j <= numBestMoves && j < TTEntry::NumMoves; ++j)
+            {
+                bestMoves[j] = bestMoves[j - 1];
+            }
+            numBestMoves = std::min(TTEntry::NumMoves, numBestMoves + 1);
+            bestMoves[0] = move;
             bestValue = score;
-            bestMove = move;
 
             if (isPvNode)
             {
@@ -1510,10 +1487,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     if (bestValue >= beta)
     {
-        if (bestMove.IsQuiet())
+        if (bestMoves[0].IsQuiet())
         {
-            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMove, node.depth);
-            thread.moveOrderer.UpdateKillerMove(node, bestMove);
+            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMoves[0], node.depth);
+            thread.moveOrderer.UpdateKillerMove(node, bestMoves[0]);
         }
     }
 
@@ -1531,10 +1508,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     bestValue = std::min(bestValue, maxValue);
 
     // update transposition table
-    // don't write anything new to TT if time is exceeded as evaluation may be inaccurate
-    // skip root nodes when searching secondary PV lines, as they don't contain best moves
-    if (!hasMoveFilter && !searchAborted)
+    // don't write if:
+    // - time is exceeded as evaluation may be inaccurate
+    // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
+    if (!filteredSomeMove && !CheckStopCondition(ctx))
     {
+        ASSERT(numBestMoves > 0);
+
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
             bestValue > oldAlpha ? TTEntry::Bounds::Exact :
@@ -1545,7 +1525,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ASSERT(bounds != TTEntry::Bounds::Exact);
         }
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, bestMove);
+        MovesArray<PackedMove, TTEntry::NumMoves> packedBestMoves;
+        for (uint32_t i = 0; i < numBestMoves; ++i)
+        {
+            ASSERT(bestMoves[i].IsValid());
+            packedBestMoves[i] = bestMoves[i];
+        }
+        numBestMoves = packedBestMoves.MergeWith(ttEntry.moves);
+
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, numBestMoves, packedBestMoves.Data());
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;

@@ -224,7 +224,9 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "print")
     {
         UniqueLock lock(mMutex);
-        std::cout << "Init:  " << mGame.GetInitialPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
+        std::cout << "Init:    " << mGame.GetInitialPosition().ToFEN() << std::endl; 
+        std::cout << "Moves:   " << mGame.ToPGN() << std::endl;
+        std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
         std::cout << mGame.GetPosition().Print() << std::endl;
     }
     else if (command == "eval")
@@ -404,7 +406,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     uint32_t movesToGo = UINT32_MAX;
     uint32_t mateSearchDepth = 0;
 
-    std::vector<Move> rootMoves;
     std::vector<Move> excludedMoves;
 
     for (size_t i = 1; i < args.size(); ++i)
@@ -463,20 +464,21 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
         else if (args[i] == "searchmoves" && i + 1 < args.size())
         {
+            // TODO use 'excludedMoves' to implement this feature
             // restrict search to this moves only
-            for (size_t j = i + 1; j < args.size(); ++j)
-            {
-                const Move move = mGame.GetPosition().MoveFromString(args[j]);
-                if (move.IsValid())
-                {
-                    rootMoves.push_back(move);
-                }
-                else
-                {
-                    std::cout << "Invalid move: " << args[j] << std::endl;
-                    return false;
-                }
-            }
+            //for (size_t j = i + 1; j < args.size(); ++j)
+            //{
+            //    const Move move = mGame.GetPosition().MoveFromString(args[j]);
+            //    if (move.IsValid())
+            //    {
+            //        rootMoves.push_back(move);
+            //    }
+            //    else
+            //    {
+            //        std::cout << "Invalid move: " << args[j] << std::endl;
+            //        return false;
+            //    }
+            //}
         }
         else if (args[i] == "excludemoves" && i + 1 < args.size())
         {
@@ -552,7 +554,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.limits.analysisMode = !isPonder && (isInfinite || mOptions.analysisMode); // run full analysis when pondering
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
-    mSearchCtx->searchParam.rootMoves = std::move(rootMoves);
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.printMoves = printMoves;
     mSearchCtx->searchParam.verboseStats = verboseStats;
@@ -783,7 +784,18 @@ bool UniversalChessInterface::Command_TTProbe()
         std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
         std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
-        std::cout << "Generation: " << ttEntry.generation << std::endl;
+        std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
+        std::cout << "Moves:      ";
+
+        uint32_t numMoves = 0;
+        for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
+        {
+            if (!ttEntry.moves[i].IsValid()) break;
+            std::cout << ttEntry.moves[i].ToString() << " ";
+            numMoves++;
+        }
+        if (numMoves == 0) std::cout << "<none>";
+        std::cout << std::endl;
     }
     else
     {
@@ -800,6 +812,12 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
+
+    TTEntry ttEntry;
+    if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
+    {
+        moves.AssignTTScores(ttEntry);
+    }
 
     mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves);
 

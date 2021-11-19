@@ -222,6 +222,7 @@ inline uint64_t ParallelBitsExtract(uint32_t src, uint32_t mask)
 }
 
 class Position;
+struct TTEntry;
 struct Move;
 struct PackedMove;
 class MoveList;

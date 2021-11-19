@@ -5,7 +5,6 @@
 #include <cstring>
 #include <xmmintrin.h>
 
-static_assert(sizeof(TTEntry) == sizeof(uint64_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT cluster is too big");
 
 #if defined(_MSC_VER)
@@ -238,13 +237,15 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 
         TTCluster& cluster = clusters[position.GetHash() & hashmapMask];
 
+        const uint32_t posKey = (position.GetHash() >> 32);
+
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
-            uint64_t hash;
+            uint32_t hash;
             TTEntry data;
             cluster[i].Load(hash, data);
 
-            if (hash == position.GetHash() && data.bounds != TTEntry::Bounds::Invalid)
+            if (hash == posKey && data.bounds != TTEntry::Bounds::Invalid)
             {
                 // update entry generation
                 data.generation = generation;
@@ -259,33 +260,19 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, uint32_t numMoves, const PackedMove* moves)
 {
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;
-    entry.move = move;
     entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
     entry.bounds = bounds;
 
-    Write(position, entry);
-
-    /*
-    if (position.Blacks().pawns == 0 && position.Whites().pawns == 0 && position.GetNumPieces() <= 6)
+    for (uint32_t i = 0; i < numMoves; ++i)
     {
-        Position positionMirrorV = position; positionMirrorV.MirrorVertically();
-        Position positionMirrorH = position; positionMirrorH.MirrorHorizontally();
-        Position positionMirrorVH = positionMirrorV; positionMirrorVH.MirrorHorizontally();
-
-        Write(positionMirrorV, entry);
-        Write(positionMirrorH, entry);
-        Write(positionMirrorVH, entry);
+        entry.moves[i] = moves[i];
     }
-    */
-}
 
-void TranspositionTable::Write(const Position& position, TTEntry entry)
-{
     ASSERT(entry.IsValid());
 
     if (!clusters)
@@ -295,26 +282,27 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
 
     const uint64_t positionHash = position.GetHash();
     const size_t hashmapMask = numClusters - 1;
+    const uint32_t positionKey = (uint32_t)(positionHash >> 32);
 
     TTCluster& cluster = clusters[positionHash & hashmapMask];
 
     uint32_t replaceIndex = 0;
     int32_t minDepthInCluster = INT32_MAX;
-    uint64_t prevHash = 0;
+    uint32_t prevKey = 0;
     TTEntry prevEntry;
 
     // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
-        uint64_t hash;
+        uint32_t hash;
         TTEntry data;
         cluster[i].Load(hash, data);
 
         // found entry with same hash or empty entry
-        if (hash == positionHash || !data.IsValid())
+        if (hash == positionKey || !data.IsValid())
         {
             replaceIndex = i;
-            prevHash = hash;
+            prevKey = hash;
             prevEntry = data;
             break;
         }
@@ -325,12 +313,12 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
         {
             minDepthInCluster = (int32_t)data.depth - entryAge;
             replaceIndex = i;
-            prevHash = hash;
+            prevKey = hash;
             prevEntry = data;
         }
     }
 
-    if (positionHash == prevHash)
+    if (positionKey == prevKey)
     {
         // don't overwrite entries with worse depth when preserving bounds
         if (entry.depth < prevEntry.depth &&
@@ -348,15 +336,15 @@ void TranspositionTable::Write(const Position& position, TTEntry entry)
         }
 
         // preserve existing move
-        if (!entry.move.IsValid())
+        if (!entry.moves[0].IsValid())
         {
-            entry.move = prevEntry.move;
+            entry.moves[0] = prevEntry.moves[0];
         }
     }
 
     entry.generation = generation;
 
-    cluster[replaceIndex].Store(positionHash, entry);
+    cluster[replaceIndex].Store(positionKey, entry);
 }
 
 size_t TranspositionTable::GetNumUsedEntries() const
@@ -369,7 +357,7 @@ size_t TranspositionTable::GetNumUsedEntries() const
         for (size_t j = 0; j < NumEntriesPerCluster; ++j)
         {
             const InternalEntry& entry = cluster[j];
-            if (entry.data.load(std::memory_order_relaxed).IsValid())
+            if (entry.entry.IsValid())
             {
                 num++;
             }

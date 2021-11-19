@@ -1,8 +1,38 @@
 #include "MoveList.hpp"
+#include "TranspositionTable.hpp"
+#include "MoveOrderer.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <random>
+
+const Move MoveList::AssignTTScores(const TTEntry& ttEntry)
+{
+    Move ttMove = Move::Invalid();
+
+    for (uint32_t j = 0; j < TTEntry::NumMoves; ++j)
+    {
+        if (!ttEntry.moves[j].IsValid())
+        {
+            continue;
+        }
+
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            if (moves[i].move == ttEntry.moves[j])
+            {
+                moves[i].score = MoveOrderer::TTMoveValue - j;
+                if (!ttMove.IsValid())
+                {
+                    ttMove = moves[i].move;
+                }
+                break;
+            }
+        }
+    }
+
+    return Move::Invalid();
+}
 
 void MoveList::Shuffle()
 {
