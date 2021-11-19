@@ -7,8 +7,9 @@
 
 class Position;
 
-union TTEntry
+struct TTEntry
 {
+    static constexpr uint32_t NumMoves = 3;
     static constexpr uint32_t GenerationBits = 6;
     static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
 
@@ -20,23 +21,31 @@ union TTEntry
         Exact   = Lower|Upper,
     };
 
-    UNNAMED_STRUCT struct
-    {
-        ScoreType score;
-        ScoreType staticEval;
-        PackedMove move;
-        int8_t depth;
-        Bounds bounds : 2;
-        uint8_t generation : GenerationBits;
-    };
+    ScoreType score;
+    ScoreType staticEval;
+    MovesArray<PackedMove, NumMoves> moves;
+    int8_t depth;
+    Bounds bounds : 2;
+    uint8_t generation : GenerationBits;
 
-    uint64_t packed;
-
-    INLINE TTEntry() : packed(0) { }
+    INLINE TTEntry()
+        : score(0)
+        , staticEval(0)
+        , moves{ PackedMove() }
+        , depth(0)
+        , bounds(Bounds::Invalid)
+        , generation(0)
+    {}
 
     INLINE bool IsValid() const
     {
         return bounds != Bounds::Invalid;
+    }
+
+    INLINE uint32_t GetHash() const
+    {
+        const uint32_t* t = reinterpret_cast<const uint32_t*>(this);
+        return t[0] ^ t[1] ^ t[2];
     }
 };
 
@@ -45,23 +54,21 @@ class TranspositionTable
 public:
     struct InternalEntry
     {
-        std::atomic<uint64_t> key;
-        std::atomic<TTEntry> data;
+        uint32_t key;
+        TTEntry entry;
 
-        INLINE void Load(uint64_t& outHash, TTEntry& outData) const
+        INLINE void Load(uint32_t& outHash, TTEntry& outEntry) const
         {
-            const uint64_t k = key.load();
-            const TTEntry d = data.load();
             // Xor trick by Robert Hyatt and Tim Mann
-            outHash = k ^ d.packed;
-            outData = d;
+            outHash = key ^ entry.GetHash();
+            outEntry = entry;
         }
 
-        INLINE void Store(uint64_t hash, TTEntry newData)
+        INLINE void Store(uint32_t positionKey, const TTEntry newEntry)
         {
             // Xor trick by Robert Hyatt and Tim Mann
-            key = hash ^ newData.packed;
-            data = newData;
+            key = positionKey ^ newEntry.GetHash();
+            entry = newEntry;
         }
     };
 
@@ -76,8 +83,7 @@ public:
     void NextGeneration();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove());
-    void Write(const Position& position, TTEntry entry);
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, uint32_t numMoves = 0, const PackedMove* moves = nullptr);
     void Prefetch(const Position& position) const;
 
     // invalidate all entries

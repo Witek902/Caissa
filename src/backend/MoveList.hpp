@@ -43,6 +43,8 @@ public:
         moves[index] = { move, 0 };
     }
 
+    const Move AssignTTScores(const TTEntry& ttEntry);
+
     const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
         ASSERT(index < numMoves);

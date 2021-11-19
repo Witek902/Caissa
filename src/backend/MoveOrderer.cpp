@@ -165,8 +165,8 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shu
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
-        // skip PV move
-        if (moves[i].score >= TTMoveValue)
+        // skip PV & TT moves
+        if (moves[i].score >= TTMoveValue - 64)
         {
             continue;
         }

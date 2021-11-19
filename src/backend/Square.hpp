@@ -108,6 +108,11 @@ public:
         return mIndex ^ 0b111000;
     }
 
+    INLINE Square FlippedFileAndRank() const
+    {
+        return mIndex ^ 0b111111;
+    }
+
     uint32_t EdgeDistance() const
     {
         const uint32_t r = Rank();
