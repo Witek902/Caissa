@@ -44,6 +44,7 @@ static const int32_t AlphaPruningDepth = 4;
 static const int32_t AlphaMarginMultiplier = 400;
 static const int32_t AlphaMarginBias = 150;
 
+static const int32_t QSearchDeltaPrunningMargin = 150;
 static const int32_t QSearchSeeMargin = 120;
 
 int64_t SearchParam::GetElapsedTime() const
@@ -700,6 +701,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
     ASSERT(node.moveFilterCount == 0);
+    ASSERT(node.height > 0);
 
     // clean PV line
     if (node.height < MaxSearchDepth)
@@ -718,7 +720,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     const Position& position = node.position;
 
-    const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.isPvNode;
 
     ScoreType staticEval = InvalidValue;
@@ -729,7 +730,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         staticEval = ttEntry.staticEval;
 
-        if (ttEntry.depth >= node.depth && !isRootNode && !isPvNode)
+        if (ttEntry.depth >= node.depth)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
@@ -776,6 +777,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             alpha = bestValue;
         }
+
+        // Delta Prunning - does not work...
+        // if the best possible capture in the possition (with some marigin) can't beat alpha - skip the search
+        //const int32_t delta = position.BestPossibleMoveValue() + QSearchDeltaPrunningMargin;
+        //if ((int32_t)staticEval + delta < (int32_t)alpha)
+        //{
+        //    //std::cout << "[DELTA] " << position.ToFEN() << " eval=" << staticEval << " alpha=" << alpha << std::endl;
+        //    return staticEval;
+        //}
     }
 
     NodeInfo childNodeParam;
