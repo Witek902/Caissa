@@ -141,6 +141,7 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 }
 
 #define MOVE_GEN_ONLY_TACTICAL 1
+#define MOVE_GEN_ONLY_QUEEN_PROMOTIONS 2
 
 struct PackedPosition
 {

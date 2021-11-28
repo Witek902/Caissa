@@ -799,6 +799,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     if (!isInCheck)
     {
         moveGenFlags |= MOVE_GEN_ONLY_TACTICAL;
+        moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
     }
 
     MoveList moves;

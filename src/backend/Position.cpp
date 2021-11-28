@@ -229,9 +229,10 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         if (fromSquare.Rank() == pawnFinalRank) // pawn promotion
         {
             const Piece promotionList[] = { Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop };
-            for (const Piece promoteTo : promotionList)
+            const uint32_t numPromotions = (flags & MOVE_GEN_ONLY_QUEEN_PROMOTIONS) ? 1 : 4;
+            for (uint32_t i = 0; i < numPromotions; ++i)
             {
-                outMoveList.Push(Move::Make(fromSquare, toSquare, Piece::Pawn, promoteTo, isCapture, enPassant));
+                outMoveList.Push(Move::Make(fromSquare, toSquare, Piece::Pawn, promotionList[i], isCapture, enPassant));
             }
         }
         else if (!onlyTactical || isCapture)
