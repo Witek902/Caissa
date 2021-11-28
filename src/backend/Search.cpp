@@ -1114,21 +1114,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 #endif // USE_TABLE_BASES
 
-    // Futility Pruning
-    if (!isPvNode &&
-        !isInCheck &&
-        !ctx.searchParam.limits.mateSearch &&
-        alpha < 1000)
+    // evaluate position if it wasn't evaluated
+    bool wasPositionEvaluated = true;
+    if (!isInCheck)
     {
-        bool wasEvaluated = true;
         if (staticEval == InvalidValue)
         {
             const ScoreType evalScore = Evaluate(position);
-            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
-            wasEvaluated = false;
+            wasPositionEvaluated = false;
         }
+    }
 
+    // Futility Pruning
+    if (!isPvNode &&
+        !isInCheck &&
+        !ctx.searchParam.limits.mateSearch)
+    {
         const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
         const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * node.depth;
 
@@ -1136,9 +1139,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (node.depth <= AlphaPruningDepth &&
             (staticEval + alphaMargin <= alpha))
         {
-            if (!wasEvaluated)
+            if (!wasPositionEvaluated)
             {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Upper);
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Exact);
             }
             return (ScoreType)std::min<int32_t>(TablebaseWinValue, staticEval);
         }
@@ -1148,9 +1151,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             (staticEval - betaMargin >= beta) &&
             staticEval <= KnownWinValue)
         {
-            if (!wasEvaluated)
+            if (!wasPositionEvaluated)
             {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Upper);
+                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Exact);
             }
             return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
         }
@@ -1352,13 +1355,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // reduce depth gradually
             depthReduction = mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
 
-            depthReduction += node.isPvNode ? 0 : 1;
+            if (!node.isPvNode) depthReduction += 1;
 
             // reduce good moves less
-            if (moveScore >= MoveOrderer::GoodCaptureValue && depthReduction > 0)
-            {
-                depthReduction--;
-            }
+            if (moveScore >= MoveOrderer::KillerMoveBonus && depthReduction > 0) depthReduction--;
 
             // don't drop into QS
             depthReduction = std::min(depthReduction, node.depth + moveExtension - 1);
