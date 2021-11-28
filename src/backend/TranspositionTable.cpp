@@ -209,8 +209,6 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
         std::cerr << "Failed to allocate transposition table" << std::endl;
         ::exit(1);
     }
-
-    Clear();
 }
 
 void TranspositionTable::NextGeneration()

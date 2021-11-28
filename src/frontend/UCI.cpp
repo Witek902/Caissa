@@ -16,10 +16,11 @@ static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
-static const uint32_t c_DefaultTTSize = 16 * 1024 * 1024;
+static const uint32_t c_DefaultTTSizeInMB = 256;
 #else
-static const uint32_t c_DefaultTTSize = 1024 * 1024;
+static const uint32_t c_DefaultTTSizeInMB = 16;
 #endif
+static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
 
 static const uint32_t c_MaxNumThreads = 64;
 static const char* c_DefaultEvalFile = "nn-04cf2b4ed1da.nnue";
@@ -159,7 +160,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         std::cout << "id name " << c_EngineName << "\n";
         std::cout << "id author " << c_Author << "\n";
-        std::cout << "option name Hash type spin default " << c_DefaultTTSize << " min 1 max 1048576\n";
+        std::cout << "option name Hash type spin default " << c_DefaultTTSizeInMB  << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
