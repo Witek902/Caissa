@@ -1430,13 +1430,14 @@ bool RunPerformanceTests(const char* path)
                         return;
                     }
 
-                    const std::string foundMoveStr = position.MoveToString(foundMove);
+                    const std::string foundMoveStrLAN = position.MoveToString(foundMove, MoveNotation::LAN);
+                    const std::string foundMoveStrSAN = position.MoveToString(foundMove, MoveNotation::SAN);
                     bool correctMoveFound = false;
                     if (!testCase.bestMoves.empty())
                     {
                         for (const std::string& bestMoveStr : testCase.bestMoves)
                         {
-                            if (foundMoveStr == bestMoveStr)
+                            if (foundMoveStrLAN == bestMoveStr || foundMoveStrSAN == bestMoveStr)
                             {
                                 correctMoveFound = true;
                             }
@@ -1447,7 +1448,7 @@ bool RunPerformanceTests(const char* path)
                         correctMoveFound = true;
                         for (const std::string& avoidMoveStr : testCase.avoidMoves)
                         {
-                            if (foundMoveStr == avoidMoveStr)
+                            if (foundMoveStrLAN == avoidMoveStr || foundMoveStrSAN == avoidMoveStr)
                             {
                                 correctMoveFound = false;
                             }
@@ -1472,7 +1473,7 @@ bool RunPerformanceTests(const char* path)
                                 for (const std::string& bestMoveStr : testCase.avoidMoves) std::cout << bestMoveStr << " ";
                             }
 
-                            std::cout << "found: " << foundMoveStr << " position: " << testCase.positionStr << std::endl;
+                            std::cout << "found: " << foundMoveStrLAN << " position: " << testCase.positionStr << std::endl;
                         }
                         return;
                     }
@@ -1481,7 +1482,7 @@ bool RunPerformanceTests(const char* path)
                         if (verbose)
                         {
                             std::unique_lock<std::mutex> lock(mutex);
-                            std::cout << "[SUCCESS] Found valid move: " << foundMoveStr << std::endl;
+                            std::cout << "[SUCCESS] Found valid move: " << foundMoveStrLAN << std::endl;
                         }
                         success++;
                     }
