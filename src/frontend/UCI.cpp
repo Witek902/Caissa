@@ -508,7 +508,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
-        const int32_t moveOverhead = 10; // make configurable
+        const int32_t moveOverhead = 8; // make configurable
         const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
 
@@ -516,16 +516,18 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         if (remainingTime != INT32_MAX)
         {
             const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft(mGame.GetPosition().GetMoveCount());
-            const float timeEstimated = std::min((float)remainingTime, (float)remainingTime / movesLeftEstimated + (float)remainingTimeInc);
-            const int32_t timeEstimatedMs = static_cast<uint32_t>(std::max(0.0f, timeEstimated) + 0.5f);
+            const float idealTimeMs = std::clamp((float)remainingTime / movesLeftEstimated + (float)remainingTimeInc, 0.0f, (float)remainingTime);
 
             // use at least 75% of estimated time
             // TODO some better heuristics:
             // for example, estimate time spent in each iteration based on previous searches
-            mSearchCtx->searchParam.limits.maxTimeSoft = timeEstimatedMs * 3 / 4;
+            mSearchCtx->searchParam.limits.maxTimeSoft = static_cast<uint32_t>(0.7f * idealTimeMs + 0.5f);
 
-            // activate root singularity search after 1/8th of estimated time passed
-            mSearchCtx->searchParam.limits.rootSingularityTime = timeEstimatedMs / 8;
+            // abort search if significantly exceeding ideal allocated time
+            mSearchCtx->searchParam.limits.maxTime = static_cast<uint32_t>(10.0f * idealTimeMs + 0.5f);
+
+            // activate root singularity search after some portion of estimated time passed
+            mSearchCtx->searchParam.limits.rootSingularityTime = static_cast<uint32_t>(0.25f * idealTimeMs + 0.5f);
         }
 
         // hard limit
@@ -533,9 +535,13 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         if (hardLimit != INT32_MAX)
         {
             hardLimit = std::max(0, hardLimit - moveOverhead);
-            mSearchCtx->searchParam.limits.maxTime = hardLimit;
+            mSearchCtx->searchParam.limits.maxTime = std::min(mSearchCtx->searchParam.limits.maxTime, (uint32_t)hardLimit);
         }
     }
+
+    std::cout << "info string maxTimeSoft " << mSearchCtx->searchParam.limits.maxTimeSoft << std::endl;
+    std::cout << "info string maxTime " << mSearchCtx->searchParam.limits.maxTime << std::endl;
+    std::cout << "info string rootSingularityTime " << mSearchCtx->searchParam.limits.rootSingularityTime << std::endl;
 
     if (mateSearchDepth > 0)
     {
