@@ -1164,20 +1164,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         !isPvNode &&
         !isInCheck &&
         !hasMoveFilter &&
+        staticEval >= beta &&
+        std::abs(beta) < KnownWinValue &&
         node.depth >= NullMovePrunningStartDepth &&
         !ctx.searchParam.limits.mateSearch &&
-        (!ttEntry.moves[0].IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
+        (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
         position.HasNonPawnMaterial(position.GetSideToMove()))
     {
         // don't allow null move if parent or grandparent node was null move
         bool doNullMove = !node.isNullMove;
-        if (node.parentNode && node.parentNode->isNullMove)
-        {
-            doNullMove = false;
-        }
+        if (node.parentNode && node.parentNode->isNullMove) doNullMove = false;
 
         if (doNullMove)
         {
+            const int32_t depthReduction =
+                NullMovePrunningDepthReduction +
+                node.depth / 4 +
+                std::min(3, int32_t(staticEval - beta) / 256);
+
             NodeInfo childNodeParam;
             childNodeParam.parentNode = &node;
             childNodeParam.pvIndex = node.pvIndex;
@@ -1186,7 +1190,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNodeParam.beta = -beta + 1;
             childNodeParam.isNullMove = true;
             childNodeParam.height = node.height + 1;
-            childNodeParam.depth = node.depth - NullMovePrunningDepthReduction - node.depth / 4;
+            childNodeParam.depth = node.depth - depthReduction;
 
             childNodeParam.position.DoNullMove();
 
@@ -1194,6 +1198,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             if (nullMoveScore >= beta)
             {
+                //std::cout
+                //    << "[Null Move Prunning] " << childNodeParam.position.ToFEN()
+                //    << " prevMove=" << node.previousMove.ToString()
+                //    << " nullMoveScore=" << nullMoveScore
+                //    << " beta=" << beta
+                //    << " depth=" << node.depth
+                //    << std::endl;
+
                 return beta;
             }
         }
