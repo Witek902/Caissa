@@ -1413,6 +1413,7 @@ bool RunPerformanceTests(const char* path)
                     searchParam.limits.maxDepth = UINT8_MAX;
                     searchParam.limits.maxTime = maxSearchTime;
                     searchParam.limits.maxTimeSoft = maxSearchTime / 2;
+                    searchParam.limits.analysisMode = true;
 
                     SearchResult searchResult;
                     search.DoSearch(game, searchParam, searchResult);

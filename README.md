@@ -25,15 +25,16 @@ Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 * Simple classic evaluation function based on Piece Square Tables
 
 #### Selectivity
-* Null Move Pruning
+* Null Move Reductions
 * Late Move Reductions & Prunning
 * Futility Pruning (both for alpha and beta)
 * Mate Distance Prunning
+* Singular Move Extensions
 
 #### Move Ordering
 * MVV/LVA
 * Winning/Losing Captures (Static Exchange Evaluation)
-* Killer/History Heuristic
+* Killer/History/Counter/Followup Move Heuristic
 
 #### Time Management
 * Heuristics based on approximate move count left

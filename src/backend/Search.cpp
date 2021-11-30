@@ -26,8 +26,9 @@ static const uint32_t MateCountStopCondition = 5;
 
 static const int32_t TablebaseProbeDepth = 0;
 
-static const int32_t NullMovePrunningStartDepth = 2;
-static const int32_t NullMovePrunningDepthReduction = 4;
+static const int32_t NullMoveReductionsStartDepth = 2;
+static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
+static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
@@ -975,12 +976,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // maximum search depth reached, enter quisence search to find final evaluation
     if (node.depth <= 0)
     {
-        if (ctx.searchParam.limits.mateSearch)
-        {
-            const ScoreType evalScore = Evaluate(position);
-            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-            return ColorMultiplier(position.GetSideToMove()) * evalScore;
-        }
         return QuiescenceNegaMax(thread, node, ctx);
     }
     
@@ -1125,6 +1120,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
             wasPositionEvaluated = false;
         }
+        node.staticEval = staticEval;
     }
 
     // Futility Pruning
@@ -1159,14 +1155,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-    // Null Move Prunning
+    // Null Move Reductions
     if (!isRootNode &&
         !isPvNode &&
         !isInCheck &&
         !hasMoveFilter &&
         staticEval >= beta &&
-        std::abs(beta) < KnownWinValue &&
-        node.depth >= NullMovePrunningStartDepth &&
+        node.depth >= NullMoveReductionsStartDepth &&
         !ctx.searchParam.limits.mateSearch &&
         (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
         position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1178,7 +1173,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (doNullMove)
         {
             const int32_t depthReduction =
-                NullMovePrunningDepthReduction +
+                NullMoveReductions_NullMoveDepthReduction +
                 node.depth / 4 +
                 std::min(3, int32_t(staticEval - beta) / 256);
 
@@ -1194,19 +1189,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             childNodeParam.position.DoNullMove();
 
-            const int32_t nullMoveScore = -NegaMax(thread, childNodeParam, ctx);
+            ScoreType nullMoveScore = -NegaMax(thread, childNodeParam, ctx);
 
             if (nullMoveScore >= beta)
             {
-                //std::cout
-                //    << "[Null Move Prunning] " << childNodeParam.position.ToFEN()
-                //    << " prevMove=" << node.previousMove.ToString()
-                //    << " nullMoveScore=" << nullMoveScore
-                //    << " beta=" << beta
-                //    << " depth=" << node.depth
-                //    << std::endl;
+                if (nullMoveScore >= TablebaseWinValue)
+                    nullMoveScore = beta;
 
-                return beta;
+                if (std::abs(beta) < KnownWinValue && node.depth < 10)
+                    return nullMoveScore;
+
+                node.depth -= NullMoveReductions_ReSearchDepthReduction;
+
+                if (node.depth <= 0)
+                {
+                    return QuiescenceNegaMax(thread, node, ctx);
+                }
             }
         }
     }
@@ -1216,7 +1214,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     childNodeParam.height = node.height + 1;
     childNodeParam.pvIndex = node.pvIndex;
 
-    uint16_t extension = 0;
+    int32_t extension = 0;
 
     // check extension
     if (isInCheck)
@@ -1349,7 +1347,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // avoid search explosion
         moveExtension = std::min(moveExtension, 2);
 
-        childNodeParam.depth = node.depth + moveExtension - 1;
         childNodeParam.previousMove = move;
 
         int32_t depthReduction = 0;
