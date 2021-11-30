@@ -104,6 +104,8 @@ struct NodeInfo
     ScoreType alpha;
     ScoreType beta;
 
+    ScoreType staticEval = InvalidValue;
+
     Move previousMove = Move::Invalid();
 
     uint8_t pvIndex;
