@@ -37,15 +37,10 @@ static const int32_t AspirationWindowMax = 60;
 static const int32_t AspirationWindowMin = 10;
 static const int32_t AspirationWindowStep = 5;
 
-static const int32_t BetaPruningDepth = 7;
-static const int32_t BetaMarginMultiplier = 150;
+static const int32_t BetaPruningDepth = 8;
+static const int32_t BetaMarginMultiplier = 200;
 static const int32_t BetaMarginBias = 10;
 
-static const int32_t AlphaPruningDepth = 4;
-static const int32_t AlphaMarginMultiplier = 400;
-static const int32_t AlphaMarginBias = 150;
-
-static const int32_t QSearchDeltaPrunningMargin = 150;
 static const int32_t QSearchSeeMargin = 120;
 
 int64_t SearchParam::GetElapsedTime() const
@@ -727,18 +722,19 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     // transposition table lookup
     TTEntry ttEntry;
+    ScoreType ttScore = InvalidValue;
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
         staticEval = ttEntry.staticEval;
+
+        ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
+        ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
         if (ttEntry.depth >= node.depth)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
-
-            ScoreType ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
             if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
                 (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= node.beta) ||
@@ -766,6 +762,16 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
 
+        // try to use TT score for better evaluation estimate
+        if (ttScore != InvalidValue)
+        {
+            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval))
+            {
+                staticEval = ttScore;
+            }
+        }
+
         bestValue = staticEval;
 
         if (bestValue >= beta)
@@ -778,15 +784,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             alpha = bestValue;
         }
-
-        // Delta Prunning - does not work...
-        // if the best possible capture in the possition (with some marigin) can't beat alpha - skip the search
-        //const int32_t delta = position.BestPossibleMoveValue() + QSearchDeltaPrunningMargin;
-        //if ((int32_t)staticEval + delta < (int32_t)alpha)
-        //{
-        //    //std::cout << "[DELTA] " << position.ToFEN() << " eval=" << staticEval << " alpha=" << alpha << std::endl;
-        //    return staticEval;
-        //}
     }
 
     NodeInfo childNodeParam;
@@ -837,8 +834,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         int32_t moveScore = 0;
         const Move move = moves.PickBestMove(i, moveScore);
 
-        // Delta Pruning - skip losing captures
-        //if (!isInCheck && move.IsCapture() && bestValue > -CheckmateValue)
+        // skip losing captures
+        //if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue)
         //{
         //    if (!position.StaticExchangeEvaluation(move, sseTreshold))
         //    {
@@ -978,6 +975,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         return QuiescenceNegaMax(thread, node, ctx);
     }
+
+    // TODO use proper stack
+    const NodeInfo* prevNodes[4] = { nullptr };
+    prevNodes[0] = node.parentNode;
+    prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
+    prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
+    prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
     
     const bool isInCheck = position.IsInCheck(position.GetSideToMove());
 
@@ -995,14 +999,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         staticEval = ttEntry.staticEval;
 
+        ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
+        ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+
         // don't prune in PV nodes, because TT does not contain path information
         if (ttEntry.depth >= node.depth &&
             (node.depth == 0 || !isPvNode) &&
             !hasMoveFilter)
         {
-            ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-            ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
-
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
@@ -1120,32 +1124,43 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
             wasPositionEvaluated = false;
         }
+
+        // try to use TT score for better evaluation estimate
+        if (ttScore != InvalidValue)
+        {
+            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval))
+            {
+                staticEval = ttScore;
+            }
+        }
+
         node.staticEval = staticEval;
     }
 
-    // Futility Pruning
+    // check how much static evaluation improved between current position and position in previous turn
+    // if we were in check in previous turn, use position prior to it
+    int32_t evalImprovement = 0;
+    if (prevNodes[1] && prevNodes[1]->staticEval != InvalidValue)
+    {
+        evalImprovement = staticEval - prevNodes[1]->staticEval;
+    }
+    else if (prevNodes[3] && prevNodes[3]->staticEval != InvalidValue)
+    {
+        evalImprovement = staticEval - prevNodes[3]->staticEval;
+    }
+    const bool isImproving = evalImprovement > 0;
+
+    // Futility/Beta Pruning
     if (!isPvNode &&
         !isInCheck &&
+        node.depth <= BetaPruningDepth &&
+        staticEval <= TablebaseWinValue &&
         !ctx.searchParam.limits.mateSearch)
     {
-        const int32_t alphaMargin = position.BestPossibleMoveValue() + AlphaMarginBias + AlphaMarginMultiplier * node.depth;
-        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * node.depth;
+        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving);
 
-        // Alpha Pruning
-        if (node.depth <= AlphaPruningDepth &&
-            (staticEval + alphaMargin <= alpha))
-        {
-            if (!wasPositionEvaluated)
-            {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Exact);
-            }
-            return (ScoreType)std::min<int32_t>(TablebaseWinValue, staticEval);
-        }
-
-        // Beta Pruning
-        if (node.depth <= BetaPruningDepth &&
-            (staticEval - betaMargin >= beta) &&
-            staticEval <= KnownWinValue)
+        if (staticEval - betaMargin >= beta)
         {
             if (!wasPositionEvaluated)
             {
