@@ -1079,7 +1079,7 @@ void RunSearchTests()
     std::cout << "Running Search tests..." << std::endl;
 
     Search search;
-    TranspositionTable tt{ 16 * 1024 };
+    TranspositionTable tt{ 16 * 1024 * 1024 };
     SearchResult result;
     Game game;
 
@@ -1233,8 +1233,6 @@ void RunSearchTests()
         TEST_EXPECT(result.size() == 1);
         TEST_EXPECT(result[0].score >= 100);
         TEST_EXPECT(result[0].moves.front() == Move::Make(Square_a1, Square_b1, Piece::King));
-
-        param.limits.mateSearch = false;
     }
 }
 
