@@ -508,7 +508,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
-        const int32_t moveOverhead = 8; // make configurable
+        const int32_t moveOverhead = 20; // make configurable
         const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
 

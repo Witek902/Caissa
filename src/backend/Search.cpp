@@ -416,12 +416,16 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             if (isMainThread)
             {
                 ASSERT(outResult[0].moves.size() > 0);
+
+                // stop other threads
+                StopSearch();
             }
             break;
         }
 
         // check for singular root move
-        if (numPvLines == 1 &&
+        if (isMainThread &&
+            numPvLines == 1 &&
             depth >= SingularitySearchMinDepth &&
             std::abs(tempResult[0].score) < KnownWinValue &&
             param.limits.rootSingularityTime < UINT32_MAX &&
@@ -448,7 +452,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             if (score < singularBeta)
             {
-                //std::cout << "info string singular move found - second best move score is " << score << std::endl;
+                StopSearch();
                 break;
             }
         }
@@ -457,18 +461,22 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         thread.prevPvLines = std::move(tempResult);
 
         // check soft time limit every depth iteration
-        if (!param.isPonder &&
+        if (isMainThread &&
+            !param.isPonder &&
             param.limits.maxTimeSoft < UINT32_MAX &&
             param.GetElapsedTime() >= param.limits.maxTimeSoft)
         {
+            StopSearch();
             break;
         }
 
         // stop the search if found mate in multiple depths in a row
-        if (!param.isPonder && !param.limits.analysisMode &&
+        if (isMainThread &&
+            !param.isPonder && !param.limits.analysisMode &&
             mateCounter >= MateCountStopCondition &&
             param.limits.maxDepth == UINT8_MAX)
         {
+            StopSearch();
             break;
         }
     }
