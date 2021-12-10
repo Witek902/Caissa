@@ -726,6 +726,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     const bool isPvNode = node.isPvNode;
 
+    ScoreType alpha = node.alpha;
+    ScoreType oldAlpha = alpha;
+    ScoreType beta = node.beta;
+    ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
 
     // transposition table lookup
@@ -738,7 +742,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
         ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
 
-        if (ttEntry.depth >= node.depth)
+        if (!isPvNode && ttEntry.depth >= node.depth)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
@@ -746,7 +750,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
             if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
                 (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= node.beta) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= node.alpha))
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < node.beta))
             {
                 return ttScore;
             }
@@ -754,11 +758,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     }
 
     const bool isInCheck = position.IsInCheck(position.GetSideToMove());
-
-    ScoreType alpha = node.alpha;
-    ScoreType oldAlpha = alpha;
-    ScoreType beta = node.beta;
-    ScoreType bestValue = -InfValue;
 
     // do not consider stand pat if in check
     if (!isInCheck)
