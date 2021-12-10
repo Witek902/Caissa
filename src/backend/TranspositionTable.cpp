@@ -9,6 +9,7 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
 #if defined(_MSC_VER)
 
+#define NOMINMAX
 #include <Windows.h>
 
     static bool EnableLargePagesSupport()
@@ -102,7 +103,7 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
 ScoreType ScoreToTT(ScoreType v, int32_t height)
 {
-    ASSERT(v >= -CheckmateValue && v <= CheckmateValue);
+    ASSERT(v > -CheckmateValue && v < CheckmateValue);
     ASSERT(height < MaxSearchDepth);
 
     return ScoreType(
@@ -119,22 +120,22 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
 
     if (v >= TablebaseWinValue - MaxSearchDepth)  // TB win or better
     {
-        if ((v >= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue - v > 99 - fiftyMoveRuleCount))
+        if ((v >= CheckmateValue - MaxSearchDepth) && (CheckmateValue - v > 99 - fiftyMoveRuleCount))
         {
             // do not return a potentially false mate score
             return CheckmateValue - MaxSearchDepth - 1;
         }
-        return ScoreType(v - height);
+        return std::min<ScoreType>(ScoreType(v - height), CheckmateValue - 1);
     }
 
     if (v <= -TablebaseWinValue + MaxSearchDepth) // TB loss or worse
     {
-        if ((v <= TablebaseWinValue - MaxSearchDepth) && (CheckmateValue + v > 99 - fiftyMoveRuleCount))
+        if ((v <= -CheckmateValue + MaxSearchDepth) && (CheckmateValue + v > 99 - fiftyMoveRuleCount))
         {
             // do not return a potentially false mate score
-            return CheckmateValue - MaxSearchDepth + 1;
+            return -CheckmateValue + MaxSearchDepth + 1;
         }
-        return ScoreType(v + height);
+        return std::max<ScoreType>(ScoreType(v + height), -CheckmateValue + 1);
     }
 
     return v;

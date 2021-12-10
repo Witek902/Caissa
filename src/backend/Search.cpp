@@ -32,7 +32,7 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowSearchStartDepth = 2;
+static const int32_t AspirationWindowSearchStartDepth = 1;
 static const int32_t AspirationWindowMax = 60;
 static const int32_t AspirationWindowMin = 10;
 static const int32_t AspirationWindowStep = 5;
@@ -740,7 +740,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         staticEval = ttEntry.staticEval;
 
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-        ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+        ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
         if (!isPvNode && ttEntry.depth >= node.depth)
         {
@@ -1007,7 +1007,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         staticEval = ttEntry.staticEval;
 
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
-        ASSERT(ttScore >= -CheckmateValue && ttScore <= CheckmateValue);
+        ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
         // don't prune in PV nodes, because TT does not contain path information
         if (ttEntry.depth >= node.depth &&
@@ -1169,10 +1169,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         if (staticEval - betaMargin >= beta)
         {
-            if (!wasPositionEvaluated)
-            {
-                ctx.searchParam.transpositionTable.Write(position, staticEval, staticEval, INT8_MIN, TTEntry::Bounds::Exact);
-            }
             return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
         }
     }
