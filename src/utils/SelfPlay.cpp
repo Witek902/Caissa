@@ -23,7 +23,7 @@ void SelfPlay()
 {
     FILE* dumpFile = fopen("selfplay.dat", "wb");
 
-    TranspositionTable tt(512 * 1024 * 1024);
+    TranspositionTable tt(2ull * 1024ull * 1024ull * 1024ull);
 
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
     
@@ -37,7 +37,7 @@ void SelfPlay()
     {
         TaskBuilder taskBuilder(waitable);
 
-        taskBuilder.ParallelFor("SelfPlay", 20000, [&](const TaskContext& context, uint32_t)
+        taskBuilder.ParallelFor("SelfPlay", 100, [&](const TaskContext& context, uint32_t)
         {
             std::random_device rd;
             std::mt19937 gen(rd());
@@ -60,9 +60,14 @@ void SelfPlay()
             for (;; ++halfMoveNumber)
             {
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 8;
+                searchParam.limits.maxDepth = 16;
                 searchParam.numPvLines = 2;
                 searchParam.debugLog = false;
+                searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
+                searchParam.limits.maxTime = 500;
+                searchParam.limits.maxTimeSoft = 80;
+                searchParam.limits.rootSingularityTime = 30;
+
 
                 searchResult.clear();
 
@@ -183,13 +188,11 @@ void SelfPlay()
 
                 if (score > 0)
                 {
-                    //ASSERT(position.GetSideToMove() == Color::White);
                     std::cout << "(white won)";
                     whiteWins++;
                 }
                 else if (score < 0)
                 {
-                    //ASSERT(position.GetSideToMove() == Color::Black);
                     std::cout << "(black won)";
                     blackWins++;
                 }

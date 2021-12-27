@@ -23,6 +23,9 @@
     <ClCompile Include="EndgamePieceSquareTables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="NetworkTest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp">

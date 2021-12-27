@@ -276,6 +276,7 @@
     <ClCompile Include="Endgame.cpp" />
     <ClCompile Include="Evaluate.cpp" />
     <ClCompile Include="Game.cpp" />
+    <ClCompile Include="GameCollection.cpp" />
     <ClCompile Include="Move.cpp" />
     <ClCompile Include="MoveList.cpp" />
     <ClCompile Include="MoveOrderer.cpp" />
@@ -283,6 +284,7 @@
     <ClCompile Include="nnue-probe\misc.cpp" />
     <ClCompile Include="nnue-probe\nnue.cpp" />
     <ClCompile Include="PackedNeuralNetwork.cpp" />
+    <ClCompile Include="PGNParser.cpp" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
@@ -327,6 +329,7 @@
     <ClInclude Include="Endgame.hpp" />
     <ClInclude Include="Evaluate.hpp" />
     <ClInclude Include="Game.hpp" />
+    <ClInclude Include="GameCollection.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />
     <ClInclude Include="MoveOrderer.hpp" />
@@ -334,6 +337,7 @@
     <ClInclude Include="nnue-probe\misc.h" />
     <ClInclude Include="nnue-probe\nnue.h" />
     <ClInclude Include="PackedNeuralNetwork.hpp" />
+    <ClInclude Include="PGNParser.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
     <ClInclude Include="Search.hpp" />

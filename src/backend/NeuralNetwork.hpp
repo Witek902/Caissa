@@ -46,7 +46,7 @@ inline float ClippedReLuDerivative(float x)
 enum class ActivationFunction
 {
     Linear,
-    ReLu,
+    ClippedReLu,
     Sigmoid,
     ATan,
 };
@@ -134,7 +134,8 @@ public:
 
 private:
 
-    void UpdateLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const;
+    void UpdateLayerWeights(Layer& layer) const;
+    void QuantizeLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const;
 
     std::vector<Layer> layers;
 

@@ -25,6 +25,21 @@ bool Game::DoMove(const Move& move)
     return false;
 }
 
+bool Game::DoMove(const Move& move, ScoreType score)
+{
+    if (mPosition.DoMove(move))
+    {
+        mMoves.push_back(move);
+        mScores.push_back(score);
+
+        RecordBoardPosition(mPosition);
+
+        return true;
+    }
+
+    return false;
+}
+
 void Game::RecordBoardPosition(const Position& position)
 {
     mHistoryGamePositions[position]++;

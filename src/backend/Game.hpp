@@ -31,6 +31,7 @@ public:
     void Reset(const Position& pos);
 
     bool DoMove(const Move& move);
+    bool DoMove(const Move& move, ScoreType score);
 
     uint32_t GetRepetitionCount(const Position& position) const;
 
@@ -46,6 +47,7 @@ private:
     Position mInitPosition;
     Position mPosition;
     std::vector<Move> mMoves;
+    std::vector<ScoreType> mScores;
 
     // TODO store some simplified position state instead of full struct
     std::unordered_map<Position, uint16_t> mHistoryGamePositions;

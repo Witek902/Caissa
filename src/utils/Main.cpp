@@ -4,15 +4,21 @@
 
 #include "../backend/nnue-probe/nnue.h"
 
+#include <iostream>
+
 extern void SelfPlay();
 extern bool Train();
 extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
+extern bool TestNetwork();
 
 int main(int argc, const char* argv[])
 {
-    (void)argc;
-    (void)argv;
+    if (argc < 2)
+    {
+        std::cerr << "Missing argument" << std::endl;
+        return 1;
+    }
 
     InitEngine();
 
@@ -21,10 +27,22 @@ int main(int argc, const char* argv[])
 
     //LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
 
-    // TODO
-    SelfPlay();
-    //TrainEndgame();
-    //GenerateEndgamePieceSquareTables();
+    if (0 == strcmp(argv[1], "selfplay"))
+    {
+        SelfPlay();
+    }
+    else if (0 == strcmp(argv[1], "testNetwork"))
+    {
+        TestNetwork();
+    }
+    else if (0 == strcmp(argv[1], "trainEndgame"))
+    {
+        TrainEndgame();
+    }
+    else if (0 == strcmp(argv[1], "generateEndgamePST"))
+    {
+        GenerateEndgamePieceSquareTables();
+    }
 
     return 0;
 }

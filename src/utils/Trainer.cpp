@@ -69,10 +69,10 @@ void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVecto
     outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
 }
 
-static const uint32_t cMaxSearchDepth = 8;
+static const uint32_t cMaxSearchDepth = 7;
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 500;
-static const uint32_t cBatchSize = 10;
+static const uint32_t cNumTrainingVectorsPerIteration = 1000;
+static const uint32_t cBatchSize = 50;
 
 bool Train()
 {
@@ -167,8 +167,8 @@ bool Train()
     return true;
 }
 
-//static const uint32_t networkInputs = 32 + 64 + 2 * 64 + 2 * 48;
-static const uint32_t networkInputs = 32 + 64 + 2 * 48;
+static const uint32_t networkInputs = 32 + 64 + 2 * 64 + 2 * 48;
+//static const uint32_t networkInputs = 32 + 64 + 2 * 48;
 
 static void PositionToVector(const Position& pos, nn::TrainingVector& outVector, std::vector<uint32_t>& outFeatures)
 {
@@ -188,9 +188,19 @@ static void PositionToVector(const Position& pos, nn::TrainingVector& outVector,
     }
 }
 
+static float ScoreToNN(float score)
+{
+    return score / 10.0f;
+}
+
+static float ScoreFromNN(float score)
+{
+    return std::clamp(score, -1.0f, 1.0f) * 10.0f;
+}
+
 bool TrainEndgame()
 {
-    TranspositionTable tt{ 8192ull * 1024ull * 1024ull };
+    TranspositionTable tt{ 2048ull * 1024ull * 1024ull };
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
     SearchParam searchParam{ tt };
@@ -208,9 +218,13 @@ bool TrainEndgame()
             {
                 Position pos;
 
+                int basePawnCount = 1 + rand() % 8;
+
                 MaterialKey material;
-                material.numWhitePawns = 1 + (rand() % 4);
-                material.numBlackPawns = 1 + (rand() % 4);
+                material.numWhitePawns = basePawnCount;// +rand() % 3;
+                material.numBlackPawns = basePawnCount;// +rand() % 3;
+                material.numWhiteRooks = 1;
+                material.numBlackRooks = 1;
 
                 GenerateRandomPosition(material, pos);
 
@@ -249,15 +263,14 @@ bool TrainEndgame()
                     ASSERT(!searchResult.empty());
                 }
 
-                float score = isStalemate ? 0.0f : (float)searchResult[0].score;
+                float score = isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f;
 
-                if (score > 1000.0f || score < -1000.0f)
+                if (score > 15.0f || score < -15.0f)
                 {
                     continue;
                 }
 
-                score = std::clamp(score / 100.0f, -15.0f, 15.0f);
-                outSet[i].output[0] = PawnToWinProbability(score);
+                outSet[i].output[0] = ScoreToNN(score);
                 outPositions[i] = pos;
 
                 break;
@@ -345,17 +358,17 @@ bool TrainEndgame()
                 tempValues = network.Run(validationSet[i].input);
                 int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)validationFeatures[i].size(), validationFeatures[i].data());
 
-                const float expectedValue = validationSet[i].output[0];
-                const float nnValue = tempValues[0];
-                const float nnPackedValue = (float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
-                const float evalValue = PawnToWinProbability((float)Evaluate(validationPositions[i]) / 100.0f);
+                const float expectedValue = ScoreFromNN(validationSet[i].output[0]);
+                const float nnValue = ScoreFromNN(tempValues[0]);
+                const float nnPackedValue = ScoreFromNN((float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale);
+                const float evalValue = (float)Evaluate(validationPositions[i]) / 100.0f;
 
                 nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 
                 if (i < 10)
                 {
                     std::cout << validationPositions[i].ToFEN() << std::endl;
-                    std::cout << " Score:            " << expectedValue << std::endl;
+                    std::cout << " True Score:       " << expectedValue << std::endl;
                     std::cout << " NN eval:          " << nnValue << std::endl;
                     std::cout << " Packed NN eval:   " << nnPackedValue << std::endl;
                     std::cout << " Static eval:      " << evalValue << std::endl;
