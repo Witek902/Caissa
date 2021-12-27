@@ -13,7 +13,7 @@ static constexpr float cWeightsRange = InputScale / (float)WeightScale;
 
 Layer::Layer(size_t inputSize, size_t outputSize)
 {
-    activationFunction = ActivationFunction::ReLu;
+    activationFunction = ActivationFunction::ClippedReLu;
 
     linearValue.resize(outputSize);
     output.resize(outputSize);
@@ -70,7 +70,7 @@ void Layer::Run(const Values& in)
 
         linearValue[i] = x;
 
-        if (activationFunction == ActivationFunction::ReLu)
+        if (activationFunction == ActivationFunction::ClippedReLu)
         {
             output[i] = ClippedReLu(x);
         }
@@ -103,7 +103,7 @@ void Layer::Backpropagate(const Values& error)
     {
         float errorGradient = error[i];
 
-        if (activationFunction == ActivationFunction::ReLu)
+        if (activationFunction == ActivationFunction::ClippedReLu)
         {
             errorGradient *= ClippedReLuDerivative(linearValue[i]);
         }
@@ -300,7 +300,7 @@ const Layer::Values& NeuralNetwork::Run(const Layer::Values& input)
     return layers.back().output;
 }
 
-void NeuralNetwork::UpdateLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const
+void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
 {
     const size_t inputSize = layer.input.size();
 
@@ -336,18 +336,6 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer, float weightQuantizationSca
             v = cRho * v + (1.0f - cRho) * delta * delta;
             w -= delta * cLearningRate;
 
-            if (j < inputSize)
-            {
-                // quantize/clamp weights
-                w = std::clamp(w, -cWeightsRange, cWeightsRange);
-                w = std::floor(w * weightQuantizationScale + 0.5f) / weightQuantizationScale;
-            }
-            else
-            {
-                // quantize/clamp biases
-                w = std::floor(w * biasQuantizationScale + 0.5f) / biasQuantizationScale;
-            }
-
             /*
             const float cAdamLearningRate = 1.0f;
             const float cAdamBeta1 = 0.9f;
@@ -365,6 +353,37 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer, float weightQuantizationSca
             assert(!std::isnan(m));
             assert(!std::isnan(v));
             assert(!std::isnan(w));
+        }
+
+        offs += inputSize + 1;
+    }
+}
+
+void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const
+{
+    const size_t inputSize = layer.input.size();
+
+    size_t offs = 0;
+
+    for (size_t i = 0; i < layer.output.size(); i++)
+    {
+        for (size_t j = 0; j <= inputSize; j++)
+        {
+            const size_t idx = offs + j;
+
+            float& w = layer.weights[idx];
+
+            if (j < inputSize)
+            {
+                w = std::floor(w * weightQuantizationScale + 0.5f) / weightQuantizationScale;
+            }
+            else
+            {
+                w = std::floor(w * biasQuantizationScale + 0.5f) / biasQuantizationScale;
+            }
+
+            w = std::clamp(w, -cWeightsRange, cWeightsRange);
+
             assert(fabsf(w) <= cWeightsRange);
         }
 
@@ -418,27 +437,32 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
 
         for (size_t i = layers.size(); i-- > 0; )
         {
-            float weightQuantizationScale = 0.0f;
-            float biasQuantizationScale = 0.0f;
-
-            if (i == 0) // input layer
-            {
-                weightQuantizationScale = InputLayerWeightQuantizationScale;
-                biasQuantizationScale = InputLayerBiasQuantizationScale;
-            }
-            else if (i + 1 == layers.size()) // output layer
-            {
-                weightQuantizationScale = OutputLayerWeightQuantizationScale;
-                biasQuantizationScale = OutputLayerBiasQuantizationScale;
-            }
-            else // hidden layer
-            {
-                weightQuantizationScale = HiddenLayerWeightQuantizationScale;
-                biasQuantizationScale = HiddenLayerBiasQuantizationScale;
-            }
-
-            UpdateLayerWeights(layers[i], weightQuantizationScale, biasQuantizationScale);
+            UpdateLayerWeights(layers[i]);
         }
+    }
+
+    for (size_t i = layers.size(); i-- > 0; )
+    {
+        float weightQuantizationScale = 0.0f;
+        float biasQuantizationScale = 0.0f;
+
+        if (i == 0) // input layer
+        {
+            weightQuantizationScale = InputLayerWeightQuantizationScale;
+            biasQuantizationScale = InputLayerBiasQuantizationScale;
+        }
+        else if (i + 1 == layers.size()) // output layer
+        {
+            weightQuantizationScale = OutputLayerWeightQuantizationScale;
+            biasQuantizationScale = OutputLayerBiasQuantizationScale;
+        }
+        else // hidden layer
+        {
+            weightQuantizationScale = HiddenLayerWeightQuantizationScale;
+            biasQuantizationScale = HiddenLayerBiasQuantizationScale;
+        }
+
+        QuantizeLayerWeights(layers[i], weightQuantizationScale, biasQuantizationScale);
     }
 }
 

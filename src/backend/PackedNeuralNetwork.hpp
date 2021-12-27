@@ -7,7 +7,7 @@
 
 namespace nn {
 
-static constexpr uint32_t FirstLayerSize = 64;
+static constexpr uint32_t FirstLayerSize = 256;
 static constexpr uint32_t SecondLayerSize = 32;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
