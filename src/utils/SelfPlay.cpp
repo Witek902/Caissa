@@ -59,15 +59,15 @@ void SelfPlay()
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
             {
+                const TimePoint startTimePoint = TimePoint::GetCurrent();
+
                 SearchParam searchParam{ tt };
                 searchParam.limits.maxDepth = 16;
                 searchParam.numPvLines = 2;
                 searchParam.debugLog = false;
-                searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
-                searchParam.limits.maxTime = 500;
-                searchParam.limits.maxTimeSoft = 80;
-                searchParam.limits.rootSingularityTime = 30;
-
+                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.5f);
+                searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
+                searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
 
                 searchResult.clear();
 

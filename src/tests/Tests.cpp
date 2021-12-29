@@ -1404,13 +1404,14 @@ bool RunPerformanceTests(const char* path)
                     Game game;
                     game.Reset(position);
 
+                    const TimePoint startTimePoint = TimePoint::GetCurrent();
+
                     SearchParam searchParam{ tt };
                     searchParam.debugLog = false;
                     searchParam.numThreads = 1;
-                    searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
                     searchParam.limits.maxDepth = UINT8_MAX;
-                    searchParam.limits.maxTime = maxSearchTime;
-                    searchParam.limits.maxTimeSoft = maxSearchTime / 2;
+                    searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f);
+                    searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f / 2.0f);
                     searchParam.limits.analysisMode = true;
 
                     SearchResult searchResult;

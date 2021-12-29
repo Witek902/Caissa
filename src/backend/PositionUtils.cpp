@@ -1,7 +1,7 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
+#include "Time.hpp"
 
-#include <chrono>
 #include <random>
 
 #include <immintrin.h>
@@ -758,7 +758,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         std::cout << "Running Perft... depth=" << depth << std::endl;
     }
 
-    auto startTime = std::chrono::high_resolution_clock::now();
+    const TimePoint startTime = TimePoint::GetCurrent();
 
     MoveList moveList;
     GenerateMoveList(moveList);
@@ -784,14 +784,12 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         nodes += numChildNodes;
     }
 
-    auto endTime = std::chrono::high_resolution_clock::now();
+    const TimePoint endTime = TimePoint::GetCurrent();
 
     if (print)
     {
-        const float timeInSeconds = (1.0e-6f * (float)std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count());
-
         std::cout << "Total nodes: " << nodes << std::endl;
-        std::cout << "Time: " << timeInSeconds << " seconds" << std::endl;
+        std::cout << "Time: " << (endTime - startTime).ToSeconds() << " seconds" << std::endl;
     }
 
     return nodes;
