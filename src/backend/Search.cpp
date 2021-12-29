@@ -43,12 +43,6 @@ static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = 120;
 
-int64_t SearchParam::GetElapsedTime() const
-{
-    auto endTimePoint = std::chrono::high_resolution_clock::now();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - startTimePoint).count();
-}
-
 Search::Search()
 {
     BuildMoveReductionTable();
@@ -83,7 +77,7 @@ void Search::StopSearch()
     mStopSearch = true;
 }
 
-bool Search::CheckStopCondition(const SearchContext& ctx) const
+NO_INLINE bool Search::CheckStopCondition(const SearchContext& ctx, bool isRootNode) const
 {
     if (mStopSearch.load(std::memory_order_relaxed))
     {
@@ -96,14 +90,20 @@ bool Search::CheckStopCondition(const SearchContext& ctx) const
             ctx.stats.nodes >= ctx.searchParam.limits.maxNodes)
         {
             // nodes limit exceeded
+            mStopSearch = true;
             return true;
         }
 
-        if (ctx.searchParam.limits.maxTime < UINT32_MAX &&
-            ctx.searchParam.GetElapsedTime() >= ctx.searchParam.limits.maxTime)
+        // check inner nodes periodically
+        if (isRootNode || (ctx.stats.nodes % 64 == 0))
         {
-            // time limit exceeded
-            return true;
+            if (ctx.searchParam.limits.maxTime.IsValid() &&
+                TimePoint::GetCurrent() >= ctx.searchParam.limits.maxTime)
+            {
+                // time limit exceeded
+                mStopSearch = true;
+                return true;
+            }
         }
     }
 
@@ -194,7 +194,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     if (!param.limits.analysisMode)
     {
         // if we have time limit and there's only a single legal move, return it immediately without evaluation
-        if (param.limits.maxTime < UINT32_MAX && numLegalMoves == 1)
+        if (param.limits.maxTime.IsValid() && numLegalMoves == 1)
         {
             outResult.front().moves.push_back(legalMoves.front());
             outResult.front().score = 0;
@@ -241,7 +241,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     }
 }
 
-void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const std::chrono::high_resolution_clock::duration searchTime) const
+void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
 {
     std::cout << "info";
     std::cout << " depth " << param.depth;
@@ -273,10 +273,16 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         std::cout << " upperbound";
     }
 
-    std::cout << " time " << std::chrono::duration_cast<std::chrono::milliseconds>(searchTime).count();
+    const float timeInSeconds = searchTime.ToSeconds();
+    const uint64_t numNodes = param.searchContext.stats.nodes.load();
 
-    std::cout << " nodes " << param.searchContext.stats.nodes;
-    std::cout << " nps " << (int32_t)(1.0e9 * (double)param.searchContext.stats.nodes / (double)std::chrono::duration_cast<std::chrono::nanoseconds>(searchTime).count());
+    std::cout << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
+    std::cout << " nodes " << numNodes;
+
+    if (timeInSeconds > 0.01f && numNodes > 100)
+    {
+        std::cout << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
+    }
 
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchContext.stats.tbHits)
@@ -395,7 +401,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             pvMovesSoFar.push_back(pvLine.moves.front());
 
             // stop search only at depth 2 and more
-            if (depth > 1 && CheckStopCondition(searchContext))
+            if (depth > 1 && CheckStopCondition(searchContext, true))
             {
                 finishSearchAtDepth = true;
             }
@@ -428,8 +434,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             numPvLines == 1 &&
             depth >= SingularitySearchMinDepth &&
             std::abs(tempResult[0].score) < KnownWinValue &&
-            param.limits.rootSingularityTime < UINT32_MAX &&
-            param.GetElapsedTime() >= param.limits.rootSingularityTime)
+            param.limits.rootSingularityTime.IsValid() &&
+            TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
         {
             SearchContext searchContext{ game, param, SearchStats{} };
 
@@ -463,8 +469,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         // check soft time limit every depth iteration
         if (isMainThread &&
             !param.isPonder &&
-            param.limits.maxTimeSoft < UINT32_MAX &&
-            param.GetElapsedTime() >= param.limits.maxTimeSoft)
+            param.limits.maxTimeSoft.IsValid() &&
+            TimePoint::GetCurrent() >= param.limits.maxTimeSoft)
         {
             StopSearch();
             break;
@@ -494,7 +500,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     // start applying aspiration window at given depth
     if (param.depth >= AspirationWindowSearchStartDepth &&
-        !CheckStopCondition(param.searchContext))
+        !CheckStopCondition(param.searchContext, true))
     {
         alpha = std::max<int32_t>(param.previousScore - aspirationWindow, -InfValue);
         beta = std::min<int32_t>(param.previousScore + aspirationWindow, InfValue);
@@ -506,7 +512,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     {
         //std::cout << "aspiration window: " << alpha << "..." << beta << "\n";
 
-        const auto startTime = std::chrono::high_resolution_clock::now();
+        const TimePoint startTime = TimePoint::GetCurrent();
 
         memset(thread.pvArray, 0, sizeof(ThreadData::pvArray));
         memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
@@ -532,8 +538,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             pvLine.moves = GetPvLine(thread, param.position, param.searchParam.transpositionTable, maxPvLength);
         }
 
-        const auto endTime = std::chrono::high_resolution_clock::now();
-        const std::chrono::high_resolution_clock::duration searchTime = endTime - startTime;
+        const TimePoint endTime = TimePoint::GetCurrent();
+        const TimePoint searchTime = endTime - startTime;
 
         BoundsType boundsType = BoundsType::Exact;
         
@@ -559,7 +565,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             boundsType = BoundsType::LowerBound;
         }
 
-        const bool stopSearch = param.depth > 1 && CheckStopCondition(param.searchContext);
+        const bool stopSearch = param.depth > 1 && CheckStopCondition(param.searchContext, true);
         const bool isMainThread = param.threadID == 0;
 
         // don't report line if search was aborted, because the result comes from incomplete search
@@ -898,7 +904,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     }
 
     // store value in transposition table
-    if (!CheckStopCondition(ctx))
+    if (!CheckStopCondition(ctx, false))
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
@@ -1283,7 +1289,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
-    Move quietMovesTried[256];
+    Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
@@ -1291,8 +1297,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (i == numScoredMoves && !shuffleMoves)
         {
             // We reached a point where moves are not scored anymore, so score them now
-            // Randomize move order a bit for non-main threads
-            thread.moveOrderer.ScoreMoves(node, moves, thread.isMainThread ? 0 : 0b11);
+            thread.moveOrderer.ScoreMoves(node, moves);
         }
 
         int32_t moveScore = 0;
@@ -1515,7 +1520,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (!isRootNode && CheckStopCondition(ctx))
+        if (!isRootNode && CheckStopCondition(ctx, false))
         {
             // abort search of further moves
             searchAborted = true;
@@ -1549,7 +1554,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // don't write if:
     // - time is exceeded as evaluation may be inaccurate
     // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
-    if (!filteredSomeMove && !CheckStopCondition(ctx))
+    if (!filteredSomeMove && !CheckStopCondition(ctx, false))
     {
         ASSERT(numBestMoves > 0);
 

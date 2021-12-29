@@ -3,28 +3,26 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "MoveOrderer.hpp"
+#include "Time.hpp"
 
 #include "nnue-probe/nnue.h"
 
-#include <chrono>
 #include <atomic>
 
 #ifndef CONFIGURATION_FINAL
 #define COLLECT_SEARCH_STATS
 #endif // CONFIGURATION_FINAL
 
-using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
-
 struct SearchLimits
 {
     // minimum time after which root singularity search kicks in
-    uint32_t rootSingularityTime = UINT32_MAX;
+    TimePoint rootSingularityTime = TimePoint::Invalid();
 
-    // suggested search time in milliseconds, it's checked every iteration so can be exceeded
-    uint32_t maxTimeSoft = UINT32_MAX;
+    // suggested search time, it's checked every iteration so can be exceeded
+    TimePoint maxTimeSoft = TimePoint::Invalid();
 
-    // maximum allowed search time in milliseconds, after that all search must be stopped immediately
-    uint32_t maxTime = UINT32_MAX;
+    // maximum allowed search time, after that all search must be stopped immediately
+    TimePoint maxTime = TimePoint::Invalid();
 
     // maximum allowed searched nodes
     uint64_t maxNodes = UINT64_MAX;
@@ -43,9 +41,6 @@ struct SearchParam
 {
     // shared transposition table
     TranspositionTable& transpositionTable;
-
-    // used to track total time spend on search
-    TimePoint startTimePoint;
 
     // search limits
     SearchLimits limits;
@@ -72,8 +67,6 @@ struct SearchParam
 
     // print verbose debug stats (not UCI comaptible)
     bool verboseStats = false;
-
-    int64_t GetElapsedTime() const;
 };
 
 struct PvLine
@@ -205,7 +198,7 @@ private:
         const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
     };
 
-    std::atomic<bool> mStopSearch = false;
+    mutable std::atomic<bool> mStopSearch = false;
     
     std::vector<ThreadData> mThreadData;
 
@@ -214,7 +207,7 @@ private:
 
     void BuildMoveReductionTable();
 
-    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const std::chrono::high_resolution_clock::duration searchTime) const;
+    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);
 
@@ -234,5 +227,5 @@ private:
     static std::vector<Move> GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength);
 
     // returns true if the search needs to be aborted immediately
-    bool CheckStopCondition(const SearchContext& ctx) const;
+    bool CheckStopCondition(const SearchContext& ctx, bool isRootNode) const;
 };

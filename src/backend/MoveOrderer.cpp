@@ -147,7 +147,7 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
     }
 }
 
-void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shuffleMask) const
+void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 {
     const Position& pos = node.position;
 
@@ -255,11 +255,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shu
                 const uint32_t prevTo = followupMove.ToSquare().Index();
                 score += followupHistory[prevPiece][prevTo][piece][to] / 2;
             }
-        }
-
-        if (shuffleMask)
-        {
-            score += rand() & shuffleMask;
         }
 
         moves[i].score = (int32_t)std::min<int64_t>(score, INT32_MAX);

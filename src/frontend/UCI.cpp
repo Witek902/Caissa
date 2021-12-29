@@ -390,7 +390,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     Command_Stop();
 
-    const auto startTimePoint = std::chrono::high_resolution_clock::now();
+    const TimePoint startTimePoint = TimePoint::GetCurrent();
 
     bool isInfinite = false;
     bool isPonder = false;
@@ -508,6 +508,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
+        SearchLimits& limits = mSearchCtx->searchParam.limits;
+
         const int32_t moveOverhead = 20; // make configurable
         const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
@@ -517,31 +519,36 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         {
             const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft(mGame.GetPosition().GetMoveCount());
             const float idealTimeMs = std::clamp((float)remainingTime / movesLeftEstimated + (float)remainingTimeInc, 0.0f, (float)remainingTime);
+            const float idealTime = idealTimeMs * 0.001f;
+
+            std::cout << "info string ideal time " << idealTimeMs << " ms" << std::endl;
 
             // use at least 75% of estimated time
             // TODO some better heuristics:
             // for example, estimate time spent in each iteration based on previous searches
-            mSearchCtx->searchParam.limits.maxTimeSoft = static_cast<uint32_t>(0.7f * idealTimeMs + 0.5f);
+            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.7f * idealTime);
 
             // abort search if significantly exceeding ideal allocated time
-            mSearchCtx->searchParam.limits.maxTime = static_cast<uint32_t>(10.0f * idealTimeMs + 0.5f);
+            limits.maxTime = startTimePoint + TimePoint::FromSeconds(10.0f * idealTime);
 
             // activate root singularity search after some portion of estimated time passed
-            mSearchCtx->searchParam.limits.rootSingularityTime = static_cast<uint32_t>(0.25f * idealTimeMs + 0.5f);
+            limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.25f * idealTime);
         }
 
         // hard limit
-        int32_t hardLimit = std::min(remainingTime, moveTime);
-        if (hardLimit != INT32_MAX)
+        int32_t hardLimitMs = std::min(remainingTime, moveTime);
+        if (hardLimitMs != INT32_MAX)
         {
-            hardLimit = std::max(0, hardLimit - moveOverhead);
-            mSearchCtx->searchParam.limits.maxTime = std::min(mSearchCtx->searchParam.limits.maxTime, (uint32_t)hardLimit);
+            hardLimitMs = std::max(0, hardLimitMs - moveOverhead);
+            const TimePoint hardLimitTimePoint = startTimePoint + TimePoint::FromSeconds(hardLimitMs * 0.001f);
+
+            if (!limits.maxTime.IsValid() ||
+                limits.maxTime >= hardLimitTimePoint)
+            {
+                limits.maxTime = hardLimitTimePoint;
+            }
         }
     }
-
-    std::cout << "info string maxTimeSoft " << mSearchCtx->searchParam.limits.maxTimeSoft << std::endl;
-    std::cout << "info string maxTime " << mSearchCtx->searchParam.limits.maxTime << std::endl;
-    std::cout << "info string rootSingularityTime " << mSearchCtx->searchParam.limits.rootSingularityTime << std::endl;
 
     if (mateSearchDepth > 0)
     {
@@ -554,7 +561,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     // This way we can consider all possible oponent's replies, not just focus on predicted one... UCI is lame...
     mSearchCtx->searchParam.isPonder = isPonder;
 
-    mSearchCtx->searchParam.startTimePoint = startTimePoint;
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
     mSearchCtx->searchParam.limits.mateSearch = mateSearchDepth > 0;
@@ -568,7 +574,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     RunSearchTask();
 
-    if (mSearchCtx->searchParam.limits.maxTime != UINT32_MAX && waitForSearch)
+    if (mSearchCtx->searchParam.limits.maxTime.IsValid() && waitForSearch)
     {
         mSearchCtx->waitable.Wait();
     }
@@ -585,9 +591,6 @@ void UniversalChessInterface::RunSearchTask()
         mTranspositionTable.NextGeneration();
 
         mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
-
-        const auto endTimePoint = std::chrono::high_resolution_clock::now();
-        const auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - mSearchCtx->searchParam.startTimePoint).count();
 
         // only report best move in non-pondering mode or if "stop" was called during ponder search
         if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
@@ -619,11 +622,6 @@ void UniversalChessInterface::RunSearchTask()
             }
 
             std::cout << std::endl << std::flush;
-        }
-
-        if (mSearchCtx->searchParam.verboseStats)
-        {
-            std::cout << "Elapsed time: " << elapsedTime << " ms" << std::endl;
         }
     };
 
@@ -663,7 +661,6 @@ bool UniversalChessInterface::Command_PonderHit()
 
         // start searching again, this time not in pondering mode
         mSearchCtx->searchParam.isPonder = false;
-        mSearchCtx->searchParam.startTimePoint = std::chrono::high_resolution_clock::now();
 
         RunSearchTask();
     }

@@ -26,7 +26,7 @@ public:
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
     // assign scores to move list
-    void ScoreMoves(const NodeInfo& node, MoveList& moves, uint32_t shuffleMask = 0) const;
+    void ScoreMoves(const NodeInfo& node, MoveList& moves) const;
 
     void DebugPrint() const;
 

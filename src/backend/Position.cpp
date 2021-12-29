@@ -218,6 +218,12 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
     const int32_t pawnDirection = mSideToMove == Color::White ? 1 : -1;
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
+
+    if (!currentSide.pawns)
+    {
+        return;
+    }
+
     const uint32_t pawnStartingRank = mSideToMove == Color::White ? 1u : 6u;
     const uint32_t enPassantRank = mSideToMove == Color::White ? 5u : 2u;
     const uint32_t pawnFinalRank = mSideToMove == Color::White ? 6u : 1u;
@@ -301,6 +307,11 @@ void Position::GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags) con
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
+    if (!currentSide.knights)
+    {
+        return;
+    }
+
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
     Bitboard filter = ~currentSide.Occupied(); // can't capture own piece
     if (flags & MOVE_GEN_ONLY_TACTICAL) filter &= occupiedByOpponent;
@@ -326,6 +337,11 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
 {
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
+
+    if (!currentSide.rooks)
+    {
+        return;
+    }
 
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
@@ -353,6 +369,11 @@ void Position::GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags) con
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
+    if (!currentSide.bishops)
+    {
+        return;
+    }
+
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
     currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
@@ -377,6 +398,11 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
 {
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
+
+    if (!currentSide.queens)
+    {
+        return;
+    }
 
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
