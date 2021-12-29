@@ -1,12 +1,15 @@
 #include "Endgame.hpp"
 #include "Evaluate.hpp"
 #include "Position.hpp"
+#include "Material.hpp"
 #include "Move.hpp"
 #include "MoveList.hpp"
 #include "PackedNeuralNetwork.hpp"
 
 #include <bitset>
 #include <vector>
+#include <unordered_map>
+#include <mutex>
 
 static nn::PackedNeuralNetwork g_pawnsEndgameNeuralNetwork;
 
@@ -54,7 +57,7 @@ struct KPKPosition
     KPKPosition() = default;
     explicit KPKPosition(uint32_t idx);
     operator Result() const { return result; }
-    Result classify(const std::vector<KPKPosition>& db);
+    Result Classify(const std::vector<KPKPosition>& db);
 
     Color sideToMove : 1;
     Result result : 3;
@@ -92,7 +95,7 @@ void Init()
             repeat = 0;
             for (uint32_t i = 0; i < MaxIndex; ++i)
             {
-                repeat |= (db[i] == UNKNOWN && db[i].classify(db) != UNKNOWN);
+                repeat |= (db[i] == UNKNOWN && db[i].Classify(db) != UNKNOWN);
             }
         }
     }
@@ -153,7 +156,7 @@ KPKPosition::KPKPosition(uint32_t idx)
     }
 }
 
-Result KPKPosition::classify(const std::vector<KPKPosition>& db)
+Result KPKPosition::Classify(const std::vector<KPKPosition>& db)
 {
     const Result Good = sideToMove == Color::White ? WIN : DRAW;
     const Result Bad = sideToMove == Color::White ? DRAW : WIN;
@@ -524,6 +527,11 @@ void InitEndgame()
     RegisterEndgameFunction(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);
 }
 
+#ifdef COLLECT_ENDGAME_STATISTICS
+static std::mutex s_matKeyOccurencesMutex;
+static std::unordered_map<MaterialKey, uint64_t> s_matKeyOccurences;
+#endif // COLLECT_ENDGAME_STATISTICS
+
 bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 {
     MaterialMask materialMask = BuildMaterialMask(pos);
@@ -535,6 +543,14 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
         outScore = 0;
         return true;
     }
+
+#ifdef COLLECT_ENDGAME_STATISTICS
+    if (pos.GetNumPieces() <= 6)
+    {
+        std::unique_lock<std::mutex> lock(s_matKeyOccurencesMutex);
+        s_matKeyOccurences[pos.GetMaterialKey()]++;
+    }
+#endif // COLLECT_ENDGAME_STATISTICS
 
     // find registered function (regular)
     uint8_t evaluationFuncIndex = s_endgameEvaluationMap[materialMask];
@@ -561,6 +577,17 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 
     return false;
 }
+
+#ifdef COLLECT_ENDGAME_STATISTICS
+void PrintEndgameStatistics()
+{
+    std::unique_lock<std::mutex> lock(s_matKeyOccurencesMutex);
+    for (const auto& iter : s_matKeyOccurences)
+    {
+        std::cout << iter.first.ToString() << " " << iter.second << std::endl;
+    }
+}
+#endif // COLLECT_ENDGAME_STATISTICS
 
 /*
     // Pawns vs Pawns

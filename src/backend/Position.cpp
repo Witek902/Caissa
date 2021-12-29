@@ -1,10 +1,10 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "Bitboard.hpp"
+#include "Material.hpp"
 
 #include <random>
 
-static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
 static_assert(sizeof(PackedPosition) == 32, "Invalid packed position size");
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
