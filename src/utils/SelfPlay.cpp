@@ -37,7 +37,7 @@ void SelfPlay()
     {
         TaskBuilder taskBuilder(waitable);
 
-        taskBuilder.ParallelFor("SelfPlay", 100, [&](const TaskContext& context, uint32_t)
+        taskBuilder.ParallelFor("SelfPlay", 200, [&](const TaskContext& context, uint32_t)
         {
             std::random_device rd;
             std::mt19937 gen(rd());
@@ -62,10 +62,10 @@ void SelfPlay()
                 const TimePoint startTimePoint = TimePoint::GetCurrent();
 
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 16;
-                searchParam.numPvLines = 2;
+                searchParam.limits.maxDepth = 20;
+                searchParam.numPvLines = halfMoveNumber > 20 ? 1 : 2;
                 searchParam.debugLog = false;
-                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.5f);
+                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
                 searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
                 searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
 
@@ -214,6 +214,10 @@ void SelfPlay()
     }
 
     waitable.Wait();
+
+#ifdef COLLECT_ENDGAME_STATISTICS
+    PrintEndgameStatistics();
+#endif // COLLECT_ENDGAME_STATISTICS
 
     fclose(dumpFile);
 }

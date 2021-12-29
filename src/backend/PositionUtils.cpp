@@ -1,6 +1,7 @@
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "Time.hpp"
+#include "Material.hpp"
 
 #include <random>
 
@@ -798,7 +799,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
 static std::random_device g_randomDevice;
 static thread_local std::mt19937_64 g_randomGenerator(g_randomDevice());
 
-bool GenerateRandomPosition(const MaterialKey material, Position& outPosition)
+bool GenerateRandomPosition(const MaterialKey& material, Position& outPosition)
 {
     std::mt19937_64& randomGenerator = g_randomGenerator;
 

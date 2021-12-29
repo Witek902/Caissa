@@ -1,7 +1,9 @@
 #include "UCI.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
+#include "../backend/Material.hpp"
 
 #include "../backend/nnue-probe/nnue.h"
 
@@ -255,6 +257,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         mSearch.GetMoveOrderer().DebugPrint();
     }
+#ifdef COLLECT_ENDGAME_STATISTICS
+    else if (command == "endgamestats")
+    {
+        PrintEndgameStatistics();
+    }
+#endif // COLLECT_ENDGAME_STATISTICS
     else
     {
         std::cout << "Invalid command" << std::endl;
