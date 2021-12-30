@@ -67,12 +67,33 @@ static void RunPositionTests()
 
         // opponent side can't be in check
         TEST_EXPECT(!Position().FromFEN("k6Q/8/8/8/8/8/8/K7 w - - 0 1"));
+
+        // valid en passant square
+        {
+            Position p;
+            TEST_EXPECT(p.FromFEN("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq d6 0 3"));
+            TEST_EXPECT(p.GetEnPassantSquare() == Square_d6);
+        }
+
+        // invalid en passant sqaure
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq e6 0 3"));
     }
 
     // FEN printing
     {
         Position pos(Position::InitPositionFEN);
         TEST_EXPECT(pos.ToFEN() == Position::InitPositionFEN);
+    }
+
+    // hash
+    {
+        TEST_EXPECT(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash() != Position("rnbqkbnr/pppppppp/8/8/8/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash());
+        TEST_EXPECT(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash() != Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Qkq - 0 1").GetHash());
+        TEST_EXPECT(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash() != Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kkq - 0 1").GetHash());
+        TEST_EXPECT(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash() != Position("rnbqkbnr/pppppppp/8/8/8/8/1PPPPPPP/RNBQKBNR w KQq - 0 1").GetHash());
+        TEST_EXPECT(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").GetHash() != Position("rnbqkbnr/pppppppp/8/8/8/8/1PPPPPPP/RNBQKBNR w KQk - 0 1").GetHash());
+
+        TEST_EXPECT(Position("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq d6 0 3").GetHash() != Position("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq - 0 3").GetHash());
     }
 
     // king moves

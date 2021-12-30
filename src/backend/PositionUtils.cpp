@@ -231,8 +231,37 @@ bool Position::FromFEN(const std::string& fenString)
         mEnPassantSquare = Square::FromString(enPassantSquare);
         if (!mEnPassantSquare.IsValid())
         {
-            fprintf(stderr, "Invalid FEN: invalid en passant square\n");
+            fprintf(stderr, "Invalid FEN: failed to parse en passant square\n");
             return false;
+        }
+
+        if (mSideToMove == Color::White)
+        {
+            if (mEnPassantSquare.Rank() != 5)
+            {
+                fprintf(stderr, "Invalid FEN: invalid en passant square\n");
+                return false;
+            }
+            if (Blacks().GetPieceAtSquare(mEnPassantSquare) != Piece::None ||
+                Blacks().GetPieceAtSquare(mEnPassantSquare.South()) != Piece::Pawn)
+            {
+                fprintf(stderr, "Invalid FEN: invalid en passant square\n");
+                return false;
+            }
+        }
+        else
+        {
+            if (mEnPassantSquare.Rank() != 2)
+            {
+                fprintf(stderr, "Invalid FEN: invalid en passant square\n");
+                return false;
+            }
+            if (Whites().GetPieceAtSquare(mEnPassantSquare) != Piece::None ||
+                Whites().GetPieceAtSquare(mEnPassantSquare.North()) != Piece::Pawn)
+            {
+                fprintf(stderr, "Invalid FEN: invalid en passant square\n");
+                return false;
+            }
         }
     }
     else
