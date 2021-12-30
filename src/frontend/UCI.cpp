@@ -514,6 +514,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     mSearchCtx = std::make_unique<SearchTaskContext>(mTranspositionTable);
 
+    mSearchCtx->searchParam.limits.startTimePoint = startTimePoint;
+
     // calculate time for move based on total remaining time and other heuristics
     {
         SearchLimits& limits = mSearchCtx->searchParam.limits;

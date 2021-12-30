@@ -15,6 +15,9 @@
 
 struct SearchLimits
 {
+    // a time point where search started
+    TimePoint startTimePoint = TimePoint::Invalid();
+
     // minimum time after which root singularity search kicks in
     TimePoint rootSingularityTime = TimePoint::Invalid();
 
@@ -72,7 +75,7 @@ struct SearchParam
 struct PvLine
 {
     std::vector<Move> moves;
-    ScoreType score = 0;
+    ScoreType score = InvalidValue;
 };
 
 using SearchResult = std::vector<PvLine>;
@@ -208,6 +211,7 @@ private:
     void BuildMoveReductionTable();
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
+    void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);
 
