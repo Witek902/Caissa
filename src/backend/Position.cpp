@@ -9,62 +9,78 @@ static_assert(sizeof(PackedPosition) == 32, "Invalid packed position size");
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-static uint64_t s_BlackToMoveHash;
-static uint64_t s_PiecePositionHash[2][6][64];
-static uint64_t s_CastlingRightsHash[2][2];
-static uint64_t s_EnPassantFileHash[8];
+// 800 random bytes to store Zobrist hash
+// 
+// 2*6*64 for pieces piece
+// 4 for castlight rights
+// 8 for en passant square
+// 
+// This gives 780 64-bit hashes required. We overlap all the hashes (1 byte offsets),
+// so required storage is 8x smaller.
+// Note: side-to-move hash is stored separately
+static uint64_t s_ZobristHash[100];
+static constexpr uint64_t s_BlackToMoveHash = 0xef3994857c29fd96ull;
 
 void InitZobristHash()
 {
     std::mt19937_64 mt(0x06db3aa64a37b526LLU);
     std::uniform_int_distribution<uint64_t> distr;
 
-    s_BlackToMoveHash = distr(mt);
-
-    for (uint32_t color = 0; color < 2; ++color)
+    for (uint32_t i = 0; i < 100; ++i)
     {
-        for (uint32_t piece = 0; piece < 6; ++piece)
-        {
-            for (uint32_t square = 0; square < 64; ++square)
-            {
-                s_PiecePositionHash[color][piece][square] = distr(mt);
-            }
-        }
+        s_ZobristHash[i] = distr(mt);
     }
+}
 
-    for (uint32_t file = 0; file < 8; ++file)
-    {
-        s_EnPassantFileHash[file] = distr(mt);
-    }
+INLINE static uint64_t GetPieceZobristHash(const Color color, const Piece piece, const uint32_t squareIndex)
+{
+    const uint32_t pieceIndex = (uint32_t)piece - (uint32_t)Piece::Pawn;
+    const uint32_t offset = (uint32_t)color + 2 * (squareIndex + 64 * pieceIndex);
+    ASSERT(offset < 2 * 6 * 64);
+    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
+}
 
-    s_CastlingRightsHash[0][0] = distr(mt);
-    s_CastlingRightsHash[0][1] = distr(mt);
-    s_CastlingRightsHash[1][0] = distr(mt);
-    s_CastlingRightsHash[1][1] = distr(mt);
+INLINE static uint64_t GetEnPassantFileZobristHash(uint32_t fileIndex)
+{
+    ASSERT(fileIndex < 8);
+
+    // skip position hashes
+    const uint32_t offset = (2 * 6 * 64) + fileIndex;
+    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
+}
+
+INLINE static uint64_t GetCastlingRightsZobristHash(const Color color, uint32_t rookIndex)
+{
+    ASSERT(rookIndex < 2);
+
+    // skip position hashes and en passant hashes
+    const uint32_t offset = (2 * 6 * 64 + 8) + (uint32_t)color + 2 * rookIndex;
+    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
 }
 
 uint64_t Position::ComputeHash() const
 {
     uint64_t hash = mSideToMove == Color::Black ? s_BlackToMoveHash : 0llu;
 
-    for (uint32_t color = 0; color < 2; ++color)
+    for (uint32_t colorIdx = 0; colorIdx < 2; ++colorIdx)
     {
-        const SidePosition& pos = mColors[color];
+        const Color color = (Color)colorIdx;
+        const SidePosition& pos = mColors[colorIdx];
 
-        pos.pawns.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][0][square]; });
-        pos.knights.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][1][square]; });
-        pos.bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][2][square]; });
-        pos.rooks.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][3][square]; });
-        pos.queens.Iterate([&](uint32_t square)  INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][4][square]; });
-        pos.king.Iterate([&](uint32_t square)    INLINE_LAMBDA { hash ^= s_PiecePositionHash[color][5][square]; });
+        pos.pawns.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Pawn, square); });
+        pos.knights.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Knight, square); });
+        pos.bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Bishop, square); });
+        pos.rooks.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Rook, square); });
+        pos.queens.Iterate([&](uint32_t square)  INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Queen, square); });
+        pos.king.Iterate([&](uint32_t square)    INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::King, square); });
     }
 
-    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= s_CastlingRightsHash[0][0];
-    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= s_CastlingRightsHash[0][1];
-    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= s_CastlingRightsHash[1][0];
-    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= s_CastlingRightsHash[1][1];
+    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= GetCastlingRightsZobristHash(Color::White, 0);
+    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= GetCastlingRightsZobristHash(Color::White, 1);
+    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= GetCastlingRightsZobristHash(Color::Black, 0);
+    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= GetCastlingRightsZobristHash(Color::Black, 1);
 
-    if (mEnPassantSquare.IsValid()) hash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
+    if (mEnPassantSquare.IsValid()) hash ^= GetEnPassantFileZobristHash(mEnPassantSquare.File());
 
     return hash;
 }
@@ -102,7 +118,7 @@ Position::Position()
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
     const Bitboard mask = square.GetBitboard();
-    SidePosition& pos = mColors[(uint8_t)color];
+    SidePosition& pos = mColors[(uint32_t)color];
 
     ASSERT((pos.pawns & mask) == 0);
     ASSERT((pos.knights & mask) == 0);
@@ -111,9 +127,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.queens & mask) == 0);
     ASSERT((pos.king & mask) == 0);
 
-    const uint32_t colorIndex = (uint32_t)color;
-    const uint32_t pieceIndex = (uint32_t)piece - 1;
-    mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
+    mHash ^= GetPieceZobristHash(color, piece, square.Index());
 
     pos.GetPieceBitBoard(piece) |= mask;
 }
@@ -127,30 +141,34 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
 
-    const uint32_t colorIndex = (uint32_t)color;
-    const uint32_t pieceIndex = (uint32_t)piece - 1;
-    mHash ^= s_PiecePositionHash[colorIndex][pieceIndex][square.Index()];
+    mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
 
 void Position::SetEnPassantSquare(const Square square)
 {
-    if (mEnPassantSquare.IsValid())
+    if (mEnPassantSquare != square)
     {
-        mHash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
-    }
-    if (square.IsValid())
-    {
-        mHash ^= s_EnPassantFileHash[square.File()];
-    }
+        uint64_t hashDiff = 0;
 
-    mEnPassantSquare = square;
+        if (mEnPassantSquare.IsValid())
+        {
+            hashDiff = GetEnPassantFileZobristHash(mEnPassantSquare.File());
+        }
+        if (square.IsValid())
+        {
+            hashDiff ^= GetEnPassantFileZobristHash(square.File());
+        }
+
+        mHash ^= hashDiff;
+        mEnPassantSquare = square;
+    }
 }
 
 void Position::ClearEnPassantSquare()
 {
     if (mEnPassantSquare.IsValid())
     {
-        mHash ^= s_EnPassantFileHash[mEnPassantSquare.File()];
+        mHash ^= GetEnPassantFileZobristHash(mEnPassantSquare.File());
     }
 
     mEnPassantSquare = Square::Invalid();
@@ -674,19 +692,19 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
     switch (affectedSquare.mIndex)
     {
     case Square_h1:
-        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= s_CastlingRightsHash[0][0];
+        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::White, 0);
         mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_ShortCastleAllowed);
         break;
     case Square_a1:
-        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= s_CastlingRightsHash[0][1];
+        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::White, 1);
         mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_LongCastleAllowed);
         break;
     case Square_h8:
-        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= s_CastlingRightsHash[1][0];
+        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::Black, 0);
         mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_ShortCastleAllowed);
         break;
     case Square_a8:
-        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= s_CastlingRightsHash[1][1];
+        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::Black, 1);
         mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_LongCastleAllowed);
         break;
     };
@@ -762,8 +780,8 @@ bool Position::DoMove(const Move& move)
 
         // clear all castling rights after moving a king
         CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
-        if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= s_CastlingRightsHash[(uint32_t)mSideToMove][0];
-        if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= s_CastlingRightsHash[(uint32_t)mSideToMove][1];
+        if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(mSideToMove, 0);
+        if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(mSideToMove, 1);
         currentSideCastlingRights = CastlingRights(0);
     }
 
