@@ -15,6 +15,8 @@
 #include <thread>
 #include <math.h>
 
+static const float CurrentMoveReportDelay = 2.5f;
+
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const uint32_t SingularitySearchMinDepth = 7;
 static const int32_t SingularitySearchScoreTreshold = 400;
@@ -32,9 +34,8 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowSearchStartDepth = 1;
 static const int32_t AspirationWindowMax = 60;
-static const int32_t AspirationWindowMin = 10;
+static const int32_t AspirationWindowMin = 15;
 static const int32_t AspirationWindowStep = 5;
 
 static const int32_t BetaPruningDepth = 8;
@@ -276,7 +277,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     const float timeInSeconds = searchTime.ToSeconds();
     const uint64_t numNodes = param.searchContext.stats.nodes.load();
 
-    std::cout << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
     std::cout << " nodes " << numNodes;
 
     if (timeInSeconds > 0.01f && numNodes > 100)
@@ -290,6 +290,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         std::cout << " tbhit " << param.searchContext.stats.tbHits;
     }
 #endif // COLLECT_SEARCH_STATS
+
+    std::cout << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
 
     std::cout << " pv ";
     {
@@ -327,6 +329,15 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         }
     }
 #endif // COLLECT_SEARCH_STATS
+}
+
+void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
+{
+    std::cout
+        << "info depth " << depth
+        << " currmove " << move.ToString()
+        << " currmovenumber " << moveNumber
+        << std::endl;
 }
 
 static bool IsMate(const ScoreType score)
@@ -367,6 +378,21 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             SearchContext searchContext{ game, param, SearchStats{} };
 
+            // use previous iteration score as starting aspiration window
+            // if it's the first iteration - try score from transposition table
+            ScoreType prevScore = prevPvLine.score;
+            if (depth <= 1 && pvIndex == 0)
+            {
+                TTEntry ttEntry;
+                if (param.transpositionTable.Read(game.GetPosition(), ttEntry))
+                {
+                    if (ttEntry.IsValid())
+                    {
+                        prevScore = ttEntry.score;
+                    }
+                }
+            }
+
             const AspirationWindowSearchParam aspirationWindowSearchParam =
             {
                 game.GetPosition(),
@@ -376,7 +402,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 searchContext,
                 !pvMovesSoFar.empty() ? pvMovesSoFar.data() : nullptr,
                 !pvMovesSoFar.empty() ? (uint8_t)pvMovesSoFar.size() : 0u,
-                prevPvLine.score,
+                prevScore,
                 threadID,
             };
 
@@ -494,12 +520,12 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t beta = InfValue;
 
     // decrease aspiration window with increasing depth
-    int32_t aspirationWindow = AspirationWindowMax - (param.depth - AspirationWindowSearchStartDepth) * AspirationWindowStep;
+    int32_t aspirationWindow = AspirationWindowMax - param.depth * AspirationWindowStep;
     aspirationWindow = std::max<int32_t>(AspirationWindowMin, aspirationWindow);
     ASSERT(aspirationWindow > 0);
 
     // start applying aspiration window at given depth
-    if (param.depth >= AspirationWindowSearchStartDepth &&
+    if (param.previousScore != InvalidValue &&
         !CheckStopCondition(param.searchContext, true))
     {
         alpha = std::max<int32_t>(param.previousScore - aspirationWindow, -InfValue);
@@ -551,7 +577,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             pvLine.score = ScoreType(alpha);
             alpha -= aspirationWindow;
             alpha = std::max<int32_t>(alpha, -CheckmateValue);
-            aspirationWindow *= 4;
+            aspirationWindow *= 8;
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
@@ -561,7 +587,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             pvLine.score = ScoreType(beta);
             beta += aspirationWindow;
             beta = std::min<int32_t>(beta, CheckmateValue);
-            aspirationWindow *= 4;
+            aspirationWindow *= 8;
             boundsType = BoundsType::LowerBound;
         }
 
@@ -1320,6 +1346,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
 
         moveIndex++;
+
+        // report current move to UCI
+        if (isRootNode && thread.isMainThread)
+        {
+            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
+            if (timeElapsed > CurrentMoveReportDelay)
+            {
+                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
+            }
+        }
 
         if (move.IsQuiet()) quietMovesTried[numQuietMovesTried++] = move;
 
