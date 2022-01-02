@@ -184,10 +184,17 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "setoption")
     {
-        if (args[1] == "name" && args[3] == "value")
+        if (args.size() >= 5 && args[1] == "name" && args[3] == "value")
         {
+            size_t offset = commandString.find("value");
+            offset += 5; // skip "value" string
+            while (offset < commandString.size() && isspace(commandString[offset]))
+            {
+                offset++;
+            }
+
             UniqueLock lock(mMutex);
-            Command_SetOption(args[2], args.size() > 4 ? args[4] : "");
+            Command_SetOption(args[2], commandString.substr(offset));
         }
         else
         {

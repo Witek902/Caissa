@@ -49,6 +49,12 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
         return false;
     }
 
+    uint32_t castlingRights = 0;
+    if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_K;
+    if (pos.GetWhitesCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_Q;
+    if (pos.GetBlacksCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_k;
+    if (pos.GetBlacksCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_q;
+
     const uint32_t probeResult = tb_probe_root(
         pos.Whites().Occupied(),
         pos.Blacks().Occupied(),
@@ -59,8 +65,8 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
         pos.Whites().knights | pos.Blacks().knights,
         pos.Whites().pawns | pos.Blacks().pawns,
         pos.GetHalfMoveCount(),
-        0, // TODO castling rights
-        pos.GetEnPassantSquare().mIndex,
+        castlingRights,
+        pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
         pos.GetSideToMove() == Color::White,
         nullptr);
 
@@ -69,12 +75,17 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
         return false;
     }
 
-    const PackedMove packedMove(
-        Square(TB_GET_FROM(probeResult)),
-        TB_GET_TO(probeResult),
-        TranslatePieceType(TB_GET_PROMOTES(probeResult)));
+    const uint32_t tbFrom = TB_GET_FROM(probeResult);
+    const uint32_t tbTo = TB_GET_TO(probeResult);
+    const uint32_t tbPromo = TB_GET_PROMOTES(probeResult);
 
-    outMove = pos.MoveFromPacked(packedMove);
+    outMove = pos.MoveFromPacked(PackedMove(Square(tbFrom), Square(tbTo), TranslatePieceType(tbPromo)));
+
+    if (!outMove.IsValid())
+    {
+        DEBUG_BREAK();
+        return false;
+    }
 
     if (outDistanceToZero)
     {
@@ -92,6 +103,64 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
     return true;
 }
 
+bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL)
+{
+    if (!HasTablebases())
+    {
+        return false;
+    }
+
+    if (pos.GetNumPieces() > TB_LARGEST)
+    {
+        return false;
+    }
+
+    uint32_t castlingRights = 0;
+    if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_K;
+    if (pos.GetWhitesCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_Q;
+    if (pos.GetBlacksCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_k;
+    if (pos.GetBlacksCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_q;
+
+    // TODO skip if too many pieces, obvious wins, etc.
+    const uint32_t probeResult = tb_probe_wdl(
+        pos.Whites().Occupied(),
+        pos.Blacks().Occupied(),
+        pos.Whites().king | pos.Blacks().king,
+        pos.Whites().queens | pos.Blacks().queens,
+        pos.Whites().rooks | pos.Blacks().rooks,
+        pos.Whites().bishops | pos.Blacks().bishops,
+        pos.Whites().knights | pos.Blacks().knights,
+        pos.Whites().pawns | pos.Blacks().pawns,
+        pos.GetHalfMoveCount(),
+        castlingRights,
+        pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
+        pos.GetSideToMove() == Color::White);
+
+    if (probeResult != TB_RESULT_FAILED)
+    {
+#ifdef COLLECT_SEARCH_STATS
+        ctx.stats.tbHits++;
+#endif // COLLECT_SEARCH_STATS
+
+        if (probeResult == TB_LOSS)
+        {
+            *outWDL = -1;
+        }
+        else if (probeResult == TB_WIN)
+        {
+            *outWDL = 1;
+        }
+        else if (probeResult == TB_LOSS)
+        {
+            *outWDL = 0;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
 #else // !USE_TABLE_BASES
 
 bool HasTablebases()
@@ -103,6 +172,11 @@ void LoadTablebase(const char*) { }
 void UnloadTablebase() { }
 
 bool ProbeTablebase_Root(const Position&, Move&, uint32_t*, int32_t*)
+{
+    return false;
+}
+
+bool ProbeTablebase_WDL(const Position&, int32_t*)
 {
     return false;
 }

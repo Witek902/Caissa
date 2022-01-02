@@ -25,7 +25,7 @@ int main(int argc, const char* argv[])
     // HACK
     nnue_init("D:/CHESS/NNUE/nn-04cf2b4ed1da.nnue");
 
-    //LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
+    LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
 
     if (0 == strcmp(argv[1], "selfplay"))
     {
