@@ -630,7 +630,13 @@ Move Position::MoveFromString(const std::string& str) const
 
 bool Position::IsMoveValid(const Move& move) const
 {
-    ASSERT(move.IsValid());
+#ifndef CONFIGURATION_FINAL
+    if (!move.IsValid())
+    {
+        std::cout << "Invalid move for position: " << ToFEN() << std::endl;
+        DEBUG_BREAK();
+    }
+#endif // CONFIGURATION_FINAL
 
     if (move.FromSquare() == move.ToSquare())
     {

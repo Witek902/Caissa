@@ -191,7 +191,7 @@ static void PositionToVector(const Position& pos, nn::TrainingVector& outVector,
 
 static float ScoreToNN(float score)
 {
-    return score / 10.0f;
+    return std::clamp(score / 10.0f, -1.0f, 1.0f);
 }
 
 static float ScoreFromNN(float score)
@@ -219,11 +219,9 @@ bool TrainEndgame()
             {
                 Position pos;
 
-                int basePawnCount = 1 + rand() % 8;
-
                 MaterialKey material;
-                material.numWhitePawns = basePawnCount;// +rand() % 3;
-                material.numBlackPawns = basePawnCount;// +rand() % 3;
+                material.numWhitePawns = 1;// +rand() % 3;
+                material.numBlackPawns = 0;// +rand() % 3;
                 material.numWhiteRooks = 1;
                 material.numBlackRooks = 1;
 
@@ -266,10 +264,10 @@ bool TrainEndgame()
 
                 float score = isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f;
 
-                if (score > 15.0f || score < -15.0f)
-                {
-                    continue;
-                }
+                //if (score > 15.0f || score < -15.0f)
+                //{
+                //    continue;
+                //}
 
                 outSet[i].output[0] = ScoreToNN(score);
                 outPositions[i] = pos;

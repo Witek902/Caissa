@@ -208,6 +208,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
             Move tbMove;
             if (ProbeTablebase_Root(game.GetPosition(), tbMove))
             {
+                ASSERT(tbMove.IsValid());
                 outResult.front().moves.push_back(tbMove);
                 outResult.front().score = 0;
                 return;
@@ -598,6 +599,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         if (isMainThread && !stopSearch && param.pvIndex != SingularitySearchPvIndex)
         {
             ASSERT(!pvLine.moves.empty());
+            ASSERT(pvLine.moves.front().IsValid());
 
             if (param.searchParam.debugLog)
             {
@@ -1028,7 +1030,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType alpha = node.alpha;
     ScoreType beta = node.beta;
     ScoreType bestValue = -InfValue;
-    ScoreType maxValue = CheckmateValue; // max score limited by tablebase
     ScoreType staticEval = InvalidValue;
 
     // transposition table lookup
@@ -1077,80 +1078,43 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-#ifdef USE_TABLE_BASES
-    // probe endgame tables
-    if (!isRootNode && HasTablebases())
+    // try probing Win-Draw-Loose endgame tables
     {
-        if (position.GetNumPieces() <= TB_LARGEST &&
+        int32_t wdl = 0;
+        if (!isRootNode &&
             node.depth >= TablebaseProbeDepth &&
-            position.GetBlacksCastlingRights() == 0 && position.GetWhitesCastlingRights() == 0)
+            ProbeTablebase_WDL(position, &wdl))
         {
-            // TODO skip if too many pieces, obvious wins, etc.
-            const uint32_t probeResult = tb_probe_wdl(
-                position.Whites().Occupied(),
-                position.Blacks().Occupied(),
-                position.Whites().king | position.Blacks().king,
-                position.Whites().queens | position.Blacks().queens,
-                position.Whites().rooks | position.Blacks().rooks,
-                position.Whites().bishops | position.Blacks().bishops,
-                position.Whites().knights | position.Blacks().knights,
-                position.Whites().pawns | position.Blacks().pawns,
-                position.GetHalfMoveCount(),
-                0, // TODO castling rights
-                position.GetEnPassantSquare().mIndex,
-                position.GetSideToMove() == Color::White);
+#ifdef COLLECT_SEARCH_STATS
+            ctx.stats.tbHits++;
+#endif // COLLECT_SEARCH_STATS
 
-            if (probeResult != TB_RESULT_FAILED)
+            // convert the WDL value to a score
+            const ScoreType tbValue =
+                wdl < 0 ? -(TablebaseWinValue - (ScoreType)node.height) :
+                wdl > 0 ? (TablebaseWinValue - (ScoreType)node.height) : 0;
+            ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
+
+            // only draws are exact, we don't know exact value for win/loss just based on WDL value
+            const TTEntry::Bounds bounds =
+                wdl < 0 ? TTEntry::Bounds::Upper :
+                wdl > 0 ? TTEntry::Bounds::Lower :
+                TTEntry::Bounds::Exact;
+
+            if (bounds == TTEntry::Bounds::Exact
+                || (bounds == TTEntry::Bounds::Lower && tbValue >= beta)
+                || (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
             {
-#ifdef COLLECT_SEARCH_STATS
-                ctx.stats.tbHits++;
-#endif // COLLECT_SEARCH_STATS
-
-                // convert the WDL value to a score
-                const ScoreType tbValue =
-                    probeResult == TB_LOSS ? -(TablebaseWinValue - (ScoreType)node.height) :
-                    probeResult == TB_WIN  ?  (TablebaseWinValue - (ScoreType)node.height) : 0;
-                ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
-
-                // only draws are exact, we don't know exact value for win/loss just based on WDL value
-                const TTEntry::Bounds bounds =
-                    probeResult == TB_LOSS ? TTEntry::Bounds::Upper :
-                    probeResult == TB_WIN  ? TTEntry::Bounds::Lower :
-                    TTEntry::Bounds::Exact;
-
-                if (    bounds == TTEntry::Bounds::Exact
-                    || (bounds == TTEntry::Bounds::Lower && tbValue >= beta)
-                    || (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
-                {
-                    ctx.searchParam.transpositionTable.Write(
-                        position,
-                        ScoreToTT(tbValue, node.height), staticEval,
-                        bounds == TTEntry::Bounds::Exact ? INT8_MAX : node.depth,
-                        bounds);
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node.height), staticEval, node.depth, bounds);
 
 #ifdef COLLECT_SEARCH_STATS
-                    ctx.stats.ttWrites++;
+                ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
 
-                    return tbValue;
-                }
-
-                //if (isPvNode)
-                //{
-                //    if (bounds == TTEntry::Bounds::Lower)
-                //    {
-                //        bestValue = tbValue;
-                //        alpha = std::max(alpha, tbValue);
-                //    }
-                //    else
-                //    {
-                //        maxValue = tbValue;
-                //    }
-                //}
+                return tbValue;
             }
         }
     }
-#endif // USE_TABLE_BASES
 
     // evaluate position if it wasn't evaluated
     bool wasPositionEvaluated = true;
@@ -1348,7 +1312,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         moveIndex++;
 
         // report current move to UCI
-        if (isRootNode && thread.isMainThread)
+        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog)
         {
             const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
             if (timeElapsed > CurrentMoveReportDelay)
@@ -1582,9 +1546,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     ASSERT(alpha < beta);
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
-
-    // limit by TB
-    bestValue = std::min(bestValue, maxValue);
 
     // update transposition table
     // don't write if:
