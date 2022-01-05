@@ -526,7 +526,7 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
 
     ASSERT(value < KnownWinValue&& value > -KnownWinValue);
 
-    constexpr int32_t nnueTreshold = 1024;
+    constexpr int32_t nnueTreshold = 512;
 
     // use NNUE for balanced positions
     if (nnue_is_valid() && value < nnueTreshold && value > -nnueTreshold)
