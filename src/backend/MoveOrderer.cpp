@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <limits>
 
+static constexpr int32_t RecaptureBonus = 10000;
+static constexpr int32_t PieceSquareTableScale = 32;
+
 static const int32_t c_PromotionScores[] =
 {
     0,          // none
@@ -206,12 +209,12 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
             // bonus for capturing previously moved piece
             if (move.ToSquare() == prevMove.ToSquare())
             {
-                score += 1000;
+                score += RecaptureBonus;
             }
         }
         else
         {
-            score += ScoreQuietMove(pos, move);
+            score += PieceSquareTableScale * ScoreQuietMove(pos, move);
         }
 
         if (move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None)

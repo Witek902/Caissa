@@ -83,7 +83,6 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
 
     if (!outMove.IsValid())
     {
-        DEBUG_BREAK();
         return false;
     }
 
