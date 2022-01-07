@@ -409,7 +409,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     bool isInfinite = false;
     bool isPonder = false;
-    bool printMoves = false;
     bool verboseStats = false;
     bool waitForSearch = false;
     uint32_t maxDepth = UINT32_MAX;
@@ -445,10 +444,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         else if (args[i] == "wait")
         {
             waitForSearch = true;
-        }
-        else if (args[i] == "printmoves")
-        {
-            printMoves = true;
         }
         else if (args[i] == "verbosestats")
         {
@@ -585,7 +580,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
-    mSearchCtx->searchParam.printMoves = printMoves;
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
 
@@ -842,7 +836,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves);
 
-    moves.Print();
+    moves.Print(mGame.GetPosition());
 
     return true;
 }

@@ -43,7 +43,7 @@ public:
         moves[index] = { move, 0 };
     }
 
-    const Move AssignTTScores(const TTEntry& ttEntry);
+    uint32_t AssignTTScores(const TTEntry& ttEntry);
 
     const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
@@ -97,7 +97,7 @@ public:
 
     void Shuffle();
 
-    void Print(bool sorted = true) const;
+    void Print(const Position& pos, bool sorted = true) const;
 
 private:
 

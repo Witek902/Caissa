@@ -1,14 +1,15 @@
 #include "MoveList.hpp"
 #include "TranspositionTable.hpp"
 #include "MoveOrderer.hpp"
+#include "Position.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <random>
 
-const Move MoveList::AssignTTScores(const TTEntry& ttEntry)
+uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
 {
-    Move ttMove = Move::Invalid();
+    uint32_t numAssignedMoves = 0;
 
     for (uint32_t j = 0; j < TTEntry::NumMoves; ++j)
     {
@@ -22,16 +23,13 @@ const Move MoveList::AssignTTScores(const TTEntry& ttEntry)
             if (moves[i].move == ttEntry.moves[j])
             {
                 moves[i].score = MoveOrderer::TTMoveValue - j;
-                if (!ttMove.IsValid())
-                {
-                    ttMove = moves[i].move;
-                }
+                numAssignedMoves++;
                 break;
             }
         }
     }
 
-    return Move::Invalid();
+    return numAssignedMoves;
 }
 
 void MoveList::Shuffle()
@@ -53,7 +51,7 @@ void MoveList::RemoveMove(const Move& move)
     }
 }
 
-void MoveList::Print(bool sorted) const
+void MoveList::Print(const Position& pos, bool sorted) const
 {
     MoveEntry movesCopy[MaxMoves];
     memcpy(movesCopy, moves, sizeof(MoveEntry) * numMoves);
@@ -68,6 +66,9 @@ void MoveList::Print(bool sorted) const
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
-        std::cout << movesCopy[i].move.ToString() << " " << movesCopy[i].score << std::endl;
+        std::cout
+            << movesCopy[i].move.ToString() << "\t("
+            << pos.MoveToString(movesCopy[i].move, MoveNotation::SAN) << ")\t"
+            << movesCopy[i].score << std::endl;
     }
 }

@@ -181,6 +181,9 @@ int32_t ScoreQuietMove(const Position& position, const Move& move)
         scoreMG = QueenPSQT[toSquare].mg - QueenPSQT[fromSquare].mg;
         scoreEG = QueenPSQT[toSquare].eg - QueenPSQT[fromSquare].eg;
         break;
+    case Piece::King:
+        scoreMG = KingPSQT[toSquare].mg - KingPSQT[fromSquare].mg;
+        scoreEG = KingPSQT[toSquare].eg - KingPSQT[fromSquare].eg;
     }
 
     const int32_t score = InterpolateScore(position, scoreMG, scoreEG);

@@ -54,9 +54,17 @@ void MoveOrderer::DebugPrint() const
     {
         std::cout << d;
 
+        bool hasAnyValid = false;
+
         for (uint32_t i = 0; i < NumKillerMoves; ++i)
         {
-            std::cout << " " << killerMoves[d][i].ToString() << " ";
+            hasAnyValid |= killerMoves[d][i].IsValid();
+            std::cout << "\t" << killerMoves[d][i].ToString() << " ";
+        }
+
+        if (!hasAnyValid)
+        {
+            break;
         }
 
         std::cout << std::endl;
@@ -91,7 +99,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(depth >= 0);
 
     // don't update uncertain moves
-    if (numMoves == 1 && depth <= 2)
+    if (numMoves <= 1 && depth <= 2)
     {
         return;
     }
@@ -212,20 +220,16 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 score += RecaptureBonus;
             }
         }
-        else
-        {
-            score += PieceSquareTableScale * ScoreQuietMove(pos, move);
-        }
-
-        if (move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None)
+        else if (move.IsPromotion())
         {
             const uint32_t pieceIndex = (uint32_t)move.GetPromoteTo();
             ASSERT(pieceIndex > 1 && pieceIndex < 6);
             score += c_PromotionScores[pieceIndex];
         }
-
-        if (move.IsQuiet())
+        else
         {
+            score += PieceSquareTableScale * ScoreQuietMove(pos, move);
+
             // history heuristics
             {
                 score += searchHistory[color][from][to];
