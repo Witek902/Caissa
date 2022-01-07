@@ -40,6 +40,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="EndgamePieceSquareTables.cpp" />
+    <ClCompile Include="EndgameValidation.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="SelfPlay.cpp" />

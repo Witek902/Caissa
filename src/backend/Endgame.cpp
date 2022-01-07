@@ -491,6 +491,79 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
     return false;
 }
 
+static bool EvaluateEndgame_KRvKR(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks > 0 && pos.Whites().queens == 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks > 0 && pos.Blacks().queens == 0);
+
+    if (pos.Whites().rooks.Count() == 1 && pos.Blacks().rooks.Count() == 1)
+    {
+        if (pos.IsInCheck(pos.GetSideToMove()))
+        {
+            return false;
+        }
+
+        // assume white is to move
+        Square whiteKing(FirstBitSet(pos.GetCurrentSide().king));
+        Square whiteRook(FirstBitSet(pos.GetCurrentSide().rooks));
+        Square blackKing(FirstBitSet(pos.GetOpponentSide().king));
+        Square blackRook(FirstBitSet(pos.GetOpponentSide().rooks));
+
+        // right skewer
+        if (blackKing.Rank() == blackRook.Rank() && // losing rook and king in same line
+            blackKing.File() >= blackRook.File() + 3 && // losing king can't protect rook
+            whiteRook.File() >= blackKing.File() + 2 && // losing king can't protect against skewer
+            (whiteKing.Rank() != blackKing.Rank() || whiteKing.File() > whiteRook.File()) && // strong king isn't blocking skewer
+            (whiteKing.File() != whiteRook.File() || whiteKing.Rank() < std::min(whiteRook.Rank(), blackKing.Rank()) || whiteKing.Rank() > std::max(whiteRook.Rank(), blackKing.Rank())) // strong king isn't blocking rook from moving
+            )
+        {
+            outScore = KnownWinValue;
+            return true;
+        }
+
+        // left skewer
+        if (blackKing.Rank() == blackRook.Rank() && // losing rook and king in same line
+            blackKing.File() + 3 <= blackRook.File() && // losing king can't protect rook
+            whiteRook.File() + 2 <= blackKing.File() && // losing king can't protect against skewer
+            (whiteKing.Rank() != blackKing.Rank() || whiteKing.File() < whiteRook.File()) && // strong king isn't blocking skewer
+            (whiteKing.File() != whiteRook.File() || whiteKing.Rank() < std::min(whiteRook.Rank(), blackKing.Rank()) || whiteKing.Rank() > std::max(whiteRook.Rank(), blackKing.Rank())) // strong king isn't blocking rook from moving
+            )
+        {
+            outScore = KnownWinValue;
+            return true;
+        }
+
+        // top skewer
+        if (blackKing.File() == blackRook.File() && // losing rook and king in same line
+            blackKing.Rank() >= blackRook.Rank() + 3 && // losing king can't protect rook
+            whiteRook.Rank() >= blackKing.Rank() + 2 && // losing king can't protect against skewer
+            (whiteKing.File() != blackKing.File() || whiteKing.Rank() > whiteRook.Rank()) && // strong king isn't blocking skewer
+            (whiteKing.Rank() != whiteRook.Rank() || whiteKing.File() < std::min(whiteRook.File(), blackKing.File()) || whiteKing.File() > std::max(whiteRook.File(), blackKing.File())) // strong king isn't blocking rook from moving
+            )
+        {
+            outScore = KnownWinValue;
+            return true;
+        }
+
+        // bottom skewer
+        if (blackKing.File() == blackRook.File() && // losing rook and king in same line
+            blackKing.Rank() + 3 <= blackRook.Rank() && // losing king can't protect rook
+            whiteRook.Rank() + 2 <= blackKing.Rank() && // losing king can't protect against skewer
+            (whiteKing.File() != blackKing.File() || whiteKing.Rank() < whiteRook.Rank()) && // strong king isn't blocking skewer
+            (whiteKing.Rank() != whiteRook.Rank() || whiteKing.File() < std::min(whiteRook.File(), blackKing.File()) || whiteKing.File() > std::max(whiteRook.File(), blackKing.File())) // strong king isn't blocking rook from moving
+            )
+        {
+            outScore = KnownWinValue;
+            return true;
+        }
+
+        // TODO rook skewer at the edge
+        // TODO mate on edge (black king blocked by white king)
+    }
+
+    return false;
+}
+
 void InitEndgame()
 {
     KPKEndgame::Init();
@@ -525,6 +598,8 @@ void InitEndgame()
     RegisterEndgameFunction(MaterialMask_WhiteBishop|MaterialMask_WhitePawn, EvaluateEndgame_KBPvK);
 
     RegisterEndgameFunction(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);
+
+    RegisterEndgameFunction(MaterialMask_WhiteRook|MaterialMask_BlackRook, EvaluateEndgame_KRvKR);
 }
 
 #ifdef COLLECT_ENDGAME_STATISTICS
