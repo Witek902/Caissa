@@ -126,14 +126,19 @@ struct Move
 
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
-    bool constexpr IsValid() const
+    INLINE bool constexpr IsValid() const
     {
         return value != 0u;
     }
 
-    bool IsQuiet() const
+    INLINE bool IsQuiet() const
     {
         return !IsCapture() && GetPromoteTo() == Piece::None;
+    }
+
+    INLINE bool IsPromotion() const
+    {
+        return GetPromoteTo() != Piece::None;
     }
 
     std::string ToString() const;

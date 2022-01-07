@@ -65,9 +65,6 @@ struct SearchParam
     // move notation for PV lines printing
     MoveNotation moveNotation = MoveNotation::LAN;
 
-    // print move scores for the root nodes
-    bool printMoves = false;
-
     // print verbose debug stats (not UCI comaptible)
     bool verboseStats = false;
 };
@@ -185,12 +182,12 @@ private:
     {
         bool isMainThread = false;
 
+        // principial variation lines from previous iterative deepening search
+        SearchResult prevPvLines;
+
         // principial variation moves tracking for current search
         PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
         uint8_t pvLengths[MaxSearchDepth];
-
-        // principial variation lines from previous iterative deepening search
-        SearchResult prevPvLines;
 
         MoveOrderer moveOrderer;
 

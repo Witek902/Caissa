@@ -28,10 +28,12 @@ void GenerateEndgamePieceSquareTables()
         Square_d1, Square_d2, Square_d3, Square_d4,
     };
 
+    const uint32_t numBlackKingPositions = 10;
+
     uint32_t successfullyProbed = 0;
     uint32_t maxDtz = 0;
 
-    for (uint32_t blackSquareIndex = 0; blackSquareIndex < 10; ++blackSquareIndex)
+    for (uint32_t blackSquareIndex = 0; blackSquareIndex < numBlackKingPositions; ++blackSquareIndex)
     {
         const Square blackKingSq = blackKingSquares[blackSquareIndex];
 
@@ -68,8 +70,8 @@ void GenerateEndgamePieceSquareTables()
             pos.SetSideToMove(Color::Black);
             pos.SetPiece(blackKingSq, Piece::King, Color::Black);
             pos.SetPiece(whiteKingSq, Piece::King, Color::White);
-            pos.SetPiece(whiteKnightSq, Piece::Knight, Color::White);
-            pos.SetPiece(whiteBishopSq, Piece::Bishop, Color::White);
+            pos.SetPiece(whiteKnightSq, Piece::Rook, Color::Black);
+            pos.SetPiece(whiteBishopSq, Piece::Queen, Color::White);
             ASSERT(pos.IsValid());
 
             Move bestMove;
@@ -79,6 +81,8 @@ void GenerateEndgamePieceSquareTables()
 
             if (probeResult)
             {
+                ASSERT(dtz < UINT8_MAX);
+
                 successfullyProbed++;
                 maxDtz = std::max(maxDtz, dtz);
 
@@ -99,7 +103,7 @@ void GenerateEndgamePieceSquareTables()
                 {
                     std::cout
                         << std::right << std::fixed << std::setprecision(3)
-                        << 400.0f * float(counters[8 * rank + file]) / (float)successfullyProbed << "\t";
+                        << 64.0f * float(counters[8 * rank + file]) / (float)successfullyProbed << "\t";
                 }
                 std::cout << std::endl;
             }

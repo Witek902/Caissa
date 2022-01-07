@@ -336,6 +336,7 @@
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />
     <ClInclude Include="MoveOrderer.hpp" />
+    <ClInclude Include="MovePicker.hpp" />
     <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="nnue-probe\misc.h" />
     <ClInclude Include="nnue-probe\nnue.h" />

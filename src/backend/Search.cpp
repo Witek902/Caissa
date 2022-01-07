@@ -1,4 +1,5 @@
 #include "Search.hpp"
+#include "MovePicker.hpp"
 #include "Game.hpp"
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
@@ -841,39 +842,18 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
     }
 
-    MoveList moves;
-    position.GenerateMoveList(moves, moveGenFlags);
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry, moveGenFlags);
 
-    //const int32_t sseTreshold = std::max(0, alpha - staticEval) - QSearchSeeMargin;
-
-    // resolve move scoring
-    // the idea here is to defer scoring if we have a TT/PV move
-    // most likely we'll get beta cutoff on it so we won't need to score any other move
-    uint32_t numScoredMoves = moves.numMoves;
-    if (moves.numMoves > 1u)
-    {
-        numScoredMoves = 0;
-
-        if (moves.AssignTTScores(ttEntry).IsValid())
-        {
-            numScoredMoves++;
-        }
-    }
+    int32_t moveScore = 0;
+    Move move;
 
     Move bestMoves[TTEntry::NumMoves];
     uint32_t numBestMoves = 0;
     uint32_t moveIndex = 0;
 
-    for (uint32_t i = 0; i < moves.Size(); ++i)
+    while (movePicker.PickMove(node, move, moveScore))
     {
-        if (i == numScoredMoves)
-        {
-            // we reached a point where moves are not scored anymore, so score them now
-            thread.moveOrderer.ScoreMoves(node, moves);
-        }
-
-        int32_t moveScore = 0;
-        const Move move = moves.PickBestMove(i, moveScore);
+        ASSERT(move.IsValid());
 
         // skip losing captures
         //if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue)
@@ -1002,6 +982,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     const bool isPvNode = node.isPvNode;
     const bool hasMoveFilter = node.moveFilterCount > 0u;
 
+    // maximum search depth reached, enter quisence search to find final evaluation
+    if (node.depth <= 0)
+    {
+        return QuiescenceNegaMax(thread, node, ctx);
+    }
+
     // Check for draw
     // Skip root node as we need some move to be reported
     if (!isRootNode && IsDraw(node, ctx.game))
@@ -1010,12 +996,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     const Position& position = node.position;
-
-    // maximum search depth reached, enter quisence search to find final evaluation
-    if (node.depth <= 0)
-    {
-        return QuiescenceNegaMax(thread, node, ctx);
-    }
 
     // TODO use proper stack
     const NodeInfo* prevNodes[4] = { nullptr };
@@ -1236,40 +1216,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         extension++;
     }
 
-    MoveList moves;
-    position.GenerateMoveList(moves);
-
-    // resolve move scoring
-    // the idea here is to defer scoring if we have a TT/PV move
-    // most likely we'll get beta cutoff on it so we won't need to score any other move
-    uint32_t numScoredMoves = moves.numMoves;
-    if (moves.numMoves > 1u)
-    {
-        const Move pvMove = thread.FindPvMove(node, moves);
-        const Move ttMove = moves.AssignTTScores(ttEntry);
-
-        numScoredMoves = 0;
-
-        if (pvMove.IsValid()) numScoredMoves++;
-        if (ttMove.IsValid()) numScoredMoves++;
-    }
-
-#ifndef CONFIGURATION_FINAL
-    if (isRootNode)
-    {
-        if (ctx.searchParam.printMoves)
-        {
-            moves.Print();
-        }
-    }
-#endif // CONFIGURATION_FINAL
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry);
 
     // randomize move order for root node on secondary threads
-    const bool shuffleMoves = isRootNode && !thread.isMainThread;
-    if (shuffleMoves)
+    if (isRootNode && !thread.isMainThread)
     {
-        moves.Shuffle();
+        movePicker.Shuffle();
     }
+
+    int32_t moveScore = 0;
+    Move move;
 
     Move bestMoves[TTEntry::NumMoves] = { Move::Invalid() };
     uint32_t numBestMoves = 0;
@@ -1282,16 +1238,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
 
-    for (uint32_t i = 0; i < moves.Size(); ++i)
+    while (movePicker.PickMove(node, move, moveScore))
     {
-        if (i == numScoredMoves && !shuffleMoves)
-        {
-            // We reached a point where moves are not scored anymore, so score them now
-            thread.moveOrderer.ScoreMoves(node, moves);
-        }
-
-        int32_t moveScore = 0;
-        const Move move = moves.PickBestMove(i, moveScore);
         ASSERT(move.IsValid());
 
         // apply node filter (multi-PV search, singularity search, etc.)
@@ -1332,7 +1280,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // extend if there's only one legal move
-        if (moveIndex == 1 && i + 1 == moves.Size())
+        if (movePicker.IsOnlyOneLegalMove())
         {
             moveExtension++;
         }
@@ -1470,16 +1418,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
                 score = -NegaMax(thread, childNodeParam, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-            }
-        }
-
-        if (isRootNode)
-        {
-            if (ctx.searchParam.printMoves)
-            {
-                std::cout << move.ToString() << " eval=" << score << " alpha=" << alpha << " beta=" << beta;
-                if (score > alpha) std::cout << " !!!";
-                std::cout << std::endl;
             }
         }
 
