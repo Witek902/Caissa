@@ -26,6 +26,9 @@
     <ClCompile Include="NetworkTest.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="EndgameValidation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp">
