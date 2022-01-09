@@ -409,16 +409,34 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             };
 
             PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam);
+
+            // stop search only at depth 2 and more
+            if (depth > 1 && CheckStopCondition(searchContext, true))
+            {
+                finishSearchAtDepth = true;
+                break;
+            }
+
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
-            if (IsMate(pvLine.score))
+            // only main thread writes out final PV line
+            if (isMainThread)
             {
-                mateCounter++;
+                outResult[pvIndex] = pvLine;
             }
-            else
+
+            // update mate counter
+            if (pvIndex == 0)
             {
-                mateCounter = 0;
+                if (IsMate(pvLine.score))
+                {
+                    mateCounter++;
+                }
+                else
+                {
+                    mateCounter = 0;
+                }
             }
 
             // store for multi-PV filtering in next iteration
@@ -428,20 +446,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             }
             pvMovesSoFar.push_back(pvLine.moves.front());
 
-            // stop search only at depth 2 and more
-            if (depth > 1 && CheckStopCondition(searchContext, true))
-            {
-                finishSearchAtDepth = true;
-            }
-            else
-            {
-                if (isMainThread)
-                {
-                    ASSERT(!pvLine.moves.empty());
-                    outResult[pvIndex] = pvLine;
-                }
-            }
-
             tempResult[pvIndex] = std::move(pvLine);
         }
 
@@ -449,7 +453,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         {
             if (isMainThread)
             {
-                ASSERT(outResult[0].moves.size() > 0);
+                // make sure all PV lines are correct
+                for (uint32_t i = 0; i < numPvLines; ++i)
+                {
+                    ASSERT(outResult[i].score > -CheckmateValue && outResult[i].score < CheckmateValue);
+                    ASSERT(!outResult[i].moves.empty());
+                }
 
                 // stop other threads
                 StopSearch();
@@ -518,6 +527,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
 PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
 {
+    ASSERT(param.pvIndex != SingularitySearchPvIndex);
+
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
 
@@ -534,12 +545,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         beta = std::min<int32_t>(param.previousScore + aspirationWindow, InfValue);
     }
 
-    PvLine pvLine;
+    PvLine finalPvLine;
 
     for (;;)
     {
-        //std::cout << "aspiration window: " << alpha << "..." << beta << "\n";
-
         const TimePoint startTime = TimePoint::GetCurrent();
 
         memset(thread.pvArray, 0, sizeof(ThreadData::pvArray));
@@ -555,6 +564,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.beta = ScoreType(beta);
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
+
+        PvLine pvLine;
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
@@ -597,15 +608,17 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         const bool isMainThread = param.threadID == 0;
 
         // don't report line if search was aborted, because the result comes from incomplete search
-        if (isMainThread && !stopSearch && param.pvIndex != SingularitySearchPvIndex)
+        if (!stopSearch)
         {
             ASSERT(!pvLine.moves.empty());
             ASSERT(pvLine.moves.front().IsValid());
 
-            if (param.searchParam.debugLog)
+            if (isMainThread && param.searchParam.debugLog)
             {
                 ReportPV(param, pvLine, boundsType, searchTime);
             }
+
+            finalPvLine = std::move(pvLine);
         }
 
         // stop the search when exact score is found
@@ -615,7 +628,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         }
     }
 
-    return pvLine;
+    return finalPvLine;
 }
 
 static INLINE ScoreType ColorMultiplier(Color color)
