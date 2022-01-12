@@ -13,7 +13,7 @@
 #define NOMINMAX
 #include <Windows.h>
 
-static const char* c_EngineName = "Caissa 0.4";
+static const char* c_EngineName = "Caissa 0.5";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
@@ -627,6 +627,12 @@ void UniversalChessInterface::RunSearchTask()
                 }
             }
 
+            if (mSearchCtx->searchParam.verboseStats)
+            {
+                const float elapsedTime = (TimePoint::GetCurrent() - mSearchCtx->searchParam.limits.startTimePoint).ToSeconds();
+                std::cout << std::endl << "info string total time " << elapsedTime << " seconds";
+            }
+
             if (!bestMove.IsValid()) // null move
             {
                 std::cout << "bestmove 0000";
@@ -786,6 +792,8 @@ bool UniversalChessInterface::Command_TTProbe()
     UniqueLock lock(mMutex);
 
     TTEntry ttEntry;
+
+    std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
 
     if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {

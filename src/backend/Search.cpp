@@ -16,7 +16,7 @@
 #include <thread>
 #include <math.h>
 
-static const float CurrentMoveReportDelay = 2.5f;
+static const float CurrentMoveReportDelay = 10.0f;
 
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const uint32_t SingularitySearchMinDepth = 7;
@@ -35,7 +35,7 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowMax = 60;
+static const int32_t AspirationWindowMax = 50;
 static const int32_t AspirationWindowMin = 15;
 static const int32_t AspirationWindowStep = 5;
 
@@ -61,7 +61,7 @@ void Search::BuildMoveReductionTable()
     {
         for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
         {
-            const int32_t reduction = int32_t(0.5f + logf(float(depth + 1)) * logf(float(moveIndex + 1)) / 2.0f);
+            const int32_t reduction = int32_t(0.5f + 0.5f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
 
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
@@ -363,6 +363,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     uint32_t mateCounter = 0;
 
+    SearchContext searchContext{ game, param, SearchStats{} };
+
     // main iterative deepening loop
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
     {
@@ -377,8 +379,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
             PvLine& prevPvLine = thread.prevPvLines[pvIndex];
-
-            SearchContext searchContext{ game, param, SearchStats{} };
 
             // use previous iteration score as starting aspiration window
             // if it's the first iteration - try score from transposition table
@@ -474,8 +474,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             param.limits.rootSingularityTime.IsValid() &&
             TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
         {
-            SearchContext searchContext{ game, param, SearchStats{} };
-
             const uint32_t singularDepth = depth / 2;
             const ScoreType singularBeta = tempResult[0].score - SingularitySearchScoreTreshold;
 
@@ -549,8 +547,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     for (;;)
     {
-        const TimePoint startTime = TimePoint::GetCurrent();
-
         memset(thread.pvArray, 0, sizeof(ThreadData::pvArray));
         memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
 
@@ -578,7 +574,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         }
 
         const TimePoint endTime = TimePoint::GetCurrent();
-        const TimePoint searchTime = endTime - startTime;
+        const TimePoint searchTime = endTime - param.searchParam.limits.startTimePoint;
 
         BoundsType boundsType = BoundsType::Exact;
         
@@ -590,7 +586,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             pvLine.score = ScoreType(alpha);
             alpha -= aspirationWindow;
             alpha = std::max<int32_t>(alpha, -CheckmateValue);
-            aspirationWindow *= 8;
+            aspirationWindow *= 4;
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
@@ -600,7 +596,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             pvLine.score = ScoreType(beta);
             beta += aspirationWindow;
             beta = std::min<int32_t>(beta, CheckmateValue);
-            aspirationWindow *= 8;
+            aspirationWindow *= 4;
             boundsType = BoundsType::LowerBound;
         }
 
@@ -894,7 +890,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         if (score > bestValue) // new best move found
         {
             // push new best move to the beginning of the list
-            for (uint32_t j = 1; j <= numBestMoves && j < TTEntry::NumMoves; ++j)
+            for (uint32_t j = TTEntry::NumMoves; j-- > 1; )
             {
                 bestMoves[j] = bestMoves[j - 1];
             }
@@ -1240,7 +1236,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t moveScore = 0;
     Move move;
 
-    Move bestMoves[TTEntry::NumMoves] = { Move::Invalid() };
+    Move bestMoves[TTEntry::NumMoves] = { Move::Invalid(), Move::Invalid(), Move::Invalid() };
     uint32_t numBestMoves = 0;
 
     uint32_t moveIndex = 0;
@@ -1351,7 +1347,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (!node.isPvNode) depthReduction += 1;
 
             // reduce good moves less
-            if (moveScore >= MoveOrderer::KillerMoveBonus && depthReduction > 0) depthReduction--;
+            if (moveScore > 0 && depthReduction > 0) depthReduction--;
 
             // don't drop into QS
             depthReduction = std::min(depthReduction, node.depth + moveExtension - 1);
@@ -1437,7 +1433,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (score > bestValue) // new best move found
         {
             // push new best move to the beginning of the list
-            for (uint32_t j = 1; j <= numBestMoves && j < TTEntry::NumMoves; ++j)
+            for (uint32_t j = TTEntry::NumMoves; j-- > 1; )
             {
                 bestMoves[j] = bestMoves[j - 1];
             }
