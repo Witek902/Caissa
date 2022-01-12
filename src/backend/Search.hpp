@@ -87,10 +87,10 @@ struct NodeInfo
     const Move* moveFilter = nullptr;
 
     // remaining depth
-    int32_t depth;
+    int32_t depth = 0;
 
     // depth in ply (depth counting from root)
-    uint32_t height;
+    uint32_t height = 0;
 
     uint8_t moveFilterCount = 0;
 
