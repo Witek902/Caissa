@@ -269,9 +269,41 @@ bool Position::FromFEN(const std::string& fenString)
         mEnPassantSquare = Square::Invalid();
     }
 
-    // TODO!
-    // half-moves
-    // move number
+    // parse half-moves counter
+    {
+        std::string halfMovesStr;
+        for (++p; *p != ' ' && *p != 0; ++p)
+        {
+            halfMovesStr += *p;
+        }
+
+        if (!halfMovesStr.empty())
+        {
+            mHalfMoveCount = (int16_t)atoi(halfMovesStr.c_str());
+        }
+        else
+        {
+            mHalfMoveCount = 0;
+        }
+    }
+
+    // parse moves number
+    {
+        std::string moveNumberStr;
+        for (++p; *p != ' ' && *p != 0; ++p)
+        {
+            moveNumberStr += *p;
+        }
+
+        if (!moveNumberStr.empty())
+        {
+            mMoveCount = (int16_t)std::max(1, atoi(moveNumberStr.c_str()));
+        }
+        else
+        {
+            mMoveCount = 1;
+        }
+    }
 
     //printf("\nhalf-moves since last pawn move/capture: "); for (++p; *p != ' '; ++p) putchar(*p);
     //printf("\n(full) move number: %s\n", ++p);
