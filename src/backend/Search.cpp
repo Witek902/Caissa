@@ -43,7 +43,7 @@ static const int32_t BetaPruningDepth = 8;
 static const int32_t BetaMarginMultiplier = 200;
 static const int32_t BetaMarginBias = 10;
 
-static const int32_t QSearchSeeMargin = 120;
+static const int32_t QSearchSeeMargin = -50;
 
 Search::Search()
 {
@@ -865,13 +865,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ASSERT(move.IsValid());
 
         // skip losing captures
-        //if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue)
-        //{
-        //    if (!position.StaticExchangeEvaluation(move, sseTreshold))
-        //    {
-        //        continue;
-        //    }
-        //}
+        if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue)
+        {
+            if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
+            {
+                continue;
+            }
+        }
 
         childNodeParam.position = position;
         if (!childNodeParam.position.DoMove(move))
@@ -1475,6 +1475,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
+    // update move orderer
     if (bestValue >= beta)
     {
         if (bestMoves[0].IsQuiet())
