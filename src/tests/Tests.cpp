@@ -802,6 +802,24 @@ static void RunPositionTests()
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 100));
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 101));
         }
+
+        // queen takes rook, then king take the queen
+        {
+            Position pos("3rk2r/2Q2p2/p3q2p/1p1p2p1/1B1P1n2/2P2P2/P3bRPP/4R1K1 w - - 0 25");
+            const Move move = pos.MoveFromString("c7d8");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -400));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -399));
+        }
+
+        // same as above, but king can't capture the queen because it's protected by a bishop
+        {
+            Position pos("3rk2r/2Q2p2/p3q2p/Bp1p2p1/3P1n2/2P2P2/P3bRPP/4R1K1 w - - 0 25");
+            const Move move = pos.MoveFromString("c7d8");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 501));
+        }
     }
 
     // IsStaleMate
