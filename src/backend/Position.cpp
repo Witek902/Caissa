@@ -510,7 +510,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     }
 }
 
-const Bitboard Position::GetAttackers(const Square square) const
+const Bitboard Position::GetAttackers(const Square square, const Bitboard occupied) const
 {
     const Bitboard pawns    = Whites().pawns | Blacks().pawns;
     const Bitboard knights  = Whites().knights | Blacks().knights;
@@ -518,34 +518,13 @@ const Bitboard Position::GetAttackers(const Square square) const
     const Bitboard rooks    = Whites().rooks | Blacks().rooks;
     const Bitboard queens   = Whites().queens | Blacks().queens;
     const Bitboard kings    = Whites().king | Blacks().king;
-    const Bitboard occupiedSquares = pawns | knights | bishops | rooks | queens | kings;
 
-    Bitboard bitboard = Bitboard::GetKingAttacks(square) & kings;
-
-    if (knights)
-    {
-        bitboard |= Bitboard::GetKnightAttacks(square) & knights;
-    }
-
-    if (rooks | queens)
-    {
-        bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (rooks | queens);
-    }
-
-    if (bishops | queens)
-    {
-        bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (bishops | queens);
-    }
-
-    if (Whites().pawns)
-    {
-        bitboard |= Bitboard::GetPawnAttacks(square, Color::Black) & Whites().pawns;
-    }
-
-    if (Blacks().pawns)
-    {
-        bitboard |= Bitboard::GetPawnAttacks(square, Color::White) & Blacks().pawns;
-    }
+    Bitboard bitboard       = Bitboard::GetKingAttacks(square) & kings;
+    if (knights)            bitboard |= Bitboard::GetKnightAttacks(square) & knights;
+    if (rooks | queens)     bitboard |= Bitboard::GenerateRookAttacks(square, occupied) & (rooks | queens);
+    if (bishops | queens)   bitboard |= Bitboard::GenerateBishopAttacks(square, occupied) & (bishops | queens);
+    if (Whites().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, Color::Black) & Whites().pawns;
+    if (Blacks().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, Color::White) & Blacks().pawns;
 
     return bitboard;
 }
@@ -557,25 +536,10 @@ const Bitboard Position::GetAttackers(const Square square, const Color sideColor
 
     Bitboard bitboard = Bitboard::GetKingAttacks(square) & side.king;
 
-    if (side.knights)
-    {
-        bitboard |= Bitboard::GetKnightAttacks(square) & side.knights;
-    }
-
-    if (side.rooks | side.queens)
-    {
-        bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens);
-    }
-
-    if (side.bishops | side.queens)
-    {
-        bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens);
-    }
-
-    if (side.pawns)
-    {
-        bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns;
-    }
+    if (side.knights)               bitboard |= Bitboard::GetKnightAttacks(square) & side.knights;
+    if (side.rooks | side.queens)   bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens);
+    if (side.bishops | side.queens) bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens);
+    if (side.pawns)                 bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns;
 
     return bitboard;
 }
@@ -1162,7 +1126,6 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     };
 
     Bitboard occupied = Whites().Occupied() | Blacks().Occupied();
-    Bitboard allAttackers = GetAttackers(toSquare);
 
     int32_t balance = 0;
 
@@ -1182,6 +1145,8 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     occupied &= ~fromSquare.GetBitboard();
     occupied |= toSquare.GetBitboard();
 
+    Bitboard allAttackers = GetAttackers(toSquare, occupied);
+
     Color sideToMove = mSideToMove;
     int32_t result = 1;
 
@@ -1192,6 +1157,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
         const SidePosition& side = mColors[(uint8_t)sideToMove];
         const Bitboard ourAttackers = allAttackers & side.Occupied();
+        const Bitboard theirAttackers = allAttackers & ~side.Occupied();
 
         // no more attackers - side to move loses
         if (ourAttackers == 0) break;
@@ -1272,39 +1238,14 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         }
         else // king
         {
-            if (allAttackers & GetOpponentSide().Occupied())
+            // if capturing with the king, but oponent still has attacker, return the result (can't be in check)
+            if (theirAttackers)
             {
                 result ^= 1;
             }
 
             break;
         }
-
-        /*
-        // find weakest attacker
-        for (uint32_t pieceType = 1; pieceType <= 6u; ++pieceType)
-        {
-            const Bitboard pieceBitboard = ourAttackers & side.GetPieceBitBoard((Piece)pieceType);
-            if (Bitboard pieceBitboard = ourAttackers & side.pawns)
-            {
-                uint32_t attackerSquare = UINT32_MAX;
-                pieceBitboard.BitScanForward(attackerSquare);
-                ASSERT(attackerSquare != UINT32_MAX);
-
-                // remove attacker from occupied squares
-                const Bitboard mask = 1ull << attackerSquare;
-                ASSERT((occupied & mask) != 0);
-                occupied ^= mask;
-
-                // TODO update diagonal/vertical attackers
-
-                balance = c_seePieceValues[pieceType] - balance;
-                if (balance < result) return result != 0;
-
-                break;
-            }
-        }
-        */
     }
 
     return result != 0;

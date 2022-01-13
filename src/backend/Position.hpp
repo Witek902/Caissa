@@ -138,7 +138,7 @@ public:
     bool IsValid() const;
 
     // get pieces attacking given square
-    const Bitboard GetAttackers(const Square square) const;
+    const Bitboard GetAttackers(const Square square, const Bitboard occupied) const;
 
     // get pieces of one side attacking given square
     const Bitboard GetAttackers(const Square square, const Color sideColor) const;

@@ -305,9 +305,6 @@ bool Position::FromFEN(const std::string& fenString)
         }
     }
 
-    //printf("\nhalf-moves since last pawn move/capture: "); for (++p; *p != ' '; ++p) putchar(*p);
-    //printf("\n(full) move number: %s\n", ++p);
-
     mHash = ComputeHash();
 
     if (!IsValid())
