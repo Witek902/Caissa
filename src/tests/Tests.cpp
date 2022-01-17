@@ -820,6 +820,33 @@ static void RunPositionTests()
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 501));
         }
+
+        // pawn push (losing)
+        {
+            Position pos("k7/8/8/5p2/8/6P1/8/K7 w - - 0 1");
+            const Move move = pos.MoveFromString("g3g4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -100));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -99));
+        }
+
+        // pawn push (equal)
+        {
+            Position pos("k7/8/8/5p2/8/6PP/8/K7 w - - 0 1");
+            const Move move = pos.MoveFromString("g3g4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+        }
+
+        // pawn push (equal)
+        {
+            Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP4/4PNP1/PP1B1PBP/RN3RK1 b - - 1 17");
+            const Move move = pos.MoveFromString("c4a3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -300));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -299));
+        }
     }
 
     // IsStaleMate
@@ -1179,7 +1206,7 @@ void RunSearchTests()
 
     // mate in two
     {
-        param.limits.maxDepth = 4;
+        param.limits.maxDepth = 8;
         param.limits.mateSearch = true;
         param.numPvLines = 1;
 
