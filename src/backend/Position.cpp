@@ -1081,8 +1081,8 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
 }
 
 static const int32_t pawnValue = 100;
-static const int32_t knightValue = 300;
-static const int32_t bishopValue = 300;
+static const int32_t knightValue = 325;
+static const int32_t bishopValue = 325;
 static const int32_t rookValue = 500;
 static const int32_t queenValue = 900;
 static const int32_t kingValue = INT32_MAX;

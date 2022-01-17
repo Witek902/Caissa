@@ -22,8 +22,6 @@ static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const uint32_t SingularitySearchMinDepth = 7;
 static const int32_t SingularitySearchScoreTreshold = 400;
 
-static const bool UsePVS = true;
-
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
@@ -1057,7 +1055,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-    // mate distance prunning
+    // mate distance pruning
     if (!isRootNode)
     {
         const ScoreType mateDistanceScore = PruneByMateDistance(node, alpha, beta);
@@ -1278,7 +1276,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (move.IsQuiet()) quietMovesTried[numQuietMovesTried++] = move;
+        if (move.IsQuiet())
+        {
+            quietMovesTried[numQuietMovesTried++] = move;
+        }
+
+        // Static Exchange Evaluation pruning
+        if (!isInCheck &&
+            bestValue > -KnownWinValue &&
+            node.depth <= 9)
+        {
+            const int32_t pruningTreshold = 16 * node.depth * node.depth;
+            if (!position.StaticExchangeEvaluation(move, -pruningTreshold))
+            {
+                continue;
+            }
+        }
 
         int32_t moveExtension = extension;
 
@@ -1357,68 +1370,39 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         ScoreType score = InvalidValue;
 
-        if (UsePVS)
+        bool doFullDepthSearch = !(isPvNode && moveIndex == 1);
+
+        // PVS search at reduced depth
+        if (depthReduction > 0)
         {
-            bool doFullDepthSearch = !(isPvNode && moveIndex == 1);
+            childNodeParam.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
+            childNodeParam.alpha = -alpha - 1;
+            childNodeParam.beta = -alpha;
+            childNodeParam.isPvNode = false;
 
-            // PVS search at reduced depth
-            if (depthReduction > 0)
-            {
-                childNodeParam.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
-                childNodeParam.alpha = -alpha - 1;
-                childNodeParam.beta = -alpha;
-                childNodeParam.isPvNode = false;
+            score = -NegaMax(thread, childNodeParam, ctx);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-                score = -NegaMax(thread, childNodeParam, ctx);
-                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-                doFullDepthSearch = score > alpha;
-            }
-
-            // PVS search at full depth
-            // TODO: internal aspiration window?
-            if (doFullDepthSearch)
-            {
-                childNodeParam.depth = node.depth + moveExtension - 1;
-                childNodeParam.alpha = -alpha - 1;
-                childNodeParam.beta = -alpha;
-                childNodeParam.isPvNode = false;
-
-                score = -NegaMax(thread, childNodeParam, ctx);
-                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-            }
-
-            // full search for PV nodes
-            if (isPvNode)
-            {
-                if (moveIndex == 1 || score > alpha)
-                {
-                    childNodeParam.depth = node.depth + moveExtension - 1;
-                    childNodeParam.alpha = -beta;
-                    childNodeParam.beta = -alpha;
-                    childNodeParam.isPvNode = true;
-
-                    score = -NegaMax(thread, childNodeParam, ctx);
-                    ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-                }
-            }
+            doFullDepthSearch = score > alpha;
         }
-        else
+
+        // PVS search at full depth
+        // TODO: internal aspiration window?
+        if (doFullDepthSearch)
         {
-            // search at reduced depth
-            if (depthReduction > 0)
-            {
-                childNodeParam.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
-                childNodeParam.alpha = -beta;
-                childNodeParam.beta = -alpha;
-                childNodeParam.isPvNode = true;
+            childNodeParam.depth = node.depth + moveExtension - 1;
+            childNodeParam.alpha = -alpha - 1;
+            childNodeParam.beta = -alpha;
+            childNodeParam.isPvNode = false;
 
-                score = -NegaMax(thread, childNodeParam, ctx);
-                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-            }
+            score = -NegaMax(thread, childNodeParam, ctx);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+        }
 
-            // full depth re-search
-            if (depthReduction <= 0 || score > alpha)
+        // full search for PV nodes
+        if (isPvNode)
+        {
+            if (moveIndex == 1 || score > alpha)
             {
                 childNodeParam.depth = node.depth + moveExtension - 1;
                 childNodeParam.alpha = -beta;

@@ -33,7 +33,7 @@ struct SearchLimits
     // maximum allowed base search depth (excluding quisence, extensions, etc.)
     uint8_t maxDepth = UINT8_MAX;
 
-    // enable mate search, disables all prunning
+    // enable mate search, disables all pruning
     bool mateSearch = false;
 
     // in analysis mode full PV lines are searched
