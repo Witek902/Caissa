@@ -42,6 +42,7 @@ static const int32_t BetaMarginMultiplier = 200;
 static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = -50;
+static const uint32_t MaxQSearchMoves = 20;
 
 Search::Search()
 {
@@ -545,7 +546,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     for (;;)
     {
-        memset(thread.pvArray, 0, sizeof(ThreadData::pvArray));
         memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
 
         NodeInfo rootNode;
@@ -661,7 +661,6 @@ const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves)
     }
 
     // no PV move found?
-    //ASSERT(false);
     return pvMove;
 }
 
@@ -896,6 +895,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             bestMoves[0] = move;
             bestValue = score;
 
+            if (isPvNode)
+            {
+                thread.UpdatePvArray(node.height, move);
+            }
+
             if (score > alpha) // update lower bound
             {
                 if (isPvNode && score < beta) // keep alpha < beta
@@ -909,6 +913,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
                     break;
                 }
             }
+        }
+
+        // skip everything after some sane amount of moves has been tried
+        // there shouldn't be more than 20 captures available in a "normal" chess positions
+        if (!isInCheck && bestValue > -KnownWinValue && moveIndex >= MaxQSearchMoves)
+        {
+            break;
         }
     }
 
@@ -1429,7 +1440,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 thread.UpdatePvArray(node.height, move);
             }
-            
+
             if (score > alpha) // update lower bound
             {
                 if (isPvNode && score < beta) // keep alpha < beta
@@ -1478,6 +1489,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     ASSERT(alpha < beta);
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
+    
+    if (isPvNode && isRootNode)
+    {
+        ASSERT(numBestMoves > 0);
+        ASSERT(thread.pvLengths[0] > 0);
+    }
 
     // update transposition table
     // don't write if:
