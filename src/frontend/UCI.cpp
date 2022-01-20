@@ -258,7 +258,11 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "ttprobe")
     {
-        Command_TTProbe();
+        Command_TranspositionTableProbe();
+    }
+    else if (command == "tbprobe")
+    {
+        Command_TablebaseProbe();
     }
     else if (command == "moveordererstats")
     {
@@ -787,7 +791,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     return true;
 }
 
-bool UniversalChessInterface::Command_TTProbe()
+bool UniversalChessInterface::Command_TranspositionTableProbe()
 {
     UniqueLock lock(mMutex);
 
@@ -824,6 +828,36 @@ bool UniversalChessInterface::Command_TTProbe()
     {
         std::cout << "(no entry found)" << std::endl;
     }
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_TablebaseProbe()
+{
+    UniqueLock lock(mMutex);
+
+    TTEntry ttEntry;
+
+    Move tbMove;
+    int32_t wdl = 0;
+    uint32_t dtz = 0;
+    if (ProbeTablebase_Root(mGame.GetPosition(), tbMove, &dtz, &wdl))
+    {
+        std::cout << "Tablebase entry found!" << std::endl;
+        std::cout << "Score:            " << wdl << std::endl;
+        std::cout << "Distance to zero: " << dtz << std::endl;
+        std::cout << "Move:             " << tbMove.ToString() << std::endl;
+    }
+    else if (ProbeTablebase_WDL(mGame.GetPosition(), &wdl))
+    {
+        std::cout << "Tablebase entry found!" << std::endl;
+        std::cout << "Score: " << wdl << std::endl;
+    }
+    else
+    {
+        std::cout << "(tablebase entry found)" << std::endl;
+    }
+
 
     return true;
 }

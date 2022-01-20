@@ -7,9 +7,14 @@
 #include "tablebase/tbprobe.h"
 
 #include <iostream>
+#include <mutex>
+
+static std::mutex g_tbMutex;
 
 void LoadTablebase(const char* path)
 {
+    std::unique_lock lock(g_tbMutex);
+
     if (tb_init(path))
     {
         std::cout << "Tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
@@ -22,6 +27,8 @@ void LoadTablebase(const char* path)
 
 void UnloadTablebase()
 {
+    std::unique_lock lock(g_tbMutex);
+
     tb_free();
 }
 
@@ -48,6 +55,8 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
     {
         return false;
     }
+
+    std::unique_lock lock(g_tbMutex);
 
     uint32_t castlingRights = 0;
     if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_K;

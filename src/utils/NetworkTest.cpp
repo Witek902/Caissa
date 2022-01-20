@@ -30,28 +30,20 @@ bool TestNetwork()
     uint32_t numTrainingVectorsPassed = 0;
 
     {
-        trainingSet[0].input.resize(2);
+        trainingSet[0].inputFeatures = {};
         trainingSet[0].output.resize(1);
-        trainingSet[0].input[0] = 0.0f;
-        trainingSet[0].input[1] = 0.0f;
         trainingSet[0].output[0] = 0.0f;
 
-        trainingSet[1].input.resize(2);
         trainingSet[1].output.resize(1);
-        trainingSet[1].input[0] = 1.0f;
-        trainingSet[1].input[1] = 0.0f;
+        trainingSet[1].inputFeatures = { 0 };
         trainingSet[1].output[0] = 1.0f;
 
-        trainingSet[2].input.resize(2);
         trainingSet[2].output.resize(1);
-        trainingSet[2].input[0] = 0.0f;
-        trainingSet[2].input[1] = 1.0f;
+        trainingSet[2].inputFeatures = { 1 };
         trainingSet[2].output[0] = 0.0f;
 
-        trainingSet[3].input.resize(2);
         trainingSet[3].output.resize(1);
-        trainingSet[3].input[0] = 1.0f;
-        trainingSet[3].input[1] = 1.0f;
+        trainingSet[3].inputFeatures = { 0, 1 };
         trainingSet[3].output[0] = 0.0f;
     }
 
@@ -92,7 +84,7 @@ bool TestNetwork()
                 featureIndices[1] = 1;
             }
 
-            tempValues = network.Run(trainingSet[i].input);
+            tempValues = network.Run(trainingSet[i].inputFeatures);
             int32_t packedNetworkOutput = packedNetwork.Run(numFeatures, featureIndices);
 
             const float expectedValue = trainingSet[i].output[0];

@@ -53,6 +53,8 @@ union MaterialKey
         return value == rhs.value;
     }
 
+    uint32_t GetNeuralNetworkInputsNumber() const;
+
     std::string ToString() const;
 };
 
