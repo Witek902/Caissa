@@ -41,7 +41,8 @@ private:
     bool Command_PonderHit();
     bool Command_Perft(const std::vector<std::string>& args);
     bool Command_SetOption(const std::string& name, const std::string& value);
-    bool Command_TTProbe();
+    bool Command_TranspositionTableProbe();
+    bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
 
     void RunSearchTask();

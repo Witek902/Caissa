@@ -896,42 +896,6 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-/*
-uint32_t Position::ComputeNetworkInputs() const
-{
-    uint32_t inputs = 0;
-
-    if (key.numWhitePawns > 0 || key.numBlackPawns > 0)
-    {
-        // has pawns, so can't exploit vertical/diagonal symmetry
-        inputs += 32; // white king on left files
-        inputs += 64; // black king on any file
-    }
-    else
-    {
-        // pawnless position, can exploit vertical/horizonal/diagonal symmetry
-        inputs += 16; // white king on files A-D, ranks 1-4
-        inputs += 36; // black king on bottom-right triangle (a1, b1, b2, c1, c2, c3, ...)
-    }
-
-    // knights/bishops/rooks/queens on any square
-    if (key.numWhiteQueens)     inputs += 64;
-    if (key.numBlackQueens)     inputs += 64;
-    if (key.numWhiteRooks)      inputs += 64;
-    if (key.numBlackRooks)      inputs += 64;
-    if (key.numWhiteBishops)    inputs += 64;
-    if (key.numBlackBishops)    inputs += 64;
-    if (key.numWhiteKnights)    inputs += 64;
-    if (key.numBlackKnights)    inputs += 64;
-
-    // pawns on ranks 2-7
-    if (key.numWhitePawns)      inputs += 48;
-    if (key.numBlackPawns)      inputs += 48;
-
-    return inputs;
-}
-*/
-
 uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
 {
     Square whiteKingSquare = Square(FirstBitSet(Whites().king));
@@ -970,112 +934,60 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
     }
 
     uint32_t numFeatures = 0;
-    uint32_t inputOffset = 0;
+    uint32_t numInputs = 0;
 
     // white king
     {
         const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
         outFeatures[numFeatures++] = whiteKingIndex;
-        inputOffset += 32;
+        numInputs += 32;
     }
 
     // black king
     {
-        outFeatures[numFeatures++] = inputOffset + blackKingSquare.Index();
-        inputOffset += 64;
+        outFeatures[numFeatures++] = numInputs + blackKingSquare.Index();
+        numInputs += 64;
     }
 
-    if (whiteQueens)
+    const auto writePieceFeatures = [&](const Bitboard bitboard)
     {
-        for (uint32_t i = 0; i < 64u; ++i)
+        if (bitboard)
         {
-            if ((whiteQueens >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
+            for (uint32_t i = 0; i < 64u; ++i)
+            {
+                if ((bitboard >> i) & 1) outFeatures[numFeatures++] = numInputs + i;
+            }
+            numInputs += 64;
         }
-        inputOffset += 64;
-    }
+    };
 
-    if (blackQueens)
+    const auto writePawnFeatures = [&](const Bitboard bitboard)
     {
-        for (uint32_t i = 0; i < 64u; ++i)
+        if (bitboard)
         {
-            if ((blackQueens >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
+            // pawns cannot stand on first or last rank
+            for (uint32_t i = 0; i < 48u; ++i)
+            {
+                const uint32_t squreIndex = i + 8u;
+                if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = numInputs + i;
+            }
+            numInputs += 48;
         }
-        inputOffset += 64;
-    }
+    };
 
-    if (whiteRooks)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((whiteRooks >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
+    writePieceFeatures(whiteQueens);
+    writePieceFeatures(whiteRooks);
+    writePieceFeatures(whiteBishops);
+    writePieceFeatures(whiteKnights);
+    writePawnFeatures(whitePawns);
 
-    if (blackRooks)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((blackRooks >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
+    writePieceFeatures(blackQueens);
+    writePieceFeatures(blackRooks);
+    writePieceFeatures(blackBishops);
+    writePieceFeatures(blackKnights);
+    writePawnFeatures(blackPawns);
 
-    if (whiteBishops)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((whiteBishops >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
-
-    if (blackBishops)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((blackBishops >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
-
-    if (whiteKnights)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((whiteKnights >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
-
-    if (blackKnights)
-    {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((blackKnights >> i) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 64;
-    }
-
-    if (whitePawns)
-    {
-        for (uint32_t i = 0; i < 48u; ++i)
-        {
-            const uint32_t squreIndex = i + 8u;
-            if ((whitePawns >> squreIndex) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 48;
-    }
-
-    if (blackPawns)
-    {
-        for (uint32_t i = 0; i < 48u; ++i)
-        {
-            const uint32_t squreIndex = i + 8u;
-            if ((blackPawns >> squreIndex) & 1) outFeatures[numFeatures++] = inputOffset + i;
-        }
-        inputOffset += 48;
-    }
+    ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
 
     return numFeatures;
 }

@@ -50,9 +50,29 @@ void Layer::InitWeights()
     }
 }
 
+static float ApplyActivationFunction(float x, ActivationFunction func)
+{
+    if (func == ActivationFunction::ClippedReLu)
+    {
+        return ClippedReLu(x);
+    }
+    else if (func == ActivationFunction::Sigmoid)
+    {
+        return Sigmoid(x);
+    }
+    else if (func == ActivationFunction::ATan)
+    {
+        return InvTan(x);
+    }
+    else
+    {
+        return x;
+    }
+}
+
 void Layer::Run(const Values& in)
 {
-    assert(in.size() == input.size());
+    ASSERT(in.size() == input.size());
 
     input = in;
 
@@ -65,27 +85,40 @@ void Layer::Run(const Values& in)
             x += weights[offs + j] * input[j];
         }
 
-        assert(!std::isnan(x));
-        assert(fabsf(x) < 10000.0f);
+        ASSERT(!std::isnan(x));
+        ASSERT(fabsf(x) < 10000.0f);
 
         linearValue[i] = x;
+        output[i] = ApplyActivationFunction(x, activationFunction);
 
-        if (activationFunction == ActivationFunction::ClippedReLu)
+        offs += input.size() + 1;
+    }
+}
+
+void Layer::Run(const std::vector<uint32_t>& in)
+{
+    memset(input.data(), 0, input.size() * sizeof(float));
+
+    for (const uint32_t idx : in)
+    {
+        ASSERT(idx < input.size());
+        input[idx] = 1.0f;
+    }
+
+    size_t offs = 0;
+    for (size_t i = 0; i < output.size(); i++)
+    {
+        float x = weights[offs + input.size()];
+        for (const uint32_t idx : in)
         {
-            output[i] = ClippedReLu(x);
+            x += weights[offs + idx];
         }
-        else if (activationFunction == ActivationFunction::Sigmoid)
-        {
-            output[i] = Sigmoid(x);
-        }
-        else if (activationFunction == ActivationFunction::ATan)
-        {
-            output[i] = InvTan(x);
-        }
-        else
-        {
-            output[i] = x;
-        }
+
+        ASSERT(!std::isnan(x));
+        ASSERT(fabsf(x) < 10000.0f);
+
+        linearValue[i] = x;
+        output[i] = ApplyActivationFunction(x, activationFunction);
 
         offs += input.size() + 1;
     }
@@ -135,8 +168,8 @@ float Layer::GetWeight(size_t neuronIdx, size_t neuronInputIdx) const
     size_t outputsNum = output.size();
 
     (void)outputsNum;
-    assert(neuronIdx < outputsNum);
-    assert(neuronInputIdx <= inputsNum);
+    ASSERT(neuronIdx < outputsNum);
+    ASSERT(neuronInputIdx <= inputsNum);
 
     return weights[(inputsNum + 1) * neuronIdx + neuronInputIdx];
 }
@@ -147,8 +180,8 @@ void Layer::SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth)
     size_t outputsNum = output.size();
 
     (void)outputsNum;
-    assert(neuronIdx < outputsNum);
-    assert(neuronInputIdx <= inputsNum);
+    ASSERT(neuronIdx < outputsNum);
+    ASSERT(neuronInputIdx <= inputsNum);
 
     weights[(inputsNum + 1) * neuronIdx + neuronInputIdx] = newWeigth;
 }
@@ -283,11 +316,24 @@ void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSize
         prevLayerSize = layersSizes[i];
     }
 
-    layers.back().activationFunction = ActivationFunction::Linear;
+    layers.back().activationFunction = ActivationFunction::Sigmoid;
     tempError.resize(layersSizes.back());
 }
 
 const Layer::Values& NeuralNetwork::Run(const Layer::Values& input)
+{
+    layers.front().Run(input);
+
+    for (size_t i = 1; i < layers.size(); i++)
+    {
+        const Layer::Values& prevOutput = layers[i - 1].output;
+        layers[i].Run(prevOutput);
+    }
+
+    return layers.back().output;
+}
+
+const Layer::Values& NeuralNetwork::Run(const std::vector<uint32_t>& input)
 {
     layers.front().Run(input);
 
@@ -350,9 +396,9 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
             w -= hm / (sqrtf(hv) + cAdamEpsilon) * scale;
             */
 
-            assert(!std::isnan(m));
-            assert(!std::isnan(v));
-            assert(!std::isnan(w));
+            ASSERT(!std::isnan(m));
+            ASSERT(!std::isnan(v));
+            ASSERT(!std::isnan(w));
         }
 
         offs += inputSize + 1;
@@ -384,7 +430,7 @@ void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float weightQuantizationS
 
             w = std::clamp(w, -cWeightsRange, cWeightsRange);
 
-            assert(fabsf(w) <= cWeightsRange);
+            ASSERT(fabsf(w) <= cWeightsRange);
         }
 
         offs += inputSize + 1;
@@ -411,7 +457,7 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
             {
                 const TrainingVector& vec = trainingSet[vecIndex];
 
-                tempValues = Run(vec.input);
+                tempValues = Run(vec.inputFeatures);
 
                 // train last layers
                 {
