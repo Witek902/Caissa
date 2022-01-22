@@ -17,7 +17,7 @@ using IntermediateType = int8_t;
 
 void Accumulator::Refresh(
     const LayerData0& layer,
-    uint32_t numActiveFeatures, const uint32_t* activeFeatures)
+    uint32_t numActiveFeatures, const uint16_t* activeFeatures)
 {
 #ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 16;
@@ -81,8 +81,8 @@ void Accumulator::Refresh(
 
 void Accumulator::Update(
     const LayerData0& layer,
-    uint32_t numAddedFeatures, const uint32_t* addedFeatures,
-    uint32_t numRemovedFeatures, const uint32_t* removedFeatures)
+    uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+    uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
 {
 #ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 16;
@@ -451,10 +451,8 @@ bool PackedNeuralNetwork::Load(const char* filePath)
     return true;
 }
 
-int32_t PackedNeuralNetwork::Run(const uint32_t numActiveInputs, const uint32_t* activeInputIndices, const NeuralNetwork& referenceNetwork) const
+int32_t PackedNeuralNetwork::Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const
 {
-    (void)referenceNetwork;
-
     Accumulator accumulator;
 
     constexpr uint32_t bufferSize = std::max(FirstLayerSize, SecondLayerSize);
@@ -485,7 +483,6 @@ int32_t PackedNeuralNetwork::Run(const uint32_t numActiveInputs, const uint32_t*
 
     const LayerData12 l2{ layer2_weights, layer2_biases, SecondLayerSize, 1 };
     const int32_t output = LinearLayer_SingleOutput(l2, tempA);
-
 
     //const float error = output - referenceNetwork.layers[2].linearValue[0] * OutputScale;
     //ASSERT(std::abs(error) <= 800);

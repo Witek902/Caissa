@@ -7,6 +7,7 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
+#include "../backend/Material.hpp"
 #include "../backend/Waitable.hpp"
 
 #include "../backend/nnue-probe/nnue.h"
@@ -963,6 +964,26 @@ TEST_EXPECT(!pos.IsMoveValid(move));
     }
 }
 
+static void RunMaterialTests()
+{
+    {
+        MaterialKey key{ 1,0,0,1,0,1,0,0,1,0 };
+        TEST_EXPECT(key.IsSymetric());
+    }
+    {
+        MaterialKey key{ 63,63,63,63,63,63,63,63,63,63 };
+        TEST_EXPECT(key.IsSymetric());
+    }
+    {
+        MaterialKey key{ 0,0,0,1,0,1,0,0,1,0 };
+        TEST_EXPECT(!key.IsSymetric());
+    }
+    {
+        MaterialKey key{ 1,0,0,1,0,0,0,0,1,0 };
+        TEST_EXPECT(!key.IsSymetric());
+    }
+}
+
 static void RunMovesListTests()
 {
     // no more space in A
@@ -1497,6 +1518,7 @@ void RunSearchTests()
 void RunUnitTests()
 {
     RunPositionTests();
+    RunMaterialTests();
     RunMovesListTests();
     RunPackedPositionTests();
     RunGameTests();

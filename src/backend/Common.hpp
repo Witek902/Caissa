@@ -160,6 +160,12 @@ INLINE constexpr bool IsPowerOfTwo(const T n)
     return (n & (n - 1)) == 0;
 }
 
+template<typename T>
+INLINE constexpr T Sqr(const T& x)
+{
+    return x * x;
+}
+
 inline uint64_t ParallelBitsDeposit(uint64_t src, uint64_t mask)
 {
 #ifdef USE_BMI2
@@ -274,11 +280,12 @@ class TranspositionTable;
 
 using ScoreType = int16_t;
 
-static constexpr ScoreType InfValue           = 32767;
-static constexpr ScoreType InvalidValue       = INT16_MAX;
-static constexpr ScoreType CheckmateValue     = 32000;
-static constexpr ScoreType TablebaseWinValue  = 31000;
-static constexpr ScoreType KnownWinValue      = 20000;
+static constexpr ScoreType InfValue             = 32767;
+static constexpr ScoreType InvalidValue         = INT16_MAX;
+static constexpr ScoreType CheckmateValue       = 32000;
+static constexpr ScoreType TablebaseWinValue    = 31000;
+static constexpr ScoreType KnownWinValue        = 12000;
+static constexpr ScoreType MaxNNScore           = 10000;
 
 static constexpr uint16_t MaxSearchDepth    = 256;
 

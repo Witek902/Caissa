@@ -88,6 +88,11 @@ struct Bitboard
         return x;
     }
 
+    INLINE static constexpr Bitboard Full()
+    {
+        return 0xFFFFFFFFFFFFFFFFull;
+    }
+
     INLINE static constexpr Bitboard LightSquares()
     {
         return 0x55AA55AA55AA55AAull;

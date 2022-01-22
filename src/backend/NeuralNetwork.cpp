@@ -92,12 +92,13 @@ void Layer::Run(const Values& in)
     }
 }
 
-void Layer::Run(const std::vector<uint32_t>& in)
+void Layer::Run(const uint16_t* featureIndices, uint32_t numFeatures)
 {
     memset(input.data(), 0, input.size() * sizeof(float));
 
-    for (const uint32_t idx : in)
+    for (uint32_t i = 0; i < numFeatures; ++i)
     {
+        const uint16_t idx = featureIndices[i];
         ASSERT(idx < input.size());
         input[idx] = 1.0f;
     }
@@ -106,8 +107,9 @@ void Layer::Run(const std::vector<uint32_t>& in)
     for (size_t i = 0; i < output.size(); i++)
     {
         float x = weights[offs + input.size()];
-        for (const uint32_t idx : in)
+        for (uint32_t j = 0; j < numFeatures; ++j)
         {
+            const uint16_t idx = featureIndices[j];
             x += weights[offs + idx];
         }
 
@@ -283,7 +285,7 @@ bool NeuralNetwork::Load(const char* filePath)
         prevLayerSize = numLayerOutputs;
     }
 
-    layers.back().activationFunction = ActivationFunction::Linear;
+    layers.back().activationFunction = ActivationFunction::Sigmoid;
     tempError.resize(prevLayerSize);
 
     // read weights
@@ -330,9 +332,9 @@ const Layer::Values& NeuralNetwork::Run(const Layer::Values& input)
     return layers.back().output;
 }
 
-const Layer::Values& NeuralNetwork::Run(const std::vector<uint32_t>& input)
+const Layer::Values& NeuralNetwork::Run(const uint16_t* featureIndices, uint32_t numFeatures)
 {
-    layers.front().Run(input);
+    layers.front().Run(featureIndices, numFeatures);
 
     for (size_t i = 1; i < layers.size(); i++)
     {
@@ -450,7 +452,7 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
             {
                 const TrainingVector& vec = trainingSet[vecIndex];
 
-                tempValues = Run(vec.inputFeatures);
+                tempValues = Run(vec.inputFeatures.data(), (uint32_t)vec.inputFeatures.size());
 
                 // train last layers
                 {

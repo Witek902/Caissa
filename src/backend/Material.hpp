@@ -25,6 +25,7 @@ union MaterialKey
     INLINE constexpr MaterialKey() : value(0) { }
 
     INLINE constexpr MaterialKey(const MaterialKey& rhs) : value(rhs.value) { }
+    INLINE constexpr explicit MaterialKey(uint64_t v) : value(v) { }
 
     INLINE MaterialKey(
         uint32_t wp, uint32_t wk, uint32_t wb, uint32_t wr, uint32_t wq,
@@ -58,6 +59,16 @@ union MaterialKey
         return
             (uint32_t)numWhitePawns + (uint32_t)numWhiteKnights + (uint32_t)numWhiteBishops + (uint32_t)numWhiteRooks + (uint32_t)numWhiteQueens +
             (uint32_t)numBlackPawns + (uint32_t)numBlackKnights + (uint32_t)numBlackBishops + (uint32_t)numBlackRooks + (uint32_t)numBlackQueens;
+    }
+
+    INLINE constexpr bool IsSymetric() const
+    {
+        return (value & 0x3FFFFFFF) == (value >> 30);
+    }
+
+    INLINE constexpr MaterialKey SwappedColors() const
+    {
+        return MaterialKey((value >> 30) | (value << 30));
     }
 
     uint32_t GetNeuralNetworkInputsNumber() const;

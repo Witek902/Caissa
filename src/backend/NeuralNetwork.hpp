@@ -9,7 +9,7 @@ class PackedNeuralNetwork;
 
 struct TrainingVector
 {
-    std::vector<uint32_t> inputFeatures;
+    std::vector<uint16_t> inputFeatures;
     std::vector<float> output;
 };
 
@@ -61,7 +61,7 @@ struct Layer
 
     void InitWeights();
     void Run(const Values& in);
-    void Run(const std::vector<uint32_t>& in);
+    void Run(const uint16_t* featureIndices, uint32_t numFeatures);
     void Backpropagate(const Values& error);
     void QuantizeWeights(float strength);
 
@@ -106,7 +106,7 @@ public:
     const Layer::Values& Run(const Layer::Values& input);
 
     // Calculate neural network output based on ssparse input (list of active features)
-    const Layer::Values& Run(const std::vector<uint32_t>& input);
+    const Layer::Values& Run(const uint16_t* featureIndices, uint32_t numFeatures);
 
     // Train the neural network
     void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize);
