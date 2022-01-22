@@ -25,9 +25,8 @@
 
 using namespace threadpool;
 
-static const uint32_t cMaxSearchDepth = 7;
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 10240;
+static const uint32_t cNumTrainingVectorsPerIteration = 4096;
 static const uint32_t cBatchSize = 64;
 
 /*
@@ -178,7 +177,7 @@ static void PositionToVector(const Position& pos, nn::TrainingVector& outVector)
 {
     const uint32_t maxFeatures = 64;
 
-    uint32_t features[maxFeatures];
+    uint16_t features[maxFeatures];
     uint32_t numFeatures = pos.ToFeaturesVector(features);
     ASSERT(numFeatures <= maxFeatures);
 
@@ -195,30 +194,23 @@ static void PositionToVector(const Position& pos, nn::TrainingVector& outVector)
 static float ScoreToNN(float score)
 {
     return score;
-
-    // return 0.05f + score * 0.9f; 
-    // 
-    // return std::clamp(score / 10.0f, -1.0f, 1.0f);
 }
 
 static float ScoreFromNN(float score)
 {
     return std::clamp(score, 0.0f, 1.0f);
-
-    //return std::clamp((score - 0.05f)/ 0.9f, 0.0f, 1.0f);
-
-    // return std::clamp(score, -1.0f, 1.0f) * 10.0f;
 }
 
 bool TrainEndgame()
 {
-    //TranspositionTable tt{ 2048ull * 1024ull * 1024ull };
-    //std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
+    TranspositionTable tt{ 2048ull * 1024ull * 1024ull };
+    std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
-    //SearchParam searchParam{ tt };
-    //searchParam.limits.maxDepth = cMaxSearchDepth;
-    //searchParam.limits.analysisMode = true;
-    //searchParam.debugLog = false;
+    SearchParam searchParam{ tt };
+    searchParam.limits.maxDepth = 10;
+    searchParam.limits.maxNodes = 100000;
+    searchParam.limits.analysisMode = true;
+    searchParam.debugLog = false;
 
     struct TrainingEntry
     {
@@ -227,10 +219,10 @@ bool TrainEndgame()
     };
 
     MaterialKey materialKey;
-    materialKey.numWhitePawns   = 0;
+    materialKey.numWhitePawns   = 1;
     materialKey.numWhiteKnights = 0;
     materialKey.numWhiteBishops = 0;
-    materialKey.numWhiteRooks   = 1;
+    materialKey.numWhiteRooks   = 0;
     materialKey.numWhiteQueens  = 0;
     materialKey.numBlackPawns   = 1;
     materialKey.numBlackKnights = 0;
@@ -245,11 +237,11 @@ bool TrainEndgame()
 
     const auto generateTrainingSet = [&](TaskBuilder& taskBuilder, std::vector<TrainingEntry>& outSet)
     {
-        taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext&, const uint32_t i)
+        taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext& ctx, const uint32_t i)
         {
             std::mt19937_64 randomGenerator(randomDevice());
 
-            // Search& search = searchArray[context.threadId];
+            Search& search = searchArray[ctx.threadId];
 
             for (;;)
             {
@@ -271,13 +263,10 @@ bool TrainEndgame()
                     continue;
                 }
 
-                Game game;
-                game.Reset(pos);
-
                 uint32_t dtz = 0;
                 int32_t wdl = 0;
                 Move tbMove;
-                if (!ProbeTablebase_Root(game.GetPosition(), tbMove, &dtz, &wdl))
+                if (!ProbeTablebase_Root(pos, tbMove, &dtz, &wdl))
                 {
                     continue;
                 }
@@ -286,7 +275,11 @@ bool TrainEndgame()
                 if (wdl < 0) score = 0.0f;
                 if (wdl > 0) score = 1.0f;
 
-                /*
+                (void)search;
+/*
+                Game game;
+                game.Reset(pos);
+
                 SearchResult searchResult;
                 search.DoSearch(game, searchParam, searchResult);
 
@@ -302,13 +295,8 @@ bool TrainEndgame()
                     ASSERT(!searchResult.empty());
                 }
 
-                float score = isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f;
-
-                if (score > 15.0f || score < -15.0f)
-                {
-                    continue;
-                }
-                */
+                float score = PawnToWinProbability(isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f);
+*/
 
                 PositionToVector(pos, outSet[i].trainingVector);
                 outSet[i].trainingVector.output[0] = ScoreToNN(score);
@@ -406,9 +394,9 @@ bool TrainEndgame()
                 fwrite("\n", 1, 1, f);
             }
 
-            const std::vector<uint32_t>& features = validationSet[i].trainingVector.inputFeatures;
-            tempValues = network.Run(features);
-            int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)features.size(), features.data(), network);
+            const std::vector<uint16_t>& features = validationSet[i].trainingVector.inputFeatures;
+            tempValues = network.Run(features.data(), (uint32_t)features.size());
+            int32_t packedNetworkOutput = packedNetwork.Run(features.data(), (uint32_t)features.size());
 
             const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.output[0]);
             const float nnValue = ScoreFromNN(tempValues[0]);
@@ -417,9 +405,9 @@ bool TrainEndgame()
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 
-            if ((expectedValue == 1.0f && nnValue >= 0.7f) ||
-                (expectedValue == 0.0f && nnValue <= 0.3f) ||
-                (expectedValue == 0.5f && nnValue > 0.3f && nnValue < 0.7f))
+            if ((expectedValue >= 0.7f && nnValue >= 0.7f) ||
+                (expectedValue <= 0.3f && nnValue <= 0.3f) ||
+                (expectedValue > 0.3f && expectedValue < 0.7f && nnValue > 0.3f && nnValue < 0.7f))
             {
                 correctPredictions++;
             }
@@ -427,7 +415,7 @@ bool TrainEndgame()
             //if (i < 10)
             //{
             //    std::cout
-            //        << trainingSet[i].pos.ToFEN()
+            //        << validationSet[i].pos.ToFEN()
             //        << ", True Score: " << expectedValue
             //        << ", NN eval: " << nnValue
             //        << ", Packed NN eval: " << nnPackedValue
@@ -482,8 +470,6 @@ bool TrainEndgame()
         network.Save((materialKey.ToString() + ".nn").c_str());
         packedNetwork.Save((materialKey.ToString() + ".pnn").c_str());
     }
-
-    
 
     return true;
 }

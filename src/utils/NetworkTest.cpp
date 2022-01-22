@@ -65,7 +65,7 @@ bool TestNetwork()
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
             uint32_t numFeatures = 0;
-            uint32_t featureIndices[2] = { 0, 0 };
+            uint16_t featureIndices[2] = { 0, 0 };
 
             if (i == 1)
             {
@@ -84,8 +84,8 @@ bool TestNetwork()
                 featureIndices[1] = 1;
             }
 
-            tempValues = network.Run(trainingSet[i].inputFeatures);
-            int32_t packedNetworkOutput = packedNetwork.Run(numFeatures, featureIndices, network);
+            tempValues = network.Run(featureIndices, numFeatures);
+            int32_t packedNetworkOutput = packedNetwork.Run(featureIndices, numFeatures);
 
             const float expectedValue = trainingSet[i].output[0];
             const float nnValue = tempValues[0];

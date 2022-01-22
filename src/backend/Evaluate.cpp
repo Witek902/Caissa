@@ -1,9 +1,12 @@
 #include "Evaluate.hpp"
 #include "Move.hpp"
+#include "Material.hpp"
 #include "Endgame.hpp"
-#include "NeuralNetwork.hpp"
+#include "PackedNeuralNetwork.hpp"
 
 #include "nnue-probe/nnue.h"
+
+#include <unordered_map>
 
 struct PieceScore
 {
@@ -95,6 +98,27 @@ const PieceScore KingPSQT[Square::NumSquares] =
     S(   1, -27), S(   7, -11), S(  -8,   4), S( -64,  13), S( -43,  14), S( -16,   4), S(   9,  -5), S(   8, -17),
     S( -15, -53), S(  36, -34), S(  12, -21), S( -54, -11), S(   8, -28), S( -28, -14), S(  24, -24), S(  14, -43),
 };
+
+using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
+static std::unordered_map<MaterialKey, PackedNeuralNetworkPtr> g_neuralNetworks;
+
+static void LoadNetworkForMaterialKey(const MaterialKey key)
+{
+    const std::string path = "../../networks/" + key.ToString() + ".pnn";
+
+    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
+    if (network->Load(path.c_str()))
+    {
+        g_neuralNetworks[key] = std::move(network);
+    }
+}
+
+void InitEvaluation()
+{
+    //LoadNetworkForMaterialKey({ 1,0,0,1,0,1,0,0,1,0 });
+    //LoadNetworkForMaterialKey({ 1,0,0,0,0,1,0,0,0,0 });
+    //LoadNetworkForMaterialKey({ 1,0,0,1,0,0,0,0,1,0 });
+}
 
 static uint32_t FlipRank(uint32_t square)
 {
@@ -360,8 +384,22 @@ static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueDa
     return score;
 }
 
+static int32_t EvaluateNeuralNetwork(nn::PackedNeuralNetwork& network, const Position& position)
+{
+    uint16_t features[64];
+    const uint32_t numFeatures = position.ToFeaturesVector(features);
+
+    float nnOutput = (float)network.Run(features, numFeatures) / (float)nn::OutputScale;
+    nnOutput = std::clamp(nnOutput, 0.001f, 0.999f);
+    nnOutput = 100.0f * WinProbabilityToPawns(nnOutput);
+
+    return std::clamp<int32_t>((int32_t)nnOutput, -MaxNNScore, MaxNNScore);
+}
+
 ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
 {
+    const MaterialKey materialKey = position.GetMaterialKey();
+
     // check endgame evaluation first
     {
         int32_t endgameScore;
@@ -372,21 +410,44 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
         }
     }
 
+    /*
+    {
+        auto iter = g_neuralNetworks.find(materialKey);
+        if (iter != g_neuralNetworks.end())
+        {
+            int32_t nnScore = EvaluateNeuralNetwork(*(iter->second), position);
+            ASSERT(nnScore < TablebaseWinValue&& nnScore > -TablebaseWinValue);
+            return (ScoreType)nnScore;
+        }
+
+        if (!materialKey.IsSymetric())
+        {
+            iter = g_neuralNetworks.find(materialKey.SwappedColors());
+            if (iter != g_neuralNetworks.end())
+            {
+                int32_t nnScore = -EvaluateNeuralNetwork(*(iter->second), position.SwappedColors());
+                ASSERT(nnScore < TablebaseWinValue&& nnScore > -TablebaseWinValue);
+                return (ScoreType)nnScore;
+            }
+        }
+    }
+    */
+
     int32_t value = 0;
     int32_t valueMG = 0;
     int32_t valueEG = 0;
 
-    const int32_t whiteQueens = position.Whites().queens.Count();
-    const int32_t whiteRooks = position.Whites().rooks.Count();
-    const int32_t whiteBishops = position.Whites().bishops.Count();
-    const int32_t whiteKnights = position.Whites().knights.Count();
-    const int32_t whitePawns = position.Whites().pawns.Count();
+    const int32_t whiteQueens   = materialKey.numWhiteQueens;
+    const int32_t whiteRooks    = materialKey.numWhiteRooks;
+    const int32_t whiteBishops  = materialKey.numWhiteBishops;
+    const int32_t whiteKnights  = materialKey.numWhiteKnights;
+    const int32_t whitePawns    = materialKey.numWhitePawns;
 
-    const int32_t blackQueens = position.Blacks().queens.Count();
-    const int32_t blackRooks = position.Blacks().rooks.Count();
-    const int32_t blackBishops = position.Blacks().bishops.Count();
-    const int32_t blackKnights = position.Blacks().knights.Count();
-    const int32_t blackPawns = position.Blacks().pawns.Count();
+    const int32_t blackQueens   = materialKey.numBlackQueens;
+    const int32_t blackRooks    = materialKey.numBlackRooks;
+    const int32_t blackBishops  = materialKey.numBlackBishops;
+    const int32_t blackKnights  = materialKey.numBlackKnights;
+    const int32_t blackPawns    = materialKey.numBlackPawns;
 
     if (whitePawns == 0)
     {

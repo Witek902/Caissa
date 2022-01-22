@@ -8,6 +8,8 @@
 #include <math.h>
 #include <algorithm>
 
+void InitEvaluation();
+
 // convert evaluation score (in pawns) into win probability
 inline float PawnToWinProbability(float pawnsDifference)
 {

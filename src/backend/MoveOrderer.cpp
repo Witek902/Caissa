@@ -12,7 +12,7 @@ static const int32_t c_PromotionScores[] =
 {
     0,          // none
     0,          // pawn
-    90000,      // knight
+    1000,       // knight
     0,          // bishop
     0,          // rook
     10000000,   // queen
@@ -377,18 +377,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                     const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
                     const uint32_t prevTo = followupMove.ToSquare().Index();
                     score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to] / 2;
-                }
-
-                // penalty for early king moves
-                if (move.GetPiece() == Piece::King && !move.IsCastling())
-                {
-                    score -= 256 * std::max(0, 10 - (int32_t)pos.GetMoveCount());
-                }
-
-                // penalty for early queen moves
-                if (move.GetPiece() == Piece::Queen)
-                {
-                    score -= 64 * std::max(0, 6 - (int32_t)pos.GetMoveCount());
                 }
             }
         }

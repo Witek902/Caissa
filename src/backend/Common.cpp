@@ -3,6 +3,7 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
 #include "Endgame.hpp"
+#include "Evaluate.hpp"
 
 void InitEngine()
 {
@@ -10,4 +11,5 @@ void InitEngine()
     InitBitboards();
     InitZobristHash();
     InitEndgame();
+    InitEvaluation();
 }

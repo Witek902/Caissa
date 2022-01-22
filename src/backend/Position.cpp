@@ -400,15 +400,16 @@ void Position::GenerateRookMoveList(MoveList& outMoveList, uint32_t flags) const
         return;
     }
 
+    const Bitboard occupiedByCurrent = currentSide.Occupied();
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+    const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
 
     currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
         const Square square(fromIndex);
 
         Bitboard attackBitboard = Bitboard::GenerateRookAttacks(square, occupiedSquares);
-        attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
+        attackBitboard &= ~occupiedByCurrent; // can't capture own piece
         if (flags & MOVE_GEN_ONLY_TACTICAL) attackBitboard &= occupiedByOpponent;
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
@@ -461,7 +462,9 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
         return;
     }
 
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+    const Bitboard occupiedByCurrent = currentSide.Occupied();
+    const Bitboard occupiedByOpponent = opponentSide.Occupied();
+    const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
 
     currentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
@@ -470,16 +473,16 @@ void Position::GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags) cons
         Bitboard attackBitboard =
             Bitboard::GenerateRookAttacks(square, occupiedSquares) |
             Bitboard::GenerateBishopAttacks(square, occupiedSquares);
-        attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
+        attackBitboard &= ~occupiedByCurrent; // can't capture own piece
         if (flags & MOVE_GEN_ONLY_TACTICAL)
         {
-            attackBitboard &= opponentSide.OccupiedExcludingKing();
+            attackBitboard &= occupiedByOpponent;
         }
 
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             const Square targetSquare(toIndex);
-            const bool isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
+            const bool isCapture = occupiedByOpponent & targetSquare.GetBitboard();
 
             outMoveList.Push(Move::Make(square, targetSquare, Piece::Queen, Piece::None, isCapture));
         });
@@ -494,25 +497,25 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
-
     ASSERT(currentSide.king);
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
     const Square kingSquare(kingSquareIndex);
     const Square opponentKingSquare(FirstBitSet(opponentSide.king));
 
+    const Bitboard opponentNonKingOccupied = opponentSide.OccupiedExcludingKing();
+
     Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
-    attackBitboard &= ~currentSide.Occupied(); // can't capture own piece
+    attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
     attackBitboard &= ~Bitboard::GetKingAttacks(opponentKingSquare); // can't move to piece controlled by opponent's king
     if (onlyTactical)
     {
-        attackBitboard &= opponentSide.OccupiedExcludingKing();
+        attackBitboard &= opponentNonKingOccupied;
     }
 
     attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
     {
         const Square targetSquare(toIndex);
-        const bool isCapture = opponentSide.OccupiedExcludingKing() & targetSquare.GetBitboard();
+        const bool isCapture = opponentNonKingOccupied & targetSquare.GetBitboard();
 
         outMoveList.Push(Move::Make(kingSquare, targetSquare, Piece::King, Piece::None, isCapture));
     });
@@ -530,6 +533,8 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         // king can't be in check
         if ((currentSide.king & opponentAttacks) == 0u)
         {
+            const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+
             if ((currentSideCastlingRights & CastlingRights_LongCastleAllowed) &&
                 ((occupiedSquares & longCastleCrossedSquares) == 0u) &&
                 ((opponentAttacks & longCastleKingCrossedSquares) == 0u))
@@ -934,7 +939,7 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
+uint32_t Position::ToFeaturesVector(uint16_t* outFeatures) const
 {
     Square whiteKingSquare = Square(FirstBitSet(Whites().king));
     Square blackKingSquare = Square(FirstBitSet(Blacks().king));
@@ -977,13 +982,13 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
     // white king
     {
         const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
-        outFeatures[numFeatures++] = whiteKingIndex;
+        outFeatures[numFeatures++] = (uint16_t)whiteKingIndex;
         numInputs += 32;
     }
 
     // black king
     {
-        outFeatures[numFeatures++] = numInputs + blackKingSquare.Index();
+        outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
         numInputs += 64;
     }
 
@@ -993,7 +998,7 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
         {
             for (uint32_t i = 0; i < 64u; ++i)
             {
-                if ((bitboard >> i) & 1) outFeatures[numFeatures++] = numInputs + i;
+                if ((bitboard >> i) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
             }
             numInputs += 64;
         }
@@ -1007,7 +1012,7 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
             for (uint32_t i = 0; i < 48u; ++i)
             {
                 const uint32_t squreIndex = i + 8u;
-                if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = numInputs + i;
+                if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
             }
             numInputs += 48;
         }
@@ -1025,6 +1030,7 @@ uint32_t Position::ToFeaturesVector(uint32_t* outFeatures) const
     writePieceFeatures(blackKnights);
     writePawnFeatures(blackPawns);
 
+    ASSERT(numInputs <= UINT16_MAX);
     ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
 
     return numFeatures;

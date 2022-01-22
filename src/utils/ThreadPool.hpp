@@ -211,7 +211,7 @@ private:
 class TaskBuilder
 {
 public:
-    static constexpr uint32_t MaxTasks = 1024;
+    static constexpr uint32_t MaxTasks = 4096;
 
     TaskBuilder(const TaskID parentTask = InvalidTaskID);
     explicit TaskBuilder(const TaskContext& taskContext);

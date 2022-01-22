@@ -87,7 +87,7 @@ void MoveList::Print(const Position& pos, bool sorted) const
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         std::cout
-            << std::right << std::setw(3) << i << ". "
+            << std::right << std::setw(3) << (i+1) << ". "
             << movesCopy[i].move.ToString() << "\t("
             << pos.MoveToString(movesCopy[i].move, MoveNotation::SAN) << ")\t"
             << movesCopy[i].score << std::endl;

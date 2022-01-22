@@ -114,6 +114,7 @@ bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistan
 bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL)
 {
     ASSERT(pos.IsValid());
+    ASSERT(!pos.IsInCheck(GetOppositeColor(pos.GetSideToMove())));
 
     if (!HasTablebases())
     {

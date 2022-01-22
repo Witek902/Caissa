@@ -38,6 +38,20 @@ inline char PieceToChar(Piece p, bool upperCase = true)
     return c;
 }
 
+inline const char* PieceToString(Piece p)
+{
+    switch (p)
+    {
+    case Piece::Pawn:   return "Pawn";
+    case Piece::Knight: return "Knight";
+    case Piece::Bishop: return "Bishop";
+    case Piece::Rook:   return "Rook";
+    case Piece::Queen:  return "Queen";
+    case Piece::King:   return "King";
+    default: return "";
+    }
+}
+
 inline bool CharToPiece(const char ch, Piece& outPiece)
 {
     switch (ch)
