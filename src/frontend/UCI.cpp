@@ -77,8 +77,7 @@ static void TryLoadingDefaultEvalFile()
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {
-    // init threadpool
-    threadpool::ThreadPool::GetInstance();
+    mSearchThread = std::thread(&UniversalChessInterface::SearchThreadEntryFunc, this);
 
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
@@ -95,6 +94,11 @@ UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
             ExecuteCommand(argv[i]);
         }
     }
+}
+
+UniversalChessInterface::~UniversalChessInterface()
+{
+    StopSearchThread();
 }
 
 void UniversalChessInterface::Loop()
@@ -174,12 +178,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "isready")
     {
-        UniqueLock lock(mMutex);
         std::cout << "readyok" << std::endl;
     }
     else if (command == "ucinewgame")
     {
-        UniqueLock lock(mMutex);
         mTranspositionTable.Clear();
     }
     else if (command == "setoption")
@@ -193,7 +195,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
                 offset++;
             }
 
-            UniqueLock lock(mMutex);
             Command_SetOption(args[2], commandString.substr(offset));
         }
         else
@@ -203,27 +204,24 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "position")
     {
-        UniqueLock lock(mMutex);
+        Command_Stop();
         Command_Position(args);
     }
     else if (command == "go")
     {
-        UniqueLock lock(mMutex);
+        Command_Stop();
         Command_Go(args);
     }
     else if (command == "ponderhit")
     {
-        UniqueLock lock(mMutex);
         Command_PonderHit();
     }
     else if (command == "stop")
     {
-        UniqueLock lock(mMutex);
         Command_Stop();
     }
     else if (command == "quit")
     {
-        UniqueLock lock(mMutex);
         Command_Stop();
         return false;
     }
@@ -233,7 +231,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "print")
     {
-        UniqueLock lock(mMutex);
         std::cout << "Init:    " << mGame.GetInitialPosition().ToFEN() << std::endl; 
         std::cout << "Moves:   " << mGame.ToPGN() << std::endl;
         std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
@@ -245,12 +242,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "scoremoves")
     {
-        UniqueLock lock(mMutex);
         Command_ScoreMoves();
     }
     else if (command == "ttinfo")
     {
-        UniqueLock lock(mMutex);
         const size_t numEntriesUsed = mTranspositionTable.GetNumUsedEntries();
         const float percentage = 100.0f * (float)numEntriesUsed / (float)mTranspositionTable.GetSize();
         std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
@@ -291,25 +286,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     if (args.size() >= 2 && args[1] == "startpos")
     {
         pos.FromFEN(Position::InitPositionFEN);
-
-        if (args.size() >= 4 && args[2] == "moves")
-        {
-            extraMovesStart = 2;
-        }
-    }
-    else if (args.size() >= 2 && args[1] == "random")
-    {
-        MaterialKey material;
-        material.numWhitePawns = 4;
-        material.numBlackPawns = 4;
-        material.numWhiteRooks = 4;
-        material.numBlackRooks = 4;
-
-        if (!GenerateRandomPosition(material, pos))
-        {
-            std::cout << "Failed to generate random position" << std::endl;
-            return false;
-        }
 
         if (args.size() >= 4 && args[2] == "moves")
         {
@@ -597,56 +573,93 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     return true;
 }
 
-void UniversalChessInterface::RunSearchTask()
+void UniversalChessInterface::StopSearchThread()
 {
-    threadpool::TaskDesc taskDesc;
-    taskDesc.waitable = &mSearchCtx->waitable;
-    taskDesc.function = [this](const threadpool::TaskContext&)
     {
-        mTranspositionTable.NextGeneration();
+        std::unique_lock<std::mutex> lock(mNewSearchMutex);
+        mStopSearchThread = true;
+        mNewSearchConditionVariable.notify_one();
+    }
+    mSearchThread.join();
+}
 
-        mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
-
-        // only report best move in non-pondering mode or if "stop" was called during ponder search
-        if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
+void UniversalChessInterface::SearchThreadEntryFunc()
+{
+    for (;;)
+    {
         {
-            Move bestMove = Move::Invalid();
-            if (!mSearchCtx->searchResult.empty())
+            // wait for a new search or a request to stop the thread
+            std::unique_lock<std::mutex> lock(mNewSearchMutex);
+            while (!mNewSearchContext && !mStopSearchThread)
             {
-                const auto& bestLine = mSearchCtx->searchResult[0].moves;
-                const MoveNotation notation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
+                mNewSearchConditionVariable.wait(lock);
+            }
+            mNewSearchContext = nullptr;
+        }
 
-                if (!bestLine.empty())
+        if (mStopSearchThread)
+        {
+            return;
+        }
+
+        DoSearch();
+    }
+}
+
+void UniversalChessInterface::DoSearch()
+{
+    mTranspositionTable.NextGeneration();
+
+    mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
+
+    // only report best move in non-pondering mode or if "stop" was called during ponder search
+    if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
+    {
+        Move bestMove = Move::Invalid();
+        if (!mSearchCtx->searchResult.empty())
+        {
+            const auto& bestLine = mSearchCtx->searchResult[0].moves;
+            const MoveNotation notation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
+
+            if (!bestLine.empty())
+            {
+                bestMove = bestLine[0];
+
+                std::cout << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
+
+                if (bestLine.size() > 1)
                 {
-                    bestMove = bestLine[0];
-
-                    std::cout << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
-
-                    if (bestLine.size() > 1)
-                    {
-                        Position posAfterBestMove = mGame.GetPosition();
-                        posAfterBestMove.DoMove(bestMove);
-                        std::cout << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
-                    }
+                    Position posAfterBestMove = mGame.GetPosition();
+                    posAfterBestMove.DoMove(bestMove);
+                    std::cout << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
                 }
             }
-
-            if (mSearchCtx->searchParam.verboseStats)
-            {
-                const float elapsedTime = (TimePoint::GetCurrent() - mSearchCtx->searchParam.limits.startTimePoint).ToSeconds();
-                std::cout << std::endl << "info string total time " << elapsedTime << " seconds";
-            }
-
-            if (!bestMove.IsValid()) // null move
-            {
-                std::cout << "bestmove 0000";
-            }
-
-            std::cout << std::endl << std::flush;
         }
-    };
 
-    threadpool::ThreadPool::GetInstance().CreateAndDispatchTask(taskDesc);
+        if (mSearchCtx->searchParam.verboseStats)
+        {
+            const float elapsedTime = (TimePoint::GetCurrent() - mSearchCtx->searchParam.limits.startTimePoint).ToSeconds();
+            std::cout << std::endl << "info string total time " << elapsedTime << " seconds";
+        }
+
+        if (!bestMove.IsValid()) // null move
+        {
+            std::cout << "bestmove 0000";
+        }
+
+        std::cout << std::endl << std::flush;
+
+        mSearchCtx->waitable.OnFinished();
+    }
+}
+
+void UniversalChessInterface::RunSearchTask()
+{
+    {
+        std::unique_lock<std::mutex> lock(mNewSearchMutex);
+        mNewSearchContext = mSearchCtx.get();
+        mNewSearchConditionVariable.notify_one();
+    }
 }
 
 bool UniversalChessInterface::Command_Stop()
@@ -793,8 +806,6 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 
 bool UniversalChessInterface::Command_TranspositionTableProbe()
 {
-    UniqueLock lock(mMutex);
-
     TTEntry ttEntry;
 
     std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
@@ -834,8 +845,6 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
 
 bool UniversalChessInterface::Command_TablebaseProbe()
 {
-    UniqueLock lock(mMutex);
-
     TTEntry ttEntry;
 
     Move tbMove;
@@ -857,7 +866,6 @@ bool UniversalChessInterface::Command_TablebaseProbe()
     {
         std::cout << "(tablebase entry found)" << std::endl;
     }
-
 
     return true;
 }

@@ -1,4 +1,5 @@
 #include "Common.hpp"
+#include "ThreadPool.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/Game.hpp"
@@ -11,7 +12,7 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
-#include "../backend/ThreadPool.hpp"
+#include "../backend/Waitable.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -238,16 +239,21 @@ bool TrainEndgame()
 
     std::cout << "Training network for: " << materialKey.ToString() << "..." << std::endl;
 
+
+    std::random_device randomDevice;
+
     const auto generateTrainingSet = [&](TaskBuilder& taskBuilder, std::vector<TrainingEntry>& outSet)
     {
         taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext&, const uint32_t i)
         {
+            std::mt19937_64 randomGenerator(randomDevice());
+
             // Search& search = searchArray[context.threadId];
 
             for (;;)
             {
                 Position pos;
-                GenerateRandomPosition(materialKey, pos);
+                GenerateRandomPosition(randomGenerator, materialKey, pos);
 
                 // don't generate positions where side to move is in check
                 if (pos.IsInCheck(pos.GetSideToMove()))
