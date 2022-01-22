@@ -3,7 +3,7 @@
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/TranspositionTable.hpp"
-#include "../backend/ThreadPool.hpp"
+#include "../backend/Waitable.hpp"
 
 #include <iostream>
 #include <mutex>
@@ -21,7 +21,7 @@ struct SearchTaskContext
 {
     SearchParam searchParam;
     SearchResult searchResult;
-    threadpool::Waitable waitable;
+    Waitable waitable;
     std::atomic<bool> ponderHit = false;
 
     SearchTaskContext(TranspositionTable& tt) : searchParam{ tt } { }
@@ -31,6 +31,8 @@ class UniversalChessInterface
 {
 public:
     UniversalChessInterface(int argc, const char* argv[]);
+    ~UniversalChessInterface();
+
     void Loop();
     bool ExecuteCommand(const std::string& commandString);
 
@@ -45,14 +47,23 @@ private:
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
 
+    void StopSearchThread();
     void RunSearchTask();
+    void DoSearch();
+
+    void SearchThreadEntryFunc();
 
     Game mGame;
     Search mSearch;
     TranspositionTable mTranspositionTable;
     Options mOptions;
 
-    std::mutex mMutex;
+    std::thread mSearchThread;
+
+    std::mutex mNewSearchMutex;
+    std::condition_variable mNewSearchConditionVariable;
+    std::atomic<bool> mStopSearchThread = false;
+    SearchTaskContext* mNewSearchContext = nullptr;
 
     std::unique_ptr<SearchTaskContext> mSearchCtx;
 };

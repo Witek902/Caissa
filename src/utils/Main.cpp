@@ -6,6 +6,8 @@
 
 #include <iostream>
 
+extern void RunUnitTests();
+extern bool RunPerformanceTests(const char* path);
 extern void SelfPlay();
 extern bool Train();
 extern bool TrainEndgame();
@@ -28,7 +30,15 @@ int main(int argc, const char* argv[])
 
     LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
 
-    if (0 == strcmp(argv[1], "selfplay"))
+    if (argc > 1 && strcmp(argv[1], "unittest") == 0)
+    {
+        RunUnitTests();
+    }
+    else if (argc > 2 && strcmp(argv[1], "perftest") == 0)
+    {
+        RunPerformanceTests(argv[2]);
+    }
+    else if (0 == strcmp(argv[1], "selfplay"))
     {
         SelfPlay();
     }

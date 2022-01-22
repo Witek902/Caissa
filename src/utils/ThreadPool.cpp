@@ -1,4 +1,5 @@
 #include "ThreadPool.hpp"
+#include "../backend/Waitable.hpp"
 
 #include <assert.h>
 
@@ -33,48 +34,6 @@ Task::Task(Task&& other)
     mTail = other.mTail;
     mSibling = other.mSibling;
     mWaitable = other.mWaitable;
-}
-
-//////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-
-Waitable::Waitable()
-    : mFinished(false)
-{ }
-
-Waitable::~Waitable()
-{
-    Wait();
-}
-
-void Waitable::Wait()
-{
-    if (!mFinished)
-    {
-        std::unique_lock<std::mutex> lock(mMutex);
-        while (!mFinished)
-        {
-            mConditionVariable.wait(lock);
-        }
-    }
-}
-
-void Waitable::Reset()
-{
-    assert(mFinished.load());
-
-    mFinished = false;
-}
-
-void Waitable::OnFinished()
-{
-    const bool oldState = mFinished.exchange(true);
-    assert(!oldState);
-    (void)oldState;
-
-    std::unique_lock<std::mutex> lock(mMutex);
-    mConditionVariable.notify_all();
 }
 
 //////////////////////////////////////////////////////////////////////////

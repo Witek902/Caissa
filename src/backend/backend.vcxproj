@@ -321,9 +321,9 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release-POPCNT|x64'">Level1</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release-BMI2|x64'">Level1</WarningLevel>
     </ClCompile>
-    <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="Time.cpp" />
     <ClCompile Include="TranspositionTable.cpp" />
+    <ClCompile Include="Waitable.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Bitboard.hpp" />
@@ -351,9 +351,9 @@
     <ClInclude Include="tablebase\stdendian.h" />
     <ClInclude Include="tablebase\tbconfig.h" />
     <ClInclude Include="tablebase\tbprobe.h" />
-    <ClInclude Include="ThreadPool.hpp" />
     <ClInclude Include="Time.hpp" />
     <ClInclude Include="TranspositionTable.hpp" />
+    <ClInclude Include="Waitable.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="backend.natvis" />

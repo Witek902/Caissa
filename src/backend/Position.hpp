@@ -8,6 +8,7 @@
 
 #include <string>
 #include <vector>
+#include <random>
 
 enum CastlingRights : uint8_t
 {
@@ -273,4 +274,4 @@ static_assert(sizeof(Position) == 112, "Invalid position size");
 
 void InitZobristHash();
 
-bool GenerateRandomPosition(const MaterialKey& material, Position& outPosition);
+bool GenerateRandomPosition(std::mt19937_64& randomGenerator, const MaterialKey& material, Position& outPosition);

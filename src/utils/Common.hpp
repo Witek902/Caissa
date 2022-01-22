@@ -1,6 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
+#include "../backend/Common.hpp"
 
 struct PositionEntry
 {

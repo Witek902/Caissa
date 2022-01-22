@@ -44,10 +44,13 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
+    <ClCompile Include="Tests.cpp" />
+    <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="Trainer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
+    <ClInclude Include="ThreadPool.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

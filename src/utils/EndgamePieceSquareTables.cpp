@@ -8,7 +8,6 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/ThreadPool.hpp"
 
 #include <iostream>
 #include <iomanip>

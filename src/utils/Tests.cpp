@@ -1,4 +1,5 @@
-#include <iostream>
+#include "ThreadPool.hpp"
+
 #include "../backend/Position.hpp"
 #include "../backend/MoveList.hpp"
 #include "../backend/Search.hpp"
@@ -6,10 +7,11 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
-#include "../backend/ThreadPool.hpp"
+#include "../backend/Waitable.hpp"
 
 #include "../backend/nnue-probe/nnue.h"
 
+#include <iostream>
 #include <chrono>
 #include <mutex>
 #include <fstream>
@@ -1583,28 +1585,4 @@ bool RunPerformanceTests(const char* path)
     }
 
     return true;
-}
-
-int main(int argc, const char* argv[])
-{
-    InitEngine();
-
-    nnue_init("D:/CHESS/NNUE/nn-04cf2b4ed1da.nnue");
-
-    LoadTablebase("C:/Program Files (x86)/syzygy/");
-
-    if (argc > 1 && strcmp(argv[1], "unittest") == 0)
-    {
-        RunUnitTests();
-    }
-    else if (argc > 2 && strcmp(argv[1], "perftest") == 0)
-    {
-        RunPerformanceTests(argv[2]);
-    }
-    else
-    {
-        return 1;
-    }
-
-    return 0;
 }

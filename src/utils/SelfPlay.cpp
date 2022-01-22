@@ -1,4 +1,5 @@
 #include "Common.hpp"
+#include "ThreadPool.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/Game.hpp"
@@ -9,7 +10,7 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/NeuralNetwork.hpp"
-#include "../backend/ThreadPool.hpp"
+#include "../backend/Waitable.hpp"
 
 #include <chrono>
 #include <random>
