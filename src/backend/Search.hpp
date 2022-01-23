@@ -182,6 +182,9 @@ private:
     {
         bool isMainThread = false;
 
+        // search depth at the root node in current iterative deepening step
+        uint32_t rootDepth = 0;
+
         // principial variation lines from previous iterative deepening search
         SearchResult prevPvLines;
 

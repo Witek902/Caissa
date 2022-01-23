@@ -373,6 +373,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         pvMovesSoFar.clear();
         pvMovesSoFar = param.excludedMoves;
 
+        thread.rootDepth = depth;
+
         bool finishSearchAtDepth = false;
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
@@ -1306,50 +1308,58 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         int32_t moveExtension = extension;
 
-        // promotion extension
-        if (move.GetPromoteTo() == Piece::Queen)
+        // avoid extending search too much (maximum 2x depth at root node)
+        if (node.height < 2 * thread.rootDepth)
         {
-            moveExtension++;
-        }
-
-        // extend if there's only one legal move
-        if (movePicker.IsOnlyOneLegalMove())
-        {
-            moveExtension++;
-        }
-
-        // Singular move extension
-        if (moveExtension <= 1 &&
-            !isRootNode &&
-            !hasMoveFilter &&
-            move == ttEntry.moves[0] &&
-            node.depth >= SingularitySearchMinDepth &&
-            std::abs(ttScore) < KnownWinValue &&
-            ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-            ttEntry.depth >= node.depth - 3)
-        {
-            const uint32_t singularDepth = (node.depth - 1) / 2;
-            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 8 * node.depth);
-
-            NodeInfo singularChildNode = node;
-            singularChildNode.isPvNode = false;
-            singularChildNode.depth = singularDepth;
-            singularChildNode.pvIndex = SingularitySearchPvIndex;
-            singularChildNode.alpha = singularBeta - 1;
-            singularChildNode.beta = singularBeta;
-            singularChildNode.moveFilter = &move;
-            singularChildNode.moveFilterCount = 1;
-
-            const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
-            
-            if (singularScore < singularBeta)
+            // promotion extension
+            if (move.GetPromoteTo() == Piece::Queen)
             {
                 moveExtension++;
+            }
+
+            // extend if there's only one legal move
+            if (movePicker.IsOnlyOneLegalMove())
+            {
+                moveExtension++;
+            }
+
+            // Singular move extension
+            if (moveExtension <= 1 &&
+                !isRootNode &&
+                !hasMoveFilter &&
+                move == ttEntry.moves[0] &&
+                node.depth >= SingularitySearchMinDepth &&
+                std::abs(ttScore) < KnownWinValue &&
+                ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
+                ttEntry.depth >= node.depth - 3)
+            {
+                const uint32_t singularDepth = (node.depth - 1) / 2;
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 8 * node.depth);
+
+                NodeInfo singularChildNode = node;
+                singularChildNode.isPvNode = false;
+                singularChildNode.depth = singularDepth;
+                singularChildNode.pvIndex = SingularitySearchPvIndex;
+                singularChildNode.alpha = singularBeta - 1;
+                singularChildNode.beta = singularBeta;
+                singularChildNode.moveFilter = &move;
+                singularChildNode.moveFilterCount = 1;
+
+                const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
+
+                if (singularScore < singularBeta)
+                {
+                    moveExtension++;
+                }
+                //else if (singularBeta >= node.beta)
+                //{
+                //    return singularBeta;
+                //}
             }
         }
 
         // avoid search explosion
-        moveExtension = std::min(moveExtension, 2);
+        moveExtension = std::clamp(moveExtension, 0, 2);
 
         childNodeParam.previousMove = move;
 

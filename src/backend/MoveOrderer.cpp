@@ -20,13 +20,13 @@ static const int32_t c_PromotionScores[] =
 
 static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
 {
-    return 100 * (int32_t)capturedPiece - (int32_t)attackingPiece;
+    return 8192 * (int32_t)capturedPiece - (int32_t)attackingPiece;
 }
 
 void MoveOrderer::DebugPrint() const
 {
 #ifndef CONFIGURATION_FINAL
-    std::cout << "=== MOVE HISTORY HEURISTICS ===" << std::endl;
+    std::cout << "=== QUIET MOVES HISTORY HEURISTICS ===" << std::endl;
 
     for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
     {
@@ -34,7 +34,7 @@ void MoveOrderer::DebugPrint() const
         {
             for (uint32_t color = 0; color < 2; ++color)
             {
-                const CounterType count = searchHistory[color][fromIndex][toIndex];
+                const CounterType count = quietMoveHistory[color][fromIndex][toIndex];
 
                 if (count)
                 {
@@ -47,7 +47,28 @@ void MoveOrderer::DebugPrint() const
         }
     }
 
-    std::cout << "=== CONTINUATION HISTORY HEURISTICS ===" << std::endl;
+    std::cout << "=== CAPTURES HISTORY HEURISTICS ===" << std::endl;
+
+    for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
+    {
+        for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
+        {
+            for (uint32_t color = 0; color < 2; ++color)
+            {
+                const CounterType count = capturesHistory[color][fromIndex][toIndex];
+
+                if (count)
+                {
+                    std::cout
+                        << Square(fromIndex).ToString() << Square(toIndex).ToString()
+                        << (color > 0 ? " (black)" : " (white)")
+                        << " ==> " << count << '\n';
+                }
+            }
+        }
+    }
+
+    std::cout << "=== QUIET MOVES CONTINUATION HISTORY HEURISTICS ===" << std::endl;
 
     for (uint32_t prevPiece = 0; prevPiece < 6; ++prevPiece)
     {
@@ -57,7 +78,7 @@ void MoveOrderer::DebugPrint() const
             {
                 for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
                 {
-                    const CounterType count = continuationHistory[prevPiece][prevToIndex][piece][toIndex];
+                    const CounterType count = quietMoveContinuationHistory[prevPiece][prevToIndex][piece][toIndex];
 
                     if (count)
                     {
@@ -72,7 +93,7 @@ void MoveOrderer::DebugPrint() const
         }
     }
 
-    std::cout << "=== FOLLOWUP HISTORY HEURISTICS ===" << std::endl;
+    std::cout << "=== QUIET MOVES FOLLOWUP HISTORY HEURISTICS ===" << std::endl;
 
     for (uint32_t prevPiece = 0; prevPiece < 6; ++prevPiece)
     {
@@ -82,7 +103,7 @@ void MoveOrderer::DebugPrint() const
             {
                 for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
                 {
-                    const CounterType count = followupHistory[prevPiece][prevToIndex][piece][toIndex];
+                    const CounterType count = quietMoveFollowupHistory[prevPiece][prevToIndex][piece][toIndex];
 
                     if (count)
                     {
@@ -140,9 +161,10 @@ void MoveOrderer::Clear()
     //    reinterpret_cast<CounterType*>(followupHistory)[i] /= scaleDownFactor;
     //}
 
-    memset(searchHistory, 0, sizeof(searchHistory));
-    memset(continuationHistory, 0, sizeof(continuationHistory));
-    memset(followupHistory, 0, sizeof(followupHistory));
+    //memset(capturesHistory, 0, sizeof(capturesHistory));
+    memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
+    memset(quietMoveContinuationHistory, 0, sizeof(quietMoveContinuationHistory));
+    memset(quietMoveFollowupHistory, 0, sizeof(quietMoveFollowupHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -185,21 +207,47 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
-        UpdateHistoryCounter(searchHistory[color][from][to], delta);
+        UpdateHistoryCounter(quietMoveHistory[color][from][to], delta);
 
         if (prevMove.IsValid())
         {
             const uint32_t prevPiece = (uint32_t)prevMove.GetPiece() - 1;
             const uint32_t prevTo = prevMove.ToSquare().Index();
-            UpdateHistoryCounter(continuationHistory[prevPiece][prevTo][piece][to], delta);
+            UpdateHistoryCounter(quietMoveContinuationHistory[prevPiece][prevTo][piece][to], delta);
         }
 
         if (followupMove.IsValid())
         {
             const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
             const uint32_t prevTo = followupMove.ToSquare().Index();
-            UpdateHistoryCounter(followupHistory[prevPiece][prevTo][piece][to], delta);
+            UpdateHistoryCounter(quietMoveFollowupHistory[prevPiece][prevTo][piece][to], delta);
         }
+    }
+}
+
+void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
+{
+    ASSERT(depth >= 0);
+
+    // don't update uncertain moves
+    if (numMoves <= 1 && depth <= 2)
+    {
+        return;
+    }
+
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+
+    const int32_t bonus = std::min(depth * depth, 256);
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        const Move move = moves[i];
+        const int32_t delta = move == bestMove ? bonus : -bonus;
+
+        const uint32_t from = move.FromSquare().Index();
+        const uint32_t to = move.ToSquare().Index();
+
+        UpdateHistoryCounter(capturesHistory[color][from][to], delta);
     }
 }
 
@@ -282,6 +330,9 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 }
             }
 
+            // history heuristics
+            //score += capturesHistory[color][from][to];
+
             // bonus for capturing previously moved piece
             if (prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare())
             {
@@ -310,14 +361,14 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 score += quietMoveStaticScoreScale * ScoreQuietMove(pos, move);
 
                 // history heuristics
-                score += searchHistory[color][from][to];
+                score += quietMoveHistory[color][from][to];
 
                 // counter move history
                 if (prevMove.IsValid())
                 {
                     const uint32_t prevPiece = (uint32_t)prevMove.GetPiece() - 1;
                     const uint32_t prevTo = prevMove.ToSquare().Index();
-                    score += continuationHistory[prevPiece][prevTo][piece][to] / 2;
+                    score += quietMoveContinuationHistory[prevPiece][prevTo][piece][to] / 2;
                 }
 
                 // followup move history
@@ -325,7 +376,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 {
                     const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
                     const uint32_t prevTo = followupMove.ToSquare().Index();
-                    score += followupHistory[prevPiece][prevTo][piece][to] / 2;
+                    score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to] / 2;
                 }
 
                 // penalty for early king moves
