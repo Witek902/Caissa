@@ -44,6 +44,8 @@ static const int32_t BetaMarginBias = 10;
 static const int32_t QSearchSeeMargin = -50;
 static const uint32_t MaxQSearchMoves = 20;
 
+static const int32_t LateMovePruningStartDepth = 10;
+
 Search::Search()
 {
     BuildMoveReductionTable();
@@ -65,6 +67,12 @@ void Search::BuildMoveReductionTable()
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
         }
+    }
+
+    for (int32_t depth = 0; depth < MaxSearchDepth; ++depth)
+    {
+        const int32_t maxMoves = 5 + depth * depth;
+        mLateMovePruningTable[depth] = (uint8_t)std::min<int32_t>(maxMoves, UINT8_MAX);
     }
 }
 
@@ -1304,6 +1312,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 continue;
             }
+        }
+
+        // Late Move Pruning
+        if (move.IsQuiet() &&
+            moveScore < 0 &&
+            !isInCheck &&
+            bestValue > -KnownWinValue &&
+            node.depth <= LateMovePruningStartDepth &&
+            moveIndex >= mLateMovePruningTable[node.depth])
+        {
+            continue;
         }
 
         int32_t moveExtension = extension;
