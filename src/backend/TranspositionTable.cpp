@@ -48,7 +48,10 @@ static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT clust
 
         CloseHandle(hToken);
 
+#ifndef CONFIGURATION_FINAL
         std::cout << "Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
+#endif // CONFIGURATION_FINAL
+
         return true;
     }
 

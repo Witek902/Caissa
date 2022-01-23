@@ -22,6 +22,7 @@ public:
     void Clear();
 
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
+    void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
 
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
@@ -36,9 +37,10 @@ private:
 
     alignas(CACHELINE_SIZE)
 
-    CounterType searchHistory[2][64][64];
-    CounterType continuationHistory[6][64][6][64];
-    CounterType followupHistory[6][64][6][64];
+    CounterType capturesHistory[2][64][64];
+    CounterType quietMoveHistory[2][64][64];
+    CounterType quietMoveContinuationHistory[6][64][6][64];
+    CounterType quietMoveFollowupHistory[6][64][6][64];
 
     static constexpr uint32_t NumKillerMoves = 2;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
