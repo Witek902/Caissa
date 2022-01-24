@@ -20,8 +20,6 @@ static constexpr PieceScore c_knightValue          = S(337, 281);
 static constexpr PieceScore c_pawnValue            = S(82, 94);
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_mobilityBonus        = 2;
-static constexpr int32_t c_guardBonus           = 5;
 static constexpr int32_t c_kingSafetyBonus      = 3;
 static constexpr int32_t c_doubledPawnPenalty   = 0;
 static constexpr int32_t c_inCheckPenalty       = 20;
@@ -420,32 +418,7 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
     valueEG += c_knightValue.eg * knightsDiff;
     valueEG += c_pawnValue.eg * pawnsDiff;
 
-    const Bitboard whiteAttackedSquares = position.GetAttackedSquares(Color::White);
-    const Bitboard blackAttackedSquares = position.GetAttackedSquares(Color::Black);
-    const Bitboard whiteOccupiedSquares = position.Whites().Occupied();
-    const Bitboard blackOccupiedSquares = position.Blacks().Occupied();
-
-    const uint32_t numWhitePieces = whiteOccupiedSquares.Count() - 1;
-    const uint32_t numBlackPieces = blackOccupiedSquares.Count() - 1;
-
-    const Bitboard whitesMobility = whiteAttackedSquares & ~whiteOccupiedSquares;
-    const Bitboard blacksMobility = blackAttackedSquares & ~blackOccupiedSquares;
-    value += c_mobilityBonus * ((int32_t)whitesMobility.Count() - (int32_t)blacksMobility.Count());
-
-    const Bitboard whitesGuardedPieces = whiteAttackedSquares & whiteOccupiedSquares;
-    const Bitboard blacksGuardedPieces = blackAttackedSquares & blackOccupiedSquares;
-    value += c_guardBonus * ((int32_t)whitesGuardedPieces.Count() - (int32_t)blacksGuardedPieces.Count());
-
     value += c_castlingRightsBonus * ((int32_t)PopCount(position.GetWhitesCastlingRights()) - (int32_t)PopCount(position.GetBlacksCastlingRights()));
-
-    if (whiteAttackedSquares & position.Blacks().king)
-    {
-        value += c_inCheckPenalty;
-    }
-    if (blackAttackedSquares & position.Whites().king)
-    {
-        value -= c_inCheckPenalty;
-    }
 
     // piece square tables
     {
@@ -500,28 +473,14 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
         value += (numPassedWhitePawns - numPassedBlackPawns) * c_passedPawnBonus;
     }
 
-    // white king safety
-    {
-        const Square kingSquare(FirstBitSet(position.Whites().king));
-        int32_t kingNeighbors = (whiteOccupiedSquares & Bitboard::GetKingAttacks(kingSquare)).Count();
-        value += kingNeighbors * c_kingSafetyBonus;
-    }
-
-    // black king safety
-    {
-        const Square kingSquare(FirstBitSet(position.Blacks().king));
-        int32_t kingNeighbors = (blackOccupiedSquares & Bitboard::GetKingAttacks(kingSquare)).Count();
-        value -= kingNeighbors * c_kingSafetyBonus;
-    }
-
     // tempo bonus
     if (position.GetSideToMove() == Color::White)
     {
-        value += numWhitePieces;
+        value += position.Whites().Occupied().Count();
     }
     else
     {
-        value += numBlackPieces;
+        value += position.Blacks().Occupied().Count();
     }
 
     // accumulate middle/end game scores

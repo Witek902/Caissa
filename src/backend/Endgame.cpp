@@ -8,7 +8,6 @@
 
 #include <bitset>
 #include <vector>
-#include <unordered_map>
 #include <mutex>
 
 static nn::PackedNeuralNetwork g_pawnsEndgameNeuralNetwork;
@@ -603,6 +602,7 @@ void InitEndgame()
 }
 
 #ifdef COLLECT_ENDGAME_STATISTICS
+#include <unordered_map>
 static std::mutex s_matKeyOccurencesMutex;
 static std::unordered_map<MaterialKey, uint64_t> s_matKeyOccurences;
 #endif // COLLECT_ENDGAME_STATISTICS
