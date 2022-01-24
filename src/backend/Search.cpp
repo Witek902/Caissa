@@ -1053,7 +1053,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // don't prune in PV nodes, because TT does not contain path information
         if (ttEntry.depth >= node.depth &&
             (node.depth == 0 || !isPvNode) &&
-            !hasMoveFilter)
+            !hasMoveFilter &&
+            position.GetHalfMoveCount() < 90)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;

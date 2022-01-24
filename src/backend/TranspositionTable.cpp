@@ -166,6 +166,7 @@ TranspositionTable::~TranspositionTable()
 void TranspositionTable::Clear()
 {
     memset(clusters, 0, numClusters * sizeof(TTCluster));
+    generation = 0;
 }
 
 static uint64_t NextPowerOfTwo(uint64_t v)
@@ -289,7 +290,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     TTCluster& cluster = clusters[positionHash & hashmapMask];
 
     uint32_t replaceIndex = 0;
-    int32_t minDepthInCluster = INT32_MAX;
+    int32_t minRelevanceInCluster = INT32_MAX;
     uint32_t prevKey = 0;
     TTEntry prevEntry;
 
@@ -309,11 +310,13 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
             break;
         }
 
+        // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
+        const int32_t entryRelevance = (int32_t)data.depth - 4 * entryAge + (data.bounds == TTEntry::Bounds::Exact);
 
-        if ((int32_t)data.depth - entryAge < minDepthInCluster)
+        if (entryRelevance < minRelevanceInCluster)
         {
-            minDepthInCluster = (int32_t)data.depth - entryAge;
+            minRelevanceInCluster = entryRelevance;
             replaceIndex = i;
             prevKey = hash;
             prevEntry = data;
@@ -322,16 +325,8 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
     if (positionKey == prevKey)
     {
-        // don't overwrite entries with worse depth when preserving bounds
-        if (entry.depth < prevEntry.depth &&
-            entry.bounds == prevEntry.bounds)
-        {
-            return;
-        }
-
-        // don't demote Exact to Lower/UpperBound if overwriting entry with same depth
-        if (entry.depth == prevEntry.depth &&
-            prevEntry.bounds == TTEntry::Bounds::Exact &&
+        // don't overwrite entries with worse depth if the bounds are note exact
+        if (entry.depth < prevEntry.depth - 1 &&
             entry.bounds != TTEntry::Bounds::Exact)
         {
             return;
