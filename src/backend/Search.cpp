@@ -119,9 +119,9 @@ NO_INLINE bool Search::CheckStopCondition(const SearchContext& ctx, bool isRootN
     return false;
 }
 
-std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength)
+void Search::GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
 {
-    std::vector<Move> moves;
+    outLine.clear();
 
     uint32_t pvLength = thread.pvLengths[0];
 
@@ -138,7 +138,7 @@ std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& po
             if (!move.IsValid()) break;
             if (!iteratedPosition.DoMove(move)) break;
 
-            moves.push_back(move);
+            outLine.push_back(move);
         }
 
         // reconstruct PV line using transposition table
@@ -155,13 +155,11 @@ std::vector<Move> Search::GetPvLine(const ThreadData& thread, const Position& po
             if (!move.IsValid()) break;
             if (!iteratedPosition.DoMove(move)) break;
 
-            moves.push_back(move);
+            outLine.push_back(move);
         }
 
-        ASSERT(!moves.empty());
+        ASSERT(!outLine.empty());
     }
-
-    return moves;
 }
 
 void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult)
@@ -552,6 +550,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         beta = std::min<int32_t>(param.previousScore + aspirationWindow, InfValue);
     }
 
+    PvLine pvLine; // working copy
     PvLine finalPvLine;
 
     for (;;)
@@ -562,14 +561,11 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.position = param.position;
         rootNode.isPvNode = true;
         rootNode.depth = param.depth;
-        rootNode.height = 0;
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
-
-        PvLine pvLine;
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
@@ -578,11 +574,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         {
             uint32_t maxPvLength = param.depth;
             if (!param.searchParam.limits.analysisMode) maxPvLength = std::min(maxPvLength, DefaultMaxPvLineLength);
-            pvLine.moves = GetPvLine(thread, param.position, param.searchParam.transpositionTable, maxPvLength);
+            GetPvLine(thread, param.position, param.searchParam.transpositionTable, maxPvLength, pvLine.moves);
         }
-
-        const TimePoint endTime = TimePoint::GetCurrent();
-        const TimePoint searchTime = endTime - param.searchParam.limits.startTimePoint;
 
         BoundsType boundsType = BoundsType::Exact;
         
@@ -619,6 +612,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
             if (isMainThread && param.searchParam.debugLog)
             {
+                const TimePoint searchTime = TimePoint::GetCurrent() - param.searchParam.limits.startTimePoint;
                 ReportPV(param, pvLine, boundsType, searchTime);
             }
 
@@ -872,7 +866,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ASSERT(move.IsValid());
 
         // skip losing captures
-        if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue)
+        if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
         {
             if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
             {

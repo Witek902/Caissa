@@ -229,7 +229,7 @@ private:
     bool IsRepetition(const NodeInfo& node, const Game& game) const;
 
     // reconstruct PV line from cache and TT table
-    static std::vector<Move> GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength);
+    static void GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const SearchContext& ctx, bool isRootNode) const;
