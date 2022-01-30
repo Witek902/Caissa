@@ -31,17 +31,20 @@ bool Position::operator == (const Position& rhs) const
     return result;
 }
 
-bool Position::IsValid() const
+bool Position::IsValid(bool strict) const
 {
     // validate piece counts
-    if ((Whites().pawns.Count() + Whites().knights.Count() + Whites().bishops.Count() + Whites().rooks.Count() + Whites().queens.Count() > 15u)) return false;
-    if ((Blacks().pawns.Count() + Blacks().knights.Count() + Blacks().bishops.Count() + Blacks().rooks.Count() + Blacks().queens.Count() > 15u)) return false;
-    if (Whites().pawns.Count() > 8u || Blacks().pawns.Count() > 8u) return false;
-    if (Whites().knights.Count() > 9u || Blacks().knights.Count() > 9u) return false;
-    if (Whites().bishops.Count() > 9u || Blacks().bishops.Count() > 9u) return false;
-    if (Whites().rooks.Count() > 9u || Blacks().rooks.Count() > 9u) return false;
-    if (Whites().queens.Count() > 9u || Blacks().queens.Count() > 9u) return false;
     if (Whites().king.Count() != 1u || Blacks().king.Count() != 1u) return false;
+    if (strict)
+    {
+        if ((Whites().pawns.Count() + Whites().knights.Count() + Whites().bishops.Count() + Whites().rooks.Count() + Whites().queens.Count() > 15u)) return false;
+        if ((Blacks().pawns.Count() + Blacks().knights.Count() + Blacks().bishops.Count() + Blacks().rooks.Count() + Blacks().queens.Count() > 15u)) return false;
+        if (Whites().pawns.Count() > 8u || Blacks().pawns.Count() > 8u) return false;
+        if (Whites().knights.Count() > 9u || Blacks().knights.Count() > 9u) return false;
+        if (Whites().bishops.Count() > 9u || Blacks().bishops.Count() > 9u) return false;
+        if (Whites().rooks.Count() > 9u || Blacks().rooks.Count() > 9u) return false;
+        if (Whites().queens.Count() > 9u || Blacks().queens.Count() > 9u) return false;
+    }
 
     // validate pawn locations
     {
@@ -49,14 +52,14 @@ bool Position::IsValid() const
         Whites().pawns.Iterate([&](uint32_t index)
         {
             uint8_t pawnRank = Square(index).Rank();
-            pawnsValid &= pawnRank >= 1u;   // pawns can't go backward
-            pawnsValid &= pawnRank < 7u;    // unpromoted pawn
+            if (strict) pawnsValid &= pawnRank >= 1u;   // pawns can't go backward
+            pawnsValid &= pawnRank < 7u;                // unpromoted pawn
         });
         Blacks().pawns.Iterate([&](uint32_t index)
         {
             uint8_t pawnRank = Square(index).Rank();
-            pawnsValid &= pawnRank >= 1u;   // unpromoted pawn
-            pawnsValid &= pawnRank < 7u;    // pawns can't go backward
+            if (strict) pawnsValid &= pawnRank >= 1u;   // unpromoted pawn
+            pawnsValid &= pawnRank < 7u;                // pawns can't go backward
         });
         if (!pawnsValid)
         {

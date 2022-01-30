@@ -207,7 +207,6 @@ private:
 
     static constexpr uint32_t MaxReducedMoves = 64;
     uint8_t mMoveReductionTable[MaxSearchDepth][MaxReducedMoves];
-    uint8_t mLateMovePruningTable[MaxSearchDepth];
 
     void BuildMoveReductionTable();
 

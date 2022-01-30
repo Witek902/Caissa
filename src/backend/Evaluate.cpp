@@ -130,7 +130,7 @@ INLINE static void EvalBlackPieceSquareTable(const Bitboard bitboard, const Piec
 static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t egScore)
 {
     // 32 at the beginning, 0 at the end
-    const int32_t mgPhase = (pos.Whites().Occupied() | pos.Blacks().Occupied()).Count();
+    const int32_t mgPhase = std::min(32u, (pos.Whites().Occupied() | pos.Blacks().Occupied()).Count());
     const int32_t egPhase = 32 - mgPhase;
 
     ASSERT(mgPhase >= 0 && mgPhase <= 32);

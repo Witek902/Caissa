@@ -20,7 +20,9 @@ static const float CurrentMoveReportDelay = 10.0f;
 
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const uint32_t SingularitySearchMinDepth = 7;
-static const int32_t SingularitySearchScoreTreshold = 400;
+static const int32_t SingularitySearchScoreTresholdMin = 200;
+static const int32_t SingularitySearchScoreTresholdMax = 500;
+static const int32_t SingularitySearchScoreStep = 50;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
@@ -46,6 +48,11 @@ static const uint32_t MaxQSearchMoves = 20;
 
 static const int32_t LateMovePruningStartDepth = 10;
 
+INLINE static uint32_t GetLateMovePrunningTreshold(uint32_t depth)
+{
+    return 5 + depth * depth;
+}
+
 Search::Search()
 {
     BuildMoveReductionTable();
@@ -67,12 +74,6 @@ void Search::BuildMoveReductionTable()
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
         }
-    }
-
-    for (int32_t depth = 0; depth < MaxSearchDepth; ++depth)
-    {
-        const int32_t maxMoves = 5 + depth * depth;
-        mLateMovePruningTable[depth] = (uint8_t)std::min<int32_t>(maxMoves, UINT8_MAX);
     }
 }
 
@@ -473,37 +474,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
-        // check for singular root move
-        if (isMainThread &&
-            numPvLines == 1 &&
-            depth >= SingularitySearchMinDepth &&
-            std::abs(tempResult[0].score) < KnownWinValue &&
-            param.limits.rootSingularityTime.IsValid() &&
-            TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
-        {
-            const uint32_t singularDepth = depth / 2;
-            const ScoreType singularBeta = tempResult[0].score - SingularitySearchScoreTreshold;
-
-            NodeInfo rootNode;
-            rootNode.position = game.GetPosition();
-            rootNode.isPvNode = false;
-            rootNode.depth = singularDepth;
-            rootNode.height = 0;
-            rootNode.pvIndex = SingularitySearchPvIndex;
-            rootNode.alpha = singularBeta - 1;
-            rootNode.beta = singularBeta;
-            rootNode.moveFilter = &tempResult[0].moves[0];
-            rootNode.moveFilterCount = 1;
-
-            ScoreType score = NegaMax(thread, rootNode, searchContext);
-            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-            if (score < singularBeta)
-            {
-                StopSearch();
-                break;
-            }
-        }
+        const ScoreType primaryMoveScore = tempResult.front().score;
+        const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // rememeber PV lines so they can be used in next iteration
         thread.prevPvLines = std::move(tempResult);
@@ -526,6 +498,39 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         {
             StopSearch();
             break;
+        }
+
+        // check for singular root move
+        if (isMainThread &&
+            numPvLines == 1 &&
+            depth >= SingularitySearchMinDepth &&
+            std::abs(primaryMoveScore) < KnownWinValue &&
+            param.limits.rootSingularityTime.IsValid() &&
+            TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
+        {
+            const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
+
+            const uint32_t singularDepth = depth / 2;
+            const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
+
+            NodeInfo rootNode;
+            rootNode.position = game.GetPosition();
+            rootNode.isPvNode = false;
+            rootNode.depth = singularDepth;
+            rootNode.pvIndex = SingularitySearchPvIndex;
+            rootNode.alpha = singularBeta - 1;
+            rootNode.beta = singularBeta;
+            rootNode.moveFilter = &primaryMove;
+            rootNode.moveFilterCount = 1;
+
+            ScoreType score = NegaMax(thread, rootNode, searchContext);
+            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+            if (score < singularBeta || CheckStopCondition(searchContext, true))
+            {
+                StopSearch();
+                break;
+            }
         }
     }
 }
@@ -1278,12 +1283,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
+        // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
 
         moveIndex++;
 
         // report current move to UCI
-        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog)
+        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex != SingularitySearchPvIndex)
         {
             const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
             if (timeElapsed > CurrentMoveReportDelay)
@@ -1298,6 +1304,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // Static Exchange Evaluation pruning
+        // skip all moves that are bad according to SEE
+        // the higher depth is, the less agressing pruning is
         if (!isInCheck &&
             bestValue > -KnownWinValue &&
             node.depth <= 9)
@@ -1310,12 +1318,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // Late Move Pruning
+        // skip quiet moves that are far in the list
+        // the higher depth is, the less agressing pruning is
         if (move.IsQuiet() &&
             moveScore < 0 &&
             !isInCheck &&
             bestValue > -KnownWinValue &&
             node.depth <= LateMovePruningStartDepth &&
-            moveIndex >= mLateMovePruningTable[node.depth])
+            moveIndex >= GetLateMovePrunningTreshold(node.depth))
         {
             continue;
         }
@@ -1533,6 +1543,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             bestValue > oldAlpha ? TTEntry::Bounds::Exact :
             TTEntry::Bounds::Upper;
 
+        // only PV nodes can have exact score
         if (!isPvNode)
         {
             ASSERT(bounds != TTEntry::Bounds::Exact);
