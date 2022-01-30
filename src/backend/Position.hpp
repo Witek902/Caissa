@@ -135,8 +135,9 @@ public:
     void SetEnPassantSquare(const Square square);
     void ClearEnPassantSquare();
 
-    // check if board state is valid (proper number of pieces, no double checks etc.)
-    bool IsValid() const;
+    // check if board state is valid (no double checks etc.)
+    // strict mode checks if the position is "normal" chess position (proper piece count, proper pawn placement, etc.)
+    bool IsValid(bool strict = false) const;
 
     // get pieces attacking given square
     const Bitboard GetAttackers(const Square square, const Bitboard occupied) const;

@@ -515,16 +515,16 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
             std::cout << "info string ideal time " << idealTimeMs << " ms" << std::endl;
 
-            // use at least 75% of estimated time
+            // use at least 80% of estimated time
             // TODO some better heuristics:
             // for example, estimate time spent in each iteration based on previous searches
-            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.7f * idealTime);
+            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.8f * idealTime);
 
             // abort search if significantly exceeding ideal allocated time
             limits.maxTime = startTimePoint + TimePoint::FromSeconds(10.0f * idealTime);
 
             // activate root singularity search after some portion of estimated time passed
-            limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.25f * idealTime);
+            limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.2f * idealTime);
         }
 
         // hard limit
@@ -565,7 +565,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     RunSearchTask();
 
-    if (mSearchCtx->searchParam.limits.maxTime.IsValid() && waitForSearch)
+    if (waitForSearch)
     {
         mSearchCtx->waitable.Wait();
     }
