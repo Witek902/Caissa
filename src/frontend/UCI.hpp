@@ -15,6 +15,7 @@ struct Options
     uint32_t threads = 1;
     bool analysisMode = false;
     bool useStandardAlgebraicNotation = false;
+    bool colorConsoleOutput = false;
 };
 
 struct SearchTaskContext

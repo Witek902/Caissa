@@ -62,6 +62,9 @@ struct SearchParam
     // print UCI-style output
     bool debugLog = true;
 
+    // use colors in console output to make it more readable
+    bool colorConsoleOutput = false;
+
     // move notation for PV lines printing
     MoveNotation moveNotation = MoveNotation::LAN;
 
