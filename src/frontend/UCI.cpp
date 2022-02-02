@@ -174,6 +174,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
+        std::cout << "option name ColorConsoleOutput type check default false\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -562,6 +563,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
+    mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
 
     RunSearchTask();
 
@@ -794,6 +796,14 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "ponder")
     {
         // nothing special here
+    }
+    else if (lowerCaseName == "colorconsoleoutput")
+    {
+        if (!ParseBool(lowerCaseValue, mOptions.colorConsoleOutput))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
     }
     else
     {

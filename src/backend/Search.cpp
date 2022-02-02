@@ -308,7 +308,13 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         {
             const Move move = pvLine.moves[i];
             ASSERT(move.IsValid());
+
+            if (i == 0 && param.searchParam.colorConsoleOutput) std::cout << "\033[93m";
+
             std::cout << tempPosition.MoveToString(move, param.searchParam.moveNotation);
+
+            if (i == 0 && param.searchParam.colorConsoleOutput) std::cout << "\033[0m";
+
             if (i + 1 < pvLine.moves.size()) std::cout << ' ';
             tempPosition.DoMove(move);
         }
