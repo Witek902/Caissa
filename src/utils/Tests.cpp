@@ -63,9 +63,21 @@ static void RunPositionTests()
         TEST_EXPECT(!Position().FromFEN("k7/8/8/8/8/8/8/8 w - - 0 1"));
         TEST_EXPECT(!Position().FromFEN("K7/8/8/8/8/8/8/8 w - - 0 1"));
 
-        // pawn at invalid position
-        TEST_EXPECT(!Position().FromFEN("rnbqkbpr/ppppppnp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
-        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPNP/RNBQKBPR w KQkq - 0 1"));
+        // black pawn at invalid position
+        {
+            Position pos;
+            TEST_EXPECT(pos.FromFEN("rnbqkbpr/ppppppnp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
+            TEST_EXPECT(pos.IsValid(false));
+            TEST_EXPECT(!pos.IsValid(true));
+        }
+
+        // white pawn at invalid position
+        {
+            Position pos;
+            TEST_EXPECT(pos.FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPNP/RNBQKBPR w KQkq - 0 1"));
+            TEST_EXPECT(pos.IsValid(false));
+            TEST_EXPECT(!pos.IsValid(true));
+        }
 
         // opponent side can't be in check
         TEST_EXPECT(!Position().FromFEN("k6Q/8/8/8/8/8/8/K7 w - - 0 1"));
