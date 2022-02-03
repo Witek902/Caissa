@@ -3,8 +3,8 @@
 
     <Type Name="Move">
 		<Expand>
-            <Item Name="From Square">((value) &amp; 0b111111)</Item>
-            <Item Name="To Square">((value &gt;&gt; 6) &amp; 0b111111)</Item>
+            <Item Name="From Square">(SquareName)((value) &amp; 0b111111)</Item>
+            <Item Name="To Square">(SquareName)((value &gt;&gt; 6) &amp; 0b111111)</Item>
             <Item Name="Piece">(Piece)((value &gt;&gt; 16) &amp; 0b1111)</Item>
             <Item Name="Promote To">(Piece)((value &gt;&gt; 12) &amp; 0b1111)</Item>
             <Item Name="Is Capture">((value &gt;&gt; 20) &amp; 1)</Item>
@@ -12,5 +12,14 @@
             <Item Name="Is Castling">((value &gt;&gt; 22) &amp; 1)</Item>
 		</Expand>
     </Type>
+
+	<Type Name="PackedMove">
+		<Expand>
+			<Item Name="From Square">(SquareName)((value) &amp; 0b111111)</Item>
+			<Item Name="To Square">(SquareName)((value &gt;&gt; 6) &amp; 0b111111)</Item>
+			<Item Name="Piece">(Piece)((value &gt;&gt; 16) &amp; 0b1111)</Item>
+			<Item Name="Promote To">(Piece)((value &gt;&gt; 12) &amp; 0b1111)</Item>
+		</Expand>
+	</Type>
 
 </AutoVisualizer>
