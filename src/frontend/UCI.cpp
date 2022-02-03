@@ -874,7 +874,7 @@ bool UniversalChessInterface::Command_TablebaseProbe()
     }
     else
     {
-        std::cout << "(tablebase entry found)" << std::endl;
+        std::cout << "(tablebase entry not found)" << std::endl;
     }
 
     return true;

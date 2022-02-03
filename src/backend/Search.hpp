@@ -106,6 +106,10 @@ struct NodeInfo
 
     uint8_t pvIndex;
 
+    uint16_t pvLength = 0;
+    PackedMove pvLine[MaxSearchDepth];
+
+    bool isPvNodeFromPrevIteration = false;
     bool isPvNode = false;
     bool isNullMove = false;
 
@@ -191,17 +195,10 @@ private:
         // principial variation lines from previous iterative deepening search
         SearchResult prevPvLines;
 
-        // principial variation moves tracking for current search
-        PackedMove pvArray[MaxSearchDepth][MaxSearchDepth];
-        uint8_t pvLengths[MaxSearchDepth];
-
         MoveOrderer moveOrderer;
 
-        // update principal variation line
-        void UpdatePvArray(uint32_t depth, const Move move);
-
-        // check if one of generated moves is in PV table
-        const Move FindPvMove(const NodeInfo& node, MoveList& moves) const;
+        // get PV move from previous depth iteration
+        const Move GetPvMove(const NodeInfo& node) const;
     };
 
     mutable std::atomic<bool> mStopSearch = false;
@@ -231,7 +228,7 @@ private:
     bool IsRepetition(const NodeInfo& node, const Game& game) const;
 
     // reconstruct PV line from cache and TT table
-    static void GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
+    static void GetPvLine(const NodeInfo& rootNode, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const SearchContext& ctx, bool isRootNode) const;

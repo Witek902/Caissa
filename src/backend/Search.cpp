@@ -120,22 +120,23 @@ NO_INLINE bool Search::CheckStopCondition(const SearchContext& ctx, bool isRootN
     return false;
 }
 
-void Search::GetPvLine(const ThreadData& thread, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
+void Search::GetPvLine(const NodeInfo& rootNode, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
 {
     outLine.clear();
 
-    uint32_t pvLength = thread.pvLengths[0];
-
-    if (pvLength > 0)
+    if (maxLength > 0)
     {
-        uint32_t i;
+        Position iteratedPosition = pos;
+
+        uint32_t i = 0;
 
         // reconstruct PV line using PV array
-        Position iteratedPosition = pos;
-        for (i = 0; i < pvLength; ++i)
+        for (; i < std::min<uint32_t>(maxLength, rootNode.pvLength); ++i)
         {
-            const Move move = iteratedPosition.MoveFromPacked(thread.pvArray[0][i]);
+            ASSERT(rootNode.pvLine[i].IsValid());
+            const Move move = iteratedPosition.MoveFromPacked(rootNode.pvLine[i]);
 
+            ASSERT(move.IsValid());
             if (!move.IsValid()) break;
             if (!iteratedPosition.DoMove(move)) break;
 
@@ -145,8 +146,6 @@ void Search::GetPvLine(const ThreadData& thread, const Position& pos, const Tran
         // reconstruct PV line using transposition table
         for (; i < maxLength; ++i)
         {
-            if (iteratedPosition.GetNumLegalMoves() == 0) break;
-
             TTEntry ttEntry;
             if (!tt.Read(iteratedPosition, ttEntry)) break;
 
@@ -158,8 +157,6 @@ void Search::GetPvLine(const ThreadData& thread, const Position& pos, const Tran
 
             outLine.push_back(move);
         }
-
-        ASSERT(!outLine.empty());
     }
 }
 
@@ -260,11 +257,11 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         std::cout << " multipv " << (param.pvIndex + 1);
     }
 
-    if (pvLine.score > CheckmateValue - MaxSearchDepth)
+    if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)
     {
         std::cout << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
     }
-    else if (pvLine.score < -CheckmateValue + MaxSearchDepth)
+    else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)
     {
         std::cout << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
     }
@@ -356,7 +353,7 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
 
 static bool IsMate(const ScoreType score)
 {
-    return score > CheckmateValue - MaxSearchDepth || score < -CheckmateValue + MaxSearchDepth;
+    return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
 }
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
@@ -521,7 +518,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             NodeInfo rootNode;
             rootNode.position = game.GetPosition();
-            rootNode.isPvNode = false;
             rootNode.depth = singularDepth;
             rootNode.pvIndex = SingularitySearchPvIndex;
             rootNode.alpha = singularBeta - 1;
@@ -566,11 +562,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     for (;;)
     {
-        memset(thread.pvLengths, 0, sizeof(ThreadData::pvLengths));
-
         NodeInfo rootNode;
         rootNode.position = param.position;
         rootNode.isPvNode = true;
+        rootNode.isPvNodeFromPrevIteration = true;
         rootNode.depth = param.depth;
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
@@ -580,13 +575,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
-
-        // limit PV line length so the output is not flooded
-        {
-            uint32_t maxPvLength = param.depth;
-            if (!param.searchParam.limits.analysisMode) maxPvLength = std::min(maxPvLength, DefaultMaxPvLineLength);
-            GetPvLine(thread, param.position, param.searchParam.transpositionTable, maxPvLength, pvLine.moves);
-        }
+        GetPvLine(rootNode, param.position, param.searchParam.transpositionTable, param.depth, pvLine.moves);
 
         BoundsType boundsType = BoundsType::Exact;
         
@@ -645,9 +634,9 @@ static INLINE ScoreType ColorMultiplier(Color color)
     return color == Color::White ? 1 : -1;
 }
 
-const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves) const
+const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
-    if (!node.isPvNode || prevPvLines.empty() || node.pvIndex == SingularitySearchPvIndex)
+    if (!node.isPvNodeFromPrevIteration || prevPvLines.empty() || node.pvIndex == SingularitySearchPvIndex)
     {
         return Move::Invalid();
     }
@@ -658,39 +647,10 @@ const Move Search::ThreadData::FindPvMove(const NodeInfo& node, MoveList& moves)
         return Move::Invalid();
     }
 
-    if (node.height >= pvLine.size())
-    {
-        return Move::Invalid();
-    }
-
     const Move pvMove = pvLine[node.height];
     ASSERT(pvMove.IsValid());
 
-    for (uint32_t i = 0; i < moves.numMoves; ++i)
-    {
-        if (pvMove.IsValid() && moves[i].move == pvMove)
-        {
-            moves[i].score = MoveOrderer::PVMoveValue;
-            return pvMove;
-        }
-    }
-
-    // no PV move found?
     return pvMove;
-}
-
-void Search::ThreadData::UpdatePvArray(uint32_t depth, const Move move)
-{
-    if (depth + 1 < MaxSearchDepth)
-    {
-        const uint8_t childPvLength = pvLengths[depth + 1];
-        pvArray[depth][depth] = move;
-        for (uint32_t j = depth + 1; j < childPvLength; ++j)
-        {
-            pvArray[depth][j] = pvArray[depth + 1][j];
-        }
-        pvLengths[depth] = childPvLength;
-    }
 }
 
 bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
@@ -763,11 +723,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ASSERT(node.moveFilterCount == 0);
     ASSERT(node.height > 0);
 
-    // clean PV line
-    if (node.height < MaxSearchDepth)
-    {
-        thread.pvLengths[node.height] = (uint8_t)node.height;
-    }
+    // clear PV line
+    node.pvLength = 0;
 
     // update stats
     ctx.stats.quiescenceNodes++;
@@ -849,12 +806,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
     }
 
-    NodeInfo childNodeParam;
-    childNodeParam.parentNode = &node;
-    childNodeParam.pvIndex = node.pvIndex;
-    childNodeParam.isPvNode = node.isPvNode;
-    childNodeParam.depth = node.depth - 1;
-    childNodeParam.height = node.height + 1;
+    NodeInfo childNode;
+    childNode.parentNode = &node;
+    childNode.pvIndex = node.pvIndex;
+    childNode.isPvNode = node.isPvNode;
+    childNode.depth = node.depth - 1;
+    childNode.height = node.height + 1;
 
     uint32_t moveGenFlags = 0;
     if (!isInCheck)
@@ -863,7 +820,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry, moveGenFlags);
+    const Move pvMove = thread.GetPvMove(node);
+
+    if (pvMove.IsValid() && ttEntry.moves[0].IsValid())
+    {
+        ASSERT(pvMove == ttEntry.moves[0]);
+    }
+
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, moveGenFlags);
 
     int32_t moveScore = 0;
     Move move;
@@ -885,19 +849,19 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             }
         }
 
-        childNodeParam.position = position;
-        if (!childNodeParam.position.DoMove(move))
+        childNode.position = position;
+        if (!childNode.position.DoMove(move))
         {
             continue;
         }
 
-        ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         moveIndex++;
 
-        childNodeParam.alpha = -beta;
-        childNodeParam.beta = -alpha;
-        ScoreType score = -QuiescenceNegaMax(thread, childNodeParam, ctx);
+        childNode.alpha = -beta;
+        childNode.beta = -alpha;
+        ScoreType score = -QuiescenceNegaMax(thread, childNode, ctx);
 
         if (score > bestValue) // new best move found
         {
@@ -910,13 +874,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             bestMoves[0] = move;
             bestValue = score;
 
-            if (isPvNode)
-            {
-                thread.UpdatePvArray(node.height, move);
-            }
-
             if (score > alpha) // update lower bound
             {
+                // update PV line
+                node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+                node.pvLine[0] = move;
+                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove)* std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+
                 if (isPvNode && score < beta) // keep alpha < beta
                 {
                     alpha = score;
@@ -1001,11 +965,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
 
-    // clean PV line
-    if (node.height < MaxSearchDepth)
-    {
-        thread.pvLengths[node.height] = (uint8_t)node.height;
-    }
+    // clear PV line
+    node.pvLength = 0;
 
     // update stats
     ctx.stats.nodes++;
@@ -1205,19 +1166,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 node.depth / 4 +
                 std::min(3, int32_t(staticEval - beta) / 256);
 
-            NodeInfo childNodeParam;
-            childNodeParam.parentNode = &node;
-            childNodeParam.pvIndex = node.pvIndex;
-            childNodeParam.position = position;
-            childNodeParam.alpha = -beta;
-            childNodeParam.beta = -beta + 1;
-            childNodeParam.isNullMove = true;
-            childNodeParam.height = node.height + 1;
-            childNodeParam.depth = node.depth - depthReduction;
+            NodeInfo childNode;
+            childNode.parentNode = &node;
+            childNode.pvIndex = node.pvIndex;
+            childNode.position = position;
+            childNode.alpha = -beta;
+            childNode.beta = -beta + 1;
+            childNode.isNullMove = true;
+            childNode.height = node.height + 1;
+            childNode.depth = node.depth - depthReduction;
 
-            childNodeParam.position.DoNullMove();
+            childNode.position.DoNullMove();
 
-            ScoreType nullMoveScore = -NegaMax(thread, childNodeParam, ctx);
+            ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
 
             if (nullMoveScore >= beta)
             {
@@ -1237,10 +1198,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-    NodeInfo childNodeParam;
-    childNodeParam.parentNode = &node;
-    childNodeParam.height = node.height + 1;
-    childNodeParam.pvIndex = node.pvIndex;
+    NodeInfo childNode;
+    childNode.parentNode = &node;
+    childNode.height = node.height + 1;
+    childNode.pvIndex = node.pvIndex;
 
     int32_t extension = 0;
 
@@ -1250,7 +1211,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         extension++;
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry);
+    const Move pvMove = thread.GetPvMove(node);
+
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove);
 
     // randomize move order for root node on secondary threads
     if (isRootNode && !thread.isMainThread)
@@ -1283,14 +1246,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
-        childNodeParam.position = position;
-        if (!childNodeParam.position.DoMove(move))
+        childNode.position = position;
+        if (!childNode.position.DoMove(move))
         {
             continue;
         }
 
         // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(childNodeParam.position);
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         moveIndex++;
 
@@ -1391,7 +1354,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // avoid search explosion
         moveExtension = std::clamp(moveExtension, 0, 2);
 
-        childNodeParam.previousMove = move;
+        childNode.previousMove = move;
+        childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
 
         int32_t depthReduction = 0;
 
@@ -1426,12 +1390,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // PVS search at reduced depth
         if (depthReduction > 0)
         {
-            childNodeParam.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
-            childNodeParam.alpha = -alpha - 1;
-            childNodeParam.beta = -alpha;
-            childNodeParam.isPvNode = false;
+            childNode.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
+            childNode.alpha = -alpha - 1;
+            childNode.beta = -alpha;
+            childNode.isPvNode = false;
 
-            score = -NegaMax(thread, childNodeParam, ctx);
+            score = -NegaMax(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
             doFullDepthSearch = score > alpha;
@@ -1441,12 +1405,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // TODO: internal aspiration window?
         if (doFullDepthSearch)
         {
-            childNodeParam.depth = node.depth + moveExtension - 1;
-            childNodeParam.alpha = -alpha - 1;
-            childNodeParam.beta = -alpha;
-            childNodeParam.isPvNode = false;
+            childNode.depth = node.depth + moveExtension - 1;
+            childNode.alpha = -alpha - 1;
+            childNode.beta = -alpha;
+            childNode.isPvNode = false;
 
-            score = -NegaMax(thread, childNodeParam, ctx);
+            score = -NegaMax(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
         }
 
@@ -1455,12 +1419,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             if (moveIndex == 1 || score > alpha)
             {
-                childNodeParam.depth = node.depth + moveExtension - 1;
-                childNodeParam.alpha = -beta;
-                childNodeParam.beta = -alpha;
-                childNodeParam.isPvNode = true;
+                childNode.depth = node.depth + moveExtension - 1;
+                childNode.alpha = -beta;
+                childNode.beta = -alpha;
+                childNode.isPvNode = true;
 
-                score = -NegaMax(thread, childNodeParam, ctx);
+                score = -NegaMax(thread, childNode, ctx);
                 ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
             }
         }
@@ -1476,10 +1440,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             bestMoves[0] = move;
             bestValue = score;
 
-            if (isPvNode)
-            {
-                thread.UpdatePvArray(node.height, move);
-            }
+            // update PV line
+            node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+            node.pvLine[0] = move;
+            memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
 
             if (score > alpha) // update lower bound
             {
@@ -1530,10 +1494,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ASSERT(alpha < beta);
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
     
-    if (isPvNode && isRootNode)
+    if (isRootNode)
     {
         ASSERT(numBestMoves > 0);
-        ASSERT(thread.pvLengths[0] > 0);
+        ASSERT(node.pvLength > 0);
+        ASSERT(node.pvLine[0] == bestMoves[0]);
     }
 
     // update transposition table

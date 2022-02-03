@@ -2,7 +2,7 @@
 #include "MoveOrderer.hpp"
 #include "Position.hpp"
 
-MovePicker::MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, uint32_t moveGenFlags)
+MovePicker::MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags)
     : position(pos)
     , moveOrderer(moveOrderer)
     , moveGenFlags(0)
@@ -18,6 +18,8 @@ MovePicker::MovePicker(const Position& pos, const MoveOrderer& moveOrderer, cons
     {
         numScoredMoves = moves.AssignTTScores(ttEntry);
     }
+
+    moves.AssignPVScore(pvMove);
 }
 
 void MovePicker::Shuffle()

@@ -45,6 +45,8 @@ public:
 
     uint32_t AssignTTScores(const TTEntry& ttEntry);
 
+    void AssignPVScore(const Move pvMove);
+
     const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
         ASSERT(index < numMoves);

@@ -238,7 +238,7 @@ static constexpr ScoreType CheckmateValue     = 32000;
 static constexpr ScoreType TablebaseWinValue  = 31000;
 static constexpr ScoreType KnownWinValue      = 20000;
 
-static constexpr ScoreType MaxSearchDepth = 256;
+static constexpr uint16_t MaxSearchDepth    = 256;
 
 // initialize all engine subsystems
 EXPORT void InitEngine();

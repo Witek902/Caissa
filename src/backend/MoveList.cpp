@@ -33,6 +33,25 @@ uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
     return numAssignedMoves;
 }
 
+void MoveList::AssignPVScore(const Move pvMove)
+{
+    if (!pvMove.IsValid())
+    {
+        return;
+    }
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        if (moves[i].move == pvMove)
+        {
+            moves[i].score = MoveOrderer::PVMoveValue;
+            return;
+        }
+    }
+
+    ASSERT(!"Invalid PV move");
+}
+
 void MoveList::Shuffle()
 {
     static std::atomic<uint32_t> shuffleSeed = 0;

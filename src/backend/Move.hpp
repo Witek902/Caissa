@@ -7,25 +7,29 @@
 
 struct PackedMove
 {
-    UNNAMED_STRUCT union
+    // data layout is following:
+    //
+    // [type]   [property]  [bits]
+    // 
+    // Square   fromSquare  : 6
+    // Square   toSquare    : 6
+    // Piece    promoteTo   : 4     target piece after promotion (only valid is piece is pawn)
+    //
+    uint16_t value;
+
+    INLINE constexpr PackedMove() = default;
+
+    INLINE constexpr PackedMove(const Square fromSquare, const Square toSquare, Piece promoteTo = Piece::None)
     {
-        UNNAMED_STRUCT struct
-        {
-            uint16_t fromSquare : 6;
-            uint16_t toSquare : 6;
-            uint16_t promoteTo : 4;
-        };
+        value = ((uint32_t)fromSquare.mIndex) | ((uint32_t)toSquare.mIndex << 6) | ((uint32_t)promoteTo << 12);
+    }
 
-        uint16_t value;
-    };
-
-    INLINE constexpr PackedMove() : value(0u) { }
-
-    INLINE constexpr PackedMove(const Square fromSquare, const Square toSquare, Piece promoteTo)
-        : fromSquare(fromSquare.mIndex)
-        , toSquare(toSquare.mIndex)
-        , promoteTo((uint8_t)promoteTo)
-    { }
+    INLINE static constexpr const PackedMove Invalid()
+    {
+        PackedMove move;
+        move.value = 0;
+        return move;
+    }
 
     INLINE constexpr PackedMove(const PackedMove&) = default;
     INLINE constexpr PackedMove& operator = (const PackedMove&) = default;
@@ -33,12 +37,9 @@ struct PackedMove
     // make from regular move
     PackedMove(const Move rhs);
 
-    INLINE Square FromSquare() const { return fromSquare; }
-    INLINE Square ToSquare() const { return toSquare; }
-    INLINE Piece GetPromoteTo() const { return (Piece)promoteTo; }
-
-    INLINE void SetFromSquare(Square sq) { fromSquare = sq.Index(); }
-    INLINE void SetToSquare(Square sq) { toSquare = sq.Index(); }
+    INLINE const Square FromSquare() const { return value & 0b111111; }
+    INLINE const Square ToSquare() const { return (value >> 6) & 0b111111; }
+    INLINE const Piece GetPromoteTo() const { return (Piece)((value >> 12) & 0b1111); }
 
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
@@ -156,6 +157,14 @@ template<typename MoveType, uint32_t MaxSize>
 class MovesArray
 {
 public:
+
+    INLINE MovesArray()
+    {
+        for (uint32_t i = 0; i < MaxSize; ++i)
+        {
+            moves[i] = MoveType::Invalid();
+        }
+    }
 
     INLINE MoveType& operator[](uint32_t i) { return moves[i]; }
     INLINE const MoveType operator[](uint32_t i) const { return moves[i]; }

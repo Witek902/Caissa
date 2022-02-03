@@ -2,19 +2,19 @@
 
 std::string PackedMove::ToString() const
 {
-    if (fromSquare == toSquare)
+    if (FromSquare() == ToSquare())
     {
         return "0000";
     }
 
     std::string str;
 
-    str += Square(fromSquare).ToString();
-    str += Square(toSquare).ToString();
+    str += FromSquare().ToString();
+    str += ToSquare().ToString();
 
-    if ((Piece)promoteTo != Piece::None)
+    if (GetPromoteTo() != Piece::None)
     {
-        str += PieceToChar((Piece)promoteTo, false);
+        str += PieceToChar(GetPromoteTo(), false);
     }
 
     return str;
