@@ -31,7 +31,6 @@ struct TTEntry
     INLINE TTEntry()
         : score(0)
         , staticEval(0)
-        , moves{ PackedMove() }
         , depth(0)
         , bounds(Bounds::Invalid)
         , generation(0)

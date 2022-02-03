@@ -58,8 +58,8 @@ bool Position::IsValid(bool strict) const
         Blacks().pawns.Iterate([&](uint32_t index)
         {
             uint8_t pawnRank = Square(index).Rank();
-            if (strict) pawnsValid &= pawnRank >= 1u;   // unpromoted pawn
-            pawnsValid &= pawnRank < 7u;                // pawns can't go backward
+            pawnsValid &= pawnRank >= 1u;               // unpromoted pawn
+            if (strict) pawnsValid &= pawnRank < 7u;    // pawns can't go backward
         });
         if (!pawnsValid)
         {

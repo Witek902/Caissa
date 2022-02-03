@@ -8,7 +8,7 @@ struct NodeInfo;
 class MovePicker
 {
 public:
-    MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, uint32_t moveGenFlags = 0);
+    MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags = 0);
 
     void Shuffle();
 
