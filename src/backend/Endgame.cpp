@@ -283,6 +283,7 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
         MoveList moves;
         pos.GenerateKingMoveList(moves);
 
+        // TODO this does not handle all cases
         // detect stalemate
         if (moves.Size() == 0)
         {
@@ -291,7 +292,7 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
         }
 
         // check if a piece can be captured immediately
-        if (pos.Whites().Occupied().Count() == 1)
+        if (pos.Whites().Occupied().Count() == 2)
         {
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -442,8 +443,11 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
     }
     else if (numPawns == 2)
     {
+        const Square secondPawnSquare = FirstBitSet(pos.Whites().pawns & ~pawnSquare.GetBitboard());
+        const bool areConnected = (Square::Distance(pawnSquare, secondPawnSquare) <= 1) && (pawnSquare.File() != secondPawnSquare.File());
+
         // connected passed pawns
-        if (Bitboard::GetKingAttacks(pawnSquare) & pos.Whites().pawns)
+        if (areConnected && pos.GetSideToMove() == Color::White)
         {
             outScore = KnownWinValue;
             outScore += 8 * pawnSquare.Rank();
@@ -485,6 +489,111 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
             outScore = 0;
             return true;
         }
+    }
+
+    return false;
+}
+
+// Queen vs. Pawn
+static bool EvaluateEndgame_KQvKP(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
+    ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    if (pos.Whites().queens.Count() == 1 && pos.Blacks().pawns.Count() == 1)
+    {
+        const Square whiteKing(FirstBitSet(pos.Whites().king));
+        const Square blackKing(FirstBitSet(pos.Blacks().king));
+        const Square queenSquare(FirstBitSet(pos.Whites().queens));
+        const Square pawnSquare(FirstBitSet(pos.Blacks().pawns));
+
+        // push kings closer
+        outScore = 7 - Square::Distance(blackKing, whiteKing);
+
+        const Bitboard winningFiles = Bitboard::FileBitboard<1>() | Bitboard::FileBitboard<3>() | Bitboard::FileBitboard<4>() | Bitboard::FileBitboard<6>();
+
+        if (pawnSquare.Rank() >= 3)
+        {
+            // if pawn if 3 squares from promotion (or more) it's 100% win for white
+            if (pos.GetSideToMove() == Color::White && !pos.IsInCheck(Color::White))
+            {
+                outScore += KnownWinValue;
+            }
+            else
+            {
+                outScore += 800;
+            }
+        }
+        else if (pawnSquare.Rank() != 1 || Square::Distance(blackKing, pawnSquare) != 1 || (pawnSquare.GetBitboard() & winningFiles))
+        {
+            // if the pawn is about to promote, is not on rook or bishop file, then it's most likely a win
+            outScore += 800;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+// Rook vs. Pawn
+static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
+    ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    if (pos.Whites().rooks.Count() == 1 && pos.Blacks().pawns.Count() == 1)
+    {
+        const Square whiteKing(FirstBitSet(pos.Whites().king));
+        const Square blackKing(FirstBitSet(pos.Blacks().king));
+        const Square rookSquare(FirstBitSet(pos.Whites().rooks));
+        const Square pawnSquare(FirstBitSet(pos.Blacks().pawns));
+
+        // win if strong king is in front of pawn
+        if (whiteKing.Rank() < pawnSquare.Rank() && whiteKing.File() == pawnSquare.File())
+        {
+            outScore = KnownWinValue;
+            outScore += 7 - Square::Distance(pawnSquare, whiteKing); // try to capture pawn
+            return true;
+        }
+
+        // win if weak king is too far from pawn and the rook
+        if (Square::Distance(blackKing, pawnSquare) >= 3u && Square::Distance(blackKing, rookSquare) >= 2u &&
+            blackKing.Rank() >= pawnSquare.Rank() && pawnSquare.Rank() > 3)
+        {
+            outScore = KnownWinValue;
+            outScore += 7 - Square::Distance(pawnSquare, whiteKing); // try to capture pawn
+            return true;
+        }
+        if (Square::Distance(blackKing, pawnSquare) >= 4u && Square::Distance(blackKing, rookSquare) >= 2u &&
+            blackKing.Rank() >= pawnSquare.Rank() && pawnSquare.Rank() > 1)
+        {
+            outScore = KnownWinValue;
+            outScore += 7 - Square::Distance(pawnSquare, whiteKing); // try to capture pawn
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Queen vs. Rook
+static bool EvaluateEndgame_KQvKR(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks != 0 && pos.Blacks().queens == 0);
+
+    if (pos.Whites().queens.Count() == 1 && pos.Blacks().rooks.Count() == 1)
+    {
+        const Square whiteKing(FirstBitSet(pos.Whites().king));
+        const Square blackKing(FirstBitSet(pos.Blacks().king));
+        const Square queenSquare(FirstBitSet(pos.Whites().queens));
+        const Square rookSquare(FirstBitSet(pos.Blacks().rooks));
+
+        outScore = 400;
+        outScore += 8 * (3 - blackKing.EdgeDistance()); // push king to edge
+        outScore += (7 - Square::Distance(blackKing, whiteKing)); // push kings close
+        return true;
     }
 
     return false;
@@ -597,6 +706,12 @@ void InitEndgame()
     RegisterEndgameFunction(MaterialMask_WhiteBishop|MaterialMask_WhitePawn, EvaluateEndgame_KBPvK);
 
     RegisterEndgameFunction(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);
+
+    RegisterEndgameFunction(MaterialMask_WhiteQueen|MaterialMask_BlackPawn, EvaluateEndgame_KQvKP);
+
+    RegisterEndgameFunction(MaterialMask_WhiteRook|MaterialMask_BlackPawn, EvaluateEndgame_KRvKP);
+
+    RegisterEndgameFunction(MaterialMask_WhiteQueen|MaterialMask_BlackRook, EvaluateEndgame_KQvKR);
 
     RegisterEndgameFunction(MaterialMask_WhiteRook|MaterialMask_BlackRook, EvaluateEndgame_KRvKR);
 }
