@@ -249,56 +249,57 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 
 void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
 {
-    std::cout << "info";
-    std::cout << " depth " << param.depth;
-    std::cout << " seldepth " << (uint32_t)param.searchContext.stats.maxDepth;
+    std::stringstream ss{ std::ios_base::out };
+
+    ss << "info depth " << param.depth;
+    ss << " seldepth " << (uint32_t)param.searchContext.stats.maxDepth;
     if (param.searchParam.numPvLines > 1)
     {
-        std::cout << " multipv " << (param.pvIndex + 1);
+        ss << " multipv " << (param.pvIndex + 1);
     }
 
     if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)
     {
-        std::cout << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
+        ss << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
     }
     else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)
     {
-        std::cout << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
+        ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
     }
     else
     {
-        std::cout << " score cp " << pvLine.score;
+        ss << " score cp " << pvLine.score;
     }
 
     if (boundsType == BoundsType::LowerBound)
     {
-        std::cout << " lowerbound";
+        ss << " lowerbound";
     }
     if (boundsType == BoundsType::UpperBound)
     {
-        std::cout << " upperbound";
+        ss << " upperbound";
     }
 
     const float timeInSeconds = searchTime.ToSeconds();
     const uint64_t numNodes = param.searchContext.stats.nodes.load();
 
-    std::cout << " nodes " << numNodes;
+    ss << " nodes " << numNodes;
 
     if (timeInSeconds > 0.01f && numNodes > 100)
     {
-        std::cout << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
+        ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
     }
 
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchContext.stats.tbHits)
     {
-        std::cout << " tbhit " << param.searchContext.stats.tbHits;
+        ss << " tbhit " << param.searchContext.stats.tbHits;
     }
 #endif // COLLECT_SEARCH_STATS
 
-    std::cout << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
+    ss << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
 
-    std::cout << " pv ";
+    ss << " pv ";
     {
         Position tempPosition = param.position;
         for (size_t i = 0; i < pvLine.moves.size(); ++i)
@@ -306,23 +307,23 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             const Move move = pvLine.moves[i];
             ASSERT(move.IsValid());
 
-            if (i == 0 && param.searchParam.colorConsoleOutput) std::cout << "\033[93m";
+            if (i == 0 && param.searchParam.colorConsoleOutput) ss << "\033[93m";
 
-            std::cout << tempPosition.MoveToString(move, param.searchParam.moveNotation);
+            ss << tempPosition.MoveToString(move, param.searchParam.moveNotation);
 
-            if (i == 0 && param.searchParam.colorConsoleOutput) std::cout << "\033[0m";
+            if (i == 0 && param.searchParam.colorConsoleOutput) ss << "\033[0m";
 
-            if (i + 1 < pvLine.moves.size()) std::cout << ' ';
+            if (i + 1 < pvLine.moves.size()) ss << ' ';
             tempPosition.DoMove(move);
         }
     }
 
-    std::cout << std::endl;
+    ss << std::endl;
 
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
-        std::cout << "Beta cutoff histogram\n";
+        ss << "Beta cutoff histogram\n";
         uint32_t maxMoveIndex = 0;
         uint64_t sum = 0;
         for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
@@ -340,6 +341,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         }
     }
 #endif // COLLECT_SEARCH_STATS
+
+    std::cout << std::move(ss.str());
 }
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
