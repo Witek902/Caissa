@@ -276,7 +276,6 @@
     <ClCompile Include="Endgame.cpp" />
     <ClCompile Include="Evaluate.cpp" />
     <ClCompile Include="Game.cpp" />
-    <ClCompile Include="GameCollection.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="Move.cpp" />
     <ClCompile Include="MoveList.cpp" />
@@ -332,7 +331,6 @@
     <ClInclude Include="Endgame.hpp" />
     <ClInclude Include="Evaluate.hpp" />
     <ClInclude Include="Game.hpp" />
-    <ClInclude Include="GameCollection.hpp" />
     <ClInclude Include="Material.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />
@@ -345,6 +343,7 @@
     <ClInclude Include="PGNParser.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
+    <ClInclude Include="PositionUtils.hpp" />
     <ClInclude Include="Search.hpp" />
     <ClInclude Include="Square.hpp" />
     <ClInclude Include="Tablebase.hpp" />

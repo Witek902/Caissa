@@ -1,14 +1,26 @@
 #include "Game.hpp"
 #include "Evaluate.hpp"
 
+Game::Game()
+    : mInitPosition(Position::InitPositionFEN)
+    , mPosition(Position::InitPositionFEN)
+    , mForcedScore(Score::Unknown)
+{}
+
 void Game::Reset(const Position& pos)
 {
     mInitPosition = pos;
     mPosition = pos;
+    mForcedScore = Score::Unknown;
     mMoves.clear();
     mHistoryGamePositions.clear();
 
     RecordBoardPosition(pos);
+}
+
+void Game::SetScore(Score score)
+{
+    mForcedScore = score;
 }
 
 bool Game::DoMove(const Move& move)
@@ -27,10 +39,12 @@ bool Game::DoMove(const Move& move)
 
 bool Game::DoMove(const Move& move, ScoreType score)
 {
+    ASSERT(mForcedScore == Score::Unknown);
+
     if (mPosition.DoMove(move))
     {
         mMoves.push_back(move);
-        mScores.push_back(score);
+        mMoveScores.push_back(score);
 
         RecordBoardPosition(mPosition);
 
@@ -56,10 +70,34 @@ uint32_t Game::GetRepetitionCount(const Position& position) const
     return iter->second;
 }
 
+Game::Score Game::CalculateScore() const
+{
+    if (mPosition.IsMate())
+    {
+        return mPosition.GetSideToMove() == Color::White ? Score::BlackWins : Score::WhiteWins;
+    }
+
+    if (IsDrawn())
+    {
+        return Score::Draw;
+    }
+
+    return Score::Unknown;
+}
+
+Game::Score Game::GetScore() const
+{
+    if (mForcedScore != Score::Unknown)
+    {
+        return mForcedScore;
+    }
+
+    return CalculateScore();
+}
+
 bool Game::IsDrawn() const
 {
-    // NOTE: two-fold repetition rule is enough
-    if (GetRepetitionCount(mPosition) >= 2)
+    if (GetRepetitionCount(mPosition) >= 3)
     {
         return true;
     }
@@ -75,6 +113,26 @@ bool Game::IsDrawn() const
     }
 
     return false;
+}
+
+bool Game::operator == (const Game& rhs) const
+{
+    return
+        mInitPosition == rhs.mInitPosition &&
+        mPosition == rhs.mPosition &&
+        mForcedScore == rhs.mForcedScore &&
+        mMoves == rhs.mMoves &&
+        mMoveScores == rhs.mMoveScores;
+}
+
+bool Game::operator != (const Game& rhs) const
+{
+    return
+        mInitPosition != rhs.mInitPosition ||
+        mPosition != rhs.mPosition ||
+        mForcedScore != rhs.mForcedScore ||
+        mMoves != rhs.mMoves ||
+        mMoveScores != rhs.mMoveScores;
 }
 
 std::string Game::ToPGN() const

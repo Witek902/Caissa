@@ -23,6 +23,9 @@ using namespace threadpool;
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
 
+extern void RunGameTests();
+extern void RunPackedPositionTests();
+
 void RunPerft()
 {
     const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
@@ -1389,40 +1392,15 @@ void RunSearchTests()
     }
 }
 
-void RunGameTests()
-{
-    std::cout << "Running Game tests..." << std::endl;
-
-    Search search;
-    TranspositionTable tt{ 16 * 1024 };
-   
-    SearchParam param{ tt };
-    param.debugLog = false;
-    param.numPvLines = UINT32_MAX;
-    param.limits.maxDepth = 6;
-    param.numPvLines = 1;
-
-    Game game;
-    game.Reset(Position(Position::InitPositionFEN));
-    game.DoMove(Move::Make(Square_d2, Square_d4, Piece::Pawn));
-    game.DoMove(Move::Make(Square_e7, Square_e5, Piece::Pawn));
-
-    SearchResult result;
-    search.DoSearch(game, param, result);
-
-    TEST_EXPECT(result.size() == 1);
-    TEST_EXPECT(result[0].moves.front() == Move::Make(Square_d4, Square_e5, Piece::Pawn, Piece::None, true));
-    TEST_EXPECT(result[0].score > 0);
-}
-
 void RunUnitTests()
 {
     RunPositionTests();
     RunMovesListTests();
+    RunPackedPositionTests();
+    RunGameTests();
     RunEvalTests();
     RunSearchTests();
     RunPerftTests();
-    RunGameTests();
 }
 
 bool RunPerformanceTests(const char* path)

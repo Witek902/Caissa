@@ -5,8 +5,6 @@
 
 #include <random>
 
-static_assert(sizeof(PackedPosition) == 32, "Invalid packed position size");
-
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 // 800 random bytes to store Zobrist hash
@@ -117,6 +115,10 @@ Position::Position()
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
+    ASSERT(square.IsValid());
+    ASSERT((uint8_t)piece <= (uint8_t)Piece::King);
+    ASSERT(color == Color::White || color == Color::Black);
+
     const Bitboard mask = square.GetBitboard();
     SidePosition& pos = mColors[(uint32_t)color];
 
@@ -142,6 +144,43 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     targetBitboard &= ~mask;
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
+}
+
+void Position::SetSideToMove(Color color)
+{
+    ASSERT(color == Color::White || color == Color::Black);
+
+    if (mSideToMove != color)
+    {
+        mHash ^= s_BlackToMoveHash;
+        mSideToMove = color;
+    }
+}
+
+void Position::SetWhitesCastlingRights(CastlingRights rights)
+{
+    ASSERT((rights & ~CastlingRights_All) == 0);
+
+    if (const uint8_t difference = mWhitesCastlingRights ^ rights)
+    {
+        if (difference & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(Color::White, 0);
+        if (difference & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(Color::White, 1);
+
+        mWhitesCastlingRights = rights;
+    }
+}
+
+void Position::SetBlacksCastlingRights(CastlingRights rights)
+{
+    ASSERT((rights & ~CastlingRights_All) == 0);
+
+    if (const uint8_t difference = mBlacksCastlingRights ^ rights)
+    {
+        if (difference & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(Color::Black, 0);
+        if (difference & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(Color::Black, 1);
+
+        mBlacksCastlingRights = rights;
+    }
 }
 
 void Position::SetEnPassantSquare(const Square square)

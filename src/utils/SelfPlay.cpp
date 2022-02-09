@@ -1,5 +1,6 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
+#include "GameCollection.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/Game.hpp"
@@ -22,7 +23,8 @@ using namespace threadpool;
 
 void SelfPlay()
 {
-    FILE* dumpFile = fopen("selfplay.dat", "wb");
+    FileOutputStream gamesFile("selfplay.dat");
+    GameCollection::Writer writer(gamesFile);
 
     TranspositionTable tt(2ull * 1024ull * 1024ull * 1024ull);
 
@@ -51,8 +53,6 @@ void SelfPlay()
             SearchResult searchResult;
 
             int32_t score = 0;
-            std::vector<PositionEntry> posEntries;
-            posEntries.reserve(200);
 
             int32_t scoreDiffTreshold = 10;
             uint32_t maxMoves = 500;
@@ -66,9 +66,10 @@ void SelfPlay()
                 searchParam.limits.maxDepth = 20;
                 searchParam.numPvLines = halfMoveNumber > 20 ? 1 : 2;
                 searchParam.debugLog = false;
-                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
-                searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
-                searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
+                searchParam.limits.maxNodes = 10000;
+                //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
+                //searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
+                //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
 
                 searchResult.clear();
 
@@ -113,39 +114,6 @@ void SelfPlay()
                     scoreDiffTreshold = std::max(10, scoreDiffTreshold - 5);
                 }
 
-                const Position constPosition = game.GetPosition();
-
-                // dump position
-                {
-                    PositionEntry entry =
-                    {
-                        constPosition.Whites().king,
-                        constPosition.Whites().pawns,
-                        constPosition.Whites().knights,
-                        constPosition.Whites().bishops,
-                        constPosition.Whites().rooks,
-                        constPosition.Whites().queens,
-
-                        constPosition.Blacks().king,
-                        constPosition.Blacks().pawns,
-                        constPosition.Blacks().knights,
-                        constPosition.Blacks().bishops,
-                        constPosition.Blacks().rooks,
-                        constPosition.Blacks().queens,
-
-                        (uint8_t)constPosition.GetSideToMove(),
-                        (uint8_t)constPosition.GetWhitesCastlingRights(),
-                        (uint8_t)constPosition.GetBlacksCastlingRights(),
-
-                        score,
-                        0, // game result
-                        (uint16_t)halfMoveNumber,
-                        0, // total number of moves
-                    };
-
-                    posEntries.push_back(entry);
-                }
-
                 const bool moveSuccess = game.DoMove(move);
                 ASSERT(moveSuccess);
                 (void)moveSuccess;
@@ -158,43 +126,25 @@ void SelfPlay()
                 }
             }
 
-            // put missing data in entries
-            for (PositionEntry& entry : posEntries)
-            {
-                if (score > 0)
-                {
-                    entry.gameResult = 1;
-                }
-                else if (score < 0)
-                {
-                    entry.gameResult = -1;
-                }
-                else
-                {
-                    entry.gameResult = 0;
-                }
-                entry.totalMovesInGame = (uint16_t)halfMoveNumber;
-            }
+            writer.WriteGame(game);
 
             {
+                const std::string pgn = game.ToPGN();
+
                 std::unique_lock<std::mutex> lock(mutex);
-
-                fwrite(posEntries.data(), sizeof(PositionEntry), posEntries.size(), dumpFile);
-                fflush(dumpFile);
 
                 const uint32_t gameNumber = games++;
 
-                std::cout << "Game #" << gameNumber << " ";
-                std::cout << game.ToPGN();
+                std::cout << "Game #" << gameNumber << " " << pgn;
 
                 if (score > 0)
                 {
-                    std::cout << "(white won)";
+                    std::cout << " (white won)";
                     whiteWins++;
                 }
                 else if (score < 0)
                 {
-                    std::cout << "(black won)";
+                    std::cout << " (black won)";
                     blackWins++;
                 }
                 else
@@ -219,6 +169,4 @@ void SelfPlay()
 #ifdef COLLECT_ENDGAME_STATISTICS
     PrintEndgameStatistics();
 #endif // COLLECT_ENDGAME_STATISTICS
-
-    fclose(dumpFile);
 }

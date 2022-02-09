@@ -1,3 +1,5 @@
+#include "PositionUtils.hpp"
+
 #include "Position.hpp"
 #include "MoveList.hpp"
 #include "Time.hpp"
@@ -6,6 +8,101 @@
 #include <random>
 
 #include <immintrin.h>
+
+static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
+
+bool PackPosition(const Position& inPos, PackedPosition& outPos)
+{
+    outPos.occupied = inPos.Whites().Occupied() | inPos.Blacks().Occupied();
+    outPos.moveCount = inPos.GetMoveCount();
+    outPos.sideToMove = inPos.GetSideToMove() == Color::White ? 0 : 1;
+    outPos.halfMoveCount = inPos.GetHalfMoveCount();
+    outPos.castlingRights = (uint8_t)inPos.GetWhitesCastlingRights() | ((uint8_t)inPos.GetBlacksCastlingRights() << 2);
+    outPos.enPassantFile = inPos.GetEnPassantSquare().IsValid() ? inPos.GetEnPassantSquare().File() : 0xF;
+    memset(outPos.piecesData, 0, sizeof(outPos.piecesData));
+
+    if (outPos.occupied.Count() > 32)
+    {
+        return false;
+    }
+
+    uint32_t offset = 0;
+
+    outPos.occupied.Iterate([&](uint32_t index)
+    {
+        Piece piece = Piece::None;
+        uint8_t value = 0;
+
+        if ((piece = inPos.Whites().GetPieceAtSquare(Square(index))) != Piece::None)
+        {
+            value = (uint8_t)piece - (uint8_t)Piece::Pawn;
+        }
+        else if ((piece = inPos.Blacks().GetPieceAtSquare(Square(index))) != Piece::None)
+        {
+            value = (uint8_t)piece - (uint8_t)Piece::Pawn + 8;
+        }
+        else
+        {
+            DEBUG_BREAK();
+        }
+
+        if (offset % 2 == 0)
+        {
+            outPos.piecesData[offset / 2] = value;
+        }
+        else
+        {
+            outPos.piecesData[offset / 2] |= (value << 4);
+        }
+
+        offset++;
+    });
+
+    return true;
+}
+
+bool UnpackPosition(const PackedPosition& inPos, Position& outPos)
+{
+    outPos = Position();
+
+    uint32_t offset = 0;
+    bool success = true;
+
+    inPos.occupied.Iterate([&](uint32_t index)
+    {
+        const uint8_t value = (inPos.piecesData[offset / 2] >> (4 * (offset % 2))) & 0xF;
+
+        if (value <= (uint8_t)Piece::King)
+        {
+            const Piece piece = (Piece)(value + (uint8_t)Piece::Pawn);
+            outPos.SetPiece(Square(index), piece, Color::White);
+        }
+        else if (value >= 8 && value <= 8 + (uint8_t)Piece::King)
+        {
+            const Piece piece = (Piece)(value - 8 + (uint8_t)Piece::Pawn);
+            outPos.SetPiece(Square(index), piece, Color::Black);
+        }
+        else
+        {
+            success = false;
+        }
+
+        offset++;
+    });
+
+    outPos.SetSideToMove((Color)inPos.sideToMove);
+    outPos.SetMoveCount(inPos.moveCount);
+    outPos.SetHalfMoveCount(inPos.halfMoveCount);
+    outPos.SetWhitesCastlingRights(CastlingRights(inPos.castlingRights & 0b11));
+    outPos.SetBlacksCastlingRights(CastlingRights((inPos.castlingRights >> 2) & 0b11));
+
+    if (inPos.enPassantFile < 8)
+    {
+        outPos.SetEnPassantSquare(Square(inPos.enPassantFile, inPos.sideToMove == 0 ? 5 : 2));
+    }
+
+    return success;
+}
 
 Position::Position(const std::string& fenString)
     : Position()
