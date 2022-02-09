@@ -41,15 +41,21 @@
   <ItemGroup>
     <ClCompile Include="EndgamePieceSquareTables.cpp" />
     <ClCompile Include="EndgameValidation.cpp" />
+    <ClCompile Include="GameCollection.cpp" />
+    <ClCompile Include="GameTests.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="NetworkTest.cpp" />
+    <ClCompile Include="PackedPositionTests.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
+    <ClCompile Include="Stream.cpp" />
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="Trainer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
+    <ClInclude Include="GameCollection.hpp" />
+    <ClInclude Include="Stream.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

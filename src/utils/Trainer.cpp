@@ -2,6 +2,7 @@
 #include "ThreadPool.hpp"
 
 #include "../backend/Position.hpp"
+#include "../backend/PositionUtils.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Search.hpp"

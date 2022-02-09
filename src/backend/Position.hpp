@@ -8,7 +8,6 @@
 
 #include <string>
 #include <vector>
-#include <random>
 
 enum CastlingRights : uint8_t
 {
@@ -79,14 +78,6 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
 
 #define MOVE_GEN_ONLY_TACTICAL 1
 #define MOVE_GEN_ONLY_QUEEN_PROMOTIONS 2
-
-struct PackedPosition
-{
-    uint64_t occupied;          // bitboard of occupied squares
-    uint8_t sideToMove : 1;     // 0 - white, 1 - black
-    uint8_t halfMoveCount : 7;
-    uint8_t piecesData[16];     // 4 bits per occupied square
-};
 
 enum class MoveNotation : uint8_t
 {
@@ -211,14 +202,16 @@ public:
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
-    // get color to move
     INLINE Color GetSideToMove() const { return mSideToMove; }
-
-    INLINE void SetSideToMove(Color color) { mSideToMove = color; }
-
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
+
+    void SetSideToMove(Color color);
+    void SetWhitesCastlingRights(CastlingRights rights);
+    void SetBlacksCastlingRights(CastlingRights rights);
+    INLINE void SetHalfMoveCount(uint16_t halfMoveCount) { mHalfMoveCount = halfMoveCount; }
+    INLINE void SetMoveCount(uint16_t moveCount) { mMoveCount = moveCount; }
 
     // check if a side features non-pawn pieces
     bool HasNonPawnMaterial(Color color) const;
@@ -274,5 +267,3 @@ private:
 static_assert(sizeof(Position) == 112, "Invalid position size");
 
 void InitZobristHash();
-
-bool GenerateRandomPosition(std::mt19937_64& randomGenerator, const MaterialKey& material, Position& outPosition);

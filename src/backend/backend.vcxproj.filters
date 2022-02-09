@@ -74,9 +74,6 @@
     <ClCompile Include="Common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GameCollection.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PGNParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -160,9 +157,6 @@
     <ClInclude Include="PackedNeuralNetwork.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GameCollection.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="PGNParser.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -176,6 +170,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Waitable.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PositionUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
