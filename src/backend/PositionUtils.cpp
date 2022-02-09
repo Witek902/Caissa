@@ -574,17 +574,16 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
     }
     else if (notation == MoveNotation::SAN)
     {
-
         if (move.GetPiece() == Piece::Pawn)
         {
             if (move.IsCapture())
             {
-                str += move.FromSquare().ToString();
+                str += 'a' + move.FromSquare().File();
                 str += 'x';
             }
 
             str += move.ToSquare().ToString();
-            if (move.ToSquare().Rank() == 7u && move.GetPromoteTo() != Piece::None)
+            if (move.GetPromoteTo() != Piece::None)
             {
                 str += "=";
                 str += PieceToChar(move.GetPromoteTo());
@@ -615,7 +614,9 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                     const SidePosition& currentSide = GetCurrentSide();
                     const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.GetPiece());
 
-                    bool ambiguous = false;
+                    bool ambiguousFile = false;
+                    bool ambiguousRank = false;
+                    bool ambiguousPiece = false;
                     {
                         MoveList moves;
                         GenerateMoveList(moves);
@@ -627,25 +628,26 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                                 otherMove.ToSquare() == move.ToSquare() &&
                                 otherMove.FromSquare() != move.FromSquare())
                             {
-                                ambiguous = true;
-                                break;
+                                if (otherMove.FromSquare().File() == move.FromSquare().File())  ambiguousFile = true;
+                                if (otherMove.FromSquare().Rank() == move.FromSquare().Rank())  ambiguousRank = true;
+                                ambiguousPiece = true;
                             }
                         }
                     }
 
-                    if (ambiguous)
+                    if (ambiguousPiece)
                     {
-                        if ((movedPieceBitboard & Bitboard::RankBitboard(move.FromSquare().Rank())).Count() > 1)
+                        if (ambiguousFile && ambiguousRank)
                         {
-                            str += 'a' + move.FromSquare().File();
+                            str += move.FromSquare().ToString();
                         }
-                        else if ((movedPieceBitboard & Bitboard::FileBitboard(move.FromSquare().File())).Count() > 1)
+                        else if (ambiguousFile)
                         {
                             str += '1' + move.FromSquare().Rank();
                         }
                         else
                         {
-                            str += move.FromSquare().ToString();
+                            str += 'a' + move.FromSquare().File();
                         }
                     }
                 }
@@ -656,11 +658,6 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                 }
                 str += move.ToSquare().ToString();
             }
-        }
-
-        if (move.IsCapture() && move.IsEnPassant())
-        {
-            str += " e.p.";
         }
 
         if (afterMove.IsMate())
