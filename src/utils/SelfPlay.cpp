@@ -52,10 +52,7 @@ void SelfPlay()
 
             SearchResult searchResult;
 
-            int32_t score = 0;
-
-            int32_t scoreDiffTreshold = 10;
-            uint32_t maxMoves = 500;
+            int32_t scoreDiffTreshold = 20;
 
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
@@ -64,7 +61,7 @@ void SelfPlay()
 
                 SearchParam searchParam{ tt };
                 searchParam.limits.maxDepth = 20;
-                searchParam.numPvLines = halfMoveNumber > 20 ? 1 : 2;
+                searchParam.numPvLines = std::max<int32_t>(1, 5 - halfMoveNumber / 10);
                 searchParam.debugLog = false;
                 searchParam.limits.maxNodes = 10000;
                 //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
@@ -104,24 +101,20 @@ void SelfPlay()
                 const size_t moveIndex = distrib(gen);
                 ASSERT(!searchResult[moveIndex].moves.empty());
                 const Move move = searchResult[moveIndex].moves.front();
-                score = searchResult[moveIndex].score;
-                if (game.GetSideToMove() == Color::Black) score = -score;
 
-                // if didn't picked best move, reduce treshold of picking worse move
+                ScoreType moveScore = searchResult[moveIndex].score;
+                if (game.GetSideToMove() == Color::Black) moveScore = -moveScore;
+
+                // reduce treshold of picking worse move
                 // this way the game will be more random at the beginning and there will be less blunders later in the game
-                if (moveIndex > 0)
-                {
-                    scoreDiffTreshold = std::max(10, scoreDiffTreshold - 5);
-                }
+                scoreDiffTreshold = std::max(10, scoreDiffTreshold - 1);
 
-                const bool moveSuccess = game.DoMove(move);
+                const bool moveSuccess = game.DoMove(move, moveScore);
                 ASSERT(moveSuccess);
                 (void)moveSuccess;
 
-                // check for draw
-                if (game.IsDrawn() || halfMoveNumber > maxMoves)
+                if (game.GetScore() != Game::Score::Unknown)
                 {
-                    score = 0;
                     break;
                 }
             }
@@ -137,17 +130,18 @@ void SelfPlay()
 
                 std::cout << "Game #" << gameNumber << " " << pgn;
 
-                if (score > 0)
+                const Game::Score gameScore = game.GetScore();
+                if (gameScore == Game::Score::WhiteWins)
                 {
                     std::cout << " (white won)";
                     whiteWins++;
                 }
-                else if (score < 0)
+                else if (gameScore == Game::Score::BlackWins)
                 {
                     std::cout << " (black won)";
                     blackWins++;
                 }
-                else
+                else if (gameScore == Game::Score::Draw)
                 {
                     if (game.GetRepetitionCount(game.GetPosition()) >= 2) std::cout << "(draw by repetition)";
                     else if (game.GetPosition().GetHalfMoveCount() >= 100) std::cout << "(draw by 50 move rule)";
@@ -155,6 +149,10 @@ void SelfPlay()
                     else std::cout << "(draw by too long game)";
 
                     draws++;
+                }
+                else
+                {
+                    DEBUG_BREAK();
                 }
 
                 std::cout << " W:" << whiteWins << " B:" << blackWins << " D:" << draws << std::endl;
