@@ -1038,159 +1038,183 @@ static void RunMovesListTests()
 
 static void RunPerftTests()
 {
-    std::cout << "Running perft tests..." << std::endl;
+    std::cout << "Running Perft tests..." << std::endl;
 
+    Waitable waitable;
     {
-        const Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(1) == 18u);
-    }
+        TaskBuilder taskBuilder(waitable);
 
-    {
-        const Position pos("rnbqkbnr/1ppppppp/p7/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(2) == 511u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/1ppppppp/p7/5B2/8/3P4/PPP1PPPP/RN1QKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(1) == 18u);
+        });
 
-    {
-        const Position pos("rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(3) == 11959u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/1ppppppp/p7/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(2) == 511u);
+        });
 
-    {
-        const Position pos("rnb1kbnr/pp1ppppp/1qp5/1P6/8/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(1) == 21u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(3) == 11959u);
+        });
 
-    {
-        const Position pos("rnbqkbnr/pp1ppppp/2p5/1P6/8/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(2) == 458u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnb1kbnr/pp1ppppp/1qp5/1P6/8/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(1) == 21u);
+        });
 
-    {
-        const Position pos("rnbqkbnr/pp1ppppp/2p5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(3) == 10257u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/pp1ppppp/2p5/1P6/8/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(2) == 458u);
+        });
 
-    {
-        const Position pos("rnbqkbnr/pppppppp/8/8/1P6/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
-        TEST_EXPECT(pos.Perft(4) == 216145u);
-    }
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/pp1ppppp/2p5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(3) == 10257u);
+        });
 
-    // Perft
-    {
+        taskBuilder.Task("Perft", [](const TaskContext&)
+        {
+            const Position pos("rnbqkbnr/pppppppp/8/8/1P6/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.Perft(4) == 216145u);
+        });
+
         // initial position
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos(Position::InitPositionFEN);
             TEST_EXPECT(pos.Perft(1) == 20u);
             TEST_EXPECT(pos.Perft(2) == 400u);
             TEST_EXPECT(pos.Perft(3) == 8902u);
             TEST_EXPECT(pos.Perft(4) == 197281u);
-            //TEST_EXPECT(pos.Perft(5) == 4865609u);
+            TEST_EXPECT(pos.Perft(5) == 4865609u);
             //TEST_EXPECT(pos.Perft(6) == 119060324u);
-        }
+        });
 
         // kings only
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("2k2K2/8/8/8/8/8/8/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(4) == 848u);
             TEST_EXPECT(pos.Perft(6) == 29724u);
-        }
+        });
 
         // kings + knight vs. king
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("2k2K2/5N2/8/8/8/8/8/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(2) == 41u);
             TEST_EXPECT(pos.Perft(4) == 2293u);
             TEST_EXPECT(pos.Perft(6) == 130360u);
-        }
+        });
 
         // kings + rook vs. king
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("2k2K2/5R2/8/8/8/8/8/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(1) == 17u);
             TEST_EXPECT(pos.Perft(2) == 53u);
             TEST_EXPECT(pos.Perft(4) == 3917u);
             TEST_EXPECT(pos.Perft(6) == 338276u);
-        }
+        });
 
         // kings + bishop vs. king
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("2k2K2/5B2/8/8/8/8/8/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(2) == 58u);
             TEST_EXPECT(pos.Perft(4) == 4269u);
             TEST_EXPECT(pos.Perft(6) == 314405u);
-        }
+        });
 
         // kings + pawn vs. king
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("2k3K1/4P3/8/8/8/8/8/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(2) == 33u);
             TEST_EXPECT(pos.Perft(4) == 2007u);
             TEST_EXPECT(pos.Perft(6) == 136531u);
-        }
+        });
 
         // castlings
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
             TEST_EXPECT(pos.Perft(1) == 26u);
             TEST_EXPECT(pos.Perft(2) == 568u);
-            //TEST_EXPECT(pos.Perft(4) == 314346u);
-        }
+            TEST_EXPECT(pos.Perft(4) == 314346u);
+        });
 
         // kings + 2 queens
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("q3k2q/8/8/8/8/8/8/Q3K2Q w - - 0 1");
             TEST_EXPECT(pos.Perft(2) == 1040u);
             TEST_EXPECT(pos.Perft(4) == 979543u);
             //TEST_EXPECT(pos.Perft(6) == 923005707u);
-        }
+        });
 
         // max moves
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("R6R/3Q4/1Q4Q1/4Q3/2Q4Q/Q4Q2/pp1Q4/kBNN1KB1 w - - 0 1");
             TEST_EXPECT(pos.Perft(1) == 218u);
-        }
+        });
 
         // discovered double check via en passant
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("8/6p1/7k/7P/5B1R/8/8/7K b - - 0 1");
             TEST_EXPECT(pos.Perft(1) == 2u);
             TEST_EXPECT(pos.Perft(2) == 35u);
             TEST_EXPECT(pos.Perft(3) == 134u);
-        }
+        });
 
         // Kiwipete
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 0 1");
             TEST_EXPECT(pos.Perft(1) == 40u);
-        }
+        });
 
         // Kiwipete
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BK2R b KQkq - 0 1");
             TEST_EXPECT(pos.Perft(1) == 44u);
             TEST_EXPECT(pos.Perft(2) == 1733u);
-        }
+        });
 
         // Position 2 - Kiwipete
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
             TEST_EXPECT(pos.Perft(1) == 48u);
             TEST_EXPECT(pos.Perft(2) == 2039u);
             TEST_EXPECT(pos.Perft(3) == 97862u);
             TEST_EXPECT(pos.Perft(4) == 4085603u);
-        }
+        });
 
         // Position 3
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
             TEST_EXPECT(pos.Perft(1) == 14u);
             TEST_EXPECT(pos.Perft(2) == 191u);
             TEST_EXPECT(pos.Perft(3) == 2812u);
             TEST_EXPECT(pos.Perft(4) == 43238u);
-            //TEST_EXPECT(pos.Perft(5) == 674624u);
-        }
+            TEST_EXPECT(pos.Perft(5) == 674624u);
+        });
 
         // Position 4
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
             TEST_EXPECT(pos.Perft(1) == 6u);
@@ -1198,9 +1222,10 @@ static void RunPerftTests()
             TEST_EXPECT(pos.Perft(3) == 9467u);
             TEST_EXPECT(pos.Perft(4) == 422333u);
             //TEST_EXPECT(pos.Perft(5) == 15833292u);
-        }
+        });
 
         // Position 5
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
             TEST_EXPECT(pos.Perft(1) == 44u);
@@ -1208,9 +1233,10 @@ static void RunPerftTests()
             TEST_EXPECT(pos.Perft(3) == 62379u);
             TEST_EXPECT(pos.Perft(4) == 2103487u);
             //TEST_EXPECT(pos.Perft(5) == 89941194u);
-        }
+        });
 
         // Position 6
+        taskBuilder.Task("Perft", [](const TaskContext&)
         {
             const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
             TEST_EXPECT(pos.Perft(1) == 46u);
@@ -1220,8 +1246,9 @@ static void RunPerftTests()
             //TEST_EXPECT(pos.Perft(5) == 164075551u);
             //TEST_EXPECT(pos.Perft(6) == 6923051137llu);
             //TEST_EXPECT(pos.Perft(7) == 287188994746llu);
-        }
+        });
     }
+    waitable.Wait();
 }
 
 static void RunEvalTests()

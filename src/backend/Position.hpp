@@ -186,7 +186,7 @@ public:
     void MirrorHorizontally();
 
     // run performance test
-    uint64_t Perft(uint32_t depth, bool print = true) const;
+    uint64_t Perft(uint32_t depth, bool print = false) const;
 
     INLINE const SidePosition& Whites() const { return mColors[0]; }
     INLINE const SidePosition& Blacks() const { return mColors[1]; }
