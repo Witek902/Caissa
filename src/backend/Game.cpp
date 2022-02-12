@@ -112,6 +112,11 @@ bool Game::IsDrawn() const
         return true;
     }
 
+    if (mPosition.IsStalemate())
+    {
+        return true;
+    }
+
     return false;
 }
 
