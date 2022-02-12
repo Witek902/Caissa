@@ -54,6 +54,21 @@ void RunGameTests()
         TestGameSerialization(game);
     }
 
+    // game ended in stalemate
+    {
+        Game game;
+        game.Reset(Position("4K2k/8/6q1/4P3/6Q1/8/8/8 w - - 27 74"));
+
+        const Move move = game.GetPosition().MoveFromString("g4g6");
+        TEST_EXPECT(move.IsValid());
+
+        TEST_EXPECT(game.DoMove(move));
+        TEST_EXPECT(game.GetScore() == Game::Score::Draw);
+        TEST_EXPECT(game.GetPosition().IsStalemate());
+
+        TestGameSerialization(game);
+    }
+
     {
         Search search;
         TranspositionTable tt{ 16 * 1024 };
