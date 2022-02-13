@@ -26,9 +26,14 @@ void SelfPlay()
     FileOutputStream gamesFile("selfplay.dat");
     GameCollection::Writer writer(gamesFile);
 
-    TranspositionTable tt(2ull * 1024ull * 1024ull * 1024ull);
-
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
+    std::vector<TranspositionTable> ttArray;
+
+    ttArray.resize(std::thread::hardware_concurrency());
+    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    {
+        ttArray[i].Resize(128ull * 1024ull * 1024ull);
+    }
     
     std::mutex mutex;
     uint32_t games = 0;
@@ -40,19 +45,20 @@ void SelfPlay()
     {
         TaskBuilder taskBuilder(waitable);
 
-        taskBuilder.ParallelFor("SelfPlay", 200, [&](const TaskContext& context, uint32_t)
+        taskBuilder.ParallelFor("SelfPlay", 1000000, [&](const TaskContext& context, uint32_t)
         {
             std::random_device rd;
             std::mt19937 gen(rd());
 
             Search& search = searchArray[context.threadId];
+            TranspositionTable& tt = ttArray[context.threadId];
 
             Game game;
             game.Reset(Position(Position::InitPositionFEN));
 
             SearchResult searchResult;
 
-            int32_t scoreDiffTreshold = 20;
+            int32_t scoreDiffTreshold = 30;
 
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
@@ -60,20 +66,23 @@ void SelfPlay()
                 const TimePoint startTimePoint = TimePoint::GetCurrent();
 
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 20;
-                searchParam.numPvLines = std::max<int32_t>(1, 5 - halfMoveNumber / 10);
+                searchParam.limits.maxDepth = 12;
+                searchParam.numPvLines = std::max<int32_t>(1, 4 - halfMoveNumber / 10);
                 searchParam.debugLog = false;
-                searchParam.limits.maxNodes = 10000;
+                searchParam.limits.maxNodes = 200000;
                 //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
                 //searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
                 //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
 
                 searchResult.clear();
 
+                tt.NextGeneration();
                 search.DoSearch(game, searchParam, searchResult);
 
                 if (searchResult.empty())
                 {
+                    std::string dupa = game.ToPGN();
+                    DEBUG_BREAK();
                     break;
                 }
 
@@ -107,7 +116,7 @@ void SelfPlay()
 
                 // reduce treshold of picking worse move
                 // this way the game will be more random at the beginning and there will be less blunders later in the game
-                scoreDiffTreshold = std::max(10, scoreDiffTreshold - 1);
+                scoreDiffTreshold = std::max(5, scoreDiffTreshold - 1);
 
                 const bool moveSuccess = game.DoMove(move, moveScore);
                 ASSERT(moveSuccess);

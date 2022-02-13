@@ -1,10 +1,15 @@
 #include "PackedNeuralNetwork.hpp"
+#include "NeuralNetwork.hpp"
 
 #include <cassert>
 #include <cmath>
 #include <algorithm>
 #include <iostream>
 #include <intrin.h>
+
+#ifdef USE_AVX2
+#define NN_USE_AVX2
+#endif // USE_AVX2
 
 namespace nn {
 
@@ -14,7 +19,7 @@ void Accumulator::Refresh(
     const LayerData0& layer,
     uint32_t numActiveFeatures, const uint32_t* activeFeatures)
 {
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 16;
     static_assert(FirstLayerSize % registerWidth == 0, "We're processing 16 elements at a time");
     ASSERT(FirstLayerSize == layer.numOutputs);
@@ -79,7 +84,7 @@ void Accumulator::Update(
     uint32_t numAddedFeatures, const uint32_t* addedFeatures,
     uint32_t numRemovedFeatures, const uint32_t* removedFeatures)
 {
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 16;
     static_assert(FirstLayerSize % registerWidth == 0, "We're processing 16 elements at a time");
 
@@ -148,7 +153,7 @@ void Accumulator::Update(
 
 static void ClippedReLU_16(uint32_t size, IntermediateType* output, const WeightTypeLayer0* input)
 {
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     static_assert(std::is_same_v<WeightTypeLayer0, int16_t>, "Invalid type");
     constexpr uint32_t inRegisterWidth = 256 / 16;
     constexpr uint32_t outRegisterWidth = 256 / 8;
@@ -212,7 +217,7 @@ static int32_t m256_hadd(__m256i a)
 
 static void LinearLayer(const LayerData12& layer, int32_t* output, const IntermediateType* input)
 {
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 8;
     ASSERT(layer.numInputs % registerWidth == 0);
     ASSERT(layer.numOutputs % 4u == 0);
@@ -249,6 +254,7 @@ static void LinearLayer(const LayerData12& layer, int32_t* output, const Interme
         const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(&layer.biases[i * 4u]));
         // This function adds horizontally 8 values from each sum together, producing 4 int32 values.
         __m128i outVal = m256_haddx4(sum0, sum1, sum2, sum3);
+        outVal = _mm_add_epi32(outVal, _mm_set1_epi32(WeightScale / 2)); // divide with rounding to nearest
         outVal = _mm_add_epi32(outVal, bias);
         outVal = _mm_srai_epi32(outVal, WeightScaleShift);
         _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
@@ -261,14 +267,15 @@ static void LinearLayer(const LayerData12& layer, int32_t* output, const Interme
         {
             val += layer.weights[i * layer.numInputs + j] * (int32_t)input[j];
         }
-        output[i] = val >> WeightScaleShift;
+        // divide with rounding to nearest
+        output[i] = (val + (WeightScale / 2)) >> WeightScaleShift;
     }
 #endif
 }
 
 static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_t* input)
 {
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     constexpr uint32_t inRegisterWidth = 256 / 32;
     constexpr uint32_t outRegisterWidth = 256 / 8;
     ASSERT(size % outRegisterWidth == 0);
@@ -310,12 +317,13 @@ static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_
 
 static int32_t LinearLayer_SingleOutput(const LayerData12& layer, const IntermediateType* input)
 {
+    ASSERT(layer.numOutputs == 1);
+
     int32_t val = layer.biases[0];
 
-#ifdef USE_AVX2
+#ifdef NN_USE_AVX2
     constexpr uint32_t registerWidth = 256 / 8;
     ASSERT(layer.numInputs % registerWidth == 0);
-    ASSERT(layer.numOutputs % 4u == 0);
 
     // Accumulation starts from 0, we add the bias only at the end.
     __m256i sum = _mm256_setzero_si256();
@@ -335,8 +343,8 @@ static int32_t LinearLayer_SingleOutput(const LayerData12& layer, const Intermed
         val += (int32_t)input[i] * (int32_t)layer.weights[i];
     }
 #endif
-
-    return val;
+    // divide with rounding to nearest
+    return (val + (WeightScale / 2)) >> WeightScaleShift;
 }
 
 ///
@@ -439,8 +447,10 @@ bool PackedNeuralNetwork::Load(const char* filePath)
     return true;
 }
 
-int32_t PackedNeuralNetwork::Run(const uint32_t numActiveInputs, const uint32_t* activeInputIndices) const
+int32_t PackedNeuralNetwork::Run(const uint32_t numActiveInputs, const uint32_t* activeInputIndices, const NeuralNetwork& referenceNetwork) const
 {
+    (void)referenceNetwork;
+
     Accumulator accumulator;
 
     constexpr uint32_t bufferSize = std::max(FirstLayerSize, SecondLayerSize);
@@ -450,15 +460,33 @@ int32_t PackedNeuralNetwork::Run(const uint32_t numActiveInputs, const uint32_t*
     const LayerData0 l0{ layer0_weights, layer0_biases, numInputs, FirstLayerSize };
     accumulator.Refresh(l0, numActiveInputs, activeInputIndices);
 
+    //for (uint32_t i = 0; i < FirstLayerSize; ++i)
+    //{
+    //    const float error = accumulator.values[i] - referenceNetwork.layers[0].linearValue[i] * ActivationRangeScaling;
+    //    ASSERT(std::abs(error) <= 8);
+    //}
+
     ClippedReLU_16(FirstLayerSize, tempA, accumulator.values);
 
     const LayerData12 l1{ layer1_weights, layer1_biases, FirstLayerSize, SecondLayerSize };
     LinearLayer(l1, tempB, tempA);
 
+    //for (uint32_t i = 0; i < SecondLayerSize; ++i)
+    //{
+    //    const float error = tempB[i] - referenceNetwork.layers[1].linearValue[i] * ActivationRangeScaling;
+    //    ASSERT(std::abs(error) <= 64);
+    //}
+
     ClippedReLU_32(SecondLayerSize, tempA, tempB);
 
-    const LayerData12 l2{ layer2_weights, layer2_biases, SecondLayerSize, 4 };
-    return LinearLayer_SingleOutput(l2, tempA);
+    const LayerData12 l2{ layer2_weights, layer2_biases, SecondLayerSize, 1 };
+    const int32_t output = LinearLayer_SingleOutput(l2, tempA);
+
+
+    //const float error = output - referenceNetwork.layers[2].linearValue[0] * OutputScale;
+    //ASSERT(std::abs(error) <= 800);
+
+    return output;
 }
 
 } // namespace nn

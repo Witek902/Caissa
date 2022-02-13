@@ -85,7 +85,7 @@ bool TestNetwork()
             }
 
             tempValues = network.Run(trainingSet[i].inputFeatures);
-            int32_t packedNetworkOutput = packedNetwork.Run(numFeatures, featureIndices);
+            int32_t packedNetworkOutput = packedNetwork.Run(numFeatures, featureIndices, network);
 
             const float expectedValue = trainingSet[i].output[0];
             const float nnValue = tempValues[0];

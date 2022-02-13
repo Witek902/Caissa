@@ -13,6 +13,7 @@ void Game::Reset(const Position& pos)
     mPosition = pos;
     mForcedScore = Score::Unknown;
     mMoves.clear();
+    mMoveScores.clear();
     mHistoryGamePositions.clear();
 
     RecordBoardPosition(pos);

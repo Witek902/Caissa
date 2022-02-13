@@ -14,6 +14,7 @@ extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
 extern bool TestNetwork();
 extern void ValidateEndgame();
+extern void AnalyzeGames();
 
 int main(int argc, const char* argv[])
 {
@@ -57,6 +58,10 @@ int main(int argc, const char* argv[])
     else if (0 == strcmp(argv[1], "validateEndgame"))
     {
         ValidateEndgame();
+    }
+    else if (0 == strcmp(argv[1], "analyzeGames"))
+    {
+        AnalyzeGames();
     }
 
     return 0;

@@ -8,9 +8,6 @@
 
 namespace nn {
 
-// min/max value of a weight
-static constexpr float cWeightsRange = InputScale / (float)WeightScale;
-
 Layer::Layer(size_t inputSize, size_t outputSize)
 {
     activationFunction = ActivationFunction::ClippedReLu;
@@ -28,7 +25,7 @@ Layer::Layer(size_t inputSize, size_t outputSize)
 
 void Layer::InitWeights()
 {
-    const float scale = 1.0f / sqrtf((float)input.size());
+    const float scale = 2.0f / sqrtf((float)input.size());
 
     for (size_t i = 0; i < weights.size(); i++)
     {
@@ -405,7 +402,7 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
     }
 }
 
-void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const
+void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float range, float weightQuantizationScale, float biasQuantizationScale) const
 {
     const size_t inputSize = layer.input.size();
 
@@ -421,16 +418,12 @@ void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float weightQuantizationS
 
             if (j < inputSize)
             {
-                w = std::floor(w * weightQuantizationScale + 0.5f) / weightQuantizationScale;
+                w = std::clamp(std::floor(w * weightQuantizationScale + 0.5f), -range, range) / weightQuantizationScale;
             }
             else
             {
-                w = std::floor(w * biasQuantizationScale + 0.5f) / biasQuantizationScale;
+                w = std::clamp(std::floor(w * biasQuantizationScale + 0.5f), -range, range) / biasQuantizationScale;
             }
-
-            w = std::clamp(w, -cWeightsRange, cWeightsRange);
-
-            ASSERT(fabsf(w) <= cWeightsRange);
         }
 
         offs += inputSize + 1;
@@ -491,24 +484,28 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
     {
         float weightQuantizationScale = 0.0f;
         float biasQuantizationScale = 0.0f;
+        float range = 0.0f;
 
         if (i == 0) // input layer
         {
             weightQuantizationScale = InputLayerWeightQuantizationScale;
             biasQuantizationScale = InputLayerBiasQuantizationScale;
+            range = std::numeric_limits<WeightTypeLayer0>::max();
         }
         else if (i + 1 == layers.size()) // output layer
         {
             weightQuantizationScale = OutputLayerWeightQuantizationScale;
             biasQuantizationScale = OutputLayerBiasQuantizationScale;
+            range = std::numeric_limits<WeightTypeLayer12>::max();
         }
         else // hidden layer
         {
             weightQuantizationScale = HiddenLayerWeightQuantizationScale;
             biasQuantizationScale = HiddenLayerBiasQuantizationScale;
+            range = std::numeric_limits<WeightTypeLayer12>::max();
         }
 
-        QuantizeLayerWeights(layers[i], weightQuantizationScale, biasQuantizationScale);
+        QuantizeLayerWeights(layers[i], range, weightQuantizationScale, biasQuantizationScale);
     }
 }
 
@@ -518,22 +515,28 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
     size_t offs = 0;
     for (size_t i = 0; i < layer.output.size(); i++)
     {
-        float bias = layer.weights[offs + layer.input.size()];
-        const BiasType quantizedBias = (BiasType)(bias * biasScale + 0.5f);
-        outBiases[i] = quantizedBias;
+        {
+            float bias = layer.weights[offs + layer.input.size()];
+            const int32_t quantizedBias = (int32_t)(bias * biasScale + 0.5f);
+            ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
+            ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
+            outBiases[i] = (BiasType)quantizedBias;
+        }
 
         for (size_t j = 0; j < layer.input.size(); j++)
         {
             const float weight = layer.weights[offs + j];
-            const WeightType quantizedWeight = (WeightType)(weight * weightScale + 0.5f);
+            const int32_t quantizedWeight = (int32_t)(weight * weightScale + 0.5f);
+            ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
+            ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
 
             if (transpose)
             {
-                outWeights[layer.output.size() * j + i] = quantizedWeight;
+                outWeights[layer.output.size() * j + i] = (WeightType)quantizedWeight;
             }
             else
             {
-                outWeights[layer.input.size() * i + j] = quantizedWeight;
+                outWeights[layer.input.size() * i + j] = (WeightType)quantizedWeight;
             }
         }
 

@@ -111,11 +111,6 @@ public:
 
     void PrintStats() const;
 
-    Layer& GetLayer(size_t idx)
-    {
-        return layers[idx];
-    }
-
     size_t GetLayersNumber() const
     {
         return layers.size();
@@ -136,10 +131,8 @@ public:
         return layers.back().output;
     }
 
-private:
-
     void UpdateLayerWeights(Layer& layer) const;
-    void QuantizeLayerWeights(Layer& layer, float weightQuantizationScale, float biasQuantizationScale) const;
+    void QuantizeLayerWeights(Layer& layer, float range, float weightQuantizationScale, float biasQuantizationScale) const;
 
     std::vector<Layer> layers;
 
