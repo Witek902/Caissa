@@ -694,8 +694,31 @@ static bool IsMoveCastling(const Square& from, const Square& to)
 
 Move Position::MoveFromPacked(const PackedMove& packedMove) const
 {
+    if (!packedMove.FromSquare().IsValid())
+    {
+        return Move();
+    }
+
+    const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(packedMove.FromSquare());
+    if (movedPiece == Piece::None)
+    {
+        return Move();
+    }
+
     MoveList moves;
-    GenerateMoveList(moves);
+
+    // TODO
+    // instead of generating moves of all pieces of given type,
+    // generate only moves of the moved piece
+    switch (movedPiece)
+    {
+    case Piece::Pawn:   GeneratePawnMoveList(moves); break;
+    case Piece::Knight: GenerateKnightMoveList(moves); break;
+    case Piece::Rook:   GenerateRookMoveList(moves); break;
+    case Piece::Bishop: GenerateBishopMoveList(moves); break;
+    case Piece::Queen:  GenerateQueenMoveList(moves); break;
+    case Piece::King:   GenerateKingMoveList(moves); break;
+    }
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {

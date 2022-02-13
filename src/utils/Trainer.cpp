@@ -227,7 +227,7 @@ bool TrainEndgame()
     };
 
     MaterialKey materialKey;
-    materialKey.numWhitePawns   = 1;
+    materialKey.numWhitePawns   = 0;
     materialKey.numWhiteKnights = 0;
     materialKey.numWhiteBishops = 0;
     materialKey.numWhiteRooks   = 1;
@@ -235,7 +235,7 @@ bool TrainEndgame()
     materialKey.numBlackPawns   = 1;
     materialKey.numBlackKnights = 0;
     materialKey.numBlackBishops = 0;
-    materialKey.numBlackRooks   = 1;
+    materialKey.numBlackRooks   = 0;
     materialKey.numBlackQueens  = 0;
 
     std::cout << "Training network for: " << materialKey.ToString() << "..." << std::endl;
@@ -408,11 +408,11 @@ bool TrainEndgame()
 
             const std::vector<uint32_t>& features = validationSet[i].trainingVector.inputFeatures;
             tempValues = network.Run(features);
-            int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)features.size(), features.data());
+            int32_t packedNetworkOutput = packedNetwork.Run((uint32_t)features.size(), features.data(), network);
 
             const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.output[0]);
             const float nnValue = ScoreFromNN(tempValues[0]);
-            const float nnPackedValue = ScoreFromNN(nn::Sigmoid((float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale));
+            const float nnPackedValue = ScoreFromNN(nn::Sigmoid((float)packedNetworkOutput / (float)nn::OutputScale));
             const float evalValue = PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);

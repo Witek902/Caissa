@@ -7,11 +7,13 @@
 
 namespace nn {
 
+class NeuralNetwork;
+
 static constexpr uint32_t FirstLayerSize = 64;
 static constexpr uint32_t SecondLayerSize = 32;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
-static constexpr float InputScale = 127;
+static constexpr float ActivationRangeScaling = 127;
 
 static constexpr int32_t WeightScaleShift = 6;
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
@@ -19,11 +21,11 @@ static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 static constexpr int32_t OutputScaleShift = 8;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
-static constexpr float InputLayerWeightQuantizationScale = InputScale;
-static constexpr float InputLayerBiasQuantizationScale = InputScale;
+static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
+static constexpr float InputLayerBiasQuantizationScale = ActivationRangeScaling;
 static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
-static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * InputScale;
-static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / InputScale;
+static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * ActivationRangeScaling;
+static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
 using WeightTypeLayer0 = int16_t;
@@ -81,7 +83,7 @@ public:
     bool Save(const char* filePath) const;
 
     // Calculate neural network output based on input
-    int32_t Run(const uint32_t numActiveInputs, const uint32_t* activeInputIndices) const;
+    int32_t Run(const uint32_t numActiveInputs, const uint32_t* activeInputIndices, const NeuralNetwork& referenceNetwork) const;
 
     bool IsValid() const { return numInputs > 0; }
 

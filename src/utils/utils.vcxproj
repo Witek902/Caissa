@@ -39,6 +39,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AnalyzeGames.cpp" />
     <ClCompile Include="EndgamePieceSquareTables.cpp" />
     <ClCompile Include="EndgameValidation.cpp" />
     <ClCompile Include="GameCollection.cpp" />
