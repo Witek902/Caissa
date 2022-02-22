@@ -176,6 +176,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "id author " << c_Author << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSizeInMB  << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
+        std::cout << "option name MoveOverhead type spin default 20 min 0 max 10000\n";
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
@@ -511,7 +512,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     {
         SearchLimits& limits = mSearchCtx->searchParam.limits;
 
-        const int32_t moveOverhead = 20; // make configurable
+        const int32_t moveOverhead = mOptions.moveOverhead;
         const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
         const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
 
@@ -519,18 +520,18 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         if (remainingTime != INT32_MAX)
         {
             const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft(mGame.GetPosition().GetMoveCount());
-            const float idealTimeMs = std::clamp((float)remainingTime / movesLeftEstimated + (float)remainingTimeInc, 0.0f, (float)remainingTime);
+            const float idealTimeMs = std::clamp(remainingTime / movesLeftEstimated - (float)moveOverhead + (float)remainingTimeInc, 0.0f, (float)remainingTime);
             const float idealTime = idealTimeMs * 0.001f;
 
             std::cout << "info string ideal time " << idealTimeMs << " ms" << std::endl;
 
-            // use at least 80% of estimated time
+            // use at least 75% of estimated time
             // TODO some better heuristics:
             // for example, estimate time spent in each iteration based on previous searches
-            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.8f * idealTime);
+            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.75f * idealTime);
 
             // abort search if significantly exceeding ideal allocated time
-            limits.maxTime = startTimePoint + TimePoint::FromSeconds(10.0f * idealTime);
+            limits.maxTime = startTimePoint + TimePoint::FromSeconds(8.0f * idealTime);
 
             // activate root singularity search after some portion of estimated time passed
             limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.2f * idealTime);
@@ -658,9 +659,9 @@ void UniversalChessInterface::DoSearch()
         }
 
         std::cout << std::endl << std::flush;
-
-        mSearchCtx->waitable.OnFinished();
     }
+    
+    mSearchCtx->waitable.OnFinished();
 }
 
 void UniversalChessInterface::RunSearchTask()
@@ -769,6 +770,11 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         mOptions.threads = atoi(value.c_str());
         mOptions.threads = std::max(1u, std::min(c_MaxNumThreads, mOptions.threads));
+    }
+    else if (lowerCaseName == "moveoverhead")
+    {
+        mOptions.moveOverhead = atoi(value.c_str());
+        mOptions.moveOverhead = std::clamp(mOptions.moveOverhead, 0, 10000);
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
