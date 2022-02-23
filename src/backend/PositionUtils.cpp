@@ -620,9 +620,6 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                 str = PieceToChar(move.GetPiece());
 
                 {
-                    const SidePosition& currentSide = GetCurrentSide();
-                    const Bitboard movedPieceBitboard = currentSide.GetPieceBitBoard(move.GetPiece());
-
                     bool ambiguousFile = false;
                     bool ambiguousRank = false;
                     bool ambiguousPiece = false;
