@@ -26,7 +26,7 @@ union MaterialKey
 
     INLINE constexpr MaterialKey(const MaterialKey& rhs) : value(rhs.value) { }
 
-    INLINE constexpr MaterialKey(
+    INLINE MaterialKey(
         uint32_t wp, uint32_t wk, uint32_t wb, uint32_t wr, uint32_t wq,
         uint32_t bp, uint32_t bk, uint32_t bb, uint32_t br, uint32_t bq)
     {

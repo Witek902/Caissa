@@ -11,6 +11,7 @@
 #endif // USE_TABLE_BASES
 
 #include <iostream>
+#include <sstream>
 #include <cstring>
 #include <string>
 #include <thread>

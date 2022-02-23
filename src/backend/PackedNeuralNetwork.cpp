@@ -5,10 +5,10 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
-#include <intrin.h>
 
 #ifdef USE_AVX2
-#define NN_USE_AVX2
+    #include <intrin.h>
+    #define NN_USE_AVX2
 #endif // USE_AVX2
 
 namespace nn {
@@ -186,6 +186,8 @@ static void ClippedReLU_16(uint32_t size, IntermediateType* output, const Weight
 #endif
 }
 
+#ifdef USE_AVX2
+
 static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
 {
 #if defined (USE_VNNI)
@@ -214,6 +216,8 @@ static int32_t m256_hadd(__m256i a)
     const __m128i sum3 = _mm256_extracti128_si256(sum2, 1);
     return _mm_cvtsi128_si32(_mm_add_epi32(_mm256_castsi256_si128(sum2), sum3));
 }
+
+#endif // USE_AVX2
 
 static void LinearLayer(const LayerData12& layer, int32_t* output, const IntermediateType* input)
 {
@@ -355,7 +359,7 @@ PackedNeuralNetwork::~PackedNeuralNetwork()
 {
     if (layer0_weights)
     {
-        _aligned_free(layer0_weights);
+        AlignedFree(layer0_weights);
         layer0_weights = nullptr;
     }
 }
@@ -422,7 +426,7 @@ bool PackedNeuralNetwork::Load(const char* filePath)
     }
 
     const size_t layer0WeightsSize = numInputs * FirstLayerSize * sizeof(WeightTypeLayer0);
-    layer0_weights = (WeightTypeLayer0*)_aligned_realloc(layer0_weights, layer0WeightsSize, 64);
+    layer0_weights = (WeightTypeLayer0*)AlignedMalloc(layer0WeightsSize, 64);
     
     if (1 != fread(layer0_weights, layer0WeightsSize, 1, file))
     {

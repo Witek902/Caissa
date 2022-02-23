@@ -7,8 +7,6 @@
 
 #include <random>
 
-#include <immintrin.h>
-
 static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
 
 bool PackPosition(const Position& inPos, PackedPosition& outPos)
@@ -126,6 +124,17 @@ bool Position::operator == (const Position& rhs) const
     }
 
     return result;
+}
+
+bool Position::operator != (const Position& rhs) const
+{
+    return
+        Whites() != rhs.Whites() ||
+        Blacks() != rhs.Blacks() ||
+        mSideToMove != rhs.mSideToMove ||
+        mEnPassantSquare != rhs.mEnPassantSquare ||
+        mWhitesCastlingRights != rhs.mWhitesCastlingRights ||
+        mBlacksCastlingRights != rhs.mBlacksCastlingRights;
 }
 
 bool Position::IsValid(bool strict) const

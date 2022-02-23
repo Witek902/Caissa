@@ -551,7 +551,6 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 
 const Bitboard Position::GetAttackers(const Square square, const Bitboard occupied) const
 {
-    const Bitboard pawns    = Whites().pawns | Blacks().pawns;
     const Bitboard knights  = Whites().knights | Blacks().knights;
     const Bitboard bishops  = Whites().bishops | Blacks().bishops;
     const Bitboard rooks    = Whites().rooks | Blacks().rooks;

@@ -1,3 +1,5 @@
+#include "Common.hpp"
+
 #include <vector>
 #include <cmath>
 

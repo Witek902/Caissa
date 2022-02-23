@@ -1,5 +1,7 @@
 #include "Time.hpp"
 
+#if defined(PLATFORM_WINDOWS)
+
 namespace
 {
 	static LARGE_INTEGER GetCounterFrequency()
@@ -69,3 +71,51 @@ bool TimePoint::operator >= (const TimePoint& rhs) const
 {
 	return mValue.QuadPart >= rhs.mValue.QuadPart;
 }
+
+#elif defined(PLATFORM_LINUX)
+
+float TimePoint::ToSeconds() const
+{
+	return static_cast<float>(mValue) * 1.0e-9f;
+}
+
+bool TimePoint::IsValid() const
+{
+	return mValue < UINT64_MAX;
+}
+
+TimePoint TimePoint::Invalid()
+{
+	return { UINT64_MAX };
+}
+
+TimePoint TimePoint::GetCurrent()
+{
+    struct timespec value;
+    clock_gettime(CLOCK_MONOTONIC, &value);
+
+	return (uint64_t)value.tv_sec * 1000000000ull + value.tv_nsec;
+}
+
+TimePoint TimePoint::FromSeconds(float t)
+{
+	return { static_cast<uint64_t>(t * 1.0e+9f) };
+}
+
+TimePoint TimePoint::operator - (const TimePoint& rhs) const
+{
+	return { mValue - rhs.mValue };
+}
+
+TimePoint TimePoint::operator + (const TimePoint& rhs) const
+{
+	return { mValue + rhs.mValue };
+}
+
+bool TimePoint::operator >= (const TimePoint& rhs) const
+{
+	return mValue >= rhs.mValue;
+}
+
+#endif // PLATFORM
+

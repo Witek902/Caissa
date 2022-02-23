@@ -10,8 +10,11 @@
 #include <math.h>
 #include <fstream>
 
-#define NOMINMAX
-#include <Windows.h>
+#if defined(PLATFORM_WINDOWS)
+	#define WIN32_LEAN_AND_MEAN
+	#define NOMINMAX
+	#include <Windows.h>
+#endif
 
 static const char* c_EngineName = "Caissa 0.5";
 static const char* c_Author = "Michal Witanowski";
@@ -31,19 +34,24 @@ using UniqueLock = std::unique_lock<std::mutex>;
 
 static std::string GetExecutablePath()
 {
+    std::string ret;
+#if defined(PLATFORM_WINDOWS)
     char path[MAX_PATH];
-
     HMODULE hModule = GetModuleHandle(NULL);
     if (hModule != NULL)
     {
         // Use GetModuleFileName() with module handle to get the path
         GetModuleFileNameA(hModule, path, (sizeof(path)));
-        return std::string(path);
+        ret = std::string(path);
     }
-    else
+#elif defined(PLATFORM_LINUX)
+    if (char* execPath = realpath("/proc/self/exe", nullptr))
     {
-        return std::string{};
+        ret = execPath;
+        free(execPath);
     }
+#endif
+    return ret;
 }
 
 static std::string GetDefaultEvalFilePath()

@@ -2,7 +2,6 @@
 #include "Square.hpp"
 #include "Common.hpp"
 
-#include <immintrin.h>
 #include <iostream>
 
 static Bitboard gKingAttacksBitboard[Square::NumSquares];

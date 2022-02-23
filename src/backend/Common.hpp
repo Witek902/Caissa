@@ -2,16 +2,27 @@
 
 #include <inttypes.h>
 #include <cstring>
-#include <immintrin.h>
+#include <stdlib.h>
+#include <math.h>
 
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef ARCHITECTURE_X64
+    #include <immintrin.h>
+#endif
+
+#if defined(_MSC_VER)
+    #define PLATFORM_WINDOWS
+#elif defined(__GNUC__) || defined(__clang__)
+    #define PLATFORM_LINUX
+#endif
+
+#if defined(PLATFORM_LINUX)
     #include <csignal>
 #endif
 
 
-#if defined(_MSC_VER)
+#if defined(PLATFORM_WINDOWS)
     #define DEBUG_BREAK() __debugbreak()
-#elif defined(__GNUC__) || defined(__clang__)
+#elif defined(PLATFORM_LINUX)
     #define DEBUG_BREAK() std::raise(SIGINT)
 #endif
 
@@ -218,6 +229,37 @@ inline uint64_t ParallelBitsExtract(uint32_t src, uint32_t mask)
         mask &= mask - 1;
     }
     return result;
+#endif
+}
+
+inline uint64_t SwapBytes(uint64_t x)
+{
+#if defined(PLATFORM_WINDOWS)
+    return _byteswap_uint64(x);
+#else
+    return __builtin_bswap64(x);
+#endif
+}
+
+inline void* AlignedMalloc(size_t size, size_t alignment)
+{
+    void* ptr = nullptr;
+#if defined(PLATFORM_WINDOWS)
+    ptr = _aligned_malloc_dbg(size, alignment, sourceFile, sourceLine);
+#elif defined(PLATFORM_LINUX)
+    alignment = std::max(alignment, sizeof(void*));
+    int ret = posix_memalign(&ptr, alignment, size);
+    if (ret != 0) ptr = nullptr;
+#endif
+    return ptr;
+}
+
+inline void AlignedFree(void* ptr)
+{
+#if defined(PLATFORM_WINDOWS)
+    _aligned_free(ptr);
+#elif defined(PLATFORM_LINUX)
+    free(ptr);
 #endif
 }
 

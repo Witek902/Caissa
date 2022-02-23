@@ -5,9 +5,9 @@
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Waitable.hpp"
 
-#include <iostream>
 #include <mutex>
 #include <vector>
+#include <thread>
 
 struct Options
 {
