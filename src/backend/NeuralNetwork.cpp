@@ -557,8 +557,10 @@ bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
     {
         const Layer& layer = layers.front();
 
+        AlignedFree(outNetwork.layer0_weights);
+
         outNetwork.numInputs = (uint32_t)layer.input.size();
-        outNetwork.layer0_weights = (WeightTypeLayer0*)_aligned_realloc(outNetwork.layer0_weights, layer.input.size() * FirstLayerSize * sizeof(WeightTypeLayer0), 64);
+        outNetwork.layer0_weights = (WeightTypeLayer0*)AlignedMalloc(layer.input.size() * FirstLayerSize * sizeof(WeightTypeLayer0), 64);
 
         PackLayerWeights(layer, outNetwork.layer0_weights, outNetwork.layer0_biases, InputLayerWeightQuantizationScale, InputLayerBiasQuantizationScale, true);
     }

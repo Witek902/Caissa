@@ -29,7 +29,7 @@ public:
         return square;
     }
 
-    INLINE constexpr Square() = default;
+    INLINE Square() = default;
 
     INLINE Square(uint32_t value)
         : mIndex(static_cast<uint8_t>(value))

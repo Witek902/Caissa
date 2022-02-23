@@ -17,14 +17,14 @@ struct PackedMove
     //
     uint16_t value;
 
-    INLINE constexpr PackedMove() = default;
+    INLINE PackedMove() = default;
 
-    INLINE constexpr PackedMove(const Square fromSquare, const Square toSquare, Piece promoteTo = Piece::None)
+    INLINE PackedMove(const Square fromSquare, const Square toSquare, Piece promoteTo = Piece::None)
     {
         value = ((uint32_t)fromSquare.mIndex) | ((uint32_t)toSquare.mIndex << 6) | ((uint32_t)promoteTo << 12);
     }
 
-    INLINE static constexpr const PackedMove Invalid()
+    INLINE static const PackedMove Invalid()
     {
         PackedMove move;
         move.value = 0;
@@ -39,7 +39,7 @@ struct PackedMove
 
     INLINE const Square FromSquare() const { return value & 0b111111; }
     INLINE const Square ToSquare() const { return (value >> 6) & 0b111111; }
-    INLINE const Piece GetPromoteTo() const { return (Piece)((value >> 12) & 0b1111); }
+    INLINE Piece GetPromoteTo() const { return (Piece)((value >> 12) & 0b1111); }
 
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
@@ -62,8 +62,8 @@ struct Move
 {
     INLINE const Square FromSquare() const      { return value & 0b111111; }
     INLINE const Square ToSquare() const        { return (value >> 6) & 0b111111; }
-    INLINE const Piece GetPromoteTo() const     { return (Piece)((value >> 12) & 0b1111); }
-    INLINE const Piece GetPiece() const         { return (Piece)((value >> 16) & 0b1111); }
+    INLINE Piece GetPromoteTo() const           { return (Piece)((value >> 12) & 0b1111); }
+    INLINE Piece GetPiece() const               { return (Piece)((value >> 16) & 0b1111); }
     INLINE constexpr bool IsCapture() const     { return (value >> 20) & 1; }
     INLINE constexpr bool IsEnPassant() const   { return (value >> 21) & 1; }
     INLINE constexpr bool IsCastling() const    { return (value >> 22) & 1; }

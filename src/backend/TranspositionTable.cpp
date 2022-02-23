@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <xmmintrin.h>
 
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT cluster is too big");
 
@@ -223,6 +222,7 @@ void TranspositionTable::NextGeneration()
 
 void TranspositionTable::Prefetch(const Position& position) const
 {
+#ifdef USE_SSE
     if (clusters)
     {
         const size_t hashmapMask = numClusters - 1;
@@ -230,6 +230,7 @@ void TranspositionTable::Prefetch(const Position& position) const
         const TTCluster* cluster = clusters + (position.GetHash() & hashmapMask);
         _mm_prefetch(reinterpret_cast<const char*>(cluster), _MM_HINT_T0);
     }
+#endif // USE_SSE
 }
 
 bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
