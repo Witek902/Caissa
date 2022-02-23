@@ -245,7 +245,7 @@ inline void* AlignedMalloc(size_t size, size_t alignment)
 {
     void* ptr = nullptr;
 #if defined(PLATFORM_WINDOWS)
-    ptr = _aligned_malloc_dbg(size, alignment, sourceFile, sourceLine);
+    ptr = _aligned_malloc(size, alignment);
 #elif defined(PLATFORM_LINUX)
     alignment = std::max(alignment, sizeof(void*));
     int ret = posix_memalign(&ptr, alignment, size);
