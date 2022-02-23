@@ -20,9 +20,7 @@ static constexpr PieceScore c_knightValue          = S(337, 281);
 static constexpr PieceScore c_pawnValue            = S(82, 94);
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
-static constexpr int32_t c_kingSafetyBonus      = 3;
 static constexpr int32_t c_doubledPawnPenalty   = 0;
-static constexpr int32_t c_inCheckPenalty       = 20;
 static constexpr int32_t c_noPawnPenalty        = 120;
 static constexpr int32_t c_passedPawnBonus      = 0;
 

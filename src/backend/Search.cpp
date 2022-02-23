@@ -20,7 +20,7 @@
 static const float CurrentMoveReportDelay = 10.0f;
 
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
-static const uint32_t SingularitySearchMinDepth = 7;
+static const int32_t SingularitySearchMinDepth = 7;
 static const int32_t SingularitySearchScoreTresholdMin = 200;
 static const int32_t SingularitySearchScoreTresholdMax = 500;
 static const int32_t SingularitySearchScoreStep = 50;
@@ -418,7 +418,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 (uint8_t)pvIndex,
                 searchContext,
                 !pvMovesSoFar.empty() ? pvMovesSoFar.data() : nullptr,
-                !pvMovesSoFar.empty() ? (uint8_t)pvMovesSoFar.size() : 0u,
+                (uint8_t)(!pvMovesSoFar.empty() ? pvMovesSoFar.size() : 0u),
                 prevScore,
                 threadID,
             };

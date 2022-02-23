@@ -230,6 +230,8 @@ void TranspositionTable::Prefetch(const Position& position) const
         const TTCluster* cluster = clusters + (position.GetHash() & hashmapMask);
         _mm_prefetch(reinterpret_cast<const char*>(cluster), _MM_HINT_T0);
     }
+#else
+    (void)position;
 #endif // USE_SSE
 }
 

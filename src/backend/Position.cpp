@@ -1118,7 +1118,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
         Bitboard pieceBitboard;
 
-        if (pieceBitboard = ourAttackers & side.pawns)
+        if ((pieceBitboard = ourAttackers & side.pawns))
         {
             // remove attacker from occupied squares
             const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
@@ -1132,7 +1132,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             balance = pawnValue - balance;
             if (balance < result) break;
         }
-        else if (pieceBitboard = ourAttackers & side.knights)
+        else if ((pieceBitboard = ourAttackers & side.knights))
         {
             // remove attacker from occupied squares
             const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
@@ -1143,7 +1143,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             balance = knightValue - balance;
             if (balance < result) break;
         }
-        else if (pieceBitboard = ourAttackers & side.bishops)
+        else if ((pieceBitboard = ourAttackers & side.bishops))
         {
             // remove attacker from occupied squares
             const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
@@ -1157,7 +1157,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             balance = bishopValue - balance;
             if (balance < result) break;
         }
-        else if (pieceBitboard = ourAttackers & side.rooks)
+        else if ((pieceBitboard = ourAttackers & side.rooks))
         {
             // remove attacker from occupied squares
             const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
@@ -1171,7 +1171,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             balance = rookValue - balance;
             if (balance < result) break;
         }
-        else if (pieceBitboard = ourAttackers & side.queens)
+        else if ((pieceBitboard = ourAttackers & side.queens))
         {
             // remove attacker from occupied squares
             const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
