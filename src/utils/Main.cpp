@@ -9,7 +9,7 @@
 extern void RunUnitTests();
 extern bool RunPerformanceTests(const char* path);
 extern void SelfPlay();
-extern bool Train();
+extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
 extern bool TestNetwork();
@@ -46,6 +46,10 @@ int main(int argc, const char* argv[])
     else if (0 == strcmp(argv[1], "testNetwork"))
     {
         TestNetwork();
+    }
+    else if (0 == strcmp(argv[1], "trainPieceSquareTables"))
+    {
+        TrainPieceSquareTables();
     }
     else if (0 == strcmp(argv[1], "trainEndgame"))
     {

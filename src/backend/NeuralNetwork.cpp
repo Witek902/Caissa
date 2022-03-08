@@ -25,7 +25,7 @@ Layer::Layer(size_t inputSize, size_t outputSize)
 
 void Layer::InitWeights()
 {
-    const float scale = 2.0f / sqrtf((float)input.size());
+    const float scale = 1.0f / sqrtf((float)input.size());
 
     for (size_t i = 0; i < weights.size(); i++)
     {
@@ -40,6 +40,7 @@ void Layer::InitWeights()
 
         for (size_t j = 0; j < input.size(); j++)
         {
+            //weights[offs + j] = 0.0f;
             weights[offs + j] = ((float)(rand() % RAND_MAX) / (float)(RAND_MAX)-0.5f) * scale;
         }
 
@@ -303,7 +304,7 @@ bool NeuralNetwork::Load(const char* filePath)
     return true;
 }
 
-void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSizes)
+void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSizes, ActivationFunction outputLayerActivationFunc)
 {
     layers.reserve(layersSizes.size());
     size_t prevLayerSize = inputSize;
@@ -315,7 +316,7 @@ void NeuralNetwork::Init(size_t inputSize, const std::vector<size_t>& layersSize
         prevLayerSize = layersSizes[i];
     }
 
-    layers.back().activationFunction = ActivationFunction::Sigmoid;
+    layers.back().activationFunction = outputLayerActivationFunc;
     tempError.resize(layersSizes.back());
 }
 
@@ -373,7 +374,7 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
 
             const float cRho = 0.95f;
             const float cEpsilon = 1.0e-6f;
-            const float cLearningRate = 0.75f;
+            const float cLearningRate = 0.5f;
 
             // ADADELTA algorithm
             m = cRho * m + (1.0f - cRho) * g * g;

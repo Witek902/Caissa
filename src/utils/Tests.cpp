@@ -114,6 +114,18 @@ static void RunPositionTests()
         TEST_EXPECT(Position("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq d6 0 3").GetHash() != Position("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq - 0 3").GetHash());
     }
 
+    // equality
+    {
+        TEST_EXPECT(Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/1QN1P3/PP3PPP/R1B1KBNR b KQkq - 0 1") == Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/1QN1P3/PP3PPP/R1B1KBNR b KQkq - 0 1"));
+        TEST_EXPECT(Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/1QN1P3/PP3PPP/R1B1KBNR b KQkq - 0 1") != Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/PQN1P3/1P3PPP/R1B1KBNR b KQkq - 0 1"));
+    }
+
+    // mirror / flipping
+    {
+        TEST_EXPECT(Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/1QN1P3/PP3PPP/R1B1KBNR b KQkq - 0 1").MirroredHorizontally() == Position("r1bkq1nr/pppp2pp/2n5/2b1p3/4P3/3P1NQ1/PPP3PP/RNBK1B1R b - - 0 1"));
+        TEST_EXPECT(Position("rn1qkb1r/pp2pppp/5n2/3p1b2/3P4/1QN1P3/PP3PPP/R1B1KBNR b KQkq - 0 1").MirroredVertically() == Position("R1B1KBNR/PP3PPP/1QN1P3/3P4/3p1b2/5n2/pp2pppp/rn1qkb1r b - - 0 1"));
+    }
+
     // king moves
     {
         // king moves (a1)

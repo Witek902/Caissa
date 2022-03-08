@@ -269,10 +269,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_TablebaseProbe();
     }
+#ifndef CONFIGURATION_FINAL
     else if (command == "moveordererstats")
     {
         mSearch.GetMoveOrderer().DebugPrint();
     }
+#endif // CONFIGURATION_FINAL
 #ifdef COLLECT_ENDGAME_STATISTICS
     else if (command == "endgamestats")
     {

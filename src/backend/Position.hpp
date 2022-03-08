@@ -11,6 +11,7 @@
 
 enum CastlingRights : uint8_t
 {
+    CastlingRights_None = 0,
     CastlingRights_ShortCastleAllowed = 1 << 0,
     CastlingRights_LongCastleAllowed = 1 << 1,
 
@@ -197,6 +198,9 @@ public:
     void MirrorVertically();
     void MirrorHorizontally();
 
+    Position MirroredVertically() const;
+    Position MirroredHorizontally() const;
+
     // run performance test
     uint64_t Perft(uint32_t depth, bool print = false) const;
 
@@ -209,7 +213,12 @@ public:
     INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
     INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
 
-    INLINE uint32_t GetNumPieces() const { return (Whites().Occupied() | Blacks().Occupied()).Count(); }
+    INLINE uint32_t GetNumPieces() const
+    {
+        ASSERT(Whites().king.Count() == 1);
+        ASSERT(Blacks().king.Count() == 1);
+        return 2 + (Whites().OccupiedExcludingKing() | Blacks().OccupiedExcludingKing()).Count();
+    }
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
@@ -233,7 +242,8 @@ public:
 
     // convert position to neural network input features (active indices list)
     // returns number of active features
-    uint32_t ToFeaturesVector(uint16_t* outFeatures) const;
+    uint32_t ToSparseFeaturesVector(uint16_t* outFeatures) const;
+    uint32_t ToPackedFeaturesVector(uint16_t* outFeatures) const;
 
     void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
     void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;

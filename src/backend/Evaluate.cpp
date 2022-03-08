@@ -3,6 +3,7 @@
 #include "Material.hpp"
 #include "Endgame.hpp"
 #include "PackedNeuralNetwork.hpp"
+#include "PieceSquareTables.h"
 
 #include "nnue-probe/nnue.h"
 
@@ -159,56 +160,6 @@ static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t eg
     ASSERT(egPhase >= 0 && egPhase <= 32);
 
     return (mgScore * mgPhase + egScore * egPhase) / 32;
-}
-
-int32_t ScoreQuietMove(const Position& position, const Move& move)
-{
-    ASSERT(move.IsValid());
-    ASSERT(!move.IsCapture());
-    ASSERT(!move.IsEnPassant());
-
-    uint32_t fromSquare = move.FromSquare().Index();
-    uint32_t toSquare = move.ToSquare().Index();
-
-    if (position.GetSideToMove() == Color::White)
-    {
-        fromSquare = FlipRank(fromSquare);
-        toSquare = FlipRank(toSquare);
-    }
-
-    int32_t scoreMG = 0;
-    int32_t scoreEG = 0;
-
-    switch (move.GetPiece())
-    {
-    case Piece::Pawn:
-        scoreMG = PawnPSQT[toSquare].mg - PawnPSQT[fromSquare].mg;
-        scoreEG = PawnPSQT[toSquare].eg - PawnPSQT[fromSquare].eg;
-        break;
-    case Piece::Knight:
-        scoreMG = KnightPSQT[toSquare].mg - KnightPSQT[fromSquare].mg;
-        scoreEG = KnightPSQT[toSquare].eg - KnightPSQT[fromSquare].eg;
-        break;
-    case Piece::Bishop:
-        scoreMG = BishopPSQT[toSquare].mg - BishopPSQT[fromSquare].mg;
-        scoreEG = BishopPSQT[toSquare].eg - BishopPSQT[fromSquare].eg;
-        break;
-    case Piece::Rook:
-        scoreMG = RookPSQT[toSquare].mg - RookPSQT[fromSquare].mg;
-        scoreEG = RookPSQT[toSquare].eg - RookPSQT[fromSquare].eg;
-        break;
-    case Piece::Queen:
-        scoreMG = QueenPSQT[toSquare].mg - QueenPSQT[fromSquare].mg;
-        scoreEG = QueenPSQT[toSquare].eg - QueenPSQT[fromSquare].eg;
-        break;
-    case Piece::King:
-        scoreMG = KingPSQT[toSquare].mg - KingPSQT[fromSquare].mg;
-        scoreEG = KingPSQT[toSquare].eg - KingPSQT[fromSquare].eg;
-    }
-
-    const int32_t score = InterpolateScore(position, scoreMG, scoreEG);
-
-    return std::max(0, score);
 }
 
 bool CheckInsufficientMaterial(const Position& position)
@@ -387,7 +338,7 @@ static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueDa
 static int32_t EvaluateNeuralNetwork(nn::PackedNeuralNetwork& network, const Position& position)
 {
     uint16_t features[64];
-    const uint32_t numFeatures = position.ToFeaturesVector(features);
+    const uint32_t numFeatures = position.ToPackedFeaturesVector(features);
 
     float nnOutput = (float)network.Run(features, numFeatures) / (float)nn::OutputScale;
     nnOutput = std::clamp(nnOutput, 0.001f, 0.999f);
