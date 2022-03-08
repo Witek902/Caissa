@@ -286,6 +286,7 @@
     <ClCompile Include="nnue-probe\nnue.cpp" />
     <ClCompile Include="PackedNeuralNetwork.cpp" />
     <ClCompile Include="PGNParser.cpp" />
+    <ClCompile Include="PieceSquareTables.h" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />

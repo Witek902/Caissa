@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <limits>
 
-static constexpr int32_t RecaptureBonus = 10000;
+static constexpr int32_t RecaptureBonus = 1000;
 
 static const int32_t c_PromotionScores[] =
 {
@@ -283,10 +283,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
     const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
     const Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
 
-    // The deeper in the search tree, make static move scoring more important.
-    // The reasoning behind it is that history heuristics is more accurate near the root of the tree
-    const int32_t quietMoveStaticScoreScale = 16 + 2 * node.height;
-
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         const Move move = moves[i].move;
@@ -358,8 +354,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
 
             if (!isKiller)
             {
-                score += quietMoveStaticScoreScale * ScoreQuietMove(pos, move);
-
                 // history heuristics
                 score += quietMoveHistory[color][from][to];
 

@@ -854,22 +854,24 @@ bool Position::DoNullMove()
 Position Position::SwappedColors() const
 {
     Position result;
-    result.mColors[0].king     = mColors[1].king.MirroredVertically();
-    result.mColors[0].queens   = mColors[1].queens.MirroredVertically();
-    result.mColors[0].rooks    = mColors[1].rooks.MirroredVertically();
-    result.mColors[0].bishops  = mColors[1].bishops.MirroredVertically();
-    result.mColors[0].knights  = mColors[1].knights.MirroredVertically();
-    result.mColors[0].pawns    = mColors[1].pawns.MirroredVertically();
-    result.mColors[1].king     = mColors[0].king.MirroredVertically();
-    result.mColors[1].queens   = mColors[0].queens.MirroredVertically();
-    result.mColors[1].rooks    = mColors[0].rooks.MirroredVertically();
-    result.mColors[1].bishops  = mColors[0].bishops.MirroredVertically();
-    result.mColors[1].knights  = mColors[0].knights.MirroredVertically();
-    result.mColors[1].pawns    = mColors[0].pawns.MirroredVertically();
-    result.mSideToMove = GetOppositeColor(mSideToMove);
-    result.mMoveCount = mMoveCount;
-    result.mHalfMoveCount = mHalfMoveCount;
-    result.mHash = result.ComputeHash();
+    result.mColors[0].king          = mColors[1].king.MirroredVertically();
+    result.mColors[0].queens        = mColors[1].queens.MirroredVertically();
+    result.mColors[0].rooks         = mColors[1].rooks.MirroredVertically();
+    result.mColors[0].bishops       = mColors[1].bishops.MirroredVertically();
+    result.mColors[0].knights       = mColors[1].knights.MirroredVertically();
+    result.mColors[0].pawns         = mColors[1].pawns.MirroredVertically();
+    result.mColors[1].king          = mColors[0].king.MirroredVertically();
+    result.mColors[1].queens        = mColors[0].queens.MirroredVertically();
+    result.mColors[1].rooks         = mColors[0].rooks.MirroredVertically();
+    result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
+    result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
+    result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
+    result.mBlacksCastlingRights    = mWhitesCastlingRights;
+    result.mWhitesCastlingRights    = mBlacksCastlingRights;
+    result.mSideToMove              = GetOppositeColor(mSideToMove);
+    result.mMoveCount               = mMoveCount;
+    result.mHalfMoveCount           = mHalfMoveCount;
+    result.mHash                    = result.ComputeHash();
     return result;
 }
 
@@ -888,6 +890,9 @@ void Position::MirrorVertically()
     mColors[1].bishops  = mColors[1].bishops.MirroredVertically();
     mColors[1].knights  = mColors[1].knights.MirroredVertically();
     mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
+
+    mWhitesCastlingRights = CastlingRights_None;
+    mBlacksCastlingRights = CastlingRights_None;
 
     mHash = ComputeHash();
 }
@@ -908,7 +913,24 @@ void Position::MirrorHorizontally()
     mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
     mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
 
+    mWhitesCastlingRights = CastlingRights_None;
+    mBlacksCastlingRights = CastlingRights_None;
+
     mHash = ComputeHash();
+}
+
+Position Position::MirroredVertically() const
+{
+    Position ret = *this;
+    ret.MirrorVertically();
+    return ret;
+}
+
+Position Position::MirroredHorizontally() const
+{
+    Position ret = *this;
+    ret.MirrorHorizontally();
+    return ret;
 }
 
 bool Position::HasNonPawnMaterial(Color color) const
@@ -939,7 +961,64 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-uint32_t Position::ToFeaturesVector(uint16_t* outFeatures) const
+uint32_t Position::ToSparseFeaturesVector(uint16_t* outFeatures) const
+{
+    const Square whiteKingSquare = Square(FirstBitSet(Whites().king));
+    const Square blackKingSquare = Square(FirstBitSet(Blacks().king));
+
+    uint32_t numFeatures = 0;
+    uint32_t numInputs = 0;
+
+    const auto writePieceFeatures = [&](const Bitboard bitboard)
+    {
+        for (uint32_t i = 0; i < 64u; ++i)
+        {
+            if ((bitboard >> i) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
+        }
+        numInputs += 64;
+    };
+
+    const auto writePawnFeatures = [&](const Bitboard bitboard)
+    {
+        // pawns cannot stand on first or last rank
+        for (uint32_t i = 0; i < 48u; ++i)
+        {
+            const uint32_t squreIndex = i + 8u;
+            if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
+        }
+        numInputs += 48;
+    };
+
+    writePawnFeatures(Whites().pawns);
+    writePieceFeatures(Whites().knights);
+    writePieceFeatures(Whites().bishops);
+    writePieceFeatures(Whites().rooks);
+    writePieceFeatures(Whites().queens);
+
+    // white king
+    {
+        outFeatures[numFeatures++] = (uint16_t)(numInputs + whiteKingSquare.Index());
+        numInputs += 64;
+    }
+
+    writePawnFeatures(Blacks().pawns);
+    writePieceFeatures(Blacks().knights);
+    writePieceFeatures(Blacks().bishops);
+    writePieceFeatures(Blacks().rooks);
+    writePieceFeatures(Blacks().queens);
+
+    // black king
+    {
+        outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
+        numInputs += 64;
+    }
+
+    ASSERT(numInputs == (2 * 5 * 64 + 2 * 48));
+
+    return numFeatures;
+}
+
+uint32_t Position::ToPackedFeaturesVector(uint16_t* outFeatures) const
 {
     Square whiteKingSquare = Square(FirstBitSet(Whites().king));
     Square blackKingSquare = Square(FirstBitSet(Blacks().king));

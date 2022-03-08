@@ -23,6 +23,5 @@ inline float WinProbabilityToPawns(float w)
     return 4.0f * log10f(w / (1.0f - w));
 }
 
-int32_t ScoreQuietMove(const Position& position, const Move& move);
 ScoreType Evaluate(const Position& position, NNUEdata** nnueData = nullptr);
 bool CheckInsufficientMaterial(const Position& position);

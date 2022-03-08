@@ -91,7 +91,7 @@ class NeuralNetwork
 public:
 
     // Create multi-layer neural network
-    void Init(size_t inputSize, const std::vector<size_t>& layersSizes);
+    void Init(size_t inputSize, const std::vector<size_t>& layersSizes, ActivationFunction outputLayerActivationFunc = ActivationFunction::Sigmoid);
 
     // save to file
     bool Save(const char* filePath) const;

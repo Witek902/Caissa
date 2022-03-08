@@ -105,12 +105,12 @@ public:
 
     INLINE Square FlippedRank() const
     {
-        return mIndex ^ 0b111000;
+        return mIndex ^ (uint8_t)0b111000;
     }
 
     INLINE Square FlippedFileAndRank() const
     {
-        return mIndex ^ 0b111111;
+        return mIndex ^ (uint8_t)0b111111;
     }
 
     uint32_t EdgeDistance() const

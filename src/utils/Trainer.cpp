@@ -26,159 +26,15 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 4096;
+static const uint32_t cNumTrainingVectorsPerIteration = 100000;
 static const uint32_t cBatchSize = 64;
 
-/*
-
-void PositionEntryToTrainingVector(const PositionEntry& entry, nn::TrainingVector& outVector)
-{
-    outVector.input.resize(12 * 64);
-    outVector.output.resize(1);
-
-    PositionEntry flippedEntry = entry;
-    if (entry.sideToMove == 1)
-    {
-        flippedEntry.whiteKing = Bitboard(entry.blackKing).Rotated180();
-        flippedEntry.whitePawns = Bitboard(entry.blackPawns).Rotated180();
-        flippedEntry.whiteKnights = Bitboard(entry.blackKnights).Rotated180();
-        flippedEntry.whiteBishops = Bitboard(entry.blackBishops).Rotated180();
-        flippedEntry.whiteRooks = Bitboard(entry.blackRooks).Rotated180();
-        flippedEntry.whiteQueens = Bitboard(entry.blackQueens).Rotated180();
-
-        flippedEntry.blackKing = Bitboard(entry.whiteKing).Rotated180();
-        flippedEntry.blackPawns = Bitboard(entry.whitePawns).Rotated180();
-        flippedEntry.blackKnights = Bitboard(entry.whiteKnights).Rotated180();
-        flippedEntry.blackBishops = Bitboard(entry.whiteBishops).Rotated180();
-        flippedEntry.blackRooks = Bitboard(entry.whiteRooks).Rotated180();
-        flippedEntry.blackQueens = Bitboard(entry.whiteQueens).Rotated180();
-
-        flippedEntry.eval *= -1;
-        flippedEntry.gameResult *= -1;
-    }
-
-    for (uint32_t i = 0; i < 64u; ++i)
-    {
-        outVector.input[ 0 * 64 + i] = (float)((flippedEntry.whiteKing >> i) & 1);
-        outVector.input[ 1 * 64 + i] = (float)((flippedEntry.whitePawns >> i) & 1);
-        outVector.input[ 2 * 64 + i] = (float)((flippedEntry.whiteKnights >> i) & 1);
-        outVector.input[ 3 * 64 + i] = (float)((flippedEntry.whiteBishops >> i) & 1);
-        outVector.input[ 4 * 64 + i] = (float)((flippedEntry.whiteRooks >> i) & 1);
-        outVector.input[ 5 * 64 + i] = (float)((flippedEntry.whiteQueens >> i) & 1);
-
-        outVector.input[ 6 * 64 + i] = (float)((flippedEntry.blackKing >> i) & 1);
-        outVector.input[7 * 64 + i] = (float)((flippedEntry.blackPawns >> i) & 1);
-        outVector.input[8 * 64 + i] = (float)((flippedEntry.blackKnights >> i) & 1);
-        outVector.input[9 * 64 + i] = (float)((flippedEntry.blackBishops >> i) & 1);
-        outVector.input[10 * 64 + i] = (float)((flippedEntry.blackRooks >> i) & 1);
-        outVector.input[11 * 64 + i] = (float)((flippedEntry.blackQueens >> i) & 1);
-    }
-
-    outVector.output[0] = (float)flippedEntry.eval / 100.0f;
-    outVector.output[0] = 2.0f * PawnToWinProbability(outVector.output[0]) - 1.0f;
-}
-
-bool Train()
-{
-    FILE* dumpFile = fopen("selfplay.dat", "rb");
-
-    if (!dumpFile)
-    {
-        std::cout << "ERROR: Failed to load selfplay data file!" << std::endl;
-        return false;
-    }
-
-    fseek(dumpFile, 0, SEEK_END);
-    const size_t fileSize = ftell(dumpFile);
-    fseek(dumpFile, 0, SEEK_SET);
-
-    const size_t numEntries = fileSize / sizeof(PositionEntry);
-
-    std::vector<PositionEntry> entries;
-    entries.resize(numEntries);
-
-    if (numEntries != fread(entries.data(), sizeof(PositionEntry), numEntries, dumpFile))
-    {
-        std::cout << "ERROR: Failed read selfplay data file!" << std::endl;
-        fclose(dumpFile);
-        return false;
-    }
-
-    std::cout << "INFO: Loaded " << numEntries << " entries" << std::endl;
-    fclose(dumpFile);
-
-    nn::NeuralNetwork network;
-    network.Init(12 * 64, { 256, 32, 32, 1 });
-    //if (!network.Load("network.dat")) return false;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    std::vector<nn::TrainingVector> trainingSet;
-    trainingSet.resize(cNumTrainingVectorsPerIteration);
-
-    nn::TrainingVector validationVector;
-
-    nn::Layer::Values tempValues;
-
-    uint32_t numTrainingVectorsPassed = 0;
-
-    for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
-    {
-        // pick random test entries
-        std::uniform_int_distribution<size_t> distrib(0, numEntries - 1);
-        for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
-        {
-            const PositionEntry& entry = entries[distrib(gen)];
-            PositionEntryToTrainingVector(entry, trainingSet[i]);
-        }
-        network.Train(trainingSet, tempValues, cBatchSize);
-
-        numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
-
-        float minError = std::numeric_limits<float>::max();
-        float maxError = -std::numeric_limits<float>::max();
-        float errorSum = 0.0f;
-        for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
-        {
-            const PositionEntry& entry = entries[distrib(gen)];
-            PositionEntryToTrainingVector(entry, validationVector);
-
-            tempValues = network.Run(validationVector.input);
-
-            float expectedValue = validationVector.output[0];
-
-            if (i < 10)
-            {
-                //std::cout << "    value= " << tempValues[0] << ", expected=" << expectedValue << std::endl;
-            }
-
-            const float error = expectedValue - tempValues[0];
-            minError = std::min(minError, fabsf(error));
-            maxError = std::max(maxError, fabsf(error));
-            const float sqrError = error * error;
-            errorSum += sqrError;
-        }
-        errorSum = sqrtf(errorSum / cNumTrainingVectorsPerIteration);
-
-        float epoch = (float)numTrainingVectorsPassed / (float)numEntries;
-        std::cout << epoch << "\t" << errorSum << "\t" << minError << "\t" << maxError;
-        std::cout << std::endl;
-
-        network.Save("network.dat");
-    }
-
-    return true;
-}
-
-*/
-
-static void PositionToVector(const Position& pos, nn::TrainingVector& outVector)
+static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
     const uint32_t maxFeatures = 64;
 
     uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToFeaturesVector(features);
+    uint32_t numFeatures = pos.ToPackedFeaturesVector(features);
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
@@ -298,7 +154,7 @@ bool TrainEndgame()
                 float score = PawnToWinProbability(isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f);
 */
 
-                PositionToVector(pos, outSet[i].trainingVector);
+                PositionToPackedVector(pos, outSet[i].trainingVector);
                 outSet[i].trainingVector.output[0] = ScoreToNN(score);
                 outSet[i].pos = pos;
 

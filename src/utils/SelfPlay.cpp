@@ -32,7 +32,7 @@ void SelfPlay()
     ttArray.resize(std::thread::hardware_concurrency());
     for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     {
-        ttArray[i].Resize(128ull * 1024ull * 1024ull);
+        ttArray[i].Resize(64ull * 1024ull * 1024ull);
     }
     
     std::mutex mutex;
@@ -55,10 +55,11 @@ void SelfPlay()
 
             Game game;
             game.Reset(Position(Position::InitPositionFEN));
+            tt.Clear();
 
             SearchResult searchResult;
 
-            int32_t scoreDiffTreshold = 30;
+            int32_t scoreDiffTreshold = 40;
 
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
@@ -66,10 +67,10 @@ void SelfPlay()
                 const TimePoint startTimePoint = TimePoint::GetCurrent();
 
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 12;
-                searchParam.numPvLines = std::max<int32_t>(1, 4 - halfMoveNumber / 10);
+                searchParam.limits.maxDepth = 16;
+                searchParam.numPvLines = std::max<int32_t>(1, 8 - halfMoveNumber / 4);
                 searchParam.debugLog = false;
-                searchParam.limits.maxNodes = 200000;
+                searchParam.limits.maxNodes = 40000 + (rand() % 4096);
                 //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
                 //searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
                 //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
@@ -116,7 +117,7 @@ void SelfPlay()
 
                 // reduce treshold of picking worse move
                 // this way the game will be more random at the beginning and there will be less blunders later in the game
-                scoreDiffTreshold = std::max(5, scoreDiffTreshold - 1);
+                scoreDiffTreshold = std::max(5, scoreDiffTreshold - 2);
 
                 const bool moveSuccess = game.DoMove(move, moveScore);
                 ASSERT(moveSuccess);
