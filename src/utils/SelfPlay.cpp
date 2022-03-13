@@ -56,6 +56,7 @@ void SelfPlay()
             Game game;
             game.Reset(Position(Position::InitPositionFEN));
             tt.Clear();
+            search.Clear();
 
             SearchResult searchResult;
 

@@ -34,7 +34,7 @@ bool MovePicker::IsOnlyOneLegalMove()
     return false;
 }
 
-bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore)
+bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
     if (moveIndex >= moves.Size())
     {
@@ -44,7 +44,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
     if (moveIndex == numScoredMoves && !shuffleEnabled)
     {
         // we reached a point where moves are not scored anymore, so score them now
-        moveOrderer.ScoreMoves(node, moves);
+        moveOrderer.ScoreMoves(node, game, moves);
     }
 
     outMove = moves.PickBestMove(moveIndex++, outScore);

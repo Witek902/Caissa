@@ -78,6 +78,14 @@ void Search::BuildMoveReductionTable()
     }
 }
 
+void Search::Clear()
+{
+    for (ThreadData& threadData : mThreadData)
+    {
+        threadData.moveOrderer.Clear();
+    }
+}
+
 const MoveOrderer& Search::GetMoveOrderer() const
 {
     return mThreadData.front().moveOrderer;
@@ -370,7 +378,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     outResult.resize(numPvLines);
 
-    thread.moveOrderer.Clear();
+    thread.moveOrderer.NewSearch();
     thread.prevPvLines.clear();
     thread.prevPvLines.resize(numPvLines);
 
@@ -840,7 +848,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     uint32_t numBestMoves = 0;
     uint32_t moveIndex = 0;
 
-    while (movePicker.PickMove(node, move, moveScore))
+    while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
         ASSERT(move.IsValid());
 
@@ -1239,7 +1247,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
 
-    while (movePicker.PickMove(node, move, moveScore))
+    while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
         ASSERT(move.IsValid());
 

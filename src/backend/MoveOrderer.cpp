@@ -2,11 +2,12 @@
 #include "Search.hpp"
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
+#include "Game.hpp"
 
 #include <algorithm>
 #include <limits>
 
-static constexpr int32_t RecaptureBonus = 1000;
+static constexpr int32_t RecaptureBonus = 100000;
 
 static const int32_t c_PromotionScores[] =
 {
@@ -145,23 +146,28 @@ void MoveOrderer::DebugPrint() const
 #endif // CONFIGURATION_FINAL
 }
 
+void MoveOrderer::NewSearch()
+{
+    const CounterType scaleDownFactor = 32;
+
+    for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
+    {
+        reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
+    }
+    for (uint32_t i = 0; i < sizeof(quietMoveContinuationHistory) / sizeof(CounterType); ++i)
+    {
+        reinterpret_cast<CounterType*>(quietMoveContinuationHistory)[i] /= scaleDownFactor;
+    }
+    for (uint32_t i = 0; i < sizeof(quietMoveFollowupHistory) / sizeof(CounterType); ++i)
+    {
+        reinterpret_cast<CounterType*>(quietMoveFollowupHistory)[i] /= scaleDownFactor;
+    }
+
+    memset(killerMoves, 0, sizeof(killerMoves));
+}
+
 void MoveOrderer::Clear()
 {
-    //const CounterType scaleDownFactor = 16;
-    //for (uint32_t i = 0; i < sizeof(searchHistory) / sizeof(CounterType); ++i)
-    //{
-    //    reinterpret_cast<CounterType*>(searchHistory)[i] /= scaleDownFactor;
-    //}
-    //for (uint32_t i = 0; i < sizeof(continuationHistory) / sizeof(CounterType); ++i)
-    //{
-    //    reinterpret_cast<CounterType*>(continuationHistory)[i] /= scaleDownFactor;
-    //}
-    //for (uint32_t i = 0; i < sizeof(followupHistory) / sizeof(CounterType); ++i)
-    //{
-    //    reinterpret_cast<CounterType*>(followupHistory)[i] /= scaleDownFactor;
-    //}
-
-    //memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(quietMoveContinuationHistory, 0, sizeof(quietMoveContinuationHistory));
     memset(quietMoveFollowupHistory, 0, sizeof(quietMoveFollowupHistory));
@@ -274,14 +280,37 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
     }
 }
 
-void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
+void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves) const
 {
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
-    const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
-    const Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
+    Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
+    Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
+
+    // at root node, obtaing previous move from the game data
+    if (node.height == 0)
+    {
+        ASSERT(!prevMove.IsValid());
+        ASSERT(!followupMove.IsValid());
+        if (!game.GetMoves().empty())
+        {
+            prevMove = game.GetMoves().back();
+        }
+        if (game.GetMoves().size() > 1)
+        {
+            followupMove = game.GetMoves()[game.GetMoves().size() - 2];
+        }
+    }
+    else if (node.height == 1)
+    {
+        ASSERT(!followupMove.IsValid());
+        if (!game.GetMoves().empty())
+        {
+            followupMove = game.GetMoves().back();
+        }
+    }
 
     for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
@@ -362,7 +391,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 {
                     const uint32_t prevPiece = (uint32_t)prevMove.GetPiece() - 1;
                     const uint32_t prevTo = prevMove.ToSquare().Index();
-                    score += quietMoveContinuationHistory[prevPiece][prevTo][piece][to] / 2;
+                    score += quietMoveContinuationHistory[prevPiece][prevTo][piece][to];
                 }
 
                 // followup move history
@@ -370,7 +399,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, MoveList& moves) const
                 {
                     const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
                     const uint32_t prevTo = followupMove.ToSquare().Index();
-                    score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to] / 2;
+                    score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to];
                 }
             }
         }
