@@ -14,7 +14,7 @@ public:
 
     bool IsOnlyOneLegalMove();
 
-    bool PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore);
+    bool PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore);
 
 private:
     const Position& position;

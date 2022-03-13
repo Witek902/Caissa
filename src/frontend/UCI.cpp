@@ -193,6 +193,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "ucinewgame")
     {
         mTranspositionTable.Clear();
+        mSearch.Clear();
     }
     else if (command == "setoption")
     {
@@ -910,7 +911,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
         moves.AssignTTScores(ttEntry);
     }
 
-    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves);
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves);
 
     moves.Print(mGame.GetPosition());
 

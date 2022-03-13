@@ -134,6 +134,8 @@ public:
     Search();
     ~Search();
 
+    void Clear();
+
     void DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult);
 
     void StopSearch();

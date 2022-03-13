@@ -19,6 +19,7 @@ public:
 
     using CounterType = int16_t;
 
+    void NewSearch();
     void Clear();
 
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
@@ -27,7 +28,7 @@ public:
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
     // assign scores to move list
-    void ScoreMoves(const NodeInfo& node, MoveList& moves) const;
+    void ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves) const;
 
     void DebugPrint() const;
 
