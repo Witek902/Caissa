@@ -17,6 +17,8 @@ public:
     static constexpr int32_t CounterMoveBonus       = 0;
     static constexpr int32_t LosingCaptureValue     = 0;
 
+    static constexpr uint32_t NumKillerMoves = 2;
+
     using CounterType = int16_t;
 
     void NewSearch();
@@ -43,6 +45,5 @@ private:
     CounterType quietMoveContinuationHistory[6][64][6][64];
     CounterType quietMoveFollowupHistory[6][64][6][64];
 
-    static constexpr uint32_t NumKillerMoves = 2;
     PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
 };

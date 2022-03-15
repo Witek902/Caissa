@@ -152,6 +152,9 @@ public:
     // check if given square is visible by any other piece
     bool IsSquareVisible(const Square square, const Color sideColor) const;
 
+    // check if side to move is in check
+    bool IsInCheck() const;
+
     // check if given side is in check
     bool IsInCheck(Color sideColor) const;
 
