@@ -530,6 +530,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             NodeInfo rootNode;
             rootNode.position = game.GetPosition();
+            rootNode.isInCheck = rootNode.position.IsInCheck();
             rootNode.depth = singularDepth;
             rootNode.pvIndex = SingularitySearchPvIndex;
             rootNode.alpha = singularBeta - 1;
@@ -563,6 +564,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     // start applying aspiration window at given depth
     if (param.previousScore != InvalidValue &&
+        !IsMate(param.previousScore) &&
         !CheckStopCondition(param.searchContext, true))
     {
         alpha = std::max<int32_t>(param.previousScore - aspirationWindow, -InfValue);
@@ -576,6 +578,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     {
         NodeInfo rootNode;
         rootNode.position = param.position;
+        rootNode.isInCheck = param.position.IsInCheck();
         rootNode.isPvNode = true;
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.depth = param.depth;
@@ -782,10 +785,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
     }
 
-    const bool isInCheck = position.IsInCheck(position.GetSideToMove());
-
     // do not consider stand pat if in check
-    if (!isInCheck)
+    if (!node.isInCheck)
     {
         if (staticEval == InvalidValue)
         {
@@ -826,7 +827,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     childNode.height = node.height + 1;
 
     uint32_t moveGenFlags = 0;
-    if (!isInCheck)
+    if (!node.isInCheck)
     {
         moveGenFlags |= MOVE_GEN_ONLY_TACTICAL;
         moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
@@ -853,7 +854,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ASSERT(move.IsValid());
 
         // skip losing captures
-        if (!isInCheck && move.IsCapture() && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
+        if (!node.isInCheck && move.IsCapture() && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
         {
             if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
             {
@@ -868,6 +869,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
 
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
+
+        childNode.isInCheck = childNode.position.IsInCheck();
 
         moveIndex++;
 
@@ -908,14 +911,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be more than 20 captures available in a "normal" chess positions
-        if (!isInCheck && bestValue > -KnownWinValue && moveIndex >= MaxQSearchMoves)
+        if (!node.isInCheck && bestValue > -KnownWinValue && moveIndex >= MaxQSearchMoves)
         {
             break;
         }
     }
 
     // no legal moves - checkmate
-    if (isInCheck && moveIndex == 0u)
+    if (node.isInCheck && moveIndex == 0u)
     {
         return -CheckmateValue + (ScoreType)node.height;
     }
@@ -1010,7 +1013,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
     prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
     
-    const bool isInCheck = position.IsInCheck(position.GetSideToMove());
+    ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
 
     const ScoreType oldAlpha = node.alpha;
     ScoreType alpha = node.alpha;
@@ -1105,7 +1108,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     // evaluate position if it wasn't evaluated
     bool wasPositionEvaluated = true;
-    if (!isInCheck)
+    if (!node.isInCheck)
     {
         if (staticEval == InvalidValue)
         {
@@ -1139,11 +1142,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         evalImprovement = staticEval - prevNodes[3]->staticEval;
     }
-    const bool isImproving = evalImprovement > 0;
+    const bool isImproving = evalImprovement >= 0;
 
     // Futility/Beta Pruning
     if (!isPvNode &&
-        !isInCheck &&
+        !node.isInCheck &&
         node.depth <= BetaPruningDepth &&
         staticEval <= TablebaseWinValue &&
         !ctx.searchParam.limits.mateSearch)
@@ -1159,7 +1162,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // Null Move Reductions
     if (!isRootNode &&
         !isPvNode &&
-        !isInCheck &&
+        !node.isInCheck &&
         !hasMoveFilter &&
         staticEval >= beta &&
         node.depth >= NullMoveReductionsStartDepth &&
@@ -1218,7 +1221,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t extension = 0;
 
     // check extension
-    if (isInCheck)
+    if (node.isInCheck)
     {
         extension++;
     }
@@ -1267,6 +1270,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
+        childNode.isInCheck = childNode.position.IsInCheck();
+
         moveIndex++;
 
         // report current move to UCI
@@ -1287,7 +1292,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Static Exchange Evaluation pruning
         // skip all moves that are bad according to SEE
         // the higher depth is, the less agressing pruning is
-        if (!isInCheck &&
+        if (!node.isInCheck &&
             bestValue > -KnownWinValue &&
             node.depth <= 9)
         {
@@ -1303,7 +1308,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // the higher depth is, the less agressing pruning is
         if (move.IsQuiet() &&
             moveScore < 0 &&
-            !isInCheck &&
+            !node.isInCheck &&
             bestValue > -KnownWinValue &&
             node.depth <= LateMovePruningStartDepth &&
             moveIndex >= GetLateMovePrunningTreshold(node.depth))
@@ -1327,6 +1332,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 moveExtension++;
             }
+
+            // recapture extension
+            //if (isPvNode && node.previousMove.IsValid() && move.ToSquare() == node.previousMove.ToSquare())
+            //{
+            //    moveExtension++;
+            //}
 
             // Singular move extension
             if (moveExtension <= 1 &&
@@ -1374,23 +1385,30 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Late Move Reduction
         // don't reduce PV moves, while in check, good captures, promotions, etc.
         if (moveIndex > 1 &&
-            !isRootNode &&
             node.depth >= LateMoveReductionStartDepth &&
-            bestValue > -CheckmateValue &&
-            !isInCheck &&
+            !node.isInCheck &&
             !ctx.searchParam.limits.mateSearch &&
             move.IsQuiet())
         {
             // reduce depth gradually
             depthReduction = mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
 
-            if (!node.isPvNode) depthReduction += 1;
+            if (!node.isPvNode) depthReduction++;
+
+            // reduce more if eval is dropping
+            if (!isImproving) depthReduction++;
 
             // reduce good moves less
-            if (moveScore > 0 && depthReduction > 0) depthReduction--;
+            if (moveScore > 0) depthReduction--;
+
+            // reduce killer moves less
+            if (moveScore <= MoveOrderer::KillerMoveBonus && moveScore > MoveOrderer::KillerMoveBonus - MoveOrderer::NumKillerMoves) depthReduction--;
+
+            // reduce less if move gives check
+            if (childNode.isInCheck) depthReduction--;
 
             // don't drop into QS
-            depthReduction = std::min(depthReduction, node.depth + moveExtension - 1);
+            depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
 
             numReducedMoves++;
         }
@@ -1499,7 +1517,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // no legal moves
     if (!searchAborted && moveIndex == 0u)
     {
-        bestValue = isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
+        bestValue = node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
         return bestValue;
     }
 

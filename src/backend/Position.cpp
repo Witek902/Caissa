@@ -618,6 +618,14 @@ bool Position::IsSquareVisible(const Square square, const Color sideColor) const
     return false;
 }
 
+bool Position::IsInCheck() const
+{
+    const SidePosition& currentSide = mColors[(uint8_t)mSideToMove];
+
+    const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
+    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(mSideToMove));
+}
+
 bool Position::IsInCheck(Color sideColor) const
 {
     const SidePosition& currentSide = mColors[(uint8_t)sideColor];

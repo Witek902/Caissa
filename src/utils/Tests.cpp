@@ -1515,7 +1515,7 @@ void RunSearchTests()
 
     // Lasker-Reichhelm (TT test)
     {
-        param.limits.maxDepth = 25;
+        param.limits.maxDepth = 32;
         param.numPvLines = 1;
 
         game.Reset(Position("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1"));

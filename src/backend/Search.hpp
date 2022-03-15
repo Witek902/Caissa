@@ -112,6 +112,7 @@ struct NodeInfo
     bool isPvNodeFromPrevIteration = false;
     bool isPvNode = false;
     bool isNullMove = false;
+    bool isInCheck = false;
 
     bool ShouldCheckMove(const Move move) const
     {
