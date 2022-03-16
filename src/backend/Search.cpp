@@ -45,7 +45,6 @@ static const int32_t BetaMarginMultiplier = 200;
 static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = -50;
-static const uint32_t MaxQSearchMoves = 20;
 
 static const int32_t LateMovePruningStartDepth = 10;
 
@@ -847,14 +846,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     Move bestMoves[TTEntry::NumMoves];
     uint32_t numBestMoves = 0;
-    uint32_t moveIndex = 0;
+    int32_t moveIndex = 0;
+    uint32_t numQuietCheckEvasion = 0;
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
         ASSERT(move.IsValid());
 
         // skip losing captures
-        if (!node.isInCheck && move.IsCapture() && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
+        if (!node.isInCheck && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
         {
             if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
             {
@@ -868,7 +868,29 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             continue;
         }
 
+        // don't try all check evasions
+        if (node.isInCheck && move.IsQuiet())
+        {
+            if (bestValue > -KnownWinValue && numQuietCheckEvasion > 1)
+            {
+                continue;
+            }
+            numQuietCheckEvasion++;
+        }
+
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
+
+        // Move Count Prunning
+        // skip everything after some sane amount of moves has been tried
+        // there shouldn't be many "good" captures available in a "normal" chess positions
+        if (bestValue > -KnownWinValue &&
+            !node.isInCheck &&
+            !childNode.isInCheck &&
+            !move.IsPromotion() &&
+            moveIndex > (node.depth < 0 ? 2 : 8))
+        {
+            continue;
+        }
 
         childNode.isInCheck = childNode.position.IsInCheck();
 
@@ -894,7 +916,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
                 // update PV line
                 node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
                 node.pvLine[0] = move;
-                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove)* std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
 
                 if (isPvNode && score < beta) // keep alpha < beta
                 {
@@ -908,17 +930,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
                 }
             }
         }
-
-        // skip everything after some sane amount of moves has been tried
-        // there shouldn't be more than 20 captures available in a "normal" chess positions
-        if (!node.isInCheck && bestValue > -KnownWinValue && moveIndex >= MaxQSearchMoves)
-        {
-            break;
-        }
     }
 
     // no legal moves - checkmate
-    if (node.isInCheck && moveIndex == 0u)
+    if (node.isInCheck && moveIndex == 0)
     {
         return -CheckmateValue + (ScoreType)node.height;
     }
