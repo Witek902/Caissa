@@ -45,5 +45,5 @@ private:
     CounterType quietMoveContinuationHistory[6][64][6][64];
     CounterType quietMoveFollowupHistory[6][64][6][64];
 
-    PackedMove killerMoves[MaxSearchDepth][NumKillerMoves];
+    Move killerMoves[MaxSearchDepth][NumKillerMoves];
 };
