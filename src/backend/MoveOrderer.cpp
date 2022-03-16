@@ -367,7 +367,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         else // non-capture
         {
             // killer moves heuristics
-            bool isKiller = false;
             if (node.height < MaxSearchDepth)
             {
                 for (uint32_t j = 0; j < NumKillerMoves; ++j)
@@ -375,13 +374,13 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     if (move == killerMoves[node.height][j])
                     {
                         score = KillerMoveBonus - j;
-                        isKiller = true;
                         break;
                     }
                 }
             }
 
-            if (!isKiller)
+            // not killer move
+            if (score <= KillerMoveBonus - NumKillerMoves)
             {
                 // history heuristics
                 score += quietMoveHistory[color][from][to];

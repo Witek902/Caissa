@@ -23,7 +23,10 @@ std::string PackedMove::ToString() const
 
 std::string Move::ToString() const
 {
-    ASSERT(GetPiece() != Piece::None);
+    if (FromSquare() == ToSquare())
+    {
+        return "0000";
+    }
 
     std::string str;
 
