@@ -1,7 +1,7 @@
 # Caissa Chess Engine
 UCI command-line chess engine written in C++. Currently compiles only for Windows, Linux version is on the way.
 
-Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
+Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 
 ## Features
 
@@ -27,7 +27,7 @@ Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 #### Selectivity
 * Null Move Reductions
 * Late Move Reductions & Prunning
-* Futility Pruning (both for alpha and beta)
+* Futility Pruning
 * Mate Distance Prunning
 * Singular Move Extensions
 
@@ -40,7 +40,6 @@ Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 * Heuristics based on approximate move count left
 * Reducing search time for singular root moves
 
-
 #### Misc
 * Large Pages Support for Transposition Table
 * Magic Bitboards
@@ -52,11 +51,9 @@ Estimated ELO: **2800** (10+1 time control, single threaded, with NNUE)
 The projects comprises folowing modules:
   * _backend_ (library) - engine's core
   * _frontend_ (executable) - UCI wrapper for the backend
-  * _tests_ (executable) - unit tests and search tests
-  * _utils_ (executable) - various utilities, such as neural network trainer
+  * _utils_ (executable) - various utilities, such as unit tests, neural network trainer, self-play data generator, etc.
   
 ## TODO
 
-  * Better evaluation function
   * Custom-trained neural network
   * More platforms support
