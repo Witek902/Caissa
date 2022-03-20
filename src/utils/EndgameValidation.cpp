@@ -256,11 +256,11 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         {
             bool exactScoreRecognized = false;
 
+            stats.count++;
+
             int32_t evalScore = 0;
             if (EvaluateEndgame(pos, evalScore))
             {
-                stats.count++;
-
                 const float error = trueScore - PawnToWinProbability(evalScore * 0.01f);
                 stats.totalErrorSqr += error * error;
 
@@ -403,14 +403,19 @@ static void ValidateEndgame_2v2(const EndgameValidationParam& param)
 void ValidateEndgame()
 {
     EndgameValidationParam param;
-    param.matKey.numWhiteRooks = 1;
+    param.matKey.numWhiteBishops = 1;
+    param.matKey.numWhiteRooks = 0;
     param.matKey.numWhitePawns = 1;
-    param.matKey.numBlackRooks = 1;
+    param.matKey.numBlackRooks = 0;
     param.matKey.numBlackPawns = 0;
     param.matKey.numBlackKnights = 0;
     param.matKey.numBlackBishops = 0;
 
-    param.whitePawnsAllowedSquares = Square(0, 6).GetBitboard();// Bitboard::FileBitboard<0>() | Bitboard::FileBitboard<1>() | Bitboard::FileBitboard<2>() | Bitboard::FileBitboard<3>();
+    //param.whitePawnsAllowedSquares = Square(0, 6).GetBitboard();// Bitboard::FileBitboard<0>() | Bitboard::FileBitboard<1>() | Bitboard::FileBitboard<2>() | Bitboard::FileBitboard<3>();
+
+    ValidateEndgame_2v2(param);
+
+    param.sideToMove = Color::Black;
 
     ValidateEndgame_2v2(param);
 }
