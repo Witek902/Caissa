@@ -13,9 +13,8 @@ public:
 
     static constexpr int32_t WinningCaptureValue    = 20000000;
     static constexpr int32_t GoodCaptureValue       = 10000000;
-    static constexpr int32_t KillerMoveBonus        = 100000;
-    static constexpr int32_t CounterMoveBonus       = 0;
-    static constexpr int32_t LosingCaptureValue     = 0;
+    static constexpr int32_t KillerMoveBonus        = 1000000;
+    static constexpr int32_t LosingCaptureValue     = 100000;
 
     static constexpr uint32_t NumKillerMoves = 2;
 
@@ -25,7 +24,6 @@ public:
     void Clear();
 
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
-    void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
 
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
@@ -40,7 +38,6 @@ private:
 
     alignas(CACHELINE_SIZE)
 
-    CounterType capturesHistory[2][64][64];
     CounterType quietMoveHistory[2][64][64];
     CounterType quietMoveContinuationHistory[6][64][6][64];
     CounterType quietMoveFollowupHistory[6][64][6][64];
