@@ -21,7 +21,7 @@ static const int32_t c_PromotionScores[] =
 
 static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
 {
-    return 8192 * (int32_t)capturedPiece - (int32_t)attackingPiece;
+    return 8 * (int32_t)capturedPiece - (int32_t)attackingPiece;
 }
 
 void MoveOrderer::DebugPrint() const
@@ -36,27 +36,6 @@ void MoveOrderer::DebugPrint() const
             for (uint32_t color = 0; color < 2; ++color)
             {
                 const CounterType count = quietMoveHistory[color][fromIndex][toIndex];
-
-                if (count)
-                {
-                    std::cout
-                        << Square(fromIndex).ToString() << Square(toIndex).ToString()
-                        << (color > 0 ? " (black)" : " (white)")
-                        << " ==> " << count << '\n';
-                }
-            }
-        }
-    }
-
-    std::cout << "=== CAPTURES HISTORY HEURISTICS ===" << std::endl;
-
-    for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
-    {
-        for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
-        {
-            for (uint32_t color = 0; color < 2; ++color)
-            {
-                const CounterType count = capturesHistory[color][fromIndex][toIndex];
 
                 if (count)
                 {
@@ -231,32 +210,6 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 }
 
-void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
-{
-    ASSERT(depth >= 0);
-
-    // don't update uncertain moves
-    if (numMoves <= 1 && depth <= 2)
-    {
-        return;
-    }
-
-    const uint32_t color = (uint32_t)node.position.GetSideToMove();
-
-    const int32_t bonus = std::min(depth * depth, 256);
-
-    for (uint32_t i = 0; i < numMoves; ++i)
-    {
-        const Move move = moves[i];
-        const int32_t delta = move == bestMove ? bonus : -bonus;
-
-        const uint32_t from = move.FromSquare().Index();
-        const uint32_t to = move.ToSquare().Index();
-
-        UpdateHistoryCounter(capturesHistory[color][from][to], delta);
-    }
-}
-
 void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
 {
     if (node.height < MaxSearchDepth)
@@ -354,9 +307,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     score = LosingCaptureValue + mvvLva;
                 }
             }
-
-            // history heuristics
-            //score += capturesHistory[color][from][to];
 
             // bonus for capturing previously moved piece
             if (prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare())
