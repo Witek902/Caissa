@@ -440,7 +440,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
         if (pawnSquare.Rank() < 6) keySquare = Square(pawnSquare.Rank() + 2, pawnSquare.File());
 
         outScore = KnownWinValue + 100;
-        outScore += 4 * pawnSquare.Rank();
+        outScore += 8 * pawnSquare.Rank();
         outScore -= (int32_t)Square::Distance(keySquare, strongKingSq); // put strong king in front of pawn
         outScore += (int32_t)Square::Distance(pawnSquare, weakKingSq); // try to capture pawn
         return true;
@@ -601,6 +601,7 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
 
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
+    const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
 
     // if all pawns are on A/H file and we have a wrong bishop, then it's a draw
@@ -617,6 +618,30 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
             (Square::Distance(weakKing, Square_h8) <= 1))
         {
             outScore = 0;
+            return true;
+        }
+    }
+
+    // if we have a "good" bishop and weak king can't easily capture pawn, then it's a win
+    if (pos.Whites().pawns.Count() == 1)
+    {
+        const Square pawnSquare(FirstBitSet(pos.Whites().pawns));
+        const Square bishopSquare(FirstBitSet(pos.Whites().bishops));
+        const Square promotionSquare(pawnSquare.File(), 7);
+
+        const bool bishopOnLightSquare = pos.Whites().bishops & Bitboard::LightSquares();
+        const bool promotionOnLightSquare = promotionSquare.GetBitboard() & Bitboard::LightSquares();
+
+        const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
+
+        if (bishopOnLightSquare == promotionOnLightSquare &&
+            Square::Distance(weakKing, pawnSquare) > 2 + blackToMove &&
+            Square::Distance(strongKing, bishopSquare) > 1 && !bishopSquare.IsCorner())
+        {
+            outScore = KnownWinValue;
+            outScore += 16 * pawnSquare.Rank();
+            outScore += Square::Distance(weakKing, pawnSquare);
+            outScore -= Square::Distance(strongKing, pawnSquare);
             return true;
         }
     }

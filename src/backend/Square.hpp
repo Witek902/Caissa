@@ -113,6 +113,11 @@ public:
         return mIndex ^ (uint8_t)0b111111;
     }
 
+    bool IsCorner() const
+    {
+        return mIndex == Square_a1 || mIndex == Square_a8 || mIndex == Square_h1 || mIndex == Square_h8;
+    }
+
     uint32_t EdgeDistance() const
     {
         const uint32_t r = Rank();
