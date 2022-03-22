@@ -1342,17 +1342,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 moveExtension++;
             }
 
-            // extend if there's only one legal move
-            if (movePicker.IsOnlyOneLegalMove())
+            // pawn advanced to 6th row so is about to promote
+            if (move.GetPiece() == Piece::Pawn &&
+                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
             {
                 moveExtension++;
             }
-
-            // recapture extension
-            //if (isPvNode && node.previousMove.IsValid() && move.ToSquare() == node.previousMove.ToSquare())
-            //{
-            //    moveExtension++;
-            //}
 
             // Singular move extension
             if (moveExtension <= 1 &&
@@ -1381,11 +1376,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 if (singularScore < singularBeta)
                 {
                     moveExtension++;
+
+                    // extend even more if secondary move is really bad
+                    if (!node.isPvNode && singularScore < singularBeta - 100)
+                    {
+                        moveExtension++;
+                    }
                 }
-                //else if (singularBeta >= node.beta)
-                //{
-                //    return singularBeta;
-                //}
+                else if (singularBeta >= beta)
+                {
+                    return singularBeta;
+                }
             }
         }
 
