@@ -28,12 +28,6 @@ void MovePicker::Shuffle()
     shuffleEnabled = true;
 }
 
-bool MovePicker::IsOnlyOneLegalMove()
-{
-    // TODO how to determine this if moves are not generated yet?
-    return false;
-}
-
 bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
     if (moveIndex >= moves.Size())

@@ -12,8 +12,6 @@ public:
 
     void Shuffle();
 
-    bool IsOnlyOneLegalMove();
-
     bool PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore);
 
 private:

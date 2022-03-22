@@ -78,6 +78,12 @@ public:
         return mIndex % 8u;
     }
 
+    INLINE uint8_t RelativeRank(const Color color) const
+    {
+        const uint8_t rank = mIndex / 8u;
+        return color == Color::White ? rank : (7 - rank);
+    }
+
     INLINE Square North() const
     {
         return Rank() < 7 ? mIndex + 8 : Invalid();
