@@ -1,6 +1,8 @@
 #include "Game.hpp"
 #include "Evaluate.hpp"
 
+#include <sstream>
+
 Game::Game()
     : mInitPosition(Position::InitPositionFEN)
     , mPosition(Position::InitPositionFEN)
@@ -141,9 +143,9 @@ bool Game::operator != (const Game& rhs) const
         mMoveScores != rhs.mMoveScores;
 }
 
-std::string Game::ToPGN() const
+std::string Game::ToPGNMoveList() const
 {
-    std::string str;
+    std::stringstream str;
 
     Position pos = mInitPosition;
 
@@ -151,12 +153,10 @@ std::string Game::ToPGN() const
     {
         if (i % 2 == 0)
         {
-            str += std::to_string(1 + (i / 2));
-            str += ". ";
+            str << pos.GetMoveCount() << ". ";
         }
 
-        str += pos.MoveToString(mMoves[i]);
-        str += ' ';
+        str << pos.MoveToString(mMoves[i]) << ' ';
 
         const bool moveResult = pos.DoMove(mMoves[i]);
         ASSERT(moveResult);
@@ -165,5 +165,44 @@ std::string Game::ToPGN() const
 
     ASSERT(pos == mPosition);
 
-    return str;
+    return str.str();
+}
+
+std::string Game::ToPGN() const
+{
+    std::stringstream str;
+
+    std::string resultStr;
+    std::string terminationStr;
+
+    const Game::Score gameScore = GetScore();
+    if (gameScore == Game::Score::WhiteWins)
+    {
+        resultStr = "1-0";
+        terminationStr = "checkmate";
+    }
+    else if (gameScore == Game::Score::BlackWins)
+    {
+        resultStr = "0-1";
+        terminationStr = "checkmate";
+    }
+    else if (gameScore == Game::Score::Draw)
+    {
+        resultStr = "1/2-1/2";
+        if (GetRepetitionCount(GetPosition()) >= 2) terminationStr = "3-fold repetition";
+        else if (GetPosition().GetHalfMoveCount() >= 100) terminationStr = "50 moves rule";
+        else if (CheckInsufficientMaterial(GetPosition())) terminationStr = "insufficient material";
+        else terminationStr = "unknown";
+    }
+
+    str << "[Round \"1." << mMetadata.roundNumber << "\"]" << std::endl;
+    str << "[White \"Caissa\"]" << std::endl;
+    str << "[Black \"Caissa\"]" << std::endl;
+    str << "[Result \"" << resultStr << "\"]" << std::endl;
+    str << "[Termination \"" << terminationStr << "\"]" << std::endl;
+    str << "[FEN \"" << mInitPosition.ToFEN() << "\"]" << std::endl;
+    str << std::endl;
+    str << ToPGNMoveList() << resultStr;
+
+    return str.str();
 }

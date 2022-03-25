@@ -5,10 +5,12 @@
 #include "../backend/nnue-probe/nnue.h"
 
 #include <iostream>
+#include <vector>
+#include <string>
 
 extern void RunUnitTests();
 extern bool RunPerformanceTests(const char* path);
-extern void SelfPlay();
+extern void SelfPlay(const std::vector<std::string>& args);
 extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
@@ -22,6 +24,14 @@ int main(int argc, const char* argv[])
     {
         std::cerr << "Missing argument" << std::endl;
         return 1;
+    }
+
+    std::vector<std::string> args;
+    {
+        for (int32_t i = 2; i < argc; ++i)
+        {
+            args.push_back(argv[i]);
+        }
     }
 
     InitEngine();
@@ -41,7 +51,7 @@ int main(int argc, const char* argv[])
     }
     else if (0 == strcmp(argv[1], "selfplay"))
     {
-        SelfPlay();
+        SelfPlay(args);
     }
     else if (0 == strcmp(argv[1], "testNetwork"))
     {

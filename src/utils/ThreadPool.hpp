@@ -176,6 +176,8 @@ public:
         DispatchTask(CreateTask(desc));
     }
 
+    size_t GetNumThreads() const { return mThreads.size(); }
+
 private:
 
     ThreadPool(const ThreadPool&) = delete;
