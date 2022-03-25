@@ -18,6 +18,11 @@ struct hash<Position>
 
 } // std
 
+struct GameMetadata
+{
+    uint32_t roundNumber = 1;
+};
+
 // represents whole game
 class Game
 {
@@ -35,6 +40,8 @@ public:
     const Position& GetInitialPosition() const { return mInitPosition; }
     const Position& GetPosition() const { return mPosition; }
     Color GetSideToMove() const { return mPosition.GetSideToMove(); }
+
+    void SetMetadata(const GameMetadata& metadata) { mMetadata = metadata; }
 
     bool operator == (const Game& rhs) const;
     bool operator != (const Game& rhs) const;
@@ -55,6 +62,9 @@ public:
     bool IsDrawn() const;
 
     // convert moves list to PGN string
+    std::string ToPGNMoveList() const;
+
+    // print whole game as PNG string
     std::string ToPGN() const;
 
 private:
@@ -62,6 +72,8 @@ private:
     Score CalculateScore() const;
 
     void RecordBoardPosition(const Position& position);
+
+    GameMetadata mMetadata;
 
     Position mInitPosition;
     Position mPosition;

@@ -17,29 +17,65 @@
 #include <random>
 #include <mutex>
 #include <fstream>
+#include <sstream>
+#include <string>
 #include <limits.h>
 
 using namespace threadpool;
 
-void SelfPlay()
+bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
+{
+    std::ifstream file(path);
+    if (!file.good())
+    {
+        std::cout << "Failed to load opening positions file " << path << std::endl;
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        Position pos;
+        if (!pos.FromFEN(line)) continue;
+
+        PackedPosition packedPos;
+        PackPosition(pos, packedPos);
+        outPositions.push_back(packedPos);
+    }
+
+    std::cout << "Loaded " << outPositions.size() << " opening positions" << std::endl;
+
+    return true;
+}
+
+void SelfPlay(const std::vector<std::string>& args)
 {
     FileOutputStream gamesFile("selfplay.dat");
     GameCollection::Writer writer(gamesFile);
 
-    std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
+    const size_t numThreads = ThreadPool::GetInstance().GetNumThreads();
+
+    std::vector<Search> searchArray{ numThreads };
     std::vector<TranspositionTable> ttArray;
 
-    ttArray.resize(std::thread::hardware_concurrency());
-    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    std::cout << "Allocating transposition table..." << std::endl;
+    ttArray.resize(numThreads);
+    for (size_t i = 0; i < numThreads; ++i)
     {
         ttArray[i].Resize(64ull * 1024ull * 1024ull);
+    }
+
+    std::cout << "Loading opening positions..." << std::endl;
+    std::vector<PackedPosition> openingPositions;
+    if (args.size() > 0)
+    {
+        LoadOpeningPositions(args[0], openingPositions);
     }
     
     std::mutex mutex;
     uint32_t games = 0;
-    uint32_t whiteWins = 0;
-    uint32_t blackWins = 0;
-    uint32_t draws = 0;
+
+    std::cout << "Starting games..." << std::endl;
 
     Waitable waitable;
     {
@@ -53,14 +89,23 @@ void SelfPlay()
             Search& search = searchArray[context.threadId];
             TranspositionTable& tt = ttArray[context.threadId];
 
+            // start new game
             Game game;
-            game.Reset(Position(Position::InitPositionFEN));
             tt.Clear();
             search.Clear();
 
+            // generate opening position
+            Position openingPos(Position::InitPositionFEN);
+            if (!openingPositions.empty())
+            {
+                std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
+                UnpackPosition(openingPositions[distrib(gen)], openingPos);
+            }
+            game.Reset(openingPos);
+
             SearchResult searchResult;
 
-            int32_t scoreDiffTreshold = 40;
+            int32_t scoreDiffTreshold = 20;
 
             uint32_t halfMoveNumber = 0;
             for (;; ++halfMoveNumber)
@@ -69,21 +114,17 @@ void SelfPlay()
 
                 SearchParam searchParam{ tt };
                 searchParam.limits.maxDepth = 16;
-                searchParam.numPvLines = std::max<int32_t>(1, 8 - halfMoveNumber / 4);
                 searchParam.debugLog = false;
-                searchParam.limits.maxNodes = 40000 + (rand() % 4096);
-                //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.4f);
-                //searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.1f);
-                //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.03f);
+                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
+                searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.06f);
+                searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
 
                 searchResult.clear();
-
                 tt.NextGeneration();
                 search.DoSearch(game, searchParam, searchResult);
 
                 if (searchResult.empty())
                 {
-                    std::string dupa = game.ToPGN();
                     DEBUG_BREAK();
                     break;
                 }
@@ -116,9 +157,21 @@ void SelfPlay()
                 ScoreType moveScore = searchResult[moveIndex].score;
                 if (game.GetSideToMove() == Color::Black) moveScore = -moveScore;
 
+                // don't play forced mate sequences
+                if (moveScore > CheckmateValue - MaxSearchDepth)
+                {
+                    game.SetScore(Game::Score::WhiteWins);
+                    break;
+                }
+                else if (moveScore < -CheckmateValue + MaxSearchDepth)
+                {
+                    game.SetScore(Game::Score::BlackWins);
+                    break;
+                }
+
                 // reduce treshold of picking worse move
                 // this way the game will be more random at the beginning and there will be less blunders later in the game
-                scoreDiffTreshold = std::max(5, scoreDiffTreshold - 2);
+                scoreDiffTreshold = std::max(5, scoreDiffTreshold - 1);
 
                 const bool moveSuccess = game.DoMove(move, moveScore);
                 ASSERT(moveSuccess);
@@ -133,40 +186,18 @@ void SelfPlay()
             writer.WriteGame(game);
 
             {
-                const std::string pgn = game.ToPGN();
-
                 std::unique_lock<std::mutex> lock(mutex);
 
-                const uint32_t gameNumber = games++;
+                const uint32_t gameNumber = ++games;
 
-                std::cout << "Game #" << gameNumber << " " << pgn;
+                GameMetadata metadata;
+                metadata.roundNumber = gameNumber;
+                game.SetMetadata(metadata);
 
-                const Game::Score gameScore = game.GetScore();
-                if (gameScore == Game::Score::WhiteWins)
-                {
-                    std::cout << " (white won)";
-                    whiteWins++;
-                }
-                else if (gameScore == Game::Score::BlackWins)
-                {
-                    std::cout << " (black won)";
-                    blackWins++;
-                }
-                else if (gameScore == Game::Score::Draw)
-                {
-                    if (game.GetRepetitionCount(game.GetPosition()) >= 2) std::cout << "(draw by repetition)";
-                    else if (game.GetPosition().GetHalfMoveCount() >= 100) std::cout << "(draw by 50 move rule)";
-                    else if (CheckInsufficientMaterial(game.GetPosition())) std::cout << "(draw by insufficient material)";
-                    else std::cout << "(draw by too long game)";
+                const std::string pgn = game.ToPGN();
 
-                    draws++;
-                }
-                else
-                {
-                    DEBUG_BREAK();
-                }
-
-                std::cout << " W:" << whiteWins << " B:" << blackWins << " D:" << draws << std::endl;
+                std::cout << std::endl << pgn << std::endl;
+                std::cout.flush();
             }
         });
 
