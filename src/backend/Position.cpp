@@ -683,20 +683,36 @@ bool Position::IsMoveLegal(const Move& move) const
     return positionAfterMove.DoMove(move);
 }
 
-static Square ExtractEnPassantSquareFromMove(const Move& move)
+Square Position::ExtractEnPassantSquareFromMove(const Move& move) const
 {
     ASSERT(move.GetPiece() == Piece::Pawn);
 
-    if (move.FromSquare().Rank() == 1u && move.ToSquare().Rank() == 3u)
+    const Bitboard oponentPawns = GetOpponentSide().pawns;
+    const Square from = move.FromSquare();
+    const Square to = move.ToSquare();
+
+    if (from.Rank() == 1u && to.Rank() == 3u)
     {
-        ASSERT(move.FromSquare().File() == move.ToSquare().File());
-        return Square(move.FromSquare().File(), 2u);
+        ASSERT(from.File() == to.File());
+        ASSERT(mSideToMove == Color::White);
+
+        if ((to.File() > 0 && (to.West_Unsafe().GetBitboard() & oponentPawns)) ||
+            (to.File() < 7 && (to.East_Unsafe().GetBitboard() & oponentPawns)))
+        {
+            return Square(move.FromSquare().File(), 2u);
+        }
     }
 
-    if (move.FromSquare().Rank() == 6u && move.ToSquare().Rank() == 4u)
+    if (from.Rank() == 6u && to.Rank() == 4u)
     {
-        ASSERT(move.FromSquare().File() == move.ToSquare().File());
-        return Square(move.FromSquare().File(), 5u);
+        ASSERT(from.File() == to.File());
+        ASSERT(mSideToMove == Color::Black);
+
+        if ((to.File() > 0 && (to.West_Unsafe().GetBitboard() & oponentPawns)) ||
+            (to.File() < 7 && (to.East_Unsafe().GetBitboard() & oponentPawns)))
+        {
+            return Square(from.File(), 5u);
+        }
     }
 
     return Square::Invalid();

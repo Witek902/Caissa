@@ -16,7 +16,7 @@
 	#include <Windows.h>
 #endif
 
-static const char* c_EngineName = "Caissa 0.6.3";
+static const char* c_EngineName = "Caissa 0.6.4";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
@@ -243,8 +243,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "print")
     {
         std::cout << "Init:    " << mGame.GetInitialPosition().ToFEN() << std::endl; 
-        std::cout << "Moves:   " << mGame.ToPGN() << std::endl;
-        std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGN() << std::endl;
+        std::cout << "Moves:   " << mGame.ToPGNMoveList() << std::endl;
+        std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGNMoveList() << std::endl;
         std::cout << mGame.GetPosition().Print() << std::endl;
     }
     else if (command == "eval")

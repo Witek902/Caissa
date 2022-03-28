@@ -367,7 +367,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
+            TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
         }
 
         // move pawn (invalid, blocked)
