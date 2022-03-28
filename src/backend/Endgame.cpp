@@ -453,10 +453,29 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
         // connected passed pawns
         if (areConnected && pos.GetSideToMove() == Color::White)
         {
-            outScore = KnownWinValue;
+            outScore = KnownWinValue + 200;
             outScore += 8 * pawnSquare.Rank();
             outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
             outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
+            return true;
+        }
+    }
+
+    // win if king can't reach promoting pawn
+    {
+        uint32_t mostAdvancedPawnRank = 0;
+        for (uint32_t rank = 1; rank < 7; ++rank)
+        {
+            if (pos.Whites().pawns & Bitboard::RankBitboard(rank))
+            {
+                mostAdvancedPawnRank = rank;
+            }
+        }
+
+        if (weakKing.Rank() + (uint32_t)pos.GetSideToMove() < mostAdvancedPawnRank)
+        {
+            outScore = KnownWinValue + 100 * numPawns;
+            outScore += 8 * mostAdvancedPawnRank;
             return true;
         }
     }
@@ -839,6 +858,39 @@ static bool EvaluateEndgame_KQvKR(const Position& pos, int32_t& outScore)
     return false;
 }
 
+// Queen vs. Knight
+static bool EvaluateEndgame_KQvKN(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    if (pos.Whites().queens.Count() == 1 && pos.Blacks().knights.Count() == 1)
+    {
+        const Square strongKing(FirstBitSet(pos.Whites().king));
+        const Square weakKing(FirstBitSet(pos.Blacks().king));
+        const Square queenSquare(FirstBitSet(pos.Whites().queens));
+        const Square knightSquare(FirstBitSet(pos.Blacks().knights));
+
+        if (pos.GetSideToMove() == Color::Black)
+        {
+            // detect fork
+            if (Bitboard::GetKnightAttacks(knightSquare) & Bitboard::GetKnightAttacks(queenSquare) & Bitboard::GetKnightAttacks(strongKing))
+            {
+                outScore = 0;
+                return true;
+            }
+        }
+
+        outScore = KnownWinValue + (pos.GetSideToMove() == Color::White ? 100 : -100);
+        outScore -= 8 * weakKing.EdgeDistance(); // push king to edge
+        outScore -= 2 * Square::Distance(weakKing, strongKing); // push kings close
+        outScore += Square::Distance(weakKing, knightSquare); // push losing king and knight close
+        return true;
+    }
+
+    return false;
+}
+
 static bool EvaluateEndgame_KRvKR(const Position& pos, int32_t& outScore)
 {
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks > 0 && pos.Whites().queens == 0);
@@ -1058,6 +1110,7 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackKnight, EvaluateEndgame_KRvKN);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackBishop, EvaluateEndgame_KRvKB);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackRook, EvaluateEndgame_KQvKR);
+    RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackKnight, EvaluateEndgame_KQvKN);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackRook, EvaluateEndgame_KRvKR);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_WhitePawn|MaterialMask_BlackRook, EvaluateEndgame_KRPvKR);
 }
