@@ -265,6 +265,8 @@ private:
     INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
     INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
 
+    Square ExtractEnPassantSquareFromMove(const Move& move) const;
+
     void ClearRookCastlingRights(const Square affectedSquare);
 
     // BOARD STATE & FLAGS

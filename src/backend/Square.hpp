@@ -104,6 +104,11 @@ public:
         return File() > 0 ? (mIndex - 1) : Invalid();
     }
 
+    INLINE Square North_Unsafe() const { return mIndex + 8; }
+    INLINE Square South_Unsafe() const { return mIndex - 8; }
+    INLINE Square East_Unsafe() const { return mIndex + 1; }
+    INLINE Square West_Unsafe() const { return mIndex - 1; }
+
     INLINE Square FlippedFile() const
     {
         return mIndex ^ 0b000111;
