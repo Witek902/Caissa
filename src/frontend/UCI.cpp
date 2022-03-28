@@ -16,7 +16,7 @@
 	#include <Windows.h>
 #endif
 
-static const char* c_EngineName = "Caissa 0.6.2";
+static const char* c_EngineName = "Caissa 0.6.3";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
