@@ -795,10 +795,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
 
         // try to use TT score for better evaluation estimate
-        if (ttScore != InvalidValue)
+        if (std::abs(ttScore) < KnownWinValue)
         {
             if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval))
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval) ||
+                (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
                 staticEval = ttScore;
             }
@@ -1134,10 +1135,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // try to use TT score for better evaluation estimate
-        if (ttScore != InvalidValue)
+        if (std::abs(ttScore) < KnownWinValue)
         {
             if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval))
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval) ||
+                (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
                 staticEval = ttScore;
             }
