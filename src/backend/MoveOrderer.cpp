@@ -101,23 +101,31 @@ void MoveOrderer::DebugPrint() const
     std::cout << std::endl;
     std::cout << "=== KILLER MOVE HEURISTICS ===" << std::endl;
 
-    for (uint32_t d = 0; d < MaxSearchDepth; ++d)
+    for (uint32_t numPieces = 3; numPieces <= MaxNumPieces; ++numPieces)
     {
-        std::cout << d;
+        std::cout << numPieces << " pieces:" << std::endl;
 
-        bool hasAnyValid = false;
-
-        for (uint32_t i = 0; i < NumKillerMoves; ++i)
+        uint32_t lastValidDepth = 0;
+        for (uint32_t d = 0; d < MaxSearchDepth; ++d)
         {
-            hasAnyValid |= killerMoves[d][i].IsValid();
-            std::cout << "\t" << killerMoves[d][i].ToString() << " ";
+            for (uint32_t i = 0; i < NumKillerMoves; ++i)
+            {
+                if (killerMoves[numPieces][d].moves[i].IsValid())
+                {
+                    lastValidDepth = std::max(lastValidDepth, d);
+                }
+            }
         }
 
-        if (!hasAnyValid)
+        for (uint32_t d = 0; d < lastValidDepth; ++d)
         {
-            break;
+            std::cout << d;
+            for (uint32_t i = 0; i < NumKillerMoves; ++i)
+            {
+                std::cout << "\t" << killerMoves[numPieces][d].moves[i].ToString() << " ";
+            }
+            std::cout << std::endl;
         }
-
         std::cout << std::endl;
     }
 
@@ -214,22 +222,8 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
 {
     if (node.height < MaxSearchDepth)
     {
-        for (uint32_t j = 0; j < NumKillerMoves; ++j)
-        {
-            if (move == killerMoves[node.height][j])
-            {
-                // move to the front
-                std::swap(killerMoves[node.height][0], killerMoves[node.height][j]);
-
-                return;
-            }
-        }
-
-        for (uint32_t j = NumKillerMoves; j-- > 1u; )
-        {
-            killerMoves[node.height][j] = killerMoves[node.height][j - 1];
-        }
-        killerMoves[node.height][0] = move;
+        const uint32_t numPieces = std::min(MaxNumPieces, node.position.GetNumPieces());
+        killerMoves[numPieces][node.height].Push(move);
     }
 }
 
@@ -237,7 +231,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
 {
     const Position& pos = node.position;
 
-    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    const uint32_t color = (uint32_t)pos.GetSideToMove();
+    const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
+
+    const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
 
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
     Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
@@ -319,13 +316,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
             // killer moves heuristics
             if (node.height < MaxSearchDepth)
             {
-                for (uint32_t j = 0; j < NumKillerMoves; ++j)
+                const int32_t killerMoveIndex = killerMovesForCurrentNode.Find(move);
+                if (killerMoveIndex >= 0)
                 {
-                    if (move == killerMoves[node.height][j])
-                    {
-                        score = KillerMoveBonus - j;
-                        break;
-                    }
+                    score = KillerMoveBonus - killerMoveIndex;
                 }
             }
 

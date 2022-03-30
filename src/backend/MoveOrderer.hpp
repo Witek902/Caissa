@@ -4,6 +4,48 @@
 
 struct NodeInfo;
 
+template<uint32_t Size>
+struct KillerMoves
+{
+    Move moves[Size];
+
+    void Push(const Move move)
+    {
+        for (uint32_t i = 0; i < Size; ++i)
+        {
+            if (move == moves[i])
+            {
+                // move to the front
+                for (uint32_t j = i; j > 0; j--)
+                {
+                    moves[j] = moves[j - 1];
+                }
+
+                moves[0] = move;
+                return;
+            }
+        }
+
+        for (uint32_t j = Size; j-- > 1u; )
+        {
+            moves[j] = moves[j - 1];
+        }
+        moves[0] = move;
+    }
+
+    int32_t Find(const Move move) const
+    {
+        for (uint32_t i = 0; i < Size; ++i)
+        {
+            if (move == moves[i])
+            {
+                return (int32_t)i;
+            }
+        }
+        return -1;
+    }
+};
+
 class MoveOrderer
 {
 public:
@@ -16,7 +58,7 @@ public:
     static constexpr int32_t KillerMoveBonus        = 1000000;
     static constexpr int32_t LosingCaptureValue     = 100000;
 
-    static constexpr uint32_t NumKillerMoves = 2;
+    static constexpr uint32_t NumKillerMoves        = 2;
 
     using CounterType = int16_t;
 
@@ -42,5 +84,5 @@ private:
     CounterType quietMoveContinuationHistory[6][64][6][64];
     CounterType quietMoveFollowupHistory[6][64][6][64];
 
-    Move killerMoves[MaxSearchDepth][NumKillerMoves];
+    KillerMoves<NumKillerMoves> killerMoves[MaxNumPieces+1][MaxSearchDepth];
 };

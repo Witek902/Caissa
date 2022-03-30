@@ -331,17 +331,22 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
-        ss << "Beta cutoff histogram\n";
         uint32_t maxMoveIndex = 0;
         uint64_t sum = 0;
+        double average = 0.0;
         for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
         {
             if (param.searchContext.stats.betaCutoffHistogram[i])
             {
                 sum += param.searchContext.stats.betaCutoffHistogram[i];
+                average += (double)i * (double)param.searchContext.stats.betaCutoffHistogram[i];
                 maxMoveIndex = std::max(maxMoveIndex, i);
             }
         }
+        average /= sum;
+        printf("Average cutoff move index: %.3f\n", average);
+
+        printf("Beta cutoff histogram\n");
         for (uint32_t i = 0; i <= maxMoveIndex; ++i)
         {
             const uint64_t value = param.searchContext.stats.betaCutoffHistogram[i];
@@ -1256,7 +1261,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t moveScore = 0;
     Move move;
 
-    Move bestMoves[TTEntry::NumMoves] = { Move::Invalid(), Move::Invalid(), Move::Invalid() };
+    Move bestMoves[TTEntry::NumMoves];
+    for (uint32_t i = 0; i < TTEntry::NumMoves; ++i) bestMoves[i] = Move::Invalid();
     uint32_t numBestMoves = 0;
 
     uint32_t moveIndex = 0;

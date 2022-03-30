@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <cstring>
 
-static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "TT cluster is too big");
+static_assert(sizeof(TTEntry) == 3 * sizeof(uint32_t), "Invalid TT entry size");
+static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "Invalid TT cluster size");
 
 #if defined(_MSC_VER)
 
