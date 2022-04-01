@@ -4,6 +4,7 @@
 #include "MoveList.hpp"
 #include "MoveOrderer.hpp"
 #include "Time.hpp"
+#include "Memory.hpp"
 
 #include "nnue-probe/nnue.h"
 
@@ -206,7 +207,7 @@ private:
 
     mutable std::atomic<bool> mStopSearch = false;
     
-    std::vector<ThreadData> mThreadData;
+    std::vector<ThreadData, Allocator<ThreadData>> mThreadData;
 
     static constexpr uint32_t MaxReducedMoves = 64;
     uint8_t mMoveReductionTable[MaxSearchDepth][MaxReducedMoves];
