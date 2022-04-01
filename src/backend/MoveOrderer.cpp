@@ -161,17 +161,15 @@ void MoveOrderer::Clear()
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
-void MoveOrderer::UpdateHistoryCounter(CounterType& counter, int32_t delta)
+INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = counter;
-    newValue += 16 * delta;
-    newValue -= counter * std::abs(delta) / 1024;
+    int32_t newValue = (int32_t)counter + 16 * delta - (int32_t)counter * std::abs(delta) / 1024;
 
     // there should be no saturation
-    ASSERT(newValue > std::numeric_limits<CounterType>::min());
-    ASSERT(newValue < std::numeric_limits<CounterType>::max());
+    ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());
+    ASSERT(newValue < std::numeric_limits<MoveOrderer::CounterType>::max());
 
-    counter = (CounterType)newValue;
+    counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)

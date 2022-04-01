@@ -99,8 +99,6 @@ public:
 
     uint64_t GetNumCollisions() const { return numCollisions; }
 
-    static void Init();
-
 private:
 
     mutable TTCluster* clusters;

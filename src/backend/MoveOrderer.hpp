@@ -76,8 +76,6 @@ public:
 
 private:
 
-    static void UpdateHistoryCounter(CounterType& counter, int32_t delta);
-
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][64][64];

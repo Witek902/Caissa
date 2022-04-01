@@ -1,13 +1,13 @@
 #include "Common.hpp"
 
-#include "TranspositionTable.hpp"
+#include "Memory.hpp"
 #include "Position.hpp"
 #include "Endgame.hpp"
 #include "Evaluate.hpp"
 
 void InitEngine()
 {
-    TranspositionTable::Init();
+    EnableLargePagesSupport();
     InitBitboards();
     InitZobristHash();
     InitEndgame();

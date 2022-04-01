@@ -277,6 +277,7 @@
     <ClCompile Include="Evaluate.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Material.cpp" />
+    <ClCompile Include="Memory.cpp" />
     <ClCompile Include="Move.cpp" />
     <ClCompile Include="MoveList.cpp" />
     <ClCompile Include="MoveOrderer.cpp" />
@@ -333,6 +334,7 @@
     <ClInclude Include="Evaluate.hpp" />
     <ClInclude Include="Game.hpp" />
     <ClInclude Include="Material.hpp" />
+    <ClInclude Include="Memory.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />
     <ClInclude Include="MoveOrderer.hpp" />
