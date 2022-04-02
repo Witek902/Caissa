@@ -734,6 +734,11 @@ bool Search::IsDraw(const NodeInfo& node, const Game& game) const
     return false;
 }
 
+static ScoreType GetDrawScore(uint64_t nodes)
+{
+    return DrawScoreRandomness - (nodes % (2 * DrawScoreRandomness));
+}
+
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.depth <= 0);
@@ -751,7 +756,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     if (IsDraw(node, ctx.game))
     {
-        return 0;
+        return GetDrawScore(ctx.stats.quiescenceNodes);
     }
 
     const Position& position = node.position;
@@ -1022,7 +1027,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // Skip root node as we need some move to be reported
     if (!isRootNode && IsDraw(node, ctx.game))
     {
-        return 0;
+        return GetDrawScore(ctx.stats.nodes);
     }
 
     const Position& position = node.position;

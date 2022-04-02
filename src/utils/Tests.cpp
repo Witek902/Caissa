@@ -1398,9 +1398,9 @@ void RunSearchTests()
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 3);
-        TEST_EXPECT(result[0].score == 0);
-        TEST_EXPECT(result[1].score == 0);
-        TEST_EXPECT(result[2].score == 0);
+        TEST_EXPECT(std::abs(result[0].score) <= DrawScoreRandomness);
+        TEST_EXPECT(std::abs(result[1].score) <= DrawScoreRandomness);
+        TEST_EXPECT(std::abs(result[2].score) <= DrawScoreRandomness);
     }
 
     // stalemate (no legal move)
@@ -1455,7 +1455,7 @@ void RunSearchTests()
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 1);
-        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(std::abs(result[0].score) <= DrawScoreRandomness);
         TEST_EXPECT(result[0].moves.front() == Move::Make(Square_h5, Square_e8, Piece::Queen));
 
         param.limits.mateSearch = false;

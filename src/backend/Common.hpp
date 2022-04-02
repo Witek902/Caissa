@@ -292,5 +292,7 @@ static constexpr uint16_t MaxSearchDepth    = 256;
 // maximum number of pieces in "normal" chess position
 static constexpr uint32_t MaxNumPieces      = 32;
 
+static constexpr ScoreType DrawScoreRandomness = 2;
+
 // initialize all engine subsystems
 EXPORT void InitEngine();
