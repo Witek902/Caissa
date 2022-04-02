@@ -41,16 +41,16 @@ static const int32_t AspirationWindowMin = 15;
 static const int32_t AspirationWindowStep = 5;
 
 static const int32_t BetaPruningDepth = 8;
-static const int32_t BetaMarginMultiplier = 200;
+static const int32_t BetaMarginMultiplier = 90;
 static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = -50;
 
-static const int32_t LateMovePruningStartDepth = 10;
+static const int32_t LateMovePruningScoreTreshold = 8000;
 
 INLINE static uint32_t GetLateMovePrunningTreshold(uint32_t depth)
 {
-    return 5 + depth * depth;
+    return 4 + depth + depth * depth / 4;
 }
 
 Search::Search()
@@ -69,7 +69,7 @@ void Search::BuildMoveReductionTable()
     {
         for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
         {
-            const int32_t reduction = int32_t(0.5f + 0.5f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
+            const int32_t reduction = int32_t(0.5f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
 
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
@@ -1171,14 +1171,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         !node.isInCheck &&
         node.depth <= BetaPruningDepth &&
         staticEval <= TablebaseWinValue &&
+        staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)) &&
         !ctx.searchParam.limits.mateSearch)
     {
-        const int32_t betaMargin = BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving);
-
-        if (staticEval - betaMargin >= beta)
-        {
-            return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
-        }
+        return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
     }
 
     // Null Move Reductions
@@ -1307,15 +1303,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (move.IsQuiet())
+        // Late Move Pruning
+        // skip quiet moves that are far in the list
+        // the higher depth is, the less agressing pruning is
+        if (!node.isInCheck &&
+            !childNode.isInCheck &&
+            move.IsQuiet() &&
+            moveScore < LateMovePruningScoreTreshold &&
+            bestValue > -KnownWinValue &&
+            moveIndex >= GetLateMovePrunningTreshold(node.depth) + isImproving + node.isPvNode)
         {
-            quietMovesTried[numQuietMovesTried++] = move;
+            continue;
         }
 
         // Static Exchange Evaluation pruning
         // skip all moves that are bad according to SEE
         // the higher depth is, the less agressing pruning is
         if (!node.isInCheck &&
+            moveScore < MoveOrderer::GoodCaptureValue &&
             bestValue > -KnownWinValue &&
             node.depth <= 9)
         {
@@ -1324,19 +1329,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 continue;
             }
-        }
-
-        // Late Move Pruning
-        // skip quiet moves that are far in the list
-        // the higher depth is, the less agressing pruning is
-        if (move.IsQuiet() &&
-            moveScore < 0 &&
-            !node.isInCheck &&
-            bestValue > -KnownWinValue &&
-            node.depth <= LateMovePruningStartDepth &&
-            moveIndex >= GetLateMovePrunningTreshold(node.depth))
-        {
-            continue;
         }
 
         int32_t moveExtension = extension;
@@ -1396,6 +1388,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     return singularBeta;
                 }
             }
+        }
+
+        if (move.IsQuiet())
+        {
+            quietMovesTried[numQuietMovesTried++] = move;
         }
 
         // avoid search explosion
