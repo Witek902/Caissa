@@ -326,8 +326,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         }
     }
 
-    ss << std::endl;
-
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
@@ -355,7 +353,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     }
 #endif // COLLECT_SEARCH_STATS
 
-    std::cout << std::move(ss.str());
+    std::cout << std::move(ss.str()) << std::endl;
+    std::cout.flush();
 }
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
