@@ -36,8 +36,8 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowMax = 50;
-static const int32_t AspirationWindowMin = 15;
+static const int32_t AspirationWindowMax = 100;
+static const int32_t AspirationWindowMin = 25;
 static const int32_t AspirationWindowStep = 5;
 
 static const int32_t BetaPruningDepth = 8;
@@ -566,8 +566,12 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     aspirationWindow = std::max<int32_t>(AspirationWindowMin, aspirationWindow);
     ASSERT(aspirationWindow > 0);
 
+    // scale aspiration window based on score
+    aspirationWindow = (128 + std::abs(param.previousScore) / 4) * aspirationWindow / 128;
+
     // start applying aspiration window at given depth
-    if (param.previousScore != InvalidValue &&
+    if (param.depth > 5 &&
+        param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(param.searchContext, true))
     {
@@ -597,26 +601,23 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         GetPvLine(rootNode, param.position, param.searchParam.transpositionTable, param.depth, pvLine.moves);
 
         BoundsType boundsType = BoundsType::Exact;
+
+        aspirationWindow *= 2;
+        if (aspirationWindow > 400) aspirationWindow = CheckmateValue;
         
         // out of aspiration window, redo the search in wider score range
         if (pvLine.score <= alpha)
         {
-            //beta = alpha + 1;
-            //beta = std::min<int32_t>(alpha + 1, CheckmateValue);
             pvLine.score = ScoreType(alpha);
             alpha -= aspirationWindow;
             alpha = std::max<int32_t>(alpha, -CheckmateValue);
-            aspirationWindow *= 4;
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
         {
-            //alpha = beta - 1;
-            //alpha = std::max<int32_t>(beta - 1, -CheckmateValue);
             pvLine.score = ScoreType(beta);
             beta += aspirationWindow;
             beta = std::min<int32_t>(beta, CheckmateValue);
-            aspirationWindow *= 4;
             boundsType = BoundsType::LowerBound;
         }
 
@@ -639,7 +640,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         }
 
         // stop the search when exact score is found
-        if (boundsType == BoundsType::Exact)
+        if (boundsType == BoundsType::Exact || stopSearch)
         {
             break;
         }
