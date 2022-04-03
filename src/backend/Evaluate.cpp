@@ -9,19 +9,7 @@
 
 #include <unordered_map>
 
-struct PieceScore
-{
-    int16_t mg;
-    int16_t eg;
-};
-
 #define S(mg, eg) PieceScore{ mg, eg }
-
-static constexpr PieceScore c_queenValue           = S(1025, 936);
-static constexpr PieceScore c_rookValue            = S(477, 512);
-static constexpr PieceScore c_bishopValue          = S(365, 297);
-static constexpr PieceScore c_knightValue          = S(337, 281);
-static constexpr PieceScore c_pawnValue            = S(82, 94);
 
 static constexpr int32_t c_castlingRightsBonus  = 5;
 static constexpr int32_t c_doubledPawnPenalty   = 0;

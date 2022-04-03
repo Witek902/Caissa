@@ -8,6 +8,7 @@
 #include <limits>
 
 static constexpr int32_t RecaptureBonus = 100000;
+static constexpr int32_t CastlingBonus = 8000;
 
 static const int32_t c_PromotionScores[] =
 {
@@ -232,6 +233,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
 
+    const Bitboard oponentPawnAttacks = (pos.GetSideToMove() == Color::White) ?
+        Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
+        Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
+
     const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
 
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
@@ -341,6 +346,24 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
                     const uint32_t prevTo = followupMove.ToSquare().Index();
                     score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to];
+                }
+
+                // penalty for sacrificing non-pawn pieces
+                if (move.GetPiece() != Piece::Pawn &&
+                    oponentPawnAttacks & move.ToSquare().GetBitboard())
+                {
+                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg);
+                }
+
+                // pawn push bonus
+                if (move.GetPiece() == Piece::Pawn)
+                {
+                    score += 32 * int32_t(move.ToSquare().RelativeRank(pos.GetSideToMove()));
+                }
+
+                if (move.IsCastling())
+                {
+                    score += CastlingBonus;
                 }
             }
         }

@@ -192,6 +192,9 @@ struct Bitboard
     template<Color color>
     static Bitboard GetPawnAttacks(const Square square);
 
+    template<Color color>
+    static Bitboard GetPawnAttacks(const Bitboard pawns);
+
     static Bitboard GetPawnAttacks(const Square square, const Color color);
     static Bitboard GetKingAttacks(const Square square);
     static Bitboard GetKnightAttacks(const Square square);
