@@ -20,7 +20,7 @@
 static const float CurrentMoveReportDelay = 10.0f;
 
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
-static const int32_t SingularitySearchMinDepth = 7;
+static const int32_t SingularitySearchMinDepth = 8;
 static const int32_t SingularitySearchScoreTresholdMin = 200;
 static const int32_t SingularitySearchScoreTresholdMax = 500;
 static const int32_t SingularitySearchScoreStep = 50;
@@ -36,19 +36,19 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowMax = 100;
+static const int32_t AspirationWindowMax = 80;
 static const int32_t AspirationWindowMin = 25;
 static const int32_t AspirationWindowStep = 5;
 
 static const int32_t BetaPruningDepth = 8;
-static const int32_t BetaMarginMultiplier = 90;
+static const int32_t BetaMarginMultiplier = 80;
 static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = -50;
 
-static const int32_t LateMovePruningScoreTreshold = 8000;
+static const int32_t LateMovePruningScoreTreshold = -500;
 
-INLINE static uint32_t GetLateMovePrunningTreshold(uint32_t depth)
+INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 {
     return 4 + depth + depth * depth / 4;
 }
@@ -739,6 +739,13 @@ static ScoreType GetDrawScore(uint64_t nodes)
     return DrawScoreRandomness - (nodes % (2 * DrawScoreRandomness));
 }
 
+static ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta)
+{
+    alpha   = alpha > -CheckmateValue + (ScoreType)node.height     ? alpha : -CheckmateValue + (ScoreType)node.height;
+    beta    = beta  <  CheckmateValue - (ScoreType)node.height - 1 ?  beta :  CheckmateValue - (ScoreType)node.height - 1;
+    return alpha >= beta ? alpha : InvalidValue;
+}
+
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.depth <= 0);
@@ -761,10 +768,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     const Position& position = node.position;
 
-    const bool isPvNode = node.isPvNode;
-
     ScoreType alpha = node.alpha;
-    ScoreType oldAlpha = alpha;
     ScoreType beta = node.beta;
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
@@ -779,18 +783,23 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
-        if (!isPvNode && ttEntry.depth >= node.depth)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-            if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
-                (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= node.beta) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < node.beta))
-            {
-                return ttScore;
-            }
+            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
+        }
+    }
+
+    // mate distance pruning
+    {
+        const ScoreType mateDistanceScore = PruneByMateDistance(node, alpha, beta);
+        if (mateDistanceScore != InvalidValue)
+        {
+            return mateDistanceScore;
         }
     }
 
@@ -823,11 +832,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             return bestValue;
         }
 
-        if (isPvNode && bestValue > alpha)
+        if (bestValue > alpha)
         {
             alpha = bestValue;
         }
     }
+
+    ScoreType oldAlpha = alpha;
 
     NodeInfo childNode;
     childNode.parentNode = &node;
@@ -891,7 +902,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
-        // Move Count Prunning
+        // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
         if (bestValue > -KnownWinValue &&
@@ -909,7 +920,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         childNode.alpha = -beta;
         childNode.beta = -alpha;
-        ScoreType score = -QuiescenceNegaMax(thread, childNode, ctx);
+        const ScoreType score = -QuiescenceNegaMax(thread, childNode, ctx);
+        ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
         if (score > bestValue) // new best move found
         {
@@ -921,25 +933,16 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             numBestMoves = std::min(TTEntry::NumMoves, numBestMoves + 1);
             bestMoves[0] = move;
             bestValue = score;
+        }
 
-            if (score > alpha) // update lower bound
-            {
-                // update PV line
-                node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-                node.pvLine[0] = move;
-                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+        if (score >= beta)
+        {
+            break;
+        }
 
-                if (isPvNode && score < beta) // keep alpha < beta
-                {
-                    alpha = score;
-                }
-                else
-                {
-                    ASSERT(score >= beta);
-                    ASSERT(alpha < beta);
-                    break;
-                }
-            }
+        if (score > alpha)
+        {
+            alpha = score;
         }
     }
 
@@ -954,7 +957,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
-            (isPvNode && bestValue > oldAlpha) ? TTEntry::Bounds::Exact :
+            bestValue > oldAlpha ? TTEntry::Bounds::Exact :
             TTEntry::Bounds::Upper;
 
         MovesArray<PackedMove, TTEntry::NumMoves> packedBestMoves;
@@ -973,32 +976,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     }
 
     return bestValue;
-}
-
-
-static ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType& alpha, ScoreType& beta)
-{
-    ScoreType matingValue = CheckmateValue - (ScoreType)node.height;
-    if (matingValue < beta)
-    {
-        beta = matingValue;
-        if (alpha >= matingValue)
-        {
-            return matingValue;
-        }
-    }
-
-    matingValue = -CheckmateValue + (ScoreType)node.height;
-    if (matingValue > alpha)
-    {
-        alpha = matingValue;
-        if (beta <= matingValue)
-        {
-            return matingValue;
-        }
-    }
-
-    return 0;
 }
 
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
@@ -1067,20 +1044,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-            if (ttEntry.bounds == TTEntry::Bounds::Exact)
-            {
-                return ttScore;
-            }
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper)
-            {
-                if (ttScore <= alpha) return alpha;
-                if (ttScore < beta) beta = ttScore;
-            }
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower)
-            {
-                if (ttScore >= beta) return beta;
-                if (ttScore > alpha) alpha = ttScore;
-            }
+            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
         }
     }
 
@@ -1088,7 +1054,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (!isRootNode)
     {
         const ScoreType mateDistanceScore = PruneByMateDistance(node, alpha, beta);
-        if (mateDistanceScore != 0)
+        if (mateDistanceScore != InvalidValue)
         {
             return mateDistanceScore;
         }
@@ -1175,11 +1141,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (!isPvNode &&
         !node.isInCheck &&
         node.depth <= BetaPruningDepth &&
-        staticEval <= TablebaseWinValue &&
+        std::abs(staticEval) <= KnownWinValue &&
         staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)) &&
         !ctx.searchParam.limits.mateSearch)
     {
-        return (ScoreType)std::max<int32_t>(-TablebaseWinValue, staticEval);
+        return staticEval;
     }
 
     // Null Move Reductions
@@ -1304,7 +1270,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
             if (timeElapsed > CurrentMoveReportDelay)
             {
-                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
+                //ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
             }
         }
 
@@ -1316,7 +1282,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             move.IsQuiet() &&
             moveScore < LateMovePruningScoreTreshold &&
             bestValue > -KnownWinValue &&
-            moveIndex >= GetLateMovePrunningTreshold(node.depth) + isImproving + node.isPvNode)
+            moveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)
         {
             continue;
         }
@@ -1362,14 +1328,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 node.depth >= SingularitySearchMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-                ttEntry.depth >= node.depth - 3)
+                ttEntry.depth >= node.depth - 2)
             {
-                const uint32_t singularDepth = (node.depth - 1) / 2;
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 8 * node.depth);
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 4 * node.depth);
 
                 NodeInfo singularChildNode = node;
                 singularChildNode.isPvNode = false;
-                singularChildNode.depth = singularDepth;
+                singularChildNode.depth = node.depth / 2;
                 singularChildNode.pvIndex = SingularitySearchPvIndex;
                 singularChildNode.alpha = singularBeta - 1;
                 singularChildNode.beta = singularBeta;
@@ -1388,9 +1353,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                         moveExtension++;
                     }
                 }
-                else if (singularBeta >= beta)
+                else if (singularScore >= beta)
                 {
-                    return singularBeta;
+                    // if second best move beats current beta, there most likely would be beta cutoff
+                    // when searching it at full depth
+                    return singularScore;
                 }
             }
         }
@@ -1473,7 +1440,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // full search for PV nodes
         if (isPvNode)
         {
-            if (moveIndex == 1 || score > alpha)
+            if (moveIndex == 1 || (score > alpha && score < beta))
             {
                 childNode.depth = node.depth + moveExtension - 1;
                 childNode.alpha = -beta;
@@ -1481,9 +1448,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 childNode.isPvNode = true;
 
                 score = -NegaMax(thread, childNode, ctx);
-                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
             }
         }
+
+        ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
         if (score > bestValue) // new best move found
         {
@@ -1497,29 +1465,28 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             bestValue = score;
 
             // update PV line
-            node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-            node.pvLine[0] = move;
-            memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
-
-            if (score > alpha) // update lower bound
+            if (isPvNode)
             {
-                if (isPvNode && score < beta) // keep alpha < beta
-                {
-                    alpha = score;
-                }
-                else
-                {
-                    ASSERT(moveIndex > 0);
-                    ASSERT(score >= beta);
-                    ASSERT(alpha < beta);
+                node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+                node.pvLine[0] = move;
+                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+            }
+        }
+
+        if (score >= beta)
+        {
+            ASSERT(moveIndex > 0);
 
 #ifdef COLLECT_SEARCH_STATS
-                    ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
+            ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
 #endif // COLLECT_SEARCH_STATS
 
-                    break;
-                }
-            }
+            break;
+        }
+
+        if (score > alpha)
+        {
+            alpha = score;
         }
 
         if (!isRootNode && CheckStopCondition(ctx, false))
@@ -1547,7 +1514,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         return bestValue;
     }
 
-    ASSERT(alpha < beta);
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
     
     if (isRootNode)
@@ -1571,10 +1537,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             TTEntry::Bounds::Upper;
 
         // only PV nodes can have exact score
-        if (!isPvNode)
-        {
-            ASSERT(bounds != TTEntry::Bounds::Exact);
-        }
+        ASSERT(isPvNode || bounds != TTEntry::Bounds::Exact);
 
         MovesArray<PackedMove, TTEntry::NumMoves> packedBestMoves;
         for (uint32_t i = 0; i < numBestMoves; ++i)
