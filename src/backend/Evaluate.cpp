@@ -496,5 +496,8 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
         value = (nnueFactor * value + nnueValue * (nnueTreshold - 1 - nnueFactor)) / nnueTreshold;
     }
 
+    // scale down when approaching 50-move draw
+    value = value * (256 - std::max(0, (int32_t)position.GetHalfMoveCount() - 8)) / 256;
+
     return (ScoreType)value;
 }
