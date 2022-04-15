@@ -216,7 +216,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - 4 * entryAge + (data.bounds == TTEntry::Bounds::Exact);
+        const int32_t entryRelevance = (int32_t)data.depth - 8 * entryAge + 4 * (data.bounds == TTEntry::Bounds::Exact);
 
         if (entryRelevance < minRelevanceInCluster)
         {
@@ -227,20 +227,18 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         }
     }
 
-    if (positionKey == prevKey)
+    // don't overwrite entries with worse depth if the bounds are not exact
+    if (entry.bounds != TTEntry::Bounds::Exact &&
+        positionKey == prevKey &&
+        entry.depth < prevEntry.depth - 3)
     {
-        // don't overwrite entries with worse depth if the bounds are note exact
-        if (entry.depth < prevEntry.depth - 1 &&
-            entry.bounds != TTEntry::Bounds::Exact)
-        {
-            return;
-        }
+        return;
+    }
 
-        // preserve existing move
-        if (!entry.moves[0].IsValid())
-        {
-            entry.moves[0] = prevEntry.moves[0];
-        }
+    // preserve existing move
+    if (positionKey == prevKey && !entry.moves[0].IsValid())
+    {
+        entry.moves = prevEntry.moves;
     }
 
     entry.generation = generation;

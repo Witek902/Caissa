@@ -416,7 +416,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 {
                     if (ttEntry.IsValid())
                     {
-                        prevScore = ttEntry.score;
+                        prevScore = ScoreFromTT(ttEntry.score, 0, game.GetPosition().GetHalfMoveCount());
                     }
                 }
             }
@@ -739,13 +739,6 @@ static ScoreType GetDrawScore(uint64_t nodes)
     return DrawScoreRandomness - (nodes % (2 * DrawScoreRandomness));
 }
 
-static ScoreType PruneByMateDistance(const NodeInfo& node, ScoreType alpha, ScoreType beta)
-{
-    alpha   = alpha > -CheckmateValue + (ScoreType)node.height     ? alpha : -CheckmateValue + (ScoreType)node.height;
-    beta    = beta  <  CheckmateValue - (ScoreType)node.height - 1 ?  beta :  CheckmateValue - (ScoreType)node.height - 1;
-    return alpha >= beta ? alpha : InvalidValue;
-}
-
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.depth <= 0);
@@ -794,15 +787,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
     }
 
-    // mate distance pruning
-    {
-        const ScoreType mateDistanceScore = PruneByMateDistance(node, alpha, beta);
-        if (mateDistanceScore != InvalidValue)
-        {
-            return mateDistanceScore;
-        }
-    }
-
     // do not consider stand pat if in check
     if (!node.isInCheck)
     {
@@ -828,7 +812,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         if (bestValue >= beta)
         {
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, TTEntry::Bounds::Lower);
+            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Bounds::Lower);
             return bestValue;
         }
 
@@ -955,6 +939,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     // store value in transposition table
     if (!CheckStopCondition(ctx, false))
     {
+        // if we didn't beat alpha and had valid TT entry, don't overwrite it
+        if (bestValue <= oldAlpha && ttEntry.IsValid() && ttEntry.depth > 0)
+        {
+            return bestValue;
+        }
+
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
             bestValue > oldAlpha ? TTEntry::Bounds::Exact :
@@ -968,7 +958,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
         numBestMoves = packedBestMoves.MergeWith(ttEntry.moves);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, numBestMoves, packedBestMoves.Data());
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, bounds, numBestMoves, packedBestMoves.Data());
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
@@ -1024,6 +1014,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
 
+    // mate distance pruning
+    if (!isRootNode)
+    {
+        const ScoreType tempAlpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node.height, alpha);
+        const ScoreType tempBeta = std::min<ScoreType>(CheckmateValue - (ScoreType)node.height - 1, beta);
+        if (tempAlpha >= tempBeta) return tempAlpha;
+    }
+
     // transposition table lookup
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
@@ -1036,7 +1034,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // don't prune in PV nodes, because TT does not contain path information
         if (ttEntry.depth >= node.depth &&
-            (node.depth == 0 || !isPvNode) &&
+            (node.depth <= 0 || !isPvNode) &&
             !hasMoveFilter &&
             position.GetHalfMoveCount() < 90)
         {
@@ -1047,16 +1045,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
             else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
             else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
-        }
-    }
-
-    // mate distance pruning
-    if (!isRootNode)
-    {
-        const ScoreType mateDistanceScore = PruneByMateDistance(node, alpha, beta);
-        if (mateDistanceScore != InvalidValue)
-        {
-            return mateDistanceScore;
         }
     }
 
@@ -1072,20 +1060,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
             // convert the WDL value to a score
-            const ScoreType tbValue =
+            ScoreType tbValue =
                 wdl < 0 ? -(TablebaseWinValue - (ScoreType)node.height) :
                 wdl > 0 ? (TablebaseWinValue - (ScoreType)node.height) : 0;
             ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
 
             // only draws are exact, we don't know exact value for win/loss just based on WDL value
-            const TTEntry::Bounds bounds =
+            TTEntry::Bounds bounds =
                 wdl < 0 ? TTEntry::Bounds::Upper :
                 wdl > 0 ? TTEntry::Bounds::Lower :
                 TTEntry::Bounds::Exact;
 
-            if (bounds == TTEntry::Bounds::Exact
-                || (bounds == TTEntry::Bounds::Lower && tbValue >= beta)
-                || (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
+            if (bounds == TTEntry::Bounds::Exact ||
+                (bounds == TTEntry::Bounds::Lower && tbValue >= beta) ||
+                (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
             {
                 ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node.height), staticEval, node.depth, bounds);
 
