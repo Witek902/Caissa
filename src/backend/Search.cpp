@@ -1275,6 +1275,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
+        // Futility Pruning
+        // skip quiet move that have low chance to beat alpha
+        if (move.IsQuiet() &&
+            moveIndex > 1 &&
+            !node.isPvNode &&
+            !node.isInCheck &&
+            node.depth > 1 && node.depth < 9 &&
+            std::abs(staticEval) <= KnownWinValue &&
+            staticEval + 32 * node.depth * node.depth < alpha)
+        {
+            continue;
+        }
+
         // Static Exchange Evaluation pruning
         // skip all moves that are bad according to SEE
         // the higher depth is, the less agressing pruning is
@@ -1387,6 +1400,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             // reduce less if move gives check
             if (childNode.isInCheck) depthReduction--;
+
+            if (node.previousMove.IsCapture() && std::abs(staticEval) >= KnownWinValue) depthReduction++;
 
             // don't drop into QS
             depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
