@@ -46,11 +46,16 @@ static const int32_t BetaMarginBias = 10;
 
 static const int32_t QSearchSeeMargin = -50;
 
-static const int32_t LateMovePruningScoreTreshold = -500;
+static const int32_t HistoryPruningScoreBase = 0;
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 {
-    return 4 + depth + depth * depth / 4;
+    return 3 + depth + depth * depth / 2;
+}
+
+INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
+{
+    return HistoryPruningScoreBase - 256 * depth - 64 * depth * depth;
 }
 
 Search::Search()
@@ -1221,6 +1226,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     uint32_t numBestMoves = 0;
 
     uint32_t moveIndex = 0;
+    uint32_t quietMoveIndex = 0;
     uint32_t numReducedMoves = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
@@ -1251,6 +1257,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         childNode.isInCheck = childNode.position.IsInCheck();
 
         moveIndex++;
+        if (move.IsQuiet()) quietMoveIndex++;
 
         // report current move to UCI
         if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex != SingularitySearchPvIndex)
@@ -1262,44 +1269,56 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        // Late Move Pruning
-        // skip quiet moves that are far in the list
-        // the higher depth is, the less agressing pruning is
-        if (!node.isInCheck &&
-            !childNode.isInCheck &&
-            move.IsQuiet() &&
-            moveScore < LateMovePruningScoreTreshold &&
-            bestValue > -KnownWinValue &&
-            moveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)
+        if (!isRootNode && bestValue > -KnownWinValue)
         {
-            continue;
-        }
-
-        // Futility Pruning
-        // skip quiet move that have low chance to beat alpha
-        if (move.IsQuiet() &&
-            moveIndex > 1 &&
-            !node.isPvNode &&
-            !node.isInCheck &&
-            node.depth > 1 && node.depth < 9 &&
-            std::abs(staticEval) <= KnownWinValue &&
-            staticEval + 32 * node.depth * node.depth < alpha)
-        {
-            continue;
-        }
-
-        // Static Exchange Evaluation pruning
-        // skip all moves that are bad according to SEE
-        // the higher depth is, the less agressing pruning is
-        if (!node.isInCheck &&
-            moveScore < MoveOrderer::GoodCaptureValue &&
-            bestValue > -KnownWinValue &&
-            node.depth <= 9)
-        {
-            const int32_t pruningTreshold = 16 * node.depth * node.depth;
-            if (!position.StaticExchangeEvaluation(move, -pruningTreshold))
+            // Late Move Pruning
+            // skip quiet moves that are far in the list
+            // the higher depth is, the less agressing pruning is
+            if (move.IsQuiet() &&
+                !node.isInCheck &&
+                node.depth < 9 &&
+                quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)
             {
                 continue;
+            }
+
+            // History Pruning
+            // if a move score is really bad, do not consider this move at low depth
+            if (move.IsQuiet() &&
+                !node.isInCheck &&
+                node.depth < 9 &&
+                quietMoveIndex > 1 &&
+                moveScore < GetHistoryPruningTreshold(node.depth))
+            {
+                continue;
+            }
+
+            // Futility Pruning
+            // skip quiet move that have low chance to beat alpha
+            if (move.IsQuiet() &&
+                quietMoveIndex > 1 &&
+                !node.isPvNode &&
+                !node.isInCheck &&
+                node.depth > 1 && node.depth < 9 &&
+                std::abs(staticEval) <= KnownWinValue &&
+                staticEval + 32 * node.depth * node.depth < alpha)
+            {
+                continue;
+            }
+
+            // Static Exchange Evaluation pruning
+            // skip all moves that are bad according to SEE
+            // the higher depth is, the less agressing pruning is
+            if (!node.isInCheck)
+            {
+                if (move.IsCapture() || childNode.isInCheck)
+                {
+                    if (!position.StaticExchangeEvaluation(move, -256 * node.depth)) continue;
+                }
+                else
+                {
+                    if (!position.StaticExchangeEvaluation(move, -16 * node.depth * node.depth)) continue;
+                }
             }
         }
 
@@ -1359,6 +1378,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     // if second best move beats current beta, there most likely would be beta cutoff
                     // when searching it at full depth
                     return singularScore;
+                }
+                else if (ttScore >= beta)
+                {
+                    moveExtension = 0;
                 }
             }
         }
