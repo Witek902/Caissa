@@ -17,7 +17,7 @@ static const int32_t c_PromotionScores[] =
     1000,       // knight
     0,          // bishop
     0,          // rook
-    10000000,   // queen
+    9000000,    // queen
 };
 
 static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
@@ -285,8 +285,9 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         if (move.IsCapture())
         {
             const Piece attackingPiece = move.GetPiece();
-            const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+            const Piece capturedPiece = move.IsEnPassant() ? Piece::Pawn : pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
             const int32_t mvvLva = ComputeMvvLvaScore(capturedPiece, attackingPiece);
+            ASSERT(mvvLva > 0);
 
             if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
             {
