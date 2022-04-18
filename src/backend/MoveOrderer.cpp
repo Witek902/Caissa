@@ -136,7 +136,7 @@ void MoveOrderer::DebugPrint() const
 
 void MoveOrderer::NewSearch()
 {
-    const CounterType scaleDownFactor = 32;
+    const CounterType scaleDownFactor = 2;
 
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
     {
@@ -164,7 +164,7 @@ void MoveOrderer::Clear()
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = (int32_t)counter + 16 * delta - (int32_t)counter * std::abs(delta) / 1024;
+    int32_t newValue = (int32_t)counter + 8 * delta - (int32_t)counter * std::abs(delta) / 1024;
 
     // there should be no saturation
     ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());
