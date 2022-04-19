@@ -1195,6 +1195,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
+    // reduce depth if position was not found in transposition table
+    if (node.depth >= 4 && !ttEntry.IsValid())
+    {
+        node.depth--;
+        if (node.depth >= 6 && node.isPvNode) node.depth--;
+    }
+
     NodeInfo childNode;
     childNode.parentNode = &node;
     childNode.height = node.height + 1;
@@ -1227,7 +1234,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     uint32_t moveIndex = 0;
     uint32_t quietMoveIndex = 0;
-    uint32_t numReducedMoves = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
@@ -1428,8 +1434,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             // don't drop into QS
             depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
-
-            numReducedMoves++;
         }
 
         ScoreType score = InvalidValue;
