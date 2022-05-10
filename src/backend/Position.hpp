@@ -166,6 +166,9 @@ public:
 
     // check if side to move has no legal moves
     bool IsStalemate() const;
+
+    // check if position is relatively quiet (no immediate winning captures and promotions)
+    bool IsQuiet() const;
     
     void GenerateMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
 
@@ -178,7 +181,7 @@ public:
     bool IsMoveLegal(const Move& move) const;
 
     // apply a move
-    bool DoMove(const Move& move);
+    bool DoMove(const Move& move, NNEvaluatorContext* nnContext = nullptr);
 
     // apply null move
     bool DoNullMove();

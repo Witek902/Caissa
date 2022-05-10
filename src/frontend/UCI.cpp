@@ -6,8 +6,6 @@
 #include "../backend/Material.hpp"
 #include "../backend/TimeManager.hpp"
 
-#include "../backend/nnue-probe/nnue.h"
-
 #include <math.h>
 #include <fstream>
 
@@ -17,7 +15,17 @@
 	#include <Windows.h>
 #endif
 
-static const char* c_EngineName = "Caissa 0.6.24";
+#define VersionNumber "0.7.0"
+
+#if defined(USE_BMI2) && defined(USE_AVX2) 
+#define ArchitectureStr "AVX2/BMI2"
+#elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
+#define ArchitectureStr "POPCNT/SSE4"
+#else
+#define ArchitectureStr "legacy"
+#endif
+
+static const char* c_EngineName = "Caissa " VersionNumber " (" ArchitectureStr ")";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
@@ -29,7 +37,7 @@ static const uint32_t c_DefaultTTSizeInMB = 16;
 static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
 
 static const uint32_t c_MaxNumThreads = 64;
-static const char* c_DefaultEvalFile = "nn-04cf2b4ed1da.nnue";
+static const char* c_DefaultEvalFile = "eval.pnn";
 
 using UniqueLock = std::unique_lock<std::mutex>;
 
@@ -80,7 +88,10 @@ static void TryLoadingDefaultEvalFile()
             if (!f.good()) return;
         }
 
-        nnue_init(path.c_str());
+        if (LoadMainNeuralNetwork(path.c_str()))
+        {
+            std::cout << "Loaded neural network: " << path.c_str() << std::endl;
+        }
     }
 }
 
@@ -250,7 +261,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "eval")
     {
-        std::cout << Evaluate(mGame.GetPosition(), nullptr) << std::endl;
+        std::cout << Evaluate(mGame.GetPosition()) << std::endl;
     }
     else if (command == "scoremoves")
     {
@@ -771,7 +782,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 #endif // USE_TABLE_BASES
     else if (lowerCaseName == "evalfile")
     {
-        nnue_init(value.c_str());
+        LoadMainNeuralNetwork(value.c_str());
     }
     else if (lowerCaseName == "ponder")
     {

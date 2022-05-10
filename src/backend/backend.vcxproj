@@ -284,8 +284,7 @@
     <ClCompile Include="MoveOrderer.cpp" />
     <ClCompile Include="MovePicker.cpp" />
     <ClCompile Include="NeuralNetwork.cpp" />
-    <ClCompile Include="nnue-probe\misc.cpp" />
-    <ClCompile Include="nnue-probe\nnue.cpp" />
+    <ClCompile Include="NeuralNetworkEvaluator.cpp" />
     <ClCompile Include="PackedNeuralNetwork.cpp" />
     <ClCompile Include="PGNParser.cpp" />
     <ClCompile Include="PieceSquareTables.h" />
@@ -344,8 +343,7 @@
     <ClInclude Include="MoveOrderer.hpp" />
     <ClInclude Include="MovePicker.hpp" />
     <ClInclude Include="NeuralNetwork.hpp" />
-    <ClInclude Include="nnue-probe\misc.h" />
-    <ClInclude Include="nnue-probe\nnue.h" />
+    <ClInclude Include="NeuralNetworkEvaluator.hpp" />
     <ClInclude Include="PackedNeuralNetwork.hpp" />
     <ClInclude Include="PGNParser.hpp" />
     <ClInclude Include="Piece.hpp" />

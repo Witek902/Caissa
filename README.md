@@ -7,6 +7,7 @@ Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 
 #### General
 * UCI protocol
+* Neural network evaluation
 * Syzygy endgame tablebases support
 
 #### Search Algorithm
@@ -20,9 +21,13 @@ Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 * Multithreaded search via shared transposition table
 
 #### Evaluation
-* Stockfish NNUE support
+* Custom neural network
+  * 736&rarr;512&rarr;32&rarr;64&rarr;1 layers architecture
+  * effectively updated first layer, AVX2 accelerated
+  * absolute piece coordinates (no symmetry, no king-relative features)
 * Endgame evaluation
 * Simple classic evaluation function based on Piece Square Tables
+* NN and PSQT trained on data generated during self-play matches
 
 #### Selectivity
 * Null Move Reductions
@@ -30,11 +35,13 @@ Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 * Futility Pruning
 * Mate Distance Prunning
 * Singular Move Extensions
+* Upcoming repetition detection
 
 #### Move Ordering
 * MVV/LVA
 * Winning/Losing Captures (Static Exchange Evaluation)
 * Killer/History/Counter/Followup Move Heuristic
+* Sacrifice penalty / threat bonus
 
 #### Time Management
 * Heuristics based on approximate move count left
@@ -55,5 +62,4 @@ The projects comprises folowing modules:
   
 ## TODO
 
-  * Custom-trained neural network
   * More platforms support

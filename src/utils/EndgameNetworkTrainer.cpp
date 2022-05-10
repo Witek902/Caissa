@@ -26,8 +26,8 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 100000;
-static const uint32_t cBatchSize = 64;
+static const uint32_t cNumTrainingVectorsPerIteration = 32 * 1024;
+static const uint32_t cBatchSize = 256;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -38,12 +38,12 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
-    outVector.inputFeatures.clear();
-    outVector.inputFeatures.reserve(numFeatures);
+    outVector.features.clear();
+    outVector.features.reserve(numFeatures);
 
     for (uint32_t i = 0; i < numFeatures; ++i)
     {
-        outVector.inputFeatures.push_back(features[i]);
+        outVector.features.push_back(features[i]);
     }
 }
 
@@ -75,12 +75,12 @@ bool TrainEndgame()
     };
 
     MaterialKey materialKey;
-    materialKey.numWhitePawns   = 1;
+    materialKey.numWhitePawns   = 2;
     materialKey.numWhiteKnights = 0;
     materialKey.numWhiteBishops = 0;
     materialKey.numWhiteRooks   = 0;
     materialKey.numWhiteQueens  = 0;
-    materialKey.numBlackPawns   = 1;
+    materialKey.numBlackPawns   = 2;
     materialKey.numBlackKnights = 0;
     materialKey.numBlackBishops = 0;
     materialKey.numBlackRooks   = 0;
@@ -104,17 +104,8 @@ bool TrainEndgame()
                 Position pos;
                 GenerateRandomPosition(randomGenerator, materialKey, pos);
 
-                // don't generate positions where side to move is in check
-                if (pos.IsInCheck(pos.GetSideToMove()))
-                {
-                    continue;
-                }
-
                 // generate only quiet position
-                MoveList moves;
-                pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
-
-                if (moves.Size() > 0)
+                if (!pos.IsQuiet())
                 {
                     continue;
                 }
@@ -166,7 +157,7 @@ bool TrainEndgame()
     const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { nn::FirstLayerSize, nn::SecondLayerSize, 1 });
+    network.Init(numNetworkInputs, { nn::FirstLayerSize, nn::SecondLayerSize, nn::ThirdLayerSize, 1 });
 
     nn::PackedNeuralNetwork packedNetwork;
 
@@ -189,6 +180,8 @@ bool TrainEndgame()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
+        float learningRate = 1.0f / (1.0f + 0.01f * iteration);
+
         // use validation set from previous iteration as training set in the current one
         trainingSet = validationSet;
 
@@ -205,8 +198,7 @@ bool TrainEndgame()
                     batch[i] = trainingSet[i].trainingVector;
                 }
 
-                network.Train(batch, tempValues, cBatchSize);
-                //network.PrintStats();
+                network.Train(batch, tempValues, cBatchSize, learningRate);
 
                 network.ToPackedNetwork(packedNetwork);
                 packedNetwork.Save("pawns.nn");
@@ -250,7 +242,7 @@ bool TrainEndgame()
                 fwrite("\n", 1, 1, f);
             }
 
-            const std::vector<uint16_t>& features = validationSet[i].trainingVector.inputFeatures;
+            const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
             tempValues = network.Run(features.data(), (uint32_t)features.size());
             int32_t packedNetworkOutput = packedNetwork.Run(features.data(), (uint32_t)features.size());
 
@@ -268,15 +260,16 @@ bool TrainEndgame()
                 correctPredictions++;
             }
 
-            //if (i < 10)
-            //{
-            //    std::cout
-            //        << validationSet[i].pos.ToFEN()
-            //        << ", True Score: " << expectedValue
-            //        << ", NN eval: " << nnValue
-            //        << ", Packed NN eval: " << nnPackedValue
-            //        << ", Static eval: " << evalValue << std::endl;
-            //}
+            if (i + 1 == cNumTrainingVectorsPerIteration)
+            {
+                std::cout
+                    << validationSet[i].pos.ToFEN() << std::endl << validationSet[i].pos.Print() << std::endl
+                    << "True Score:     " << expectedValue << std::endl
+                    << "NN eval:        " << nnValue << std::endl
+                    << "Packed NN eval: " << nnPackedValue << std::endl
+                    << "Static eval:    " << evalValue << std::endl
+                    << std::endl;
+            }
 
             {
                 const float error = expectedValue - nnValue;
@@ -309,19 +302,16 @@ bool TrainEndgame()
         evalErrorSum = sqrtf(evalErrorSum / cNumTrainingVectorsPerIteration);
         nnPackedQuantizationErrorSum = sqrtf(nnPackedQuantizationErrorSum / cNumTrainingVectorsPerIteration);
 
-        std::cout << std::right << std::setw(6) << numTrainingVectorsPassed; std::cout << "  |  ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << accuracy; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnErrorSum; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnMinError; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnMaxError; std::cout << "  |  ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedErrorSum; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedQuantizationErrorSum; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedMinError; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << nnPackedMaxError; std::cout << "  |  ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << evalErrorSum; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << evalMinError; std::cout << " ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << evalMaxError;
-        std::cout << std::endl;
+        std::cout
+            << "Num training vectors:   " << numTrainingVectorsPassed << std::endl
+            << "Learning rate:          " << learningRate << std::endl
+            << "Accuracy:               " << (100.0f * accuracy) << "%" << std::endl
+            << "NN avg/min/max error:   " << std::setprecision(5) << nnErrorSum << " " << std::setprecision(4) << nnMinError << " " << std::setprecision(4) << nnMaxError << std::endl
+            << "PNN avg/min/max error:  " << std::setprecision(5) << nnPackedErrorSum << " " << std::setprecision(4) << nnPackedMinError << " " << std::setprecision(4) << nnPackedMaxError << std::endl
+            << "Quantization error:     " << std::setprecision(5) << nnPackedQuantizationErrorSum << std::endl
+            << "Eval avg/min/max error: " << std::setprecision(5) << evalErrorSum << " " << std::setprecision(4) << evalMinError << " " << std::setprecision(4) << evalMaxError << std::endl;
+
+        network.PrintStats();
 
         network.Save((materialKey.ToString() + ".nn").c_str());
         packedNetwork.Save((materialKey.ToString() + ".pnn").c_str());

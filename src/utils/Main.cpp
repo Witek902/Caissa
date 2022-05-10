@@ -2,8 +2,6 @@
 
 #include "../backend/Tablebase.hpp"
 
-#include "../backend/nnue-probe/nnue.h"
-
 #include <iostream>
 #include <vector>
 #include <string>
@@ -15,6 +13,7 @@ extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
 extern bool TestNetwork();
+extern bool TrainNetwork();
 extern void ValidateEndgame();
 extern void AnalyzeGames();
 
@@ -35,9 +34,6 @@ int main(int argc, const char* argv[])
     }
 
     InitEngine();
-
-    // HACK
-    nnue_init("D:/CHESS/NNUE/nn-04cf2b4ed1da.nnue");
 
     LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
 
@@ -76,6 +72,10 @@ int main(int argc, const char* argv[])
     else if (0 == strcmp(argv[1], "analyzeGames"))
     {
         AnalyzeGames();
+    }
+    else if (0 == strcmp(argv[1], "trainNetwork"))
+    {
+        TrainNetwork();
     }
 
     system("pause");

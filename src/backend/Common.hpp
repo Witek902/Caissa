@@ -286,6 +286,7 @@ class MoveList;
 class Game;
 class TranspositionTable;
 struct NodeInfo;
+struct NNEvaluatorContext;
 
 using ScoreType = int16_t;
 
@@ -294,7 +295,6 @@ static constexpr ScoreType InvalidValue         = INT16_MAX;
 static constexpr ScoreType CheckmateValue       = 32000;
 static constexpr ScoreType TablebaseWinValue    = 31000;
 static constexpr ScoreType KnownWinValue        = 20000;
-static constexpr ScoreType MaxNNScore           = 10000;
 
 static constexpr uint16_t MaxSearchDepth    = 256;
 

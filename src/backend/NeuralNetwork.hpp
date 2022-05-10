@@ -9,7 +9,10 @@ class PackedNeuralNetwork;
 
 struct TrainingVector
 {
-    std::vector<uint16_t> inputFeatures;
+    // intput as float values or active features list
+    std::vector<float> inputs;
+    std::vector<uint16_t> features;
+
     std::vector<float> output;
 };
 
@@ -109,7 +112,7 @@ public:
     const Layer::Values& Run(const uint16_t* featureIndices, uint32_t numFeatures);
 
     // Train the neural network
-    void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize);
+    void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize, float learningRate = 0.5f);
 
     void PrintStats() const;
 
@@ -133,8 +136,8 @@ public:
         return layers.back().output;
     }
 
-    void UpdateLayerWeights(Layer& layer) const;
-    void QuantizeLayerWeights(Layer& layer, float range, float weightQuantizationScale, float biasQuantizationScale) const;
+    void UpdateLayerWeights(Layer& layer, float learningRate) const;
+    void QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale);
 
     std::vector<Layer> layers;
 

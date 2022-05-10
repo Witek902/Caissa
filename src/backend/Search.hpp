@@ -5,8 +5,7 @@
 #include "MoveOrderer.hpp"
 #include "Time.hpp"
 #include "Memory.hpp"
-
-#include "nnue-probe/nnue.h"
+#include "NeuralNetworkEvaluator.hpp"
 
 #include <atomic>
 
@@ -118,6 +117,8 @@ struct NodeInfo
     bool isPvNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
+
+    NNEvaluatorContext nnContext;
 
     bool ShouldCheckMove(const Move move) const
     {

@@ -3,6 +3,7 @@
 #include "Bitboard.hpp"
 #include "Material.hpp"
 #include "PositionHash.hpp"
+#include "NeuralNetworkEvaluator.hpp"
 
 #include <random>
 
@@ -693,31 +694,56 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
     };
 }
 
-bool Position::DoMove(const Move& move)
+bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 {
     ASSERT(IsMoveValid(move));  // move must be valid
     ASSERT(IsValid());          // board position must be valid
 
     SidePosition& opponentSide = GetOpponentSide();
 
-    // move piece
-    RemovePiece(move.FromSquare(), move.GetPiece(), mSideToMove);
+    // move piece & mark NN accumulator as dirty
+    {
+        RemovePiece(move.FromSquare(), move.GetPiece(), mSideToMove);
 
+        if (nnContext)
+        {
+            nnContext->removedPieces[0] = { move.GetPiece(), mSideToMove, move.FromSquare() };
+            nnContext->numRemovedPieces = 1;
+            nnContext->MarkAsDirty();
+        }
+    }
+
+    // remove captured piece
     if (move.IsCapture())
     {
         if (!move.IsEnPassant())
         {
             const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
-            RemovePiece(move.ToSquare(), capturedPiece, GetOppositeColor(mSideToMove));
+            const Color capturedColor = GetOppositeColor(mSideToMove);
+            RemovePiece(move.ToSquare(), capturedPiece, capturedColor);
+
+            if (nnContext)
+            {
+                nnContext->removedPieces[nnContext->numRemovedPieces++] = { capturedPiece, capturedColor, move.ToSquare() };
+            }
         }
 
         // clear specific castling right after capturing a rook
         ClearRookCastlingRights(move.ToSquare());
     }
 
-    // move piece
-    const bool isPromotion = move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None;
-    SetPiece(move.ToSquare(), isPromotion ? move.GetPromoteTo() : move.GetPiece(), mSideToMove);
+    // put moved piece
+    {
+        const bool isPromotion = move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None;
+        const Piece targetPiece = isPromotion ? move.GetPromoteTo() : move.GetPiece();
+        SetPiece(move.ToSquare(), targetPiece, mSideToMove);
+
+        if (nnContext)
+        {
+            nnContext->addedPieces[0] = { targetPiece, mSideToMove, move.ToSquare() };
+            nnContext->numAddedPieces = 1;
+        }
+    }
 
     if (move.IsEnPassant())
     {
@@ -727,6 +753,11 @@ bool Position::DoMove(const Move& move)
         ASSERT(captureSquare.IsValid());
 
         RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
+
+        if (nnContext)
+        {
+            nnContext->removedPieces[nnContext->numRemovedPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare };
+        }
     }
 
     SetEnPassantSquare(move.GetPiece() == Piece::Pawn ? ExtractEnPassantSquareFromMove(move) : Square::Invalid());
@@ -759,6 +790,12 @@ bool Position::DoMove(const Move& move)
 
             RemovePiece(oldRookSquare, Piece::Rook, mSideToMove);
             SetPiece(newRookSquare, Piece::Rook, mSideToMove);
+
+            if (nnContext)
+            {
+                nnContext->removedPieces[nnContext->numRemovedPieces++] = { Piece::Rook, mSideToMove, oldRookSquare };
+                nnContext->addedPieces[nnContext->numAddedPieces++] = { Piece::Rook, mSideToMove, newRookSquare };
+            }
         }
 
         // clear all castling rights after moving a king
@@ -797,6 +834,12 @@ bool Position::DoMove(const Move& move)
 
     // validate hash
     ASSERT(ComputeHash() == GetHash());
+
+    if (nnContext)
+    {
+        ASSERT(nnContext->numRemovedPieces > 0 && nnContext->numAddedPieces > 0);
+        ASSERT(nnContext->numRemovedPieces <= 2 && nnContext->numAddedPieces <= 2);
+    }
 
     // can't be in check after move
     return !IsInCheck(prevToMove);
@@ -945,18 +988,16 @@ uint32_t Position::ToSparseFeaturesVector(uint16_t* outFeatures) const
     uint32_t numFeatures = 0;
     uint32_t numInputs = 0;
 
-    const auto writePieceFeatures = [&](const Bitboard bitboard)
+    const auto writePieceFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
     {
-        for (uint32_t i = 0; i < 64u; ++i)
-        {
-            if ((bitboard >> i) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
-        }
+        bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA { outFeatures[numFeatures++] = (uint16_t)(numInputs + square); });
         numInputs += 64;
     };
 
-    const auto writePawnFeatures = [&](const Bitboard bitboard)
+    const auto writePawnFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
     {
         // pawns cannot stand on first or last rank
+        // TODO use Iterate()
         for (uint32_t i = 0; i < 48u; ++i)
         {
             const uint32_t squreIndex = i + 8u;
@@ -1260,4 +1301,33 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     }
 
     return result != 0;
+}
+
+bool Position::IsQuiet() const
+{
+    if (IsInCheck(mSideToMove))
+    {
+        return false;
+    }
+
+    MoveList moves;
+    GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL | MOVE_GEN_ONLY_QUEEN_PROMOTIONS);
+
+    for (uint32_t i = 0; i < moves.Size(); ++i)
+    {
+        const Move move = moves.GetMove(i);
+
+        Position posCopy = *this;
+        if (!posCopy.DoMove(move))
+        {
+            continue;
+        }
+
+        if (StaticExchangeEvaluation(move, 0))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }

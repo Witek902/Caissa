@@ -10,8 +10,6 @@
 #include "../backend/Material.hpp"
 #include "../backend/Waitable.hpp"
 
-#include "../backend/nnue-probe/nnue.h"
-
 #include <iostream>
 #include <chrono>
 #include <mutex>

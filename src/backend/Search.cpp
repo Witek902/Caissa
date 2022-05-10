@@ -734,7 +734,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         if (staticEval == InvalidValue)
         {
-            const ScoreType evalScore = Evaluate(position);
+            const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
 
@@ -818,7 +818,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move))
+        if (!childNode.position.DoMove(move, &childNode.nnContext))
         {
             continue;
         }
@@ -847,6 +847,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             else if (node.depth <  0 && moveIndex > 4) break;
         }
 
+        childNode.previousMove = move;
         childNode.isInCheck = childNode.position.IsInCheck();
 
         childNode.alpha = -beta;
@@ -1065,7 +1066,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (staticEval == InvalidValue)
         {
-            const ScoreType evalScore = Evaluate(position);
+            const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
             wasPositionEvaluated = false;
@@ -1140,6 +1141,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.depth = node.depth - depthReduction;
 
             childNode.position.DoNullMove();
+            childNode.nnContext.MarkAsDirty();
 
             ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
 
@@ -1231,7 +1233,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move))
+        if (!childNode.position.DoMove(move, &childNode.nnContext))
         {
             continue;
         }

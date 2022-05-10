@@ -45,6 +45,7 @@ void AnalyzeGames()
 
     uint64_t numGames = 0;
     uint64_t numPositions = 0;
+    uint64_t numPawnlessPositions = 0;
 
     std::unordered_map<MaterialKey, MaterialConfigInfo> materialConfigurations;
     
@@ -74,12 +75,15 @@ void AnalyzeGames()
             if (!pos.IsInCheck(pos.GetSideToMove()) && !move.IsCapture() && !move.IsPromotion() &&
                 std::abs(game.GetMoveScores()[i]) < KnownWinValue)
             {
+                const MaterialKey matKey = pos.GetMaterialKey();
+
                 numPositions++;
+                if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) numPawnlessPositions++;
 
                 whiteKingOccupancy[FirstBitSet(pos.Whites().king)]++;
                 blackKingOccupancy[FirstBitSet(pos.Blacks().king)]++;
 
-                MaterialConfigInfo& matConfigInfo = materialConfigurations[pos.GetMaterialKey()];
+                MaterialConfigInfo& matConfigInfo = materialConfigurations[matKey];
                 matConfigInfo.occurences++;
                 matConfigInfo.evalScore += CentiPawnToWinProbability(moveScore);
                 matConfigInfo.gameScore += GameScoreToWinProbability(game.GetScore());
@@ -99,13 +103,15 @@ void AnalyzeGames()
         numGames++;
     }
 
-    std::cout << "Found " << numGames << " games" << std::endl;
+    std::cout << "Parsed " << numGames << " games" << std::endl;
+    std::cout << "Found " << numPositions << " positions" << std::endl;
+    std::cout << "Found " << numPawnlessPositions << " pawnless positions" << std::endl;
 
     {
         std::cout << "Unique material configurations: " << materialConfigurations.size() << std::endl;
         for (const auto& iter : materialConfigurations)
         {
-            if (iter.second.occurences > 10000)
+            if (iter.second.occurences > 5 && iter.first.numBlackPawns == 0 && iter.first.numWhitePawns == 0)
             {
                 const float averageEvalScore = static_cast<float>(iter.second.evalScore / static_cast<double>(iter.second.occurences));
                 const float averageGameScore = static_cast<float>(iter.second.gameScore / static_cast<double>(iter.second.occurences));

@@ -12,9 +12,6 @@
     <Filter Include="tablebase">
       <UniqueIdentifier>{3757118d-478d-43bc-8cd9-888d8625def8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="nnue-probe">
-      <UniqueIdentifier>{02b89a21-6ce8-4532-a154-8ac418f5e3cb}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Position.cpp">
@@ -56,12 +53,6 @@
     <ClCompile Include="MoveOrderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nnue-probe\misc.cpp">
-      <Filter>nnue-probe</Filter>
-    </ClCompile>
-    <ClCompile Include="nnue-probe\nnue.cpp">
-      <Filter>nnue-probe</Filter>
-    </ClCompile>
     <ClCompile Include="Endgame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -102,6 +93,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SearchUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NeuralNetworkEvaluator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -157,12 +151,6 @@
     <ClInclude Include="MoveOrderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nnue-probe\misc.h">
-      <Filter>nnue-probe</Filter>
-    </ClInclude>
-    <ClInclude Include="nnue-probe\nnue.h">
-      <Filter>nnue-probe</Filter>
-    </ClInclude>
     <ClInclude Include="Endgame.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -203,6 +191,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Score.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NeuralNetworkEvaluator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
