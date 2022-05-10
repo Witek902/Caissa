@@ -27,9 +27,9 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cBatchSize = 128;
-static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48;
+static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
+static const uint32_t cBatchSize = 256;
+static const uint32_t cNumNetworkInputs = 5 * 64 + 48;
 
 struct PositionEntry
 {
@@ -39,54 +39,63 @@ struct PositionEntry
 
 static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
 {
-    const uint32_t maxFeatures = 64;
-
-    uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToSparseFeaturesVector(features);
-    ASSERT(numFeatures <= maxFeatures);
+    ASSERT(pos.GetSideToMove() == Color::White);
 
     outVector.output.resize(1);
-    outVector.inputFeatures.clear();
-    outVector.inputFeatures.reserve(numFeatures);
+    outVector.inputs.resize(cNumNetworkInputs);
+    memset(outVector.inputs.data(), 0, sizeof(float) * cNumNetworkInputs);
 
-    for (uint32_t i = 0; i < numFeatures; ++i)
+    uint32_t offset = 0;
+
+    const auto writePieceFeatures = [&](const Bitboard bitboard, const Color color) INLINE_LAMBDA
     {
-        outVector.inputFeatures.push_back(features[i]);
-    }
-}
+        bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outVector.inputs[offset + square] += (color == Color::White ? 1.0f : -1.0f);
+        });
+    };
 
-static void NormalizeKingWeights(nn::NeuralNetwork& nn)
-{
-    float* weights = nn.layers[0].weights.data();
-
-    float avgWhiteKingWeight = 0.0f;
-    float avgBlackKingWeight = 0.0f;
-
-    const uint32_t whiteKingOffset = 48 + 4 * 64;
-    const uint32_t blackKingOffset = whiteKingOffset + cNumNetworkInputs / 2;
-
-    for (uint32_t i = whiteKingOffset; i < whiteKingOffset + 64; ++i)
+    const auto writePawnFeatures = [&](const Bitboard bitboard, const Color color) INLINE_LAMBDA
     {
-        avgWhiteKingWeight += weights[i];
-    }
-    for (uint32_t i = blackKingOffset; i < blackKingOffset + 64; ++i)
+        // pawns cannot stand on first or last rank
+        for (uint32_t i = 0; i < 48u; ++i)
+        {
+            const uint32_t squreIndex = i + 8u;
+            if ((bitboard >> squreIndex) & 1)
+            {
+                outVector.inputs[offset + i] += (color == Color::White ? 1.0f : -1.0f);
+            }
+        }
+    };
+
+    writePawnFeatures(pos.Whites().pawns, Color::White);
+    writePawnFeatures(pos.Blacks().pawns.MirroredVertically(), Color::Black);
+    offset += 48;
+
+    writePieceFeatures(pos.Whites().knights, Color::White);
+    writePieceFeatures(pos.Blacks().knights.MirroredVertically(), Color::Black);
+    offset += 64;
+
+    writePieceFeatures(pos.Whites().bishops, Color::White);
+    writePieceFeatures(pos.Blacks().bishops.MirroredVertically(), Color::Black);
+    offset += 64;
+
+    writePieceFeatures(pos.Whites().rooks, Color::White);
+    writePieceFeatures(pos.Blacks().rooks.MirroredVertically(), Color::Black);
+    offset += 64;
+
+    writePieceFeatures(pos.Whites().queens, Color::White);
+    writePieceFeatures(pos.Blacks().queens.MirroredVertically(), Color::Black);
+    offset += 64;
+
+    // white kings
     {
-        avgBlackKingWeight += weights[i];
+        outVector.inputs[offset + FirstBitSet(pos.Whites().king)] += 1.0f;
+        outVector.inputs[offset + FirstBitSet(pos.Blacks().king.MirroredVertically())] += -1.0f;
+        offset += 64;
     }
 
-    avgWhiteKingWeight /= 64.0f;
-    avgBlackKingWeight /= 64.0f;
-
-    for (uint32_t i = whiteKingOffset; i < whiteKingOffset + 64; ++i)
-    {
-        weights[i] -= avgWhiteKingWeight;
-    }
-    for (uint32_t i = blackKingOffset; i < blackKingOffset + 64; ++i)
-    {
-        weights[i] -= avgBlackKingWeight;
-    }
-    weights[cNumNetworkInputs - 1] += avgWhiteKingWeight;
-    weights[cNumNetworkInputs - 1] += avgBlackKingWeight;
+    ASSERT(offset == cNumNetworkInputs);
 }
 
 static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
@@ -102,17 +111,26 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
         std::cout << name << std::endl;
         code << "{\n";
 
+        float avg = 0.0f;
+        for (uint32_t rank = 0; rank < 8; ++rank)
+        {
+            for (uint32_t file = 0; file < 8; file++)
+            {
+                avg += weights[offset + 8 * rank + file];
+            }
+        }
+        avg /= 64.0f;
+        std::cout << "Average: " << int32_t(c_nnOutputToCentiPawns * avg) << std::endl;
+
         for (uint32_t rank = 0; rank < 8; ++rank)
         {
             std::cout << "    ";
             code << "    ";
             for (uint32_t file = 0; file < 8; file++)
             {
-                const float whiteWeight = weights[offset + 8 * rank + file];
-                const float blackWeight = weights[offset + 8 * (7 - rank) + file + 5 * 64 + 48]; // skip white pieces
-                const float weight = WinProbabilityToPawns(nn::Sigmoid((whiteWeight - blackWeight) / 2.0f));
-                std::cout << std::right << std::fixed << std::setprecision(3) << std::setw(6) << weight << " ";
-                code << std::right << std::fixed << std::setw(6) << int32_t(4096 * weight) << ", ";
+                const float weight = c_nnOutputToCentiPawns * (weights[offset + 8 * rank + file] - avg);
+                std::cout << std::right << std::fixed << std::setw(6) << int32_t(weight) << " ";
+                code << std::right << std::fixed << std::setw(6) << int32_t(weight) << ", ";
             }
             std::cout << std::endl;
             code << "\n";
@@ -129,17 +147,26 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
         code << "{\n";
         code << "    0, 0, 0, 0, 0, 0, 0, 0, \n";
 
+        float avg = 0.0f;
+        for (uint32_t rank = 1; rank < 7; ++rank)
+        {
+            for (uint32_t file = 0; file < 8; file++)
+            {
+                avg += weights[offset + 8 * (rank - 1) + file];
+            }
+        }
+        avg /= 48.0f;
+        std::cout << "Average: " << int32_t(c_nnOutputToCentiPawns * avg) << std::endl;
+
         // pawns cannot stand on first or last rank
         for (uint32_t rank = 1; rank < 7; ++rank)
         {
             std::cout << "    ";
             for (uint32_t file = 0; file < 8; file++)
             {
-                const float whiteWeight = weights[offset + 8 * (rank - 1) + file];
-                const float blackWeight = weights[offset + 8 * (6 - rank) + file + 5 * 64 + 48]; // skip white pieces
-                const float weight = WinProbabilityToPawns(nn::Sigmoid((whiteWeight - blackWeight) / 2.0f));
-                std::cout << std::right << std::fixed << std::setprecision(3) << std::setw(6) << weight << " ";
-                code << std::right << std::fixed << std::setw(6) << int32_t(4096 * weight) << ", ";
+                const float weight = c_nnOutputToCentiPawns * (weights[offset + 8 * (rank - 1) + file] - avg);
+                std::cout << std::right << std::fixed << std::setw(6) << int32_t(weight) << " ";
+                code << std::right << std::fixed << std::setw(6) << int32_t(weight) << ", ";
             }
             std::cout << std::endl;
             code << "\n";
@@ -158,7 +185,7 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     printPieceWeights("Queen");
     printPieceWeights("King");
 
-    std::cout << "Eval offset: " << weights[offset] << std::endl;
+    std::cout << "Eval offset: " << int32_t(c_nnOutputToCentiPawns * weights[offset]) << std::endl;
 
     //std::cout << "Code:" << std::endl;
     //std::cout << code.str() << std::endl;
@@ -203,16 +230,35 @@ bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entries)
             const float gamePhase = (float)i / (float)game.GetMoves().size();
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];
+            const MaterialKey matKey = pos.GetMaterialKey();
 
-            if (!pos.IsInCheck() &&
-                !move.IsCapture() && !move.IsPromotion() &&
-                std::abs(moveScore) < KnownWinValue &&
+            if (pos.GetHalfMoveCount() > 20 && i > 40 && gameScore == Game::Score::Draw)
+            {
+                break;
+            }
+
+            const Square whiteKingSq(FirstBitSet(pos.Whites().king));
+            const Square blackKingSq(FirstBitSet(pos.Blacks().king));
+
+            // skip boring equal positions
+            const bool equalPosition =
+                matKey.numBlackPawns == matKey.numWhitePawns &&
+                matKey.numBlackKnights == matKey.numWhiteKnights &&
+                matKey.numBlackBishops == matKey.numWhiteBishops &&
+                matKey.numBlackRooks == matKey.numWhiteRooks &&
+                matKey.numBlackQueens == matKey.numWhiteQueens &&
+                gameScore == Game::Score::Draw &&
+                std::abs(moveScore) < 10;
+
+            if (!equalPosition &&
+                !pos.IsInCheck() && !move.IsCapture() && !move.IsPromotion() &&
+                (whiteKingSq.Rank() <= 2 && blackKingSq.Rank() >= 5) &&
                 pos.GetNumPieces() >= 16)
             {
                 PositionEntry entry{};
 
                 // blend between eval score and actual game score
-                const float blendWeight = std::lerp(0.1f, 0.9f, gamePhase);
+                const float blendWeight = std::lerp(0.25f, 1.0f, gamePhase);
                 entry.score = std::lerp(CentiPawnToWinProbability(moveScore), score, blendWeight);
 
                 Position normalizedPos = pos;
@@ -245,12 +291,19 @@ bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entries)
 bool TrainPieceSquareTables()
 {
     std::vector<PositionEntry> entries;
+    LoadPositions("../../data/selfplayGames/selfplay3.dat", entries);
     LoadPositions("../../data/selfplayGames/selfplay4.dat", entries);
 
     std::cout << "Training with " << entries.size() << " positions" << std::endl;
 
     nn::NeuralNetwork network;
     network.Init(cNumNetworkInputs, { 1 }, nn::ActivationFunction::Sigmoid);
+
+    // reset king weights
+    for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
+    {
+        network.layers[0].weights[i] = 0.0f;
+    }
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -273,11 +326,45 @@ bool TrainPieceSquareTables()
             const PositionEntry& entry = entries[distrib(gen)];
             Position pos;
             UnpackPosition(entry.pos, pos);
+
+            // flip the board randomly
+            const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
+            const bool noCastlingRights = pos.GetBlacksCastlingRights() == 0 && pos.GetWhitesCastlingRights() == 0;
+            if (pawnless || noCastlingRights)
+            {
+                if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
+                {
+                    pos.MirrorHorizontally();
+                }
+            }
+            if (pawnless)
+            {
+                if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
+                {
+                    pos.MirrorVertically();
+                }
+            }
+
             PositionToTrainingVector(pos, trainingSet[i]);
             trainingSet[i].output[0] = entry.score;
         }
-        network.Train(trainingSet, tempValues, cBatchSize);
-        NormalizeKingWeights(network);
+
+        const float learningRate = 0.5f / (1.0f + 0.001f * iteration);
+        network.Train(trainingSet, tempValues, cBatchSize, learningRate);
+
+        // normalize king weights
+        {
+            float kingAvg = 0.0f;
+            for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
+            {
+                kingAvg += network.layers[0].weights[i];
+            }
+            kingAvg /= 64.0f;
+            for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
+            {
+                network.layers[0].weights[i] -= kingAvg;
+            }
+        }
 
         numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
@@ -293,7 +380,7 @@ bool TrainPieceSquareTables()
             PositionToTrainingVector(pos, validationVector);
             validationVector.output[0] = entry.score;
 
-            tempValues = network.Run(validationVector.inputFeatures.data(), (uint32_t)validationVector.inputFeatures.size());
+            tempValues = network.Run(validationVector.features.data(), (uint32_t)validationVector.features.size());
 
             const float expectedValue = validationVector.output[0];
 

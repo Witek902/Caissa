@@ -415,6 +415,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
     const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
     const int32_t numPawns = pos.Whites().pawns.Count();
+    const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
 
     Square strongKingSq = strongKing;
     Square weakKingSq = weakKing;
@@ -449,11 +450,40 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
     else if (numPawns == 2)
     {
         const Square secondPawnSquare = FirstBitSet(pos.Whites().pawns & ~pawnSquare.GetBitboard());
-        const bool areConnected = (Square::Distance(pawnSquare, secondPawnSquare) <= 1) && (pawnSquare.File() != secondPawnSquare.File());
+
+        bool isWin = false;
 
         // connected passed pawns
-        if ((areConnected && pos.GetSideToMove() == Color::White) ||
-            (Square::Distance(pawnSquare, secondPawnSquare) > 5 && pos.GetSideToMove() == Color::White))
+        if ((Square::Distance(pawnSquare, secondPawnSquare) <= 1) &&
+            (pawnSquare.File() != secondPawnSquare.File()) &&
+            pos.GetSideToMove() == Color::White)
+        {
+            isWin = true;
+        }
+
+        // losing side can't capture both pawns
+        if (std::abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) == 2 &&
+            Square::Distance(pawnSquare, weakKing) > 2 + blackToMove &&
+            Square::Distance(secondPawnSquare, weakKing) > 2 + blackToMove)
+        {
+            isWin = true;
+        }
+
+        // losing side can't capture both pawns
+        if (std::abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) >= 3 &&
+            Square::Distance(pawnSquare, weakKing) > 3 + blackToMove &&
+            Square::Distance(secondPawnSquare, weakKing) > 3 + blackToMove)
+        {
+            isWin = true;
+        }
+
+        // losing side can't capture both pawns
+        if (Square::Distance(pawnSquare, secondPawnSquare) > 5 && pos.GetSideToMove() == Color::White)
+        {
+            isWin = true;
+        }
+
+        if (isWin)
         {
             outScore = KnownWinValue + 2 * c_pawnValue.eg;
             outScore += 8 * pawnSquare.Rank();

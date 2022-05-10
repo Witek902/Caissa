@@ -9,8 +9,11 @@ namespace nn {
 
 class NeuralNetwork;
 
-static constexpr uint32_t FirstLayerSize = 128;
-static constexpr uint32_t SecondLayerSize = 64;
+static constexpr uint32_t CurrentVersion = 1;
+
+static constexpr uint32_t FirstLayerSize = 512;
+static constexpr uint32_t SecondLayerSize = 32;
+static constexpr uint32_t ThirdLayerSize = 64;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
 static constexpr float ActivationRangeScaling = 127;
@@ -28,38 +31,25 @@ static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * Activati
 static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
-using WeightTypeLayer0 = int16_t;
-using BiasTypeLayer0 = int16_t;
+using FirstLayerWeightType = int16_t;
+using FirstLayerBiasType = int16_t;
 
-using WeightTypeLayer12 = int8_t;
-using BiasTypeLayer12 = int32_t;
-
-struct LayerData0
-{
-    const WeightTypeLayer0* weights;
-    const BiasTypeLayer0* biases;
-    uint32_t numInputs = 0;
-    uint32_t numOutputs = 0;
-};
-
-struct LayerData12
-{
-    const WeightTypeLayer12* weights;
-    const BiasTypeLayer12* biases;
-    uint32_t numInputs = 0;
-    uint32_t numOutputs = 0;
-};
+using HiddenLayerWeightType = int8_t;
+using HiddenLayerBiasType = int32_t;
 
 struct alignas(64) Accumulator
 {
-    WeightTypeLayer0 values[FirstLayerSize];
+    FirstLayerWeightType values[FirstLayerSize];
 
     void Refresh(
-        const LayerData0& layer,
+        const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
+        uint32_t numInputs, uint32_t numOutputs,
         uint32_t numActiveFeatures, const uint16_t* activeFeatures);
 
     void Update(
-        const LayerData0& layer,
+        const Accumulator& source,
+        const FirstLayerWeightType* weights,
+        uint32_t numInputs, uint32_t numOutputs,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,
         uint32_t numRemovedFeatures, const uint16_t* removedFeatures);
 };
@@ -68,10 +58,19 @@ class PackedNeuralNetwork
 {
 public:
 
+    struct Header
+    {
+        uint32_t version = 0;
+        uint32_t numInputs = 0;
+        uint32_t firstLayerSize = 0;
+        uint32_t secondLayerSize = 0;
+        uint32_t thirdLayerSize = 0;
+    };
+
     friend class NeuralNetwork;
 
-    static constexpr uint32_t MaxNeuronsInLayer = 256;
-    static constexpr uint32_t MaxNumLayers = 5;
+    static constexpr uint32_t MaxNeuronsInLayer = 4096;
+    static constexpr uint32_t MaxNumLayers = 4;
 
     PackedNeuralNetwork();
     ~PackedNeuralNetwork();
@@ -82,23 +81,33 @@ public:
     // save to file
     bool Save(const char* filePath) const;
 
+    // Calculate neural network output based on incremetally updated accumulator
+    int32_t Run(const Accumulator& accumulator) const;
+
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const;
 
-    bool IsValid() const { return numInputs > 0; }
+    INLINE uint32_t GetNumInputs() const { return header.numInputs; }
+    INLINE const FirstLayerWeightType* GetAccumulatorWeights() const { return layer0_weights; }
+    INLINE const FirstLayerBiasType* GetAccumulatorBiases() const { return layer0_biases; }
+
+    bool IsValid() const { return header.numInputs > 0; }
 
 private:
 
-    uint32_t numInputs = 0;
+    Header header;
 
-    WeightTypeLayer0* layer0_weights = nullptr;
-    BiasTypeLayer0 layer0_biases[FirstLayerSize];
+    FirstLayerWeightType* layer0_weights = nullptr;
+    FirstLayerBiasType layer0_biases[FirstLayerSize];
 
-    WeightTypeLayer12 layer1_weights[FirstLayerSize * SecondLayerSize];
-    BiasTypeLayer12 layer1_biases[SecondLayerSize];
+    HiddenLayerWeightType layer1_weights[FirstLayerSize * SecondLayerSize];
+    HiddenLayerBiasType layer1_biases[SecondLayerSize];
 
-    WeightTypeLayer12 layer2_weights[SecondLayerSize];
-    BiasTypeLayer12 layer2_biases[1];
+    HiddenLayerWeightType layer2_weights[SecondLayerSize * ThirdLayerSize];
+    HiddenLayerBiasType layer2_biases[ThirdLayerSize];
+
+    HiddenLayerWeightType layer3_weights[ThirdLayerSize];
+    HiddenLayerBiasType layer3_biases[1];
 };
 
 } // namespace nn

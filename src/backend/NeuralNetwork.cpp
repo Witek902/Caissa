@@ -5,8 +5,12 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <random>
 
 namespace nn {
+
+static std::random_device gRandomDevice;
+static std::mt19937 gRandomGenerator(gRandomDevice());
 
 Layer::Layer(size_t inputSize, size_t outputSize)
 {
@@ -25,7 +29,7 @@ Layer::Layer(size_t inputSize, size_t outputSize)
 
 void Layer::InitWeights()
 {
-    const float scale = 1.0f / sqrtf((float)input.size());
+    const float scale = 4.0f / sqrtf((float)input.size());
 
     for (size_t i = 0; i < weights.size(); i++)
     {
@@ -40,7 +44,6 @@ void Layer::InitWeights()
 
         for (size_t j = 0; j < input.size(); j++)
         {
-            //weights[offs + j] = 0.0f;
             weights[offs + j] = ((float)(rand() % RAND_MAX) / (float)(RAND_MAX)-0.5f) * scale;
         }
 
@@ -346,7 +349,7 @@ const Layer::Values& NeuralNetwork::Run(const uint16_t* featureIndices, uint32_t
     return layers.back().output;
 }
 
-void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
+void NeuralNetwork::UpdateLayerWeights(Layer& layer, float learningRate) const
 {
     const size_t inputSize = layer.input.size();
 
@@ -372,29 +375,14 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
             w += delta * scale;
             */
 
-            const float cRho = 0.95f;
+            const float cRho = 0.9f;
             const float cEpsilon = 1.0e-6f;
-            const float cLearningRate = 0.5f;
 
             // ADADELTA algorithm
             m = cRho * m + (1.0f - cRho) * g * g;
             float delta = sqrtf((v + cEpsilon) / (m + cEpsilon)) * g;
             v = cRho * v + (1.0f - cRho) * delta * delta;
-            w -= delta * cLearningRate;
-
-            /*
-            const float cAdamLearningRate = 1.0f;
-            const float cAdamBeta1 = 0.9f;
-            const float cAdamBeta2 = 0.999f;
-            const float cAdamEpsilon = 1.0e-8f;
-
-            // ADAM algorithm
-            m = cAdamBeta1 * m + (1.0f - cAdamBeta1) * g;
-            v = cAdamBeta2 * v + (1.0f - cAdamBeta2) * g * g;
-            float hm = m / (1.0f - adamBeta1) + (1.0f - cAdamBeta1) * g / (1.0f - adamBeta1);
-            float hv = v / (1.0f - adamBeta2);
-            w -= hm / (sqrtf(hv) + cAdamEpsilon) * scale;
-            */
+            w -= delta * learningRate;
 
             ASSERT(!std::isnan(m));
             ASSERT(!std::isnan(v));
@@ -405,8 +393,9 @@ void NeuralNetwork::UpdateLayerWeights(Layer& layer) const
     }
 }
 
-void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float range, float weightQuantizationScale, float biasQuantizationScale) const
+void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
 {
+    Layer& layer = layers[layerIndex];
     const size_t inputSize = layer.input.size();
 
     size_t offs = 0;
@@ -416,16 +405,32 @@ void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float range, float weight
         for (size_t j = 0; j <= inputSize; j++)
         {
             const size_t idx = offs + j;
+            const bool isBiasWeight = (j == inputSize);
 
             float& w = layer.weights[idx];
 
-            if (j < inputSize)
+            const float prevWeightValue = w;
+            
+            if (isBiasWeight)
             {
-                w = std::clamp(std::floor(w * weightQuantizationScale + 0.5f), -range, range) / weightQuantizationScale;
+                w = std::clamp(w * biasQuantizationScale, -biasRange, biasRange) / biasQuantizationScale;
             }
             else
             {
-                w = std::clamp(std::floor(w * biasQuantizationScale + 0.5f), -range, range) / biasQuantizationScale;
+                w = std::clamp(w * weightQuantizationScale, -weightRange, weightRange) / weightQuantizationScale;
+            }
+
+            // avoid rounding to zero
+            if (layerIndex > 0 && std::abs(w) < FLT_EPSILON)
+            {
+                if (prevWeightValue > 0.0f)
+                {
+                    w = 1.0f / (isBiasWeight ? biasQuantizationScale : weightQuantizationScale);
+                }
+                else if (prevWeightValue < 0.0f)
+                {
+                    w = -1.0f / (isBiasWeight ? biasQuantizationScale : weightQuantizationScale);
+                }
             }
         }
 
@@ -433,7 +438,7 @@ void NeuralNetwork::QuantizeLayerWeights(Layer& layer, float range, float weight
     }
 }
 
-void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize)
+void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize, float learningRate)
 {
     size_t numBatches = (trainingSet.size() + batchSize - 1) / batchSize;
 
@@ -453,7 +458,14 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
             {
                 const TrainingVector& vec = trainingSet[vecIndex];
 
-                tempValues = Run(vec.inputFeatures.data(), (uint32_t)vec.inputFeatures.size());
+                if (!vec.inputs.empty())
+                {
+                    tempValues = Run(vec.inputs);
+                }
+                else
+                {
+                    tempValues = Run(vec.features.data(), (uint32_t)vec.features.size());
+                }
 
                 // train last layers
                 {
@@ -479,36 +491,38 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Layer:
 
         for (size_t i = layers.size(); i-- > 0; )
         {
-            UpdateLayerWeights(layers[i]);
+            UpdateLayerWeights(layers[i], learningRate);
         }
     }
 
     for (size_t i = layers.size(); i-- > 0; )
     {
-        float weightQuantizationScale = 0.0f;
-        float biasQuantizationScale = 0.0f;
-        float range = 0.0f;
+        float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
+        float weightRange = 0.0f, biasRange = 0.0f;
 
         if (i == 0) // input layer
         {
             weightQuantizationScale = InputLayerWeightQuantizationScale;
             biasQuantizationScale = InputLayerBiasQuantizationScale;
-            range = std::numeric_limits<WeightTypeLayer0>::max();
+            weightRange = std::numeric_limits<FirstLayerWeightType>::max();
+            biasRange = std::numeric_limits<FirstLayerBiasType>::max();
         }
         else if (i + 1 == layers.size()) // output layer
         {
             weightQuantizationScale = OutputLayerWeightQuantizationScale;
             biasQuantizationScale = OutputLayerBiasQuantizationScale;
-            range = std::numeric_limits<WeightTypeLayer12>::max();
+            weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
+            biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
         }
         else // hidden layer
         {
             weightQuantizationScale = HiddenLayerWeightQuantizationScale;
             biasQuantizationScale = HiddenLayerBiasQuantizationScale;
-            range = std::numeric_limits<WeightTypeLayer12>::max();
+            weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
+            biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
         }
 
-        QuantizeLayerWeights(layers[i], range, weightQuantizationScale, biasQuantizationScale);
+        QuantizeLayerWeights(i, weightRange, biasRange, weightQuantizationScale, biasQuantizationScale);
     }
 }
 
@@ -520,7 +534,7 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
     {
         {
             float bias = layer.weights[offs + layer.input.size()];
-            const int32_t quantizedBias = (int32_t)(bias * biasScale + 0.5f);
+            const int32_t quantizedBias = (int32_t)std::round(bias * biasScale);
             ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
             ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
             outBiases[i] = (BiasType)quantizedBias;
@@ -529,7 +543,7 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
         for (size_t j = 0; j < layer.input.size(); j++)
         {
             const float weight = layer.weights[offs + j];
-            const int32_t quantizedWeight = (int32_t)(weight * weightScale + 0.5f);
+            const int32_t quantizedWeight = (int32_t)std::round(weight * weightScale);
             ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
             ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
 
@@ -549,12 +563,14 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
 
 bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 {
-    ASSERT(layers.size() == 3);
+    ASSERT(layers.size() == 4);
     ASSERT(layers[0].output.size() == FirstLayerSize);
     ASSERT(layers[1].input.size() == FirstLayerSize);
     ASSERT(layers[1].output.size() == SecondLayerSize);
     ASSERT(layers[2].input.size() == SecondLayerSize);
-    ASSERT(layers[2].output.size() == 1);
+    ASSERT(layers[2].output.size() == ThirdLayerSize);
+    ASSERT(layers[3].input.size() == ThirdLayerSize);
+    ASSERT(layers[3].output.size() == 1);
 
     // handle layer 0 (variable size)
     {
@@ -562,14 +578,15 @@ bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 
         AlignedFree(outNetwork.layer0_weights);
 
-        outNetwork.numInputs = (uint32_t)layer.input.size();
-        outNetwork.layer0_weights = (WeightTypeLayer0*)AlignedMalloc(layer.input.size() * FirstLayerSize * sizeof(WeightTypeLayer0), 64);
+        outNetwork.header.numInputs = (uint32_t)layer.input.size();
+        outNetwork.layer0_weights = (FirstLayerWeightType*)AlignedMalloc(layer.input.size() * FirstLayerSize * sizeof(FirstLayerWeightType), 64);
 
         PackLayerWeights(layer, outNetwork.layer0_weights, outNetwork.layer0_biases, InputLayerWeightQuantizationScale, InputLayerBiasQuantizationScale, true);
     }
 
     PackLayerWeights(layers[1], outNetwork.layer1_weights, outNetwork.layer1_biases, HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
-    PackLayerWeights(layers[2], outNetwork.layer2_weights, outNetwork.layer2_biases, OutputLayerWeightQuantizationScale, OutputLayerBiasQuantizationScale, false);
+    PackLayerWeights(layers[2], outNetwork.layer2_weights, outNetwork.layer2_biases, HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
+    PackLayerWeights(layers[3], outNetwork.layer3_weights, outNetwork.layer3_biases, OutputLayerWeightQuantizationScale, OutputLayerBiasQuantizationScale, false);
 
     return true;
 }
@@ -604,10 +621,10 @@ void NeuralNetwork::PrintStats() const
     }
 
     std::cout
-        << "min weight: " << minWeight
-        << ", max weight: " << maxWeight
-        << ", min bias: " << minBias
-        << ", max bias: " << maxBias
+        << "NN min weight:  " << minWeight << std::endl
+        << "NN max weight:  " << maxWeight << std::endl
+        << "NN min bias:    " << minBias << std::endl
+        << "NN max bias:    " << maxBias << std::endl
         << std::endl;
 }
 

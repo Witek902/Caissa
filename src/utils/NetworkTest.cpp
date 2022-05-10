@@ -30,20 +30,20 @@ bool TestNetwork()
     uint32_t numTrainingVectorsPassed = 0;
 
     {
-        trainingSet[0].inputFeatures = {};
+        trainingSet[0].features = {};
         trainingSet[0].output.resize(1);
         trainingSet[0].output[0] = 0.0f;
 
         trainingSet[1].output.resize(1);
-        trainingSet[1].inputFeatures = { 0 };
+        trainingSet[1].features = { 0 };
         trainingSet[1].output[0] = 1.0f;
 
         trainingSet[2].output.resize(1);
-        trainingSet[2].inputFeatures = { 1 };
+        trainingSet[2].features = { 1 };
         trainingSet[2].output[0] = 0.0f;
 
         trainingSet[3].output.resize(1);
-        trainingSet[3].inputFeatures = { 0, 1 };
+        trainingSet[3].features = { 0, 1 };
         trainingSet[3].output[0] = 0.0f;
     }
 

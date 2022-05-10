@@ -14,7 +14,7 @@
     <ClCompile Include="SelfPlay.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Trainer.cpp">
+    <ClCompile Include="EndgameNetworkTrainer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">
@@ -51,6 +51,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PieceSquareTablesTrainer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NetworkTrainer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

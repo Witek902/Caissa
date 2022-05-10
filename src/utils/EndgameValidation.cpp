@@ -403,9 +403,9 @@ static void ValidateEndgame_2v2(const EndgameValidationParam& param)
 void ValidateEndgame()
 {
     EndgameValidationParam param;
-    param.matKey.numWhiteBishops = 1;
+    param.matKey.numWhiteBishops = 0;
     param.matKey.numWhiteRooks = 0;
-    param.matKey.numWhitePawns = 1;
+    param.matKey.numWhitePawns = 2;
     param.matKey.numBlackRooks = 0;
     param.matKey.numBlackPawns = 0;
     param.matKey.numBlackKnights = 0;
