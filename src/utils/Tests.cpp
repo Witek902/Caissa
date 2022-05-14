@@ -1525,6 +1525,17 @@ void RunSearchTests()
         TEST_EXPECT(result[0].score >= 100);
         TEST_EXPECT(result[0].moves.front() == Move::Make(Square_a1, Square_b1, Piece::King));
     }
+
+    // search explosion test
+    {
+        param.limits.maxDepth = 1;
+        param.numPvLines = 1;
+
+        game.Reset(Position("KNnNnNnk/NnNnNnNn/nNnNnNnN/NnNnNnNn/nNnNnNnN/NnNnNnNn/nNnNnNnN/NnNnNnNn w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+    }
 }
 
 void RunUnitTests()

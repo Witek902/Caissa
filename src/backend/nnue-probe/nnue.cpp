@@ -184,7 +184,7 @@ typedef int8_t weight_t;
 
 typedef struct {
   size_t size;
-  unsigned values[30];
+  unsigned values[64];
 } IndexList;
 
 INLINE int orient(int c, int s)

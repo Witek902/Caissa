@@ -51,7 +51,8 @@ static Piece TranslatePieceType(uint32_t tbPromotes)
 
 bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistanceToZero, int32_t* outWDL)
 {
-    if (!HasTablebases())
+    if (!HasTablebases() ||
+        pos.GetNumPieces() > TB_LARGEST)
     {
         return false;
     }
@@ -116,12 +117,8 @@ bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL)
     ASSERT(pos.IsValid());
     ASSERT(!pos.IsInCheck(GetOppositeColor(pos.GetSideToMove())));
 
-    if (!HasTablebases())
-    {
-        return false;
-    }
-
-    if (pos.GetNumPieces() > TB_LARGEST)
+    if (!HasTablebases() ||
+        pos.GetNumPieces() > TB_LARGEST)
     {
         return false;
     }

@@ -227,8 +227,8 @@ static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPaw
 
 static int32_t EvaluateStockfishNNUE(const Position& position, NNUEdata** nnueData)
 {
-    int32_t pieces[32 + 1];
-    int32_t squares[32 + 1];
+    int32_t pieces[64 + 1];
+    int32_t squares[64 + 1];
 
     size_t index = 2;
 
