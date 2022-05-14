@@ -891,21 +891,22 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
+        moveIndex++;
+
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
         if (bestValue > -KnownWinValue &&
             !node.isInCheck &&
-            !childNode.isInCheck &&
-            !move.IsPromotion() &&
-            moveIndex > (node.depth < 0 ? 2 : 8))
+            !move.IsPromotion())
         {
-            continue;
+                 if (node.depth < -16 && moveIndex > 1) break;
+            else if (node.depth <  -2 && moveIndex > 2) break;
+            else if (node.depth <   0 && moveIndex > 4) break;
+            else if (                    moveIndex > 8) break;
         }
 
         childNode.isInCheck = childNode.position.IsInCheck();
-
-        moveIndex++;
 
         childNode.alpha = -beta;
         childNode.beta = -alpha;
