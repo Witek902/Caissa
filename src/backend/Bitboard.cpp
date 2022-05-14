@@ -475,6 +475,23 @@ Bitboard Bitboard::GetKnightAttacks(const Square square)
     return gKnightAttacksBitboard[square.Index()];
 }
 
+NO_INLINE Bitboard Bitboard::GetKnightAttacks(const Bitboard squares)
+{
+    Bitboard result = 0;
+    if (squares)
+    {
+        // based on: https://www.chessprogramming.org/Knight_Pattern
+        const Bitboard l1 = (squares >> 1) & 0x7f7f7f7f7f7f7f7full;
+        const Bitboard l2 = (squares >> 2) & 0x3f3f3f3f3f3f3f3full;
+        const Bitboard r1 = (squares << 1) & 0xfefefefefefefefeull;
+        const Bitboard r2 = (squares << 2) & 0xfcfcfcfcfcfcfcfcull;
+        const Bitboard h1 = l1 | r1;
+        const Bitboard h2 = l2 | r2;
+        result = (h1 << 16) | (h1 >> 16) | (h2 << 8) | (h2 >> 8);
+    }
+    return result;
+}
+
 Bitboard Bitboard::GetRookAttacks(const Square square)
 {
     ASSERT(square.IsValid());
