@@ -198,6 +198,7 @@ struct Bitboard
     static Bitboard GetPawnAttacks(const Square square, const Color color);
     static Bitboard GetKingAttacks(const Square square);
     static Bitboard GetKnightAttacks(const Square square);
+    static Bitboard GetKnightAttacks(const Bitboard squares);
     static Bitboard GetRookAttacks(const Square square);
     static Bitboard GetBishopAttacks(const Square square);
 

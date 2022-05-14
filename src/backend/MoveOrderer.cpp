@@ -236,6 +236,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
     const Bitboard oponentPawnAttacks = (pos.GetSideToMove() == Color::White) ?
         Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
         Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
+    const Bitboard oponentKnightAttacks = Bitboard::GetKnightAttacks(pos.GetOpponentSide().knights);
 
     const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
 
@@ -349,11 +350,18 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to];
                 }
 
-                // penalty for sacrificing non-pawn pieces
+                // penalty moving a piece under pawn attack
                 if (move.GetPiece() != Piece::Pawn &&
-                    oponentPawnAttacks & move.ToSquare().GetBitboard())
+                    (oponentPawnAttacks & move.ToSquare().GetBitboard()))
                 {
-                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg);
+                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_pawnValue.mg);
+                }
+
+                // penalty moving a piece under knight
+                if (move.GetPiece() != Piece::Pawn && move.GetPiece() != Piece::Knight &&
+                    (oponentKnightAttacks & move.ToSquare().GetBitboard()))
+                {
+                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_knightValue.mg);
                 }
 
                 // pawn push bonus
