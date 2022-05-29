@@ -323,6 +323,7 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release-BMI2|x64'">Level1</WarningLevel>
     </ClCompile>
     <ClCompile Include="Time.cpp" />
+    <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TranspositionTable.cpp" />
     <ClCompile Include="Waitable.cpp" />
   </ItemGroup>
@@ -354,6 +355,7 @@
     <ClInclude Include="tablebase\tbconfig.h" />
     <ClInclude Include="tablebase\tbprobe.h" />
     <ClInclude Include="Time.hpp" />
+    <ClInclude Include="TimeManager.hpp" />
     <ClInclude Include="TranspositionTable.hpp" />
     <ClInclude Include="Waitable.hpp" />
   </ItemGroup>

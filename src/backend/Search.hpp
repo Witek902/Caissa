@@ -23,7 +23,7 @@ struct SearchLimits
     TimePoint rootSingularityTime = TimePoint::Invalid();
 
     // suggested search time, it's checked every iteration so can be exceeded
-    TimePoint maxTimeSoft = TimePoint::Invalid();
+    TimePoint idealTime = TimePoint::Invalid();
 
     // maximum allowed search time, after that all search must be stopped immediately
     TimePoint maxTime = TimePoint::Invalid();
@@ -173,6 +173,7 @@ private:
     {
         const Game& game;
         const SearchParam& searchParam;
+        TimePoint maxTimeSoft = TimePoint::Invalid();
         SearchStats stats;
     };
 

@@ -4,6 +4,7 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Material.hpp"
+#include "../backend/TimeManager.hpp"
 
 #include "../backend/nnue-probe/nnue.h"
 
@@ -16,7 +17,7 @@
 	#include <Windows.h>
 #endif
 
-static const char* c_EngineName = "Caissa 0.6.15";
+static const char* c_EngineName = "Caissa 0.6.16";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
@@ -176,7 +177,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "id author " << c_Author << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSizeInMB  << " min 1 max 1048576\n";
         std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
-        std::cout << "option name MoveOverhead type spin default 20 min 0 max 10000\n";
+        std::cout << "option name MoveOverhead type spin default " << mOptions.moveOverhead << " min 0 max 10000\n";
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
@@ -386,14 +387,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     return true;
 }
 
-static float EstimateMovesLeft(const uint32_t moves)
-{
-    // based on LeelaChessZero 
-    const float midpoint = 50.0f;
-    const float steepness = 6.0f;
-    return midpoint * std::pow(1.0f + 2.0f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
-}
-
 bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 {
     Command_Stop();
@@ -513,46 +506,16 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
-        SearchLimits& limits = mSearchCtx->searchParam.limits;
+        TimeManagerInitData data;
+        data.moveTime = moveTime;
+        data.remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
+        data.timeIncrement = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
+        data.theirRemainingTime = mGame.GetSideToMove() == Color::White ? blacksRemainingTime : whiteRemainingTime;
+        data.theirTimeIncrement = mGame.GetSideToMove() == Color::White ? blacksTimeIncrement : whiteTimeIncrement;
+        data.movesToGo = movesToGo;
+        data.moveOverhead = mOptions.moveOverhead;
 
-        const int32_t moveOverhead = mOptions.moveOverhead;
-        const int32_t remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
-        const int32_t remainingTimeInc = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
-
-        // soft limit
-        if (remainingTime != INT32_MAX)
-        {
-            const float movesLeftEstimated = movesToGo != UINT32_MAX ? (float)movesToGo : EstimateMovesLeft(mGame.GetPosition().GetMoveCount());
-            const float idealTimeMs = std::clamp(remainingTime / movesLeftEstimated - (float)moveOverhead + (float)remainingTimeInc, 0.0f, (float)remainingTime);
-            const float idealTime = idealTimeMs * 0.001f;
-
-            std::cout << "info string ideal time " << idealTimeMs << " ms" << std::endl;
-
-            // use at least 75% of estimated time
-            // TODO some better heuristics:
-            // for example, estimate time spent in each iteration based on previous searches
-            limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.75f * idealTime);
-
-            // abort search if significantly exceeding ideal allocated time
-            limits.maxTime = startTimePoint + TimePoint::FromSeconds(8.0f * idealTime);
-
-            // activate root singularity search after some portion of estimated time passed
-            limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.2f * idealTime);
-        }
-
-        // hard limit
-        int32_t hardLimitMs = std::min(remainingTime, moveTime);
-        if (hardLimitMs != INT32_MAX)
-        {
-            hardLimitMs = std::max(0, hardLimitMs - moveOverhead);
-            const TimePoint hardLimitTimePoint = startTimePoint + TimePoint::FromSeconds(hardLimitMs * 0.001f);
-
-            if (!limits.maxTime.IsValid() ||
-                limits.maxTime >= hardLimitTimePoint)
-            {
-                limits.maxTime = hardLimitTimePoint;
-            }
-        }
+        TimeManager::Init(mGame, data, mSearchCtx->searchParam.limits);
     }
 
     if (mateSearchDepth > 0)

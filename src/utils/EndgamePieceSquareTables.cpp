@@ -32,21 +32,23 @@ void GenerateEndgamePieceSquareTables()
     uint32_t successfullyProbed = 0;
     uint32_t maxDtz = 0;
 
+    MoveList moves;
+
     for (uint32_t blackSquareIndex = 0; blackSquareIndex < numBlackKingPositions; ++blackSquareIndex)
     {
         const Square blackKingSq = blackKingSquares[blackSquareIndex];
 
         int64_t whiteKingCounters[64] = { 0 };
-        int64_t whiteKnightCounters[64] = { 0 };
-        int64_t whiteBishopCounters[64] = { 0 };
+        int64_t whiteQueenCounters[64] = { 0 };
+        int64_t blackRookCounters[64] = { 0 };
 
         uint32_t maxNumPositions = 64 * 64 * 64;
 
         for (uint32_t posIndex = 0; posIndex < maxNumPositions; ++posIndex)
         {
             const Square whiteKingSq = (posIndex) & 0x3F;
-            const Square whiteKnightSq = (posIndex >> 6) & 0x3F;
-            const Square whiteBishopSq = (posIndex >> 12) & 0x3F;
+            const Square blackRookSq = (posIndex >> 6) & 0x3F;
+            const Square whiteQueenSq = (posIndex >> 12) & 0x3F;
 
             const Bitboard whiteKingAllowedSquares =
                 ~blackKingSq.GetBitboard() &
@@ -59,19 +61,26 @@ void GenerateEndgamePieceSquareTables()
             const Bitboard whiteBishopAllowedSquares =
                 ~blackKingSq.GetBitboard() &
                 ~whiteKingSq.GetBitboard() &
-                ~whiteKnightSq.GetBitboard();
+                ~blackRookSq.GetBitboard();
 
             if ((whiteKingSq.GetBitboard() & whiteKingAllowedSquares) == 0) continue;
-            if ((whiteKnightSq.GetBitboard() & whiteKnightAllowedSquares) == 0) continue;
-            if ((whiteBishopSq.GetBitboard() & whiteBishopAllowedSquares) == 0) continue;
+            if ((blackRookSq.GetBitboard() & whiteKnightAllowedSquares) == 0) continue;
+            if ((whiteQueenSq.GetBitboard() & whiteBishopAllowedSquares) == 0) continue;
 
             Position pos;
             pos.SetSideToMove(Color::Black);
             pos.SetPiece(blackKingSq, Piece::King, Color::Black);
             pos.SetPiece(whiteKingSq, Piece::King, Color::White);
-            pos.SetPiece(whiteKnightSq, Piece::Rook, Color::Black);
-            pos.SetPiece(whiteBishopSq, Piece::Queen, Color::White);
+            pos.SetPiece(blackRookSq, Piece::Rook, Color::Black);
+            pos.SetPiece(whiteQueenSq, Piece::Queen, Color::White);
             ASSERT(pos.IsValid());
+
+            if (pos.IsInCheck()) continue;
+
+            // generate only quiet position
+            moves.Clear();
+            pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
+            if (moves.Size() > 0) continue;
 
             Move bestMove;
             uint32_t dtz = UINT32_MAX;
@@ -85,12 +94,11 @@ void GenerateEndgamePieceSquareTables()
                 successfullyProbed++;
                 maxDtz = std::max(maxDtz, dtz);
 
-                if (wdl == 0) dtz = 64;
-                int32_t score = 64 - dtz; // (33 - dtz)* (33 - dtz);
+                if (wdl == 0) dtz = 100;
 
-                whiteKingCounters[whiteKingSq.Index()] += score;
-                whiteKnightCounters[whiteKnightSq.Index()] += score;
-                whiteBishopCounters[whiteBishopSq.Index()] += score;
+                whiteKingCounters[whiteKingSq.Index()] += dtz;
+                whiteQueenCounters[whiteQueenSq.Index()] += dtz;
+                blackRookCounters[blackRookSq.Index()] += dtz;
             }
         }
 
@@ -108,13 +116,13 @@ void GenerateEndgamePieceSquareTables()
             }
         };
 
-        std::cout << std::endl << "Black king on: " << blackKingSq.ToString() << std::endl;
-        std::cout << std::endl << "White king PST:" << std::endl;
+        std::cout << std::endl << "Black King on: " << blackKingSq.ToString() << std::endl;
+        std::cout << std::endl << "White King PST:" << std::endl;
         printPST(whiteKingCounters);
-        std::cout << std::endl << "White knight PST:" << std::endl;
-        printPST(whiteKnightCounters);
-        std::cout << std::endl << "White bishop PST:" << std::endl;
-        printPST(whiteBishopCounters);
+        std::cout << std::endl << "White Queen PST:" << std::endl;
+        printPST(whiteQueenCounters);
+        std::cout << std::endl << "Black Rook PST:" << std::endl;
+        printPST(blackRookCounters);
     }
 
     std::cout << "Successfully probed: " << successfullyProbed << std::endl;

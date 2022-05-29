@@ -308,15 +308,19 @@ bool Position::FromFEN(const std::string& fenString)
         {
             switch (*p)
             {
+            case 'A':
             case 'K':
                 mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_ShortCastleAllowed);
                 break;
+            case 'H':
             case 'Q':
                 mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_LongCastleAllowed);
                 break;
+            case 'a':
             case 'k':
                 mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_ShortCastleAllowed);
                 break;
+            case 'h':
             case 'q':
                 mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_LongCastleAllowed);
                 break;

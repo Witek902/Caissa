@@ -67,9 +67,21 @@ TimePoint TimePoint::operator + (const TimePoint& rhs) const
 	return { p };
 }
 
+TimePoint& TimePoint::operator *= (const double rhs)
+{
+	mValue.QuadPart = (LONGLONG)(mValue.QuadPart * rhs);
+	return *this;
+}
+
+
 bool TimePoint::operator >= (const TimePoint& rhs) const
 {
 	return mValue.QuadPart >= rhs.mValue.QuadPart;
+}
+
+bool TimePoint::operator != (const TimePoint& rhs) const
+{
+	return mValue.QuadPart != rhs.mValue.QuadPart;
 }
 
 #elif defined(PLATFORM_LINUX)

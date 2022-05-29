@@ -116,7 +116,7 @@ void SelfPlay(const std::vector<std::string>& args)
                 searchParam.limits.maxDepth = 16;
                 searchParam.debugLog = false;
                 searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
-                searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(0.06f);
+                searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
                 searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
 
                 searchResult.clear();

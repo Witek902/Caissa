@@ -5,6 +5,7 @@
 #include "Evaluate.hpp"
 #include "TranspositionTable.hpp"
 #include "Tablebase.hpp"
+#include "TimeManager.hpp"
 
 #ifdef USE_TABLE_BASES
     #include "tablebase/tbprobe.h"
@@ -22,8 +23,8 @@ static const float CurrentMoveReportDelay = 10.0f;
 static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const int32_t SingularitySearchMinDepth = 8;
 static const int32_t SingularitySearchScoreTresholdMin = 200;
-static const int32_t SingularitySearchScoreTresholdMax = 500;
-static const int32_t SingularitySearchScoreStep = 50;
+static const int32_t SingularitySearchScoreTresholdMax = 400;
+static const int32_t SingularitySearchScoreStep = 25;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
@@ -392,7 +393,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     uint32_t mateCounter = 0;
 
-    SearchContext searchContext{ game, param, SearchStats{} };
+    SearchContext searchContext{ game, param, param.limits.idealTime, SearchStats{} };
 
     // main iterative deepening loop
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
@@ -500,14 +501,22 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
+        // update time manager
+        if (isMainThread &&
+            !param.isPonder && !param.limits.analysisMode)
+        {
+            const TimeManagerUpdateData data{ depth, tempResult, thread.prevPvLines, param.limits };
+            TimeManager::Update(game, data, searchContext.maxTimeSoft);
+        }
+
         // rememeber PV lines so they can be used in next iteration
         thread.prevPvLines = std::move(tempResult);
 
         // check soft time limit every depth iteration
         if (isMainThread &&
             !param.isPonder &&
-            param.limits.maxTimeSoft.IsValid() &&
-            TimePoint::GetCurrent() >= param.limits.maxTimeSoft)
+            searchContext.maxTimeSoft.IsValid() &&
+            TimePoint::GetCurrent() >= searchContext.maxTimeSoft)
         {
             StopSearch();
             break;
@@ -527,7 +536,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         if (isMainThread &&
             numPvLines == 1 &&
             depth >= SingularitySearchMinDepth &&
-            std::abs(primaryMoveScore) < KnownWinValue &&
+            std::abs(primaryMoveScore) < 1000 &&
             param.limits.rootSingularityTime.IsValid() &&
             TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
         {
@@ -651,11 +660,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     }
 
     return finalPvLine;
-}
-
-static INLINE ScoreType ColorMultiplier(Color color)
-{
-    return color == Color::White ? 1 : -1;
 }
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
@@ -1550,8 +1554,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (isRootNode)
     {
         ASSERT(numBestMoves > 0);
-        ASSERT(node.pvLength > 0);
-        ASSERT(node.pvLine[0] == bestMoves[0]);
+        ASSERT(!isPvNode || node.pvLength > 0);
+        ASSERT(!isPvNode || node.pvLine[0] == bestMoves[0]);
     }
 
     // update transposition table

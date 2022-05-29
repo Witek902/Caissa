@@ -33,7 +33,10 @@ public:
 	TimePoint operator - (const TimePoint& rhs) const;
 	TimePoint operator + (const TimePoint& rhs) const;
 
+	TimePoint& operator *= (const double rhs);
+
 	bool operator >= (const TimePoint& rhs) const;
+	bool operator != (const TimePoint& rhs) const;
 
 private:
 
