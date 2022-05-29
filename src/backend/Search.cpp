@@ -41,6 +41,8 @@ static const int32_t AspirationWindowMax = 80;
 static const int32_t AspirationWindowMin = 25;
 static const int32_t AspirationWindowStep = 5;
 
+static const int32_t SingularExtensionScoreMarigin = 10;
+
 static const int32_t BetaPruningDepth = 8;
 static const int32_t BetaMarginMultiplier = 80;
 static const int32_t BetaMarginBias = 10;
@@ -1133,7 +1135,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         evalImprovement = staticEval - prevNodes[3]->staticEval;
     }
-    const bool isImproving = evalImprovement >= 0;
+    const bool isImproving = evalImprovement >= -5; // leave some small marigin
 
     // Futility/Beta Pruning
     if (!isPvNode &&
@@ -1241,6 +1243,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     uint32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
+    int32_t singularScoreDiff = 0;
 
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
@@ -1334,9 +1337,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         int32_t moveExtension = extension;
-
-        // avoid extending search too much (maximum 2x depth at root node)
-        if (node.height < 2 * thread.rootDepth)
         {
             // promotion extension
             if (move.GetPromoteTo() == Piece::Queen)
@@ -1350,50 +1350,48 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 moveExtension++;
             }
+        }
 
-            // Singular move extension
-            if (moveExtension <= 1 &&
-                !isRootNode &&
-                !hasMoveFilter &&
-                move == ttEntry.moves[0] &&
-                node.depth >= SingularitySearchMinDepth &&
-                std::abs(ttScore) < KnownWinValue &&
-                ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-                ttEntry.depth >= node.depth - 2)
+        // Singular move detection
+        if (!isRootNode &&
+            !hasMoveFilter &&
+            move == ttEntry.moves[0] &&
+            node.depth >= SingularitySearchMinDepth &&
+            std::abs(ttScore) < KnownWinValue &&
+            ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
+            ttEntry.depth >= node.depth - 2)
+        {
+            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - 2 * node.depth);
+
+            NodeInfo singularChildNode = node;
+            singularChildNode.isPvNode = false;
+            singularChildNode.depth = node.depth / 2;
+            singularChildNode.pvIndex = SingularitySearchPvIndex;
+            singularChildNode.alpha = singularBeta - 1;
+            singularChildNode.beta = singularBeta;
+            singularChildNode.moveFilter = &move;
+            singularChildNode.moveFilterCount = 1;
+
+            const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
+
+            if (singularScore < singularBeta)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 4 * node.depth);
+                singularScoreDiff = singularBeta - singularScore;
 
-                NodeInfo singularChildNode = node;
-                singularChildNode.isPvNode = false;
-                singularChildNode.depth = node.depth / 2;
-                singularChildNode.pvIndex = SingularitySearchPvIndex;
-                singularChildNode.alpha = singularBeta - 1;
-                singularChildNode.beta = singularBeta;
-                singularChildNode.moveFilter = &move;
-                singularChildNode.moveFilterCount = 1;
-
-                const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
-
-                if (singularScore < singularBeta)
+                if (node.height < 2 * thread.rootDepth)
                 {
                     moveExtension++;
-
-                    // extend even more if secondary move is really bad
-                    if (!node.isPvNode && singularScore < singularBeta - 100)
-                    {
-                        moveExtension++;
-                    }
                 }
-                else if (singularScore >= beta)
-                {
-                    // if second best move beats current beta, there most likely would be beta cutoff
-                    // when searching it at full depth
-                    return singularScore;
-                }
-                else if (ttScore >= beta)
-                {
-                    moveExtension = 0;
-                }
+            }
+            else if (singularScore >= beta)
+            {
+                // if second best move beats current beta, there most likely would be beta cutoff
+                // when searching it at full depth
+                return singularScore;
+            }
+            else if (ttScore >= beta)
+            {
+                moveExtension = 0;
             }
         }
 
@@ -1402,8 +1400,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             quietMovesTried[numQuietMovesTried++] = move;
         }
 
-        // avoid search explosion
-        moveExtension = std::clamp(moveExtension, 0, 2);
+        // avoid extending search too much (maximum 2x depth at root node)
+        if (node.height < 2 * thread.rootDepth)
+        {
+            moveExtension = std::clamp(moveExtension, 0, 2);
+        }
+        else
+        {
+            moveExtension = 0;
+        }
 
         childNode.previousMove = move;
         childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
@@ -1421,7 +1426,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // reduce depth gradually
             depthReduction = mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
 
+            // reduce non-PV nodes more
             if (!node.isPvNode) depthReduction++;
+
+            // reduce more if TT move is singular move
+            if (move != ttEntry.moves[0] && singularScoreDiff > 100) depthReduction++;
+            if (move != ttEntry.moves[0] && singularScoreDiff > 400) depthReduction++;
 
             // reduce more if eval is dropping
             if (!isImproving) depthReduction++;
@@ -1545,8 +1555,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // no legal moves
     if (!searchAborted && moveIndex == 0u)
     {
-        bestValue = node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
-        return bestValue;
+        if (filteredSomeMove)
+        {
+            return -InfValue;
+        }
+        else
+        {
+            return node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
+        }
     }
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
