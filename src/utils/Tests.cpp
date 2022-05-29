@@ -1690,7 +1690,7 @@ bool RunPerformanceTests(const char* path)
                     searchParam.numThreads = 1;
                     searchParam.limits.maxDepth = UINT8_MAX;
                     searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f);
-                    searchParam.limits.maxTimeSoft = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f / 2.0f);
+                    searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f / 2.0f);
                     searchParam.limits.analysisMode = true;
 
                     SearchResult searchResult;
