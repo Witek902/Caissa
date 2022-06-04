@@ -216,11 +216,16 @@ public:
     INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
     INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
 
-    INLINE uint32_t GetNumPieces() const
+    INLINE uint32_t GetNumPiecesExcludingKing() const
     {
         ASSERT(Whites().king.Count() == 1);
         ASSERT(Blacks().king.Count() == 1);
-        return 2 + (Whites().OccupiedExcludingKing() | Blacks().OccupiedExcludingKing()).Count();
+        return (Whites().OccupiedExcludingKing() | Blacks().OccupiedExcludingKing()).Count();
+    }
+
+    INLINE uint32_t GetNumPieces() const
+    {
+        return 2 + GetNumPiecesExcludingKing();
     }
 
     // get board hash

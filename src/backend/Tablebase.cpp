@@ -139,7 +139,6 @@ bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL)
         pos.Whites().bishops | pos.Blacks().bishops,
         pos.Whites().knights | pos.Blacks().knights,
         pos.Whites().pawns | pos.Blacks().pawns,
-        pos.GetHalfMoveCount(),
         castlingRights,
         pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
         pos.GetSideToMove() == Color::White);
@@ -150,20 +149,27 @@ bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL)
         ctx.stats.tbHits++;
 #endif // COLLECT_SEARCH_STATS
 
-        if (probeResult == TB_LOSS)
+        // wins/losses are certain only if half move count is zero
+        if (pos.GetHalfMoveCount() == 0)
         {
-            *outWDL = -1;
-        }
-        else if (probeResult == TB_WIN)
-        {
-            *outWDL = 1;
-        }
-        else if (probeResult == TB_LOSS)
-        {
-            *outWDL = 0;
+            if (probeResult == TB_LOSS)
+            {
+                *outWDL = -1;
+                return true;
+            }
+            else if (probeResult == TB_WIN)
+            {
+                *outWDL = 1;
+                return true;
+            }
         }
 
-        return true;
+        // draws are certain, no matter the half move counter
+        if (probeResult != TB_LOSS && probeResult != TB_WIN)
+        {
+            *outWDL = 0;
+            return true;
+        }
     }
 
     return false;
