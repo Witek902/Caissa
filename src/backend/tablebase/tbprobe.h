@@ -186,8 +186,6 @@ void tb_free(void);
  * PARAMETERS:
  * - white, black, kings, queens, rooks, bishops, knights, pawns:
  *   The current position (bitboards).
- * - rule50:
- *   The 50-move half-move clock.
  * - castling:
  *   Castling rights.  Set to zero if no castling is possible.
  * - ep:
@@ -213,14 +211,11 @@ static inline unsigned tb_probe_wdl(
     uint64_t _bishops,
     uint64_t _knights,
     uint64_t _pawns,
-    unsigned _rule50,
     unsigned _castling,
     unsigned _ep,
     bool     _turn)
 {
     if (_castling != 0)
-        return TB_RESULT_FAILED;
-    if (_rule50 != 0)
         return TB_RESULT_FAILED;
     return tb_probe_wdl_impl(_white, _black, _kings, _queens, _rooks,
         _bishops, _knights, _pawns, _ep, _turn);

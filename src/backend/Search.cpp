@@ -29,7 +29,7 @@ static const int32_t SingularitySearchScoreStep = 25;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
-static const int32_t TablebaseProbeDepth = 0;
+static const int32_t TablebaseProbeDepth = 2;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -1064,17 +1064,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         int32_t wdl = 0;
         if (!isRootNode &&
-            node.depth >= TablebaseProbeDepth &&
+            (node.depth >= TablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
             ProbeTablebase_WDL(position, &wdl))
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.tbHits++;
 #endif // COLLECT_SEARCH_STATS
 
+            const uint32_t numPieces = position.GetNumPiecesExcludingKing();
+
             // convert the WDL value to a score
-            ScoreType tbValue =
-                wdl < 0 ? -(TablebaseWinValue - (ScoreType)node.height) :
-                wdl > 0 ? (TablebaseWinValue - (ScoreType)node.height) : 0;
+            const ScoreType tbValue =
+                wdl < 0 ? -ScoreType(TablebaseWinValue - 100 * numPieces - node.height) :
+                wdl > 0 ? ScoreType(TablebaseWinValue - 100 * numPieces - node.height) : 0;
             ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
 
             // only draws are exact, we don't know exact value for win/loss just based on WDL value
@@ -1087,7 +1089,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 (bounds == TTEntry::Bounds::Lower && tbValue >= beta) ||
                 (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
             {
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node.height), staticEval, node.depth, bounds);
+                if (!ttEntry.IsValid())
+                {
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node.height), staticEval, node.depth, bounds);
+                }
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.ttWrites++;
@@ -1207,6 +1212,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         node.depth--;
         if (node.depth >= 6 && node.isPvNode) node.depth--;
+    }
+
+    // determine global depth reduction for quiet moves
+    int32_t globalDepthReduction = 0;
+    {
+        // reduce non-PV nodes more
+        if (!node.isPvNode) globalDepthReduction++;
+
+        // reduce more if eval is dropping
+        if (!isImproving) globalDepthReduction++;
     }
 
     NodeInfo childNode;
@@ -1423,33 +1438,28 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             !ctx.searchParam.limits.mateSearch &&
             move.IsQuiet())
         {
-            // reduce depth gradually
-            depthReduction = mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
+            depthReduction = globalDepthReduction;
 
-            // reduce non-PV nodes more
-            if (!node.isPvNode) depthReduction++;
+            // reduce depth gradually
+            depthReduction += mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
 
             // reduce more if TT move is singular move
             if (move != ttEntry.moves[0] && singularScoreDiff > 100) depthReduction++;
             if (move != ttEntry.moves[0] && singularScoreDiff > 400) depthReduction++;
 
-            // reduce more if eval is dropping
-            if (!isImproving) depthReduction++;
-
             // reduce good moves less
+            if (moveScore < -8000) depthReduction++;
             if (moveScore > 0) depthReduction--;
-
-            // reduce killer moves less
-            if (moveScore <= MoveOrderer::KillerMoveBonus && moveScore > MoveOrderer::KillerMoveBonus - MoveOrderer::NumKillerMoves) depthReduction--;
+            if (moveScore > 8000) depthReduction--;
 
             // reduce less if move gives check
             if (childNode.isInCheck) depthReduction--;
 
             if (node.previousMove.IsCapture() && std::abs(staticEval) >= KnownWinValue) depthReduction++;
-
-            // don't drop into QS
-            depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
         }
+
+        // don't drop into QS
+        depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
 
         ScoreType score = InvalidValue;
 
