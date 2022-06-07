@@ -284,7 +284,7 @@ static constexpr ScoreType InfValue             = 32767;
 static constexpr ScoreType InvalidValue         = INT16_MAX;
 static constexpr ScoreType CheckmateValue       = 32000;
 static constexpr ScoreType TablebaseWinValue    = 31000;
-static constexpr ScoreType KnownWinValue        = 12000;
+static constexpr ScoreType KnownWinValue        = 20000;
 static constexpr ScoreType MaxNNScore           = 10000;
 
 static constexpr uint16_t MaxSearchDepth    = 256;

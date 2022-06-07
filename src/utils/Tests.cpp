@@ -648,12 +648,12 @@ static void RunPositionTests()
             Position pos("4kr2/8/8/8/8/8/8/R3K2R w KQ - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-TEST_EXPECT(move.FromSquare() == Square_e1);
-TEST_EXPECT(move.ToSquare() == Square_g1);
-TEST_EXPECT(move.GetPiece() == Piece::King);
-TEST_EXPECT(move.IsCapture() == false);
-TEST_EXPECT(move.IsCastling() == true);
-TEST_EXPECT(!pos.IsMoveValid(move));
+            TEST_EXPECT(move.FromSquare() == Square_e1);
+            TEST_EXPECT(move.ToSquare() == Square_g1);
+            TEST_EXPECT(move.GetPiece() == Piece::King);
+            TEST_EXPECT(move.IsCapture() == false);
+            TEST_EXPECT(move.IsCastling() == true);
+            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move rook, loose castling rights
@@ -1362,6 +1362,11 @@ static void RunEvalTests()
         TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/4B3/1P6/1K6 w - - 0 1")));
         TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/8/P3B3/1K6 w - - 0 1")));
     }
+
+    // extreme disbalance
+    {
+        TEST_EXPECT(Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1")) < KnownWinValue);
+    }
 }
 
 // this test suite runs full search on well known/easy positions
@@ -1526,12 +1531,23 @@ void RunSearchTests()
         TEST_EXPECT(result[0].moves.front() == Move::Make(Square_a1, Square_b1, Piece::King));
     }
 
-    // search explosion test
+    // search explosion test 1
     {
         param.limits.maxDepth = 1;
         param.numPvLines = 1;
 
         game.Reset(Position("KNnNnNnk/NnNnNnNn/nNnNnNnN/NnNnNnNn/nNnNnNnN/NnNnNnNn/nNnNnNnN/NnNnNnNn w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+    }
+
+    // search explosion test 2
+    {
+        param.limits.maxDepth = 1;
+        param.numPvLines = 1;
+
+        game.Reset(Position("qQqqkqqQ/Qqqqqqqq/qQqqqqqQ/QqQqQqQq/qQqQqQqQ/QqQQQQQq/qQQQQQQQ/QqQQKQQq w - - 0 1"));
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 1);

@@ -11,6 +11,8 @@
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
+static constexpr int32_t c_evalSaturationTreshold   = 6000;
+
 static constexpr int32_t c_castlingRightsBonus  = 5;
 static constexpr int32_t c_doubledPawnPenalty   = 0;
 static constexpr int32_t c_noPawnPenalty        = 120;
@@ -484,7 +486,13 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
     // accumulate middle/end game scores
     value += InterpolateScore(position, valueMG, valueEG);
 
-    ASSERT(value < KnownWinValue&& value > -KnownWinValue);
+    // saturate eval value so it doesn't exceed KnownWinValue
+    if (value > c_evalSaturationTreshold)
+    {
+        value = c_evalSaturationTreshold + (value - c_evalSaturationTreshold) / 4;
+    }
+
+    ASSERT(value > -KnownWinValue && value < KnownWinValue);
 
     constexpr int32_t nnueTreshold = 512;
 
@@ -498,6 +506,8 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
 
     // scale down when approaching 50-move draw
     value = value * (128 - std::max(0, (int32_t)position.GetHalfMoveCount() - 8)) / 128;
+
+    ASSERT(value > -KnownWinValue && value < KnownWinValue);
 
     return (ScoreType)value;
 }
