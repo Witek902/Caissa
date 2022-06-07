@@ -309,8 +309,8 @@ void Position::GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags) const
         const Square fromSquare(fromIndex);
         const Square squareForward(fromSquare.Index() + pawnDirection * 8); // next rank
 
-        // there should be no pawn in first or last rank
-        ASSERT(fromSquare.Rank() > 0u && fromSquare.Rank() < 7u);
+        // there should be no pawn on the last rank
+        ASSERT(fromSquare.RelativeRank(mSideToMove) < 7u);
 
         // capture on the left
         if (fromSquare.File() > 0u)

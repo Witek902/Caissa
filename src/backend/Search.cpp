@@ -121,7 +121,7 @@ NO_INLINE bool Search::CheckStopCondition(const SearchContext& ctx, bool isRootN
         }
 
         // check inner nodes periodically
-        if (isRootNode || (ctx.stats.nodes % 64 == 0))
+        if (isRootNode || (ctx.stats.nodes % 256 == 0))
         {
             if (ctx.searchParam.limits.maxTime.IsValid() &&
                 TimePoint::GetCurrent() >= ctx.searchParam.limits.maxTime)
@@ -762,6 +762,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     node.pvLength = 0;
 
     // update stats
+    ctx.stats.nodes++;
     ctx.stats.quiescenceNodes++;
     ctx.stats.maxDepth = std::max<uint32_t>(ctx.stats.maxDepth, node.height);
 
@@ -865,6 +866,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     uint32_t numBestMoves = 0;
     int32_t moveIndex = 0;
     uint32_t numQuietCheckEvasion = 0;
+    bool searchAborted = false;
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
@@ -902,14 +904,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -KnownWinValue &&
-            !node.isInCheck &&
-            !move.IsPromotion())
+        if (bestValue > -KnownWinValue)
         {
-                 if (node.depth < -16 && moveIndex > 1) break;
-            else if (node.depth <  -2 && moveIndex > 2) break;
-            else if (node.depth <   0 && moveIndex > 4) break;
-            else if (                    moveIndex > 8) break;
+                 if (node.depth < -4 && moveIndex > 1) break;
+            else if (node.depth < -2 && moveIndex > 2) break;
+            else if (node.depth <  0 && moveIndex > 4) break;
         }
 
         childNode.isInCheck = childNode.position.IsInCheck();
@@ -940,16 +939,23 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             alpha = score;
         }
+
+        if (CheckStopCondition(ctx, false))
+        {
+            // abort search of further moves
+            searchAborted = true;
+            break;
+        }
     }
 
     // no legal moves - checkmate
-    if (node.isInCheck && moveIndex == 0)
+    if (!searchAborted && node.isInCheck && moveIndex == 0)
     {
         return -CheckmateValue + (ScoreType)node.height;
     }
 
     // store value in transposition table
-    if (!CheckStopCondition(ctx, false))
+    if (!searchAborted)
     {
         // if we didn't beat alpha and had valid TT entry, don't overwrite it
         if (bestValue <= oldAlpha && ttEntry.IsValid() && ttEntry.depth > 0)
