@@ -59,7 +59,13 @@ public:
         INLINE void Load(uint32_t& outHash, TTEntry& outEntry) const
         {
             // Xor trick by Robert Hyatt and Tim Mann
-            outHash = key ^ entry.GetHash();
+            
+            // equivalent of:
+            // outHash = key ^ entry.GetHash();
+            const uint64_t* t = reinterpret_cast<const uint64_t*>(this);
+            const uint64_t hash = t[0] ^ t[1];
+            outHash = (uint32_t)hash ^ (uint32_t)(hash >> 32);
+            
             outEntry = entry;
         }
 
@@ -103,7 +109,7 @@ private:
 
     mutable TTCluster* clusters;
     size_t numClusters;
-
+    size_t hashMask;
     uint8_t generation;
 
     uint64_t numCollisions;

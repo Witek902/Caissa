@@ -4,6 +4,7 @@
 #include <cstring>
 #include <stdlib.h>
 #include <math.h>
+#include <atomic>
 
 #ifdef ARCHITECTURE_X64
     #include <immintrin.h>
@@ -267,6 +268,13 @@ inline void AlignedFree(void* ptr)
 #elif defined(PLATFORM_LINUX)
     free(ptr);
 #endif
+}
+
+template<typename T>
+INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
+{
+    T prev = outMax;
+    while (prev < value && !outMax.compare_exchange_weak(prev, value)) { }
 }
 
 union MaterialKey;
