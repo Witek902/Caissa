@@ -155,11 +155,18 @@ private:
         UpperBound = 2,
     };
 
-    struct SearchStats
+    struct ThreadStats
     {
-        std::atomic<uint64_t> nodes = 0;
+        uint64_t nodes = 0;
         uint64_t quiescenceNodes = 0;
         uint32_t maxDepth = 0;
+    };
+
+    struct Stats
+    {
+        std::atomic<uint64_t> nodes = 0;
+        std::atomic<uint64_t> quiescenceNodes = 0;
+        std::atomic<uint32_t> maxDepth = 0;
 
 #ifdef COLLECT_SEARCH_STATS
         uint64_t ttHits = 0;
@@ -167,6 +174,8 @@ private:
         uint64_t tbHits = 0;
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
 #endif // COLLECT_SEARCH_STATS
+
+        void Append(ThreadStats& threadStats, bool flush = false);
     };
 
     struct SearchContext
@@ -174,7 +183,7 @@ private:
         const Game& game;
         const SearchParam& searchParam;
         TimePoint maxTimeSoft = TimePoint::Invalid();
-        SearchStats stats;
+        Stats stats;
     };
 
     struct AspirationWindowSearchParam
@@ -200,6 +209,10 @@ private:
         // principial variation lines from previous iterative deepening search
         SearchResult prevPvLines;
 
+        // per-thread search stats
+        ThreadStats stats;
+
+        // per-thread move orderer
         MoveOrderer moveOrderer;
 
         // get PV move from previous depth iteration
@@ -236,5 +249,5 @@ private:
     static void GetPvLine(const NodeInfo& rootNode, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
 
     // returns true if the search needs to be aborted immediately
-    bool CheckStopCondition(const SearchContext& ctx, bool isRootNode) const;
+    bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const;
 };

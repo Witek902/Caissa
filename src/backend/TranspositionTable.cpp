@@ -52,6 +52,7 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
 TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
     , numClusters(0)
+    , hashMask(0)
     , generation(0)
     , numCollisions(0)
 {
@@ -106,6 +107,7 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
 
     clusters = (TTCluster*)Malloc(newNumClusters * sizeof(TTCluster));
     numClusters = newNumClusters;
+    hashMask = numClusters - 1;
     ASSERT(clusters);
     ASSERT((size_t)clusters % CACHELINE_SIZE == 0);
 
@@ -126,9 +128,7 @@ void TranspositionTable::Prefetch(const Position& position) const
 #ifdef USE_SSE
     if (clusters)
     {
-        const size_t hashmapMask = numClusters - 1;
-
-        const TTCluster* cluster = clusters + (position.GetHash() & hashmapMask);
+        const TTCluster* cluster = clusters + (position.GetHash() & hashMask);
         _mm_prefetch(reinterpret_cast<const char*>(cluster), _MM_HINT_T0);
     }
 #else
@@ -140,9 +140,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 {
     if (clusters)
     {
-        const size_t hashmapMask = numClusters - 1;
-
-        TTCluster& cluster = clusters[position.GetHash() & hashmapMask];
+        TTCluster& cluster = clusters[position.GetHash() & hashMask];
 
         const uint32_t posKey = (position.GetHash() >> 32);
 
@@ -154,9 +152,12 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 
             if (hash == posKey && data.bounds != TTEntry::Bounds::Invalid)
             {
-                // update entry generation
-                data.generation = generation;
-                cluster[i].Store(hash, data);
+                if (data.generation != generation)
+                {
+                    // update entry generation
+                    data.generation = generation;
+                    cluster[i].Store(hash, data);
+                }
 
                 outEntry = data;
                 return true;
@@ -188,10 +189,9 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     }
 
     const uint64_t positionHash = position.GetHash();
-    const size_t hashmapMask = numClusters - 1;
     const uint32_t positionKey = (uint32_t)(positionHash >> 32);
 
-    TTCluster& cluster = clusters[positionHash & hashmapMask];
+    TTCluster& cluster = clusters[positionHash & hashMask];
 
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;
