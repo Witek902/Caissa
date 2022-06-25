@@ -1436,7 +1436,7 @@ void RunSearchTests()
 
     // mate in two
     {
-        param.limits.maxDepth = 12;
+        param.limits.maxDepth = 25;
         param.limits.mateSearch = true;
         param.numPvLines = 1;
 

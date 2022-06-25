@@ -169,10 +169,13 @@ private:
         std::atomic<uint32_t> maxDepth = 0;
 
 #ifdef COLLECT_SEARCH_STATS
+        static const int32_t EvalHistogramMaxValue = 1600;
+        static const int32_t EvalHistogramBins = 100;
         uint64_t ttHits = 0;
         uint64_t ttWrites = 0;
         uint64_t tbHits = 0;
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
+        uint64_t evalHistogram[EvalHistogramBins] = { 0 };
 #endif // COLLECT_SEARCH_STATS
 
         void Append(ThreadStats& threadStats, bool flush = false);
@@ -182,8 +185,8 @@ private:
     {
         const Game& game;
         const SearchParam& searchParam;
+        Stats& stats;
         TimePoint maxTimeSoft = TimePoint::Invalid();
-        Stats stats;
     };
 
     struct AspirationWindowSearchParam
@@ -231,7 +234,7 @@ private:
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
-    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult);
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult);
 
     bool IsDraw(const NodeInfo& node, const Game& game) const;
 
