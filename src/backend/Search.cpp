@@ -29,7 +29,7 @@ static const int32_t SingularitySearchScoreStep = 25;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
-static const int32_t TablebaseProbeDepth = 2;
+static const int32_t TablebaseProbeDepth = 4;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -61,6 +61,7 @@ INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
     return HistoryPruningScoreBase - 256 * depth - 64 * depth * depth;
 }
 
+NO_INLINE
 void Search::Stats::Append(ThreadStats& threadStats, bool flush)
 {
     if (threadStats.nodes >= 64 || flush)
@@ -248,6 +249,8 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
         }
     }
 
+    Stats globalStats;
+
     mThreadData.resize(param.numThreads);
     mThreadData[0].isMainThread = true;
 
@@ -258,9 +261,10 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 
         for (uint32_t i = param.numThreads; i-- > 0; )
         {
-            threads.emplace_back([this, i, numPvLines, &game, &param, &outResult]() INLINE_LAMBDA
+            // NOTE: can't capture everything by reference, because lambda is running in a thread
+            threads.emplace_back([this, i, numPvLines, &game, &param, &globalStats, &outResult]() INLINE_LAMBDA
             {
-                Search_Internal(i, numPvLines, game, param, outResult);
+                Search_Internal(i, numPvLines, game, param, globalStats, outResult);
             });
         }
 
@@ -271,7 +275,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     }
     else
     {
-        Search_Internal(0, numPvLines, game, param, outResult);
+        Search_Internal(0, numPvLines, game, param, globalStats, outResult);
     }
 }
 
@@ -349,26 +353,41 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
-        uint32_t maxMoveIndex = 0;
-        uint64_t sum = 0;
-        double average = 0.0;
-        for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
         {
-            if (param.searchContext.stats.betaCutoffHistogram[i])
+            uint32_t maxMoveIndex = 0;
+            uint64_t sum = 0;
+            double average = 0.0;
+            for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
             {
-                sum += param.searchContext.stats.betaCutoffHistogram[i];
-                average += (double)i * (double)param.searchContext.stats.betaCutoffHistogram[i];
-                maxMoveIndex = std::max(maxMoveIndex, i);
+                if (param.searchContext.stats.betaCutoffHistogram[i])
+                {
+                    sum += param.searchContext.stats.betaCutoffHistogram[i];
+                    average += (double)i * (double)param.searchContext.stats.betaCutoffHistogram[i];
+                    maxMoveIndex = std::max(maxMoveIndex, i);
+                }
+            }
+            average /= sum;
+            printf("Average cutoff move index: %.3f\n", average);
+
+            printf("Beta cutoff histogram\n");
+            for (uint32_t i = 0; i <= maxMoveIndex; ++i)
+            {
+                const uint64_t value = param.searchContext.stats.betaCutoffHistogram[i];
+                printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
             }
         }
-        average /= sum;
-        printf("Average cutoff move index: %.3f\n", average);
 
-        printf("Beta cutoff histogram\n");
-        for (uint32_t i = 0; i <= maxMoveIndex; ++i)
+
         {
-            const uint64_t value = param.searchContext.stats.betaCutoffHistogram[i];
-            printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
+            printf("Eval value histogram\n");
+            for (uint32_t i = 0; i < Stats::EvalHistogramBins; ++i)
+            {
+                const int32_t lowEval = -Stats::EvalHistogramMaxValue + i * 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
+                const int32_t highEval = lowEval + 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
+                const uint64_t value = param.searchContext.stats.evalHistogram[i];
+
+                printf("    %4d...%4d %llu\n", lowEval, highEval, value);
+            }
         }
     }
 #endif // COLLECT_SEARCH_STATS
@@ -391,7 +410,7 @@ static bool IsMate(const ScoreType score)
     return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
 }
 
-void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, SearchResult& outResult)
+void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult)
 {
     const bool isMainThread = threadID == 0;
     ThreadData& thread = mThreadData[threadID];
@@ -408,7 +427,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     uint32_t mateCounter = 0;
 
-    SearchContext searchContext{ game, param, param.limits.idealTime, Stats{} };
+    SearchContext searchContext{ game, param, outStats, param.limits.idealTime };
 
     // main iterative deepening loop
     for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
@@ -824,6 +843,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             const ScoreType evalScore = Evaluate(position);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+
+#ifdef COLLECT_SEARCH_STATS
+            int32_t binIndex = (evalScore + Stats::EvalHistogramMaxValue) * Stats::EvalHistogramBins / (2 * Stats::EvalHistogramMaxValue);
+            binIndex = std::clamp<int32_t>(binIndex, 0, Stats::EvalHistogramBins);
+            ctx.stats.evalHistogram[binIndex]++;
+#endif // COLLECT_SEARCH_STATS
         }
 
         // try to use TT score for better evaluation estimate
@@ -1049,6 +1074,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType beta = node.beta;
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
+    bool tbHit = false;
 
     // mate distance pruning
     if (!isRootNode)
@@ -1091,16 +1117,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             (node.depth >= TablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
             ProbeTablebase_WDL(position, &wdl))
         {
+            tbHit = true;
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.tbHits++;
 #endif // COLLECT_SEARCH_STATS
 
-            const uint32_t numPieces = position.GetNumPiecesExcludingKing();
-
             // convert the WDL value to a score
             const ScoreType tbValue =
-                wdl < 0 ? -ScoreType(TablebaseWinValue - 100 * numPieces - node.height) :
-                wdl > 0 ? ScoreType(TablebaseWinValue - 100 * numPieces - node.height) : 0;
+                wdl < 0 ? -ScoreType(TablebaseWinValue - node.height) :
+                wdl > 0 ? ScoreType(TablebaseWinValue - node.height) : 0;
             ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
 
             // only draws are exact, we don't know exact value for win/loss just based on WDL value
@@ -1171,8 +1196,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         !node.isInCheck &&
         node.depth <= BetaPruningDepth &&
         std::abs(staticEval) <= KnownWinValue &&
-        staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)) &&
-        !ctx.searchParam.limits.mateSearch)
+        staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
     {
         return staticEval;
     }
@@ -1184,7 +1208,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         !hasMoveFilter &&
         staticEval >= beta &&
         node.depth >= NullMoveReductionsStartDepth &&
-        !ctx.searchParam.limits.mateSearch &&
         (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
         position.HasNonPawnMaterial(position.GetSideToMove()))
     {
@@ -1246,6 +1269,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // reduce more if eval is dropping
         if (!isImproving) globalDepthReduction++;
+
+        if (tbHit) globalDepthReduction++;
     }
 
     NodeInfo childNode;
@@ -1459,8 +1484,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (moveIndex > 1 &&
             node.depth >= LateMoveReductionStartDepth &&
             !node.isInCheck &&
-            !ctx.searchParam.limits.mateSearch &&
-            move.IsQuiet())
+            (moveScore < MoveOrderer::GoodCaptureValue && !move.IsPromotion()))
         {
             depthReduction = globalDepthReduction;
 
@@ -1600,7 +1624,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
-    
+
     if (isRootNode)
     {
         ASSERT(numBestMoves > 0);

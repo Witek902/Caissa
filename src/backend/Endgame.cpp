@@ -752,8 +752,8 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
 
         if (win)
         {
-            outScore = KnownWinValue + 200;
-            outScore -= 2 * weakPawn.Rank();
+            outScore = KnownWinValue + 300;
+            outScore -= 16 * weakPawn.Rank();
             outScore -= Square::Distance(weakPawn, strongKing);
             outScore += Square::Distance(weakPawn, weakKing);
             return true;
@@ -775,8 +775,8 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
         ASSERT(psqtIndex < 24);
 
         outScore = blackPawnPsqt[psqtIndex];
-        outScore -= 40 * Square::Distance(strongKing, promotionSquare);
-        outScore += 40 * Square::Distance(weakKing, pushedPawnSquare);
+        outScore -= 64 * Square::Distance(strongKing, promotionSquare);
+        outScore += 64 * Square::Distance(weakKing, pushedPawnSquare);
         return true;
     }
 
