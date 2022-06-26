@@ -246,10 +246,10 @@ private:
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
 
     // check for repetition in the searched node
-    bool IsRepetition(const NodeInfo& node, const Game& game) const;
+    static bool IsRepetition(const NodeInfo& node, const Game& game);
 
     // reconstruct PV line from cache and TT table
-    static void GetPvLine(const NodeInfo& rootNode, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
+    static void GetPvLine(const Game& game, const NodeInfo& rootNode, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const;

@@ -149,13 +149,13 @@ NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const Search
     return false;
 }
 
-void Search::GetPvLine(const NodeInfo& rootNode, const Position& pos, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
+void Search::GetPvLine(const Game& game, const NodeInfo& rootNode, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
 {
     outLine.clear();
 
     if (maxLength > 0)
     {
-        Position iteratedPosition = pos;
+        Position iteratedPosition = rootNode.position;
 
         uint32_t i = 0;
 
@@ -185,6 +185,9 @@ void Search::GetPvLine(const NodeInfo& rootNode, const Position& pos, const Tran
             if (!iteratedPosition.DoMove(move)) break;
 
             outLine.push_back(move);
+
+            if (IsRepetition(rootNode, game)) break;
+            if (iteratedPosition.GetHalfMoveCount() >= 100) break;
         }
     }
 }
@@ -393,7 +396,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #endif // COLLECT_SEARCH_STATS
 
     std::cout << std::move(ss.str()) << std::endl;
-    std::cout.flush();
 }
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
@@ -629,6 +631,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     PvLine pvLine; // working copy
     PvLine finalPvLine;
 
+    const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? param.depth : std::min(param.depth, DefaultMaxPvLineLength);
+
     for (;;)
     {
         NodeInfo rootNode;
@@ -645,7 +649,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
-        GetPvLine(rootNode, param.position, param.searchParam.transpositionTable, param.depth, pvLine.moves);
+        GetPvLine(param.searchContext.game, rootNode, param.searchParam.transpositionTable, maxPvLine, pvLine.moves);
 
         // flush pending per-thread stats
         param.searchContext.stats.Append(thread.stats);
@@ -718,7 +722,7 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
     return pvMove;
 }
 
-bool Search::IsRepetition(const NodeInfo& node, const Game& game) const
+bool Search::IsRepetition(const NodeInfo& node, const Game& game)
 {
     const NodeInfo* prevNode = &node;
 
@@ -780,11 +784,6 @@ bool Search::IsDraw(const NodeInfo& node, const Game& game) const
     return false;
 }
 
-static ScoreType GetDrawScore(uint64_t nodes)
-{
-    return DrawScoreRandomness - (nodes % (2 * DrawScoreRandomness));
-}
-
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.depth <= 0);
@@ -804,7 +803,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     if (IsDraw(node, ctx.game))
     {
-        return GetDrawScore(ctx.stats.quiescenceNodes);
+        return 0;
     }
 
     const Position& position = node.position;
@@ -1055,7 +1054,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // Skip root node as we need some move to be reported
     if (!isRootNode && IsDraw(node, ctx.game))
     {
-        return GetDrawScore(thread.stats.nodes);
+        return 0;
     }
 
     const Position& position = node.position;
