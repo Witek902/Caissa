@@ -36,8 +36,10 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
             factor *= 0.75f;
         }
 
-        const float idealTime = std::clamp(factor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement, 0.0f, (float)data.remainingTime);
-        const float maxTime = std::clamp(2.0f * factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement, 0.0f, (float)data.remainingTime);
+        const float increment = 0.9f * (float)data.timeIncrement;
+
+        const float idealTime = std::clamp(factor * (data.remainingTime - moveOverhead) / movesLeft + increment, 0.0f, (float)data.remainingTime);
+        const float maxTime = std::clamp(2.0f * factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment, 0.0f, (float)data.remainingTime);
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string ideal time " << idealTime << " ms" << std::endl;
