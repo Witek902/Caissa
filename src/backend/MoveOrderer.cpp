@@ -8,7 +8,6 @@
 #include <limits>
 
 static constexpr int32_t RecaptureBonus = 100000;
-static constexpr int32_t CastlingBonus = 8000;
 
 static const int32_t c_PromotionScores[] =
 {
@@ -368,11 +367,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                 if (move.GetPiece() == Piece::Pawn)
                 {
                     score += 32 * int32_t(move.ToSquare().RelativeRank(pos.GetSideToMove()));
-                }
-
-                if (move.IsCastling())
-                {
-                    score += CastlingBonus;
                 }
             }
         }
