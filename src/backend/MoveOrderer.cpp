@@ -163,7 +163,7 @@ void MoveOrderer::Clear()
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = (int32_t)counter + 8 * delta - (int32_t)counter * std::abs(delta) / 1024;
+    int32_t newValue = (int32_t)counter + 8 * delta - ((int32_t)counter * std::abs(delta) + 512) / 1024;
 
     // there should be no saturation
     ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());
@@ -187,7 +187,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
     const Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
 
-    const int32_t bonus = std::min(depth * depth, 256);
+    const int32_t bonus = std::min(depth * depth, 512);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
@@ -274,6 +274,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
+        ASSERT(piece < 6);
+        ASSERT(from < 64);
+        ASSERT(to < 64);
+
         // skip PV & TT moves
         if (moves[i].score >= TTMoveValue - 64)
         {
@@ -347,6 +351,20 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     const uint32_t prevPiece = (uint32_t)followupMove.GetPiece() - 1;
                     const uint32_t prevTo = followupMove.ToSquare().Index();
                     score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to];
+                }
+
+                // bonus for moving a piece out of pawn attack
+                if (move.GetPiece() != Piece::Pawn &&
+                    (oponentPawnAttacks & move.FromSquare().GetBitboard()))
+                {
+                    score += 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_pawnValue.mg);
+                }
+
+                // bonus for moving a piece out of knight attack
+                if ((move.GetPiece() == Piece::Queen || move.GetPiece() == Piece::Rook) &&
+                    (oponentKnightAttacks & move.FromSquare().GetBitboard()))
+                {
+                    score += 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_knightValue.mg);
                 }
 
                 // penalty moving a piece under pawn attack
