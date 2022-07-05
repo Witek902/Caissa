@@ -289,6 +289,7 @@
     <ClCompile Include="PGNParser.cpp" />
     <ClCompile Include="PieceSquareTables.h" />
     <ClCompile Include="Position.cpp" />
+    <ClCompile Include="PositionHash.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="Square.cpp" />
@@ -347,6 +348,7 @@
     <ClInclude Include="PGNParser.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />
+    <ClInclude Include="PositionHash.hpp" />
     <ClInclude Include="PositionUtils.hpp" />
     <ClInclude Include="Search.hpp" />
     <ClInclude Include="Square.hpp" />

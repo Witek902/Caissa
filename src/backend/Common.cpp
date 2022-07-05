@@ -1,9 +1,10 @@
 #include "Common.hpp"
 
 #include "Memory.hpp"
-#include "Position.hpp"
+#include "PositionHash.hpp"
 #include "Endgame.hpp"
 #include "Evaluate.hpp"
+#include "Search.hpp"
 
 void InitEngine()
 {
@@ -12,4 +13,5 @@ void InitEngine()
     InitZobristHash();
     InitEndgame();
     InitEvaluation();
+    Search::Init();
 }

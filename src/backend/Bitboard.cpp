@@ -11,6 +11,7 @@ static Bitboard gBishopAttacksMasks[Square::NumSquares];
 static Bitboard gRookAttacksBitboard[Square::NumSquares];
 static Bitboard gBishopAttacksBitboard[Square::NumSquares];
 static Bitboard gRaysBitboard[Square::NumSquares][8];
+static Bitboard gBetweenBitboards[Square::NumSquares][Square::NumSquares];
 
 static const uint64_t cRookMagics[Square::NumSquares] =
 {
@@ -398,6 +399,31 @@ static void InitMagicBitboards()
 }
 */
 
+static void InitBetweenBitboards()
+{
+    memset(gBetweenBitboards, 0, sizeof(gBetweenBitboards));
+
+    for (uint32_t squareA = 0; squareA < 64; ++squareA)
+    {
+        for (uint32_t squareB = squareA + 1; squareB < 64; ++squareB)
+        {
+            if (Bitboard::GetRookAttacks(squareA) & Square(squareB).GetBitboard())
+            {
+                gBetweenBitboards[squareA][squareB] |=
+                    Bitboard::GenerateRookAttacks(squareA, Square(squareB).GetBitboard()) &
+                    Bitboard::GenerateRookAttacks(squareB, Square(squareA).GetBitboard());
+            }
+
+            if (Bitboard::GetBishopAttacks(squareA) & Square(squareB).GetBitboard())
+            {
+                gBetweenBitboards[squareB][squareB] |=
+                    Bitboard::GenerateBishopAttacks(squareA, Square(squareB).GetBitboard()) &
+                    Bitboard::GenerateBishopAttacks(squareB, Square(squareA).GetBitboard());
+            }
+        }
+    }
+}
+
 void InitBitboards()
 {
     InitRays();
@@ -409,6 +435,8 @@ void InitBitboards()
     InitRookMagicBitboards();
     InitBishopMagicBitboards();
 
+    InitBetweenBitboards();
+
     //InitMagicBitboards();
 }
 
@@ -419,6 +447,12 @@ Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
     return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
 }
 
+Bitboard Bitboard::GetBetween(const Square squareA, const Square squareB)
+{
+    ASSERT(squareA.IsValid());
+    ASSERT(squareB.IsValid());
+    return gBetweenBitboards[squareA.Index()][squareB.Index()];
+}
 
 template<>
 Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
@@ -502,6 +536,11 @@ Bitboard Bitboard::GetBishopAttacks(const Square square)
 {
     ASSERT(square.IsValid());
     return gBishopAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetQueenAttacks(const Square square)
+{
+    return GetRookAttacks(square) | GetBishopAttacks(square);
 }
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)

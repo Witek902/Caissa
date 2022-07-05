@@ -39,6 +39,11 @@ inline float PawnToWinProbability(float pawnsDifference)
     return 1.0f / (1.0f + powf(10.0, -pawnsDifference / 4.0f));
 }
 
+inline float CentiPawnToWinProbability(int32_t centiPawnsDifference)
+{
+    return PawnToWinProbability(static_cast<float>(centiPawnsDifference) * 0.01f);
+}
+
 // convert win probability into evaluation score (in pawns)
 inline float WinProbabilityToPawns(float w)
 {

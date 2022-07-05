@@ -2,63 +2,15 @@
 #include "MoveList.hpp"
 #include "Bitboard.hpp"
 #include "Material.hpp"
+#include "PositionHash.hpp"
 
 #include <random>
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-// 800 random bytes to store Zobrist hash
-// 
-// 2*6*64 for pieces piece
-// 4 for castlight rights
-// 8 for en passant square
-// 
-// This gives 780 64-bit hashes required. We overlap all the hashes (1 byte offsets),
-// so required storage is 8x smaller.
-// Note: side-to-move hash is stored separately
-static uint64_t s_ZobristHash[100];
-static constexpr uint64_t s_BlackToMoveHash = 0xef3994857c29fd96ull;
-
-void InitZobristHash()
-{
-    std::mt19937_64 mt(0x06db3aa64a37b526LLU);
-    std::uniform_int_distribution<uint64_t> distr;
-
-    for (uint32_t i = 0; i < 100; ++i)
-    {
-        s_ZobristHash[i] = distr(mt);
-    }
-}
-
-INLINE static uint64_t GetPieceZobristHash(const Color color, const Piece piece, const uint32_t squareIndex)
-{
-    const uint32_t pieceIndex = (uint32_t)piece - (uint32_t)Piece::Pawn;
-    const uint32_t offset = (uint32_t)color + 2 * (squareIndex + 64 * pieceIndex);
-    ASSERT(offset < 2 * 6 * 64);
-    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
-}
-
-INLINE static uint64_t GetEnPassantFileZobristHash(uint32_t fileIndex)
-{
-    ASSERT(fileIndex < 8);
-
-    // skip position hashes
-    const uint32_t offset = (2 * 6 * 64) + fileIndex;
-    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
-}
-
-INLINE static uint64_t GetCastlingRightsZobristHash(const Color color, uint32_t rookIndex)
-{
-    ASSERT(rookIndex < 2);
-
-    // skip position hashes and en passant hashes
-    const uint32_t offset = (2 * 6 * 64 + 8) + (uint32_t)color + 2 * rookIndex;
-    return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
-}
-
 uint64_t Position::ComputeHash() const
 {
-    uint64_t hash = mSideToMove == Color::Black ? s_BlackToMoveHash : 0llu;
+    uint64_t hash = mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu;
 
     for (uint32_t colorIdx = 0; colorIdx < 2; ++colorIdx)
     {
@@ -152,7 +104,7 @@ void Position::SetSideToMove(Color color)
 
     if (mSideToMove != color)
     {
-        mHash ^= s_BlackToMoveHash;
+        mHash ^= GetSideToMoveZobristHash();
         mSideToMove = color;
     }
 }
@@ -839,7 +791,7 @@ bool Position::DoMove(const Move& move)
     const Color prevToMove = mSideToMove;
 
     mSideToMove = GetOppositeColor(mSideToMove);
-    mHash ^= s_BlackToMoveHash;
+    mHash ^= GetSideToMoveZobristHash();
 
     ASSERT(IsValid());  // board position after the move must be valid
 
@@ -865,7 +817,7 @@ bool Position::DoNullMove()
     mHalfMoveCount++;
 
     mSideToMove = GetOppositeColor(mSideToMove);
-    mHash ^= s_BlackToMoveHash;
+    mHash ^= GetSideToMoveZobristHash();
 
     ASSERT(IsValid());  // board position after the move must be valid
 
