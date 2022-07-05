@@ -228,6 +228,9 @@ public:
         return 2 + GetNumPiecesExcludingKing();
     }
 
+    // get all occupied pieces bitboard
+    INLINE Bitboard Occupied() const { return Whites().Occupied() | Blacks().Occupied(); }
+
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
@@ -297,5 +300,3 @@ private:
 };
 
 static_assert(sizeof(Position) == 112, "Invalid position size");
-
-void InitZobristHash();

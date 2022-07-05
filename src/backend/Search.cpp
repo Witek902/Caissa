@@ -6,6 +6,7 @@
 #include "TranspositionTable.hpp"
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
+#include "PositionHash.hpp"
 
 #ifdef USE_TABLE_BASES
     #include "tablebase/tbprobe.h"
@@ -72,6 +73,62 @@ void Search::Stats::Append(ThreadStats& threadStats, bool flush)
 
         threadStats = ThreadStats{};
     }
+}
+
+constexpr uint32_t CuckooTableSize = 8192;
+
+// First and second hash functions for indexing the cuckoo tables
+INLINE uint32_t CuckooIndex1(uint64_t h) { return h % CuckooTableSize; }
+INLINE uint32_t CuckooIndex2(uint64_t h) { return (h >> 16) % CuckooTableSize; }
+
+// Cuckoo tables with Zobrist hashes of valid reversible moves, and the moves themselves
+uint64_t cuckoo[CuckooTableSize];
+PackedMove cuckooMove[CuckooTableSize];
+
+void Search::Init()
+{
+    memset(cuckoo, 0, sizeof(cuckoo));
+    memset(cuckooMove, 0, sizeof(cuckooMove));
+
+    uint32_t count = 0;
+    for (const Color color : {Color::White, Color::Black})
+    {
+        for (const Piece piece : {Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King})
+        {
+            for (uint32_t squareA = 0; squareA < 64; ++squareA)
+            {
+                for (uint32_t squareB = squareA + 1; squareB < 64; ++squareB)
+                {
+                    Bitboard attacks;
+                    switch (piece)
+                    {
+                    case Piece::Pawn:   attacks = Bitboard::GetPawnAttacks(Square(squareA), color);     break;
+                    case Piece::Knight: attacks = Bitboard::GetKnightAttacks(Square(squareA));          break;
+                    case Piece::Bishop: attacks = Bitboard::GetBishopAttacks(Square(squareA));          break;
+                    case Piece::Rook:   attacks = Bitboard::GetRookAttacks(Square(squareA));            break;
+                    case Piece::Queen:  attacks = Bitboard::GetQueenAttacks(Square(squareA));           break;
+                    case Piece::King:   attacks = Bitboard::GetKingAttacks(Square(squareA));            break;
+                    }
+
+                    if (attacks & Square(squareB).GetBitboard())
+                    {
+                        PackedMove move{ Square(squareA), Square(squareB) };
+                        uint64_t key = GetPieceZobristHash(color, piece, squareA) ^ GetPieceZobristHash(color, piece, squareB) ^ GetSideToMoveZobristHash();
+                        uint32_t index = CuckooIndex1(key);
+                        for (;;)
+                        {
+                            std::swap(cuckoo[index], key);
+                            std::swap(cuckooMove[index], move);
+                            if (!move.IsValid()) break;
+                            index = (index == CuckooIndex1(key)) ? CuckooIndex2(key) : CuckooIndex1(key);
+                        }
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+    ASSERT(count == 3668);
 }
 
 Search::Search()
@@ -764,6 +821,41 @@ bool Search::IsRepetition(const NodeInfo& node, const Game& game)
     return game.GetRepetitionCount(node.position) >= 2;
 }
 
+bool Search::CanReachGameCycle(const NodeInfo& node)
+{
+    if (node.position.GetHalfMoveCount() < 3)
+    {
+        return false;
+    }
+
+    const uint64_t originalKey = node.position.GetHash();
+    const NodeInfo* prevNode = node.parentNode;
+    ASSERT(prevNode);
+
+    for (;;)
+    {
+        if (!prevNode->parentNode || !prevNode->parentNode->parentNode) break;
+        prevNode = prevNode->parentNode->parentNode;
+
+        const uint64_t moveKey = originalKey ^ prevNode->position.GetHash();
+
+        uint32_t index = CuckooTableSize;
+        if (cuckoo[CuckooIndex1(moveKey)] == moveKey) index = CuckooIndex1(moveKey);
+        else if (cuckoo[CuckooIndex2(moveKey)] == moveKey) index = CuckooIndex2(moveKey);
+
+        if (index < CuckooTableSize)
+        {
+            const PackedMove move = cuckooMove[index];
+            if (!(Bitboard::GetBetween(move.FromSquare(), move.ToSquare()) & node.position.Occupied()))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 bool Search::IsDraw(const NodeInfo& node, const Game& game) const
 {
     if (node.position.GetHalfMoveCount() >= 100)
@@ -1040,9 +1132,23 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height);
     ctx.stats.Append(thread.stats);
 
+    const Position& position = node.position;
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.isPvNode;
     const bool hasMoveFilter = node.moveFilterCount > 0u;
+
+    ScoreType alpha = node.alpha;
+    ScoreType beta = node.beta;
+
+    // check if we can draw by repetition
+    if (!isRootNode && alpha < 0 && CanReachGameCycle(node))
+    {
+        alpha = 0;
+        if (alpha >= beta)
+        {
+            return alpha;
+        }
+    }
 
     // maximum search depth reached, enter quisence search to find final evaluation
     if (node.depth <= 0)
@@ -1057,8 +1163,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         return 0;
     }
 
-    const Position& position = node.position;
-
     // TODO use proper stack
     const NodeInfo* prevNodes[4] = { nullptr };
     prevNodes[0] = node.parentNode;
@@ -1069,8 +1173,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
 
     const ScoreType oldAlpha = node.alpha;
-    ScoreType alpha = node.alpha;
-    ScoreType beta = node.beta;
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
     bool tbHit = false;
@@ -1618,7 +1720,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
         else
         {
-            return node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
+            bestValue = node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
+
+            // write TT entry so it will overwrite any incorrect entry coming from QSearch
+            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), bestValue, INT8_MAX, TTEntry::Bounds::Exact);
+
+            return bestValue;
         }
     }
 

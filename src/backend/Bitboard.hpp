@@ -188,6 +188,7 @@ struct Bitboard
     }
 
     static Bitboard GetRay(const Square square, const RayDir dir);
+    static Bitboard GetBetween(const Square squareA, const Square squareB);
 
     template<Color color>
     static Bitboard GetPawnAttacks(const Square square);
@@ -201,6 +202,7 @@ struct Bitboard
     static Bitboard GetKnightAttacks(const Bitboard squares);
     static Bitboard GetRookAttacks(const Square square);
     static Bitboard GetBishopAttacks(const Square square);
+    static Bitboard GetQueenAttacks(const Square square);
 
     static Bitboard GenerateRookAttacks(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks(const Square square, const Bitboard blockers);

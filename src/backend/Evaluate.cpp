@@ -505,7 +505,7 @@ ScoreType Evaluate(const Position& position, NNUEdata** nnueData)
     }
 
     // scale down when approaching 50-move draw
-    value = value * (128 - std::max(0, (int32_t)position.GetHalfMoveCount() - 8)) / 128;
+    value = value * (128 - std::max(0, (int32_t)position.GetHalfMoveCount() - 4)) / 128;
 
     ASSERT(value > -KnownWinValue && value < KnownWinValue);
 
