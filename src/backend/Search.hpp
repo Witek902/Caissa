@@ -133,8 +133,6 @@ class Search
 {
 public:
 
-    static void Init();
-
     Search();
     ~Search();
 
@@ -238,24 +236,12 @@ private:
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult);
 
-    bool IsDraw(const NodeInfo& node, const Game& game) const;
-
     bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
 
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
 
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
-
-    // check for repetition in the searched node
-    static bool IsRepetition(const NodeInfo& node, const Game& game);
-
-    // check if the search node has a move that draws by repetition
-    // or a past position could directly reach the current position
-    static bool CanReachGameCycle(const NodeInfo& node);
-
-    // reconstruct PV line from cache and TT table
-    static void GetPvLine(const Game& game, const NodeInfo& rootNode, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
 
     // returns true if the search needs to be aborted immediately
     bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const;

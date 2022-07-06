@@ -285,6 +285,7 @@ struct PackedMove;
 class MoveList;
 class Game;
 class TranspositionTable;
+struct NodeInfo;
 
 using ScoreType = int16_t;
 

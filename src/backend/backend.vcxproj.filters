@@ -101,6 +101,9 @@
     <ClCompile Include="PositionHash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SearchUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -194,6 +197,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PositionHash.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SearchUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

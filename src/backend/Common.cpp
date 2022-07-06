@@ -4,7 +4,7 @@
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
 #include "Evaluate.hpp"
-#include "Search.hpp"
+#include "SearchUtils.hpp"
 
 void InitEngine()
 {
@@ -13,5 +13,5 @@ void InitEngine()
     InitZobristHash();
     InitEndgame();
     InitEvaluation();
-    Search::Init();
+    SearchUtils::Init();
 }
