@@ -292,6 +292,7 @@
     <ClCompile Include="PositionHash.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
     <ClCompile Include="Search.cpp" />
+    <ClCompile Include="SearchUtils.cpp" />
     <ClCompile Include="Square.cpp" />
     <ClCompile Include="Tablebase.cpp" />
     <ClCompile Include="tablebase\tbprobe.c">
@@ -351,6 +352,7 @@
     <ClInclude Include="PositionHash.hpp" />
     <ClInclude Include="PositionUtils.hpp" />
     <ClInclude Include="Search.hpp" />
+    <ClInclude Include="SearchUtils.hpp" />
     <ClInclude Include="Square.hpp" />
     <ClInclude Include="Tablebase.hpp" />
     <ClInclude Include="tablebase\stdendian.h" />

@@ -62,7 +62,7 @@ void SelfPlay(const std::vector<std::string>& args)
     ttArray.resize(numThreads);
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray[i].Resize(64ull * 1024ull * 1024ull);
+        ttArray[i].Resize(32ull * 1024ull * 1024ull);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -113,11 +113,11 @@ void SelfPlay(const std::vector<std::string>& args)
                 const TimePoint startTimePoint = TimePoint::GetCurrent();
 
                 SearchParam searchParam{ tt };
-                searchParam.limits.maxDepth = 16;
                 searchParam.debugLog = false;
-                searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
-                searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
-                searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
+                searchParam.limits.maxNodes = 100000 + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+                //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
+                //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
+                //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
 
                 searchResult.clear();
                 tt.NextGeneration();
@@ -197,7 +197,6 @@ void SelfPlay(const std::vector<std::string>& args)
                 const std::string pgn = game.ToPGN();
 
                 std::cout << std::endl << pgn << std::endl;
-                std::cout.flush();
             }
         });
 
