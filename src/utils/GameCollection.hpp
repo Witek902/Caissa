@@ -51,6 +51,7 @@ namespace GameCollection
 		Writer(OutputStream& stream) : mStream(stream) { }
 
 		bool WriteGame(const Game& game);
+		bool IsOK() const { return mStream.IsOK(); }
 
 	private:
 		OutputStream& mStream;

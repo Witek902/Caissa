@@ -19,6 +19,7 @@ public:
     ~OutputStream() = default;
     virtual uint64_t GetSize() = 0;
     virtual bool Write(const void* data, size_t size) = 0;
+    virtual bool IsOK() const { return true; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -65,6 +66,7 @@ public:
     bool Seek(uint64_t pos);
     virtual uint64_t GetSize() override;
     virtual bool Write(const void* data, size_t size) override;
+    virtual bool IsOK() const override;
 private:
     FILE* mFile;
 };

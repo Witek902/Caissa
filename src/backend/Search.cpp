@@ -8,6 +8,7 @@
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
 #include "PositionHash.hpp"
+#include "Score.hpp"
 
 #ifdef USE_TABLE_BASES
     #include "tablebase/tbprobe.h"
@@ -31,7 +32,8 @@ static const int32_t SingularitySearchScoreStep = 25;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
-static const int32_t TablebaseProbeDepth = 4;
+static const int32_t WdlTablebaseProbeDepth = 4;
+static const int32_t WdlTablebaseProbeMaxNumPieces = 5;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -197,14 +199,15 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
         }
 
         // try returning tablebase move immediately
-        if (numPvLines == 1)
+        if (param.useRootTablebase && numPvLines == 1)
         {
+            int32_t wdl = 0;
             Move tbMove;
-            if (ProbeTablebase_Root(game.GetPosition(), tbMove))
+            if (ProbeTablebase_Root(game.GetPosition(), tbMove, nullptr, &wdl))
             {
                 ASSERT(tbMove.IsValid());
                 outResult.front().moves.push_back(tbMove);
-                outResult.front().score = 0;
+                outResult.front().tbScore = static_cast<ScoreType>(wdl * TablebaseWinValue);
                 return;
             }
         }
@@ -363,11 +366,6 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
         << " currmove " << move.ToString()
         << " currmovenumber " << moveNumber
         << std::endl;
-}
-
-static bool IsMate(const ScoreType score)
-{
-    return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
 }
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult)
@@ -742,7 +740,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
 #ifdef COLLECT_SEARCH_STATS
             int32_t binIndex = (evalScore + Stats::EvalHistogramMaxValue) * Stats::EvalHistogramBins / (2 * Stats::EvalHistogramMaxValue);
-            binIndex = std::clamp<int32_t>(binIndex, 0, Stats::EvalHistogramBins);
+            binIndex = std::clamp<int32_t>(binIndex, 0, Stats::EvalHistogramBins - 1);
             ctx.stats.evalHistogram[binIndex]++;
 #endif // COLLECT_SEARCH_STATS
         }
@@ -1022,7 +1020,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         int32_t wdl = 0;
         if (!isRootNode &&
-            (node.depth >= TablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
+            (node.depth >= WdlTablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
+            position.GetNumPieces() <= WdlTablebaseProbeMaxNumPieces &&
             ProbeTablebase_WDL(position, &wdl))
         {
             tbHit = true;
@@ -1487,7 +1486,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (score >= beta)
         {
             ASSERT(moveIndex > 0);
-
+            ASSERT(moveIndex <= MoveList::MaxMoves);
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
 #endif // COLLECT_SEARCH_STATS

@@ -63,6 +63,9 @@ struct SearchParam
     // print UCI-style output
     bool debugLog = true;
 
+    // probe tablebases at the root
+    bool useRootTablebase = true;
+
     // use colors in console output to make it more readable
     bool colorConsoleOutput = false;
 
@@ -77,6 +80,7 @@ struct PvLine
 {
     std::vector<Move> moves;
     ScoreType score = InvalidValue;
+    ScoreType tbScore = InvalidValue;
 };
 
 using SearchResult = std::vector<PvLine>;

@@ -192,6 +192,7 @@
     <ClCompile>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)tablebase;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -351,6 +352,7 @@
     <ClInclude Include="Position.hpp" />
     <ClInclude Include="PositionHash.hpp" />
     <ClInclude Include="PositionUtils.hpp" />
+    <ClInclude Include="Score.hpp" />
     <ClInclude Include="Search.hpp" />
     <ClInclude Include="SearchUtils.hpp" />
     <ClInclude Include="Square.hpp" />

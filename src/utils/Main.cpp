@@ -78,5 +78,7 @@ int main(int argc, const char* argv[])
         AnalyzeGames();
     }
 
+    system("pause");
+
     return 0;
 }
