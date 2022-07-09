@@ -62,10 +62,10 @@ public:
     bool IsDrawn() const;
 
     // convert moves list to PGN string
-    std::string ToPGNMoveList() const;
+    std::string ToPGNMoveList(bool includeScores = false) const;
 
     // print whole game as PNG string
-    std::string ToPGN() const;
+    std::string ToPGN(bool includeScores = false) const;
 
 private:
 

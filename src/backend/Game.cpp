@@ -1,5 +1,6 @@
 #include "Game.hpp"
 #include "Evaluate.hpp"
+#include "Score.hpp"
 
 #include <sstream>
 
@@ -143,7 +144,7 @@ bool Game::operator != (const Game& rhs) const
         mMoveScores != rhs.mMoveScores;
 }
 
-std::string Game::ToPGNMoveList() const
+std::string Game::ToPGNMoveList(bool includeScores) const
 {
     std::stringstream str;
 
@@ -158,6 +159,13 @@ std::string Game::ToPGNMoveList() const
 
         str << pos.MoveToString(mMoves[i]) << ' ';
 
+        if (includeScores && i < mMoveScores.size())
+        {
+            str << '{';
+            str << ScoreToStr(mMoveScores[i]);
+            str << "} ";
+        }
+
         const bool moveResult = pos.DoMove(mMoves[i]);
         ASSERT(moveResult);
         (void)moveResult;
@@ -168,7 +176,7 @@ std::string Game::ToPGNMoveList() const
     return str.str();
 }
 
-std::string Game::ToPGN() const
+std::string Game::ToPGN(bool includeScores) const
 {
     std::stringstream str;
 
@@ -202,7 +210,7 @@ std::string Game::ToPGN() const
     str << "[Termination \"" << terminationStr << "\"]" << std::endl;
     str << "[FEN \"" << mInitPosition.ToFEN() << "\"]" << std::endl;
     str << std::endl;
-    str << ToPGNMoveList() << resultStr;
+    str << ToPGNMoveList(includeScores) << resultStr;
 
     return str.str();
 }

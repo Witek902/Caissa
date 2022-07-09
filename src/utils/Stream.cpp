@@ -132,3 +132,8 @@ bool FileOutputStream::Write(const void* data, size_t size)
 {
     return fwrite(data, size, 1, mFile) == 1;
 }
+
+bool FileOutputStream::IsOK() const
+{
+    return mFile;
+}
