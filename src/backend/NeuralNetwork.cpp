@@ -29,7 +29,7 @@ Layer::Layer(size_t inputSize, size_t outputSize)
 
 void Layer::InitWeights()
 {
-    const float scale = 4.0f / sqrtf((float)input.size());
+    const float scale = 1.0f / sqrtf((float)input.size());
 
     for (size_t i = 0; i < weights.size(); i++)
     {
@@ -81,6 +81,8 @@ void Layer::Run(const Values& in)
     for (size_t i = 0; i < output.size(); i++)
     {
         float x = weights[offs + input.size()];
+
+        #pragma loop(hint_parallel(8))
         for (size_t j = 0; j < input.size(); j++)
         {
             x += weights[offs + j] * input[j];
@@ -152,13 +154,19 @@ void Layer::Backpropagate(const Values& error)
             errorGradient *= InvTanDerivative(linearValue[i]);
         }
 
-        for (size_t j = 0; j <= inputSize; j++)
+        #pragma loop(hint_parallel(8))
+        for (size_t j = 0; j < inputSize; j++)
         {
-            size_t idx = offs + j;
-            const float inputValue = j < inputSize ? input[j] : 1.0f;
-
+            const size_t idx = offs + j;
             nextError[j] += weights[idx] * errorGradient;
-            gradient[idx] += inputValue * errorGradient;
+            gradient[idx] += input[j] * errorGradient;
+        }
+
+        // update gradient for bias
+        {
+            const size_t idx = offs + inputSize;
+            nextError[inputSize] += weights[idx] * errorGradient;
+            gradient[idx] += errorGradient;
         }
 
         offs += inputSize + 1;
@@ -572,21 +580,15 @@ bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
     ASSERT(layers[3].input.size() == ThirdLayerSize);
     ASSERT(layers[3].output.size() == 1);
 
-    // handle layer 0 (variable size)
+    if (!outNetwork.Resize((uint32_t)layers.front().input.size()))
     {
-        const Layer& layer = layers.front();
-
-        AlignedFree(outNetwork.layer0_weights);
-
-        outNetwork.header.numInputs = (uint32_t)layer.input.size();
-        outNetwork.layer0_weights = (FirstLayerWeightType*)AlignedMalloc(layer.input.size() * FirstLayerSize * sizeof(FirstLayerWeightType), 64);
-
-        PackLayerWeights(layer, outNetwork.layer0_weights, outNetwork.layer0_biases, InputLayerWeightQuantizationScale, InputLayerBiasQuantizationScale, true);
+        return false;
     }
 
-    PackLayerWeights(layers[1], outNetwork.layer1_weights, outNetwork.layer1_biases, HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
-    PackLayerWeights(layers[2], outNetwork.layer2_weights, outNetwork.layer2_biases, HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
-    PackLayerWeights(layers[3], outNetwork.layer3_weights, outNetwork.layer3_biases, OutputLayerWeightQuantizationScale, OutputLayerBiasQuantizationScale, false);
+    PackLayerWeights(layers[0], (FirstLayerWeightType*)outNetwork.GetAccumulatorWeights(), (FirstLayerBiasType*)outNetwork.GetAccumulatorBiases(), InputLayerWeightQuantizationScale, InputLayerBiasQuantizationScale, true);
+    PackLayerWeights(layers[1], (HiddenLayerWeightType*)outNetwork.GetLayer1Weights(), (HiddenLayerBiasType*)outNetwork.GetLayer1Biases(), HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
+    PackLayerWeights(layers[2], (HiddenLayerWeightType*)outNetwork.GetLayer2Weights(), (HiddenLayerBiasType*)outNetwork.GetLayer2Biases(), HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
+    PackLayerWeights(layers[3], (HiddenLayerWeightType*)outNetwork.GetLayer3Weights(), (HiddenLayerBiasType*)outNetwork.GetLayer3Biases(), OutputLayerWeightQuantizationScale, OutputLayerBiasQuantizationScale, false);
 
     return true;
 }
