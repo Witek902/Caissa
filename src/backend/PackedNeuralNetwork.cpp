@@ -5,24 +5,27 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <intrin.h>
 
 #ifdef USE_AVX2
-    #include <intrin.h>
     #define NN_USE_AVX2
 #endif // USE_AVX2
 
-#if defined(NN_USE_AVX2)
-constexpr uint32_t OptimalRegisterCount = 16;
-#elif defined(NN_USE_SSE)
+#ifdef USE_SSE2
+    #define NN_USE_SSE2
+#endif // USE_SSE
+
+#ifdef USE_SSE4
+    #define NN_USE_SSE4
+#endif // USE_SSE
+
 constexpr uint32_t OptimalRegisterCount = 8;
-#else
-constexpr uint32_t OptimalRegisterCount = 1;
-#endif
 
 namespace nn {
 
-using IntermediateType = int8_t;
+static_assert(sizeof(PackedNeuralNetwork::Header) % CACHELINE_SIZE == 0, "Network header size must be multiple of cacheline size");
 
+using IntermediateType = int8_t;
 
 void Accumulator::Refresh(
     const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
@@ -32,26 +35,32 @@ void Accumulator::Refresh(
     (void)numInputs;
     (void)numOutputs;
 
-#ifdef NN_USE_AVX2
-    constexpr uint32_t registerWidth = 256 / 16;
-    static_assert(FirstLayerSize % registerWidth == 0, "We're processing 16 elements at a time");
+#if defined(NN_USE_AVX2)
+
+    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     ASSERT(FirstLayerSize == numOutputs);
+    ASSERT((size_t)weights % 32 == 0);
+    ASSERT((size_t)biases % 32 == 0);
+    ASSERT((size_t)values % 32 == 0);
 
     constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
     static_assert(numChunks % OptimalRegisterCount == 0);
     constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
 
-    __m256i regs[OptimalRegisterCount];
+    FirstLayerWeightType* valuesStart = values;
 
+    __m256i regs[OptimalRegisterCount];
     for (uint32_t tile = 0; tile < numTiles; ++tile)
     {
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
 
         {
-            const FirstLayerBiasType* biasesStart = biases + chunkBase;
+            //const FirstLayerBiasType* biasesStart = biases + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                regs[i] = _mm256_load_si256(reinterpret_cast<const __m256i*>(biasesStart + i * registerWidth));
+                regs[i] = _mm256_load_si256(reinterpret_cast<const __m256i*>(biases));
+                biases += registerWidth;
             }
         }
 
@@ -71,15 +80,66 @@ void Accumulator::Refresh(
 
         // #TODO keep values as __m256i
         {
-            FirstLayerWeightType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                _mm256_store_si256(reinterpret_cast<__m256i*>(valuesStart + i * registerWidth), regs[i]);
+                _mm256_store_si256(reinterpret_cast<__m256i*>(valuesStart), regs[i]);
+                valuesStart += registerWidth;
             }
         }
     }
 
-#else
+#elif defined(NN_USE_SSE2)
+
+    constexpr uint32_t registerWidth = 128 / (8 * sizeof(FirstLayerWeightType));
+    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
+    ASSERT(FirstLayerSize == numOutputs);
+    ASSERT((size_t)weights % 16 == 0);
+    ASSERT((size_t)biases % 16 == 0);
+
+    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0);
+    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+
+    __m128i regs[OptimalRegisterCount];
+
+    for (uint32_t tile = 0; tile < numTiles; ++tile)
+    {
+        const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
+
+        {
+            const FirstLayerBiasType* biasesStart = biases + chunkBase;
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                regs[i] = _mm_load_si128(reinterpret_cast<const __m128i*>(biasesStart + i * registerWidth));
+            }
+        }
+
+        for (uint32_t j = 0; j < numActiveFeatures; ++j)
+        {
+            ASSERT(activeFeatures[j] < numInputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * FirstLayerSize);
+
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                regs[i] = _mm_add_epi16(
+                    regs[i],
+                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
+                );
+            }
+        }
+
+        // #TODO keep values as __m256i
+        {
+            FirstLayerWeightType* valuesStart = values + chunkBase;
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
+            }
+        }
+    }
+
+#else // no SIMD support
+
     int32_t regs[FirstLayerSize];
 
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
@@ -119,21 +179,21 @@ void Accumulator::Update(
     (void)numOutputs;
     ASSERT(numOutputs == FirstLayerSize);
 
-#ifdef NN_USE_AVX2
-    constexpr uint32_t registerWidth = 256 / 16;
-    static_assert(FirstLayerSize % registerWidth == 0, "We're processing 16 elements at a time");
-
+#if defined(NN_USE_AVX2)
+    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
     static_assert(numChunks % OptimalRegisterCount == 0);
     constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    ASSERT((size_t)weights % 32 == 0);
+    ASSERT((size_t)source.values % 32 == 0);
+    ASSERT((size_t)values % 32 == 0);
 
     __m256i regs[OptimalRegisterCount];
-
     for (uint32_t tile = 0; tile < numTiles; ++tile)
     {
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
 
-        // #TODO keep values as __m256i
         {
             const FirstLayerWeightType* valuesStart = source.values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
@@ -168,7 +228,6 @@ void Accumulator::Update(
             }
         }
 
-        // #TODO keep values as __m256i
         {
             FirstLayerWeightType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
@@ -178,12 +237,66 @@ void Accumulator::Update(
         }
     }
 
-#else
+#elif defined(NN_USE_SSE2)
+    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
+    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
+    static_assert(numChunks% OptimalRegisterCount == 0);
+    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    ASSERT((size_t)weights % 16 == 0);
+
+    __m128i regs[OptimalRegisterCount];
+    for (uint32_t tile = 0; tile < numTiles; ++tile)
+    {
+        const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
+
+        {
+            const FirstLayerWeightType* valuesStart = source.values + chunkBase;
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                regs[i] = _mm_load_si128(reinterpret_cast<const __m128i*>(valuesStart + i * registerWidth));
+            }
+        }
+
+        for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+        {
+            ASSERT(removedFeatures[j] < numInputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * FirstLayerSize);
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                regs[i] = _mm_sub_epi16(
+                    regs[i],
+                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
+                );
+            }
+        }
+
+        for (uint32_t j = 0; j < numAddedFeatures; ++j)
+        {
+            ASSERT(addedFeatures[j] < numInputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * FirstLayerSize);
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                regs[i] = _mm_add_epi16(
+                    regs[i],
+                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
+                );
+            }
+        }
+
+        {
+            FirstLayerWeightType* valuesStart = values + chunkBase;
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            {
+                _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
+            }
+        }
+    }
+#else // no SIMD support
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
     {
         values[i] = source.values[i];
     }
-
     for (uint32_t j = 0; j < numRemovedFeatures; ++j)
     {
         ASSERT(removedFeatures[j] < numInputs);
@@ -194,7 +307,6 @@ void Accumulator::Update(
             values[i] -= weights[weightsDataOffset + i];
         }
     }
-
     for (uint32_t j = 0; j < numAddedFeatures; ++j)
     {
         ASSERT(addedFeatures[j] < numInputs);
@@ -210,32 +322,58 @@ void Accumulator::Update(
 
 INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const FirstLayerWeightType* input)
 {
-#ifdef NN_USE_AVX2
+#if defined(NN_USE_AVX2)
     static_assert(std::is_same_v<FirstLayerWeightType, int16_t>, "Invalid type");
     constexpr uint32_t inRegisterWidth = 256 / 16;
     constexpr uint32_t outRegisterWidth = 256 / 8;
     ASSERT(size % outRegisterWidth == 0);
     const uint32_t numOutChunks = size / outRegisterWidth;
+    ASSERT((size_t)output % 32 == 0);
+    ASSERT((size_t)input % 32 == 0);
 
     for (uint32_t i = 0; i < numOutChunks; ++i)
     {
-        const __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 2 + 0)]));
-        const __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 2 + 1)]));
+        const __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input));
+        input += inRegisterWidth;
+        const __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input));
+        input += inRegisterWidth;
 
         const __m256i result =
             // packs changes the order, so we need to fix that with a permute
             _mm256_permute4x64_epi64(
                 // packs saturates to 127, so we only need to clamp from below
-                _mm256_max_epi8(
-                    _mm256_packs_epi16(in0, in1),
-                    _mm256_setzero_si256()
-                ),
-                0b11011000
+                _mm256_max_epi8(_mm256_packs_epi16(in0, in1), _mm256_setzero_si256()),
+                0b11'01'10'00
             );
 
-        _mm256_store_si256(reinterpret_cast<__m256i*>(&output[i * outRegisterWidth]), result);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(output), result);
+        output += outRegisterWidth;
     }
-#else
+
+#elif defined(NN_USE_SSE4)
+    static_assert(std::is_same_v<FirstLayerWeightType, int16_t>, "Invalid type");
+    constexpr uint32_t inRegisterWidth = 128 / 16;
+    constexpr uint32_t outRegisterWidth = 128 / 8;
+    ASSERT(size % outRegisterWidth == 0);
+    const uint32_t numOutChunks = size / outRegisterWidth;
+    ASSERT((size_t)output % 16 == 0);
+    ASSERT((size_t)input % 16 == 0);
+
+    for (uint32_t i = 0; i < numOutChunks; ++i)
+    {
+        const __m128i in0 = _mm_load_si128(reinterpret_cast<const __m128i*>(input));
+        input += inRegisterWidth;
+        const __m128i in1 = _mm_load_si128(reinterpret_cast<const __m128i*>(input));
+        input += inRegisterWidth;
+
+        // packs saturates to 127, so we only need to clamp from below
+        const __m128i result = _mm_max_epi8(_mm_packs_epi16(in0, in1), _mm_setzero_si128());
+
+        _mm_store_si128(reinterpret_cast<__m128i*>(output), result);
+        output += outRegisterWidth;
+    }
+
+#else // no SIMD support
     for (uint32_t i = 0; i < size; ++i)
     {
         output[i] = (IntermediateType)std::clamp<FirstLayerWeightType>(input[i], 0, std::numeric_limits<IntermediateType>::max());
@@ -276,15 +414,46 @@ INLINE static int32_t m256_hadd(__m256i a)
 
 #endif // USE_AVX2
 
+#ifdef USE_SSE4
+
+INLINE static void m128_add_dpbusd_epi32(__m128i& acc, __m128i a, __m128i b)
+{
+#if defined (USE_VNNI)
+    acc = _mm_dpbusd_epi32(acc, a, b);
+#else
+    __m128i product0 = _mm_maddubs_epi16(a, b);
+    product0 = _mm_madd_epi16(product0, _mm_set1_epi16(1));
+    acc = _mm_add_epi32(acc, product0);
+#endif
+}
+
+INLINE static __m128i m128_haddx4(__m128i a, __m128i b, __m128i c, __m128i d)
+{
+    return _mm_hadd_epi32(_mm_hadd_epi32(a, b), _mm_hadd_epi32(c, d));
+}
+
+INLINE static int32_t m128_hadd(__m128i a)
+{
+    a = _mm_hadd_epi32(a, a);
+    a = _mm_hadd_epi32(a, a);
+    return _mm_cvtsi128_si32(a);
+}
+
+#endif // USE_SSE4
+
 INLINE static void LinearLayer(
     const HiddenLayerWeightType* weights, const HiddenLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs, int32_t* output, const IntermediateType* input)
 {
-#ifdef NN_USE_AVX2
+#if defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 256 / 8;
+    const uint32_t numOutChunks = numOutputs / 4u;
     ASSERT(numInputs % registerWidth == 0);
     ASSERT(numOutputs % 4u == 0);
-    const uint32_t numOutChunks = numOutputs / 4u;
+    ASSERT((size_t)weights % 32 == 0);
+    ASSERT((size_t)biases % 32 == 0);
+    ASSERT((size_t)output % 32 == 0);
+    ASSERT((size_t)input % 32 == 0);
 
     for (uint32_t i = 0; i < numOutChunks; ++i)
     {
@@ -308,10 +477,11 @@ INLINE static void LinearLayer(
             const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
 
             // This function processes a 32x1 chunk of int8 and produces a 8x1 chunk of int32.
-            m256_add_dpbusd_epi32(sum0, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + offset0 + j)));
-            m256_add_dpbusd_epi32(sum1, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + offset1 + j)));
-            m256_add_dpbusd_epi32(sum2, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + offset2 + j)));
-            m256_add_dpbusd_epi32(sum3, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + offset3 + j)));
+            const HiddenLayerWeightType* weightsBase = weights + j;
+            m256_add_dpbusd_epi32(sum0, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset0)));
+            m256_add_dpbusd_epi32(sum1, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset1)));
+            m256_add_dpbusd_epi32(sum2, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset2)));
+            m256_add_dpbusd_epi32(sum3, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset3)));
         }
 
         const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(&biases[i * 4u]));
@@ -322,7 +492,55 @@ INLINE static void LinearLayer(
         outVal = _mm_srai_epi32(outVal, WeightScaleShift);
         _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
     }
-#else
+
+#elif defined(NN_USE_SSE4)
+    constexpr uint32_t registerWidth = 128 / 8;
+    const uint32_t numOutChunks = numOutputs / 4u;
+    ASSERT(numInputs % registerWidth == 0);
+    ASSERT(numOutputs % 4u == 0);
+    ASSERT((size_t)weights % 16 == 0);
+    ASSERT((size_t)biases % 16 == 0);
+    ASSERT((size_t)output % 16 == 0);
+    ASSERT((size_t)input % 16 == 0);
+
+    for (uint32_t i = 0; i < numOutChunks; ++i)
+    {
+        // Prepare weight offsets. One offset for one row of weights.
+        // This is a simple index into a 2d array.
+        const uint32_t offset0 = (i * 4u + 0u) * numInputs;
+        const uint32_t offset1 = (i * 4u + 1u) * numInputs;
+        const uint32_t offset2 = (i * 4u + 2u) * numInputs;
+        const uint32_t offset3 = (i * 4u + 3u) * numInputs;
+
+        // Accumulation starts from 0, we add the bias only at the end.
+        __m128i sum0 = _mm_setzero_si128();
+        __m128i sum1 = _mm_setzero_si128();
+        __m128i sum2 = _mm_setzero_si128();
+        __m128i sum3 = _mm_setzero_si128();
+
+        // Each innermost loop processes a 32x4 chunk of weights, so 128 weights at a time!
+        for (uint32_t j = 0; j < numInputs; j += registerWidth)
+        {
+            // We unroll by 4 so that we can reuse this value, reducing the number of memory operations required.
+            const __m128i in = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j));
+
+            // This function processes a 32x1 chunk of int8 and produces a 8x1 chunk of int32.
+            const HiddenLayerWeightType* weightsBase = weights + j;
+            m128_add_dpbusd_epi32(sum0, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weightsBase + offset0)));
+            m128_add_dpbusd_epi32(sum1, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weightsBase + offset1)));
+            m128_add_dpbusd_epi32(sum2, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weightsBase + offset2)));
+            m128_add_dpbusd_epi32(sum3, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weightsBase + offset3)));
+        }
+
+        const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(&biases[i * 4u]));
+        // This function adds horizontally 8 values from each sum together, producing 4 int32 values.
+        __m128i outVal = m128_haddx4(sum0, sum1, sum2, sum3);
+        outVal = _mm_add_epi32(outVal, _mm_set1_epi32(WeightScale / 2)); // divide with rounding to nearest
+        outVal = _mm_add_epi32(outVal, bias);
+        outVal = _mm_srai_epi32(outVal, WeightScaleShift);
+        _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
+    }
+#else // no SIMD support
     for (uint32_t i = 0; i < numOutputs; ++i)
     {
         int32_t val = biases[i];
@@ -338,25 +556,23 @@ INLINE static void LinearLayer(
 
 INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_t* input)
 {
-#ifdef NN_USE_AVX2
+#if defined(NN_USE_AVX2)
     constexpr uint32_t inRegisterWidth = 256 / 32;
     constexpr uint32_t outRegisterWidth = 256 / 8;
     ASSERT(size % outRegisterWidth == 0);
     const uint32_t numOutChunks = size / outRegisterWidth;
+    ASSERT((size_t)output % 32 == 0);
+    ASSERT((size_t)input % 32 == 0);
 
     for (uint32_t i = 0; i < numOutChunks; ++i)
     {
-        const __m256i in0 =
-            _mm256_packs_epi32(
-                _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 4 + 0)])),
-                _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 4 + 1)]))
-            );
+        __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+        __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+        __m256i in2 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+        __m256i in3 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
 
-        const __m256i in1 =
-            _mm256_packs_epi32(
-                _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 4 + 2)])),
-                _mm256_load_si256(reinterpret_cast<const __m256i*>(&input[inRegisterWidth * (i * 4 + 3)]))
-            );
+        in0 = _mm256_packs_epi32(in0, in1);
+        in1 = _mm256_packs_epi32(in2, in3);
 
         const __m256i result =
             _mm256_permutevar8x32_epi32(
@@ -368,9 +584,36 @@ INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const
                 _mm256_set_epi32(7, 3, 6, 2, 5, 1, 4, 0)
             );
 
-        _mm256_store_si256(reinterpret_cast<__m256i*>(&output[i * outRegisterWidth]), result);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(output), result);
+        output += outRegisterWidth;
     }
-#else
+
+#elif defined(NN_USE_SSE4)
+    constexpr uint32_t inRegisterWidth = 128 / 32;
+    constexpr uint32_t outRegisterWidth = 128 / 8;
+    ASSERT(size % outRegisterWidth == 0);
+    const uint32_t numOutChunks = size / outRegisterWidth;
+    ASSERT((size_t)output % 16 == 0);
+    ASSERT((size_t)input % 16 == 0);
+
+    for (uint32_t i = 0; i < numOutChunks; ++i)
+    {
+        __m128i in0 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+        __m128i in1 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+        __m128i in2 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+        __m128i in3 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+
+        in0 = _mm_packs_epi32(in0, in1);
+        in1 = _mm_packs_epi32(in2, in3);
+
+        // packs saturates to 127, so we only need to clamp from below
+        const __m128i result = _mm_max_epi8(_mm_packs_epi16(in0, in1), _mm_setzero_si128());
+
+        _mm_store_si128(reinterpret_cast<__m128i*>(output), result);
+        output += outRegisterWidth;
+    }
+
+#else // no SIMD support
     for (uint32_t i = 0; i < size; ++i)
     {
         output[i] = (IntermediateType)std::clamp<int32_t>(input[i], 0, std::numeric_limits<IntermediateType>::max());
@@ -389,27 +632,45 @@ INLINE static int32_t LinearLayer_SingleOutput(
 
     int32_t val = biases[0];
 
-#ifdef NN_USE_AVX2
+#if defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 256 / 8;
     ASSERT(numInputs % registerWidth == 0);
+    ASSERT((size_t)weights % 32 == 0);
+    ASSERT((size_t)biases % 32 == 0);
 
-    // Accumulation starts from 0, we add the bias only at the end.
     __m256i sum = _mm256_setzero_si256();
-
     for (uint32_t j = 0; j < numInputs; j += registerWidth)
     {
         const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
-        // This function processes a 32x1 chunk of int8 and produces a 8x1 chunk of int32.
         m256_add_dpbusd_epi32(sum, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j)));
     }
 
     // add 8 int32s horizontally
     val += m256_hadd(sum);
+
+#elif defined(NN_USE_SSE4)
+    constexpr uint32_t registerWidth = 128 / 8;
+    ASSERT(numInputs % registerWidth == 0);
+    ASSERT((size_t)weights % 16 == 0);
+    ASSERT((size_t)biases % 16 == 0);
+
+    __m128i sum = _mm_setzero_si128();
+    for (uint32_t j = 0; j < numInputs; j += registerWidth)
+    {
+        const __m128i in = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j));
+        m128_add_dpbusd_epi32(sum, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j)));
+    }
+
+    // add 8 int32s horizontally
+    val += m128_hadd(sum);
+
 #else
+
     for (uint32_t i = 0; i < numInputs; ++i)
     {
         val += (int32_t)input[i] * (int32_t)weights[i];
     }
+
 #endif
 
     // divide with rounding to nearest
@@ -420,23 +681,83 @@ INLINE static int32_t LinearLayer_SingleOutput(
 
 PackedNeuralNetwork::PackedNeuralNetwork()
 {
-    header.version = CurrentVersion;
-    header.firstLayerSize = FirstLayerSize;
-    header.secondLayerSize = SecondLayerSize;
-    header.thirdLayerSize = ThirdLayerSize;
 }
 
 PackedNeuralNetwork::~PackedNeuralNetwork()
 {
-    if (layer0_weights)
+
+
+    Release();
+}
+
+void PackedNeuralNetwork::Release()
+{
+    if (mappedData)
     {
-        AlignedFree(layer0_weights);
-        layer0_weights = nullptr;
+        ReleaseFileMapping();
+        weightsBuffer = nullptr;
     }
+
+    if (weightsBuffer)
+    {
+        AlignedFree(weightsBuffer);
+        weightsBuffer = nullptr;
+    }
+
+    header = Header{};
+}
+
+size_t PackedNeuralNetwork::GetWeightsBufferSize() const
+{
+    size_t size = 0;
+
+    size += header.numInputs * FirstLayerSize * sizeof(FirstLayerWeightType);
+    size += FirstLayerSize * sizeof(FirstLayerBiasType);
+
+    size += FirstLayerSize * SecondLayerSize * sizeof(HiddenLayerWeightType);
+    size += SecondLayerSize * sizeof(HiddenLayerBiasType);
+
+    size += SecondLayerSize * ThirdLayerSize * sizeof(HiddenLayerWeightType);
+    size += ThirdLayerSize * sizeof(HiddenLayerBiasType);
+
+    size += ThirdLayerSize * OutputSize * sizeof(HiddenLayerWeightType);
+    size += OutputSize * sizeof(HiddenLayerBiasType);
+
+    return size;
+}
+
+bool PackedNeuralNetwork::Resize(uint32_t numInputs)
+{
+    Release();
+
+    header.magic = MagicNumber;
+    header.version = CurrentVersion;
+    header.numInputs = numInputs;
+    header.firstLayerSize = FirstLayerSize;
+    header.secondLayerSize = SecondLayerSize;
+    header.thirdLayerSize = ThirdLayerSize;
+
+    const size_t weightsSize = GetWeightsBufferSize();
+    weightsBuffer = (uint8_t*)AlignedMalloc(weightsSize, 64);
+
+    if (weightsBuffer)
+    {
+        header = Header{};
+        std::cerr << "Failed to allocate weights buffer" << std::endl;
+        return false;
+    }
+
+    return true;
 }
 
 bool PackedNeuralNetwork::Save(const char* filePath) const
 {
+    if (!IsValid())
+    {
+        std::cerr << "Failed to save neural network: " << "invalid network" << std::endl;
+        return false;
+    }
+
     FILE* file = fopen(filePath, "wb");
     if (!file)
     {
@@ -451,19 +772,7 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
         return false;
     }
     
-    const size_t layer0WeightsSize = header.numInputs * FirstLayerSize * sizeof(FirstLayerWeightType);
-    if (1 != fwrite(layer0_weights, layer0WeightsSize, 1, file))
-    {
-        fclose(file);
-        std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
-        return false;
-    }
-
-    const size_t dataSize = sizeof(layer0_biases) +
-        sizeof(layer1_weights) + sizeof(layer1_biases) +
-        sizeof(layer2_weights) + sizeof(layer2_biases) +
-        sizeof(layer3_weights) + sizeof(layer3_biases);
-    if (1 != fwrite(layer0_biases, dataSize, 1, file))
+    if (1 != fwrite(weightsBuffer, GetWeightsBufferSize(), 1, file))
     {
         fclose(file);
         std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
@@ -474,65 +783,95 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
     return true;
 }
 
+void PackedNeuralNetwork::ReleaseFileMapping()
+{
+    if (fileMapping == INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(fileMapping);
+        fileMapping = INVALID_HANDLE_VALUE;
+    }
+
+    if (fileHandle == INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(fileHandle);
+        fileHandle = INVALID_HANDLE_VALUE;
+    }
+
+    mappedData = nullptr;
+}
+
 bool PackedNeuralNetwork::Load(const char* filePath)
 {
-    FILE* file = fopen(filePath, "rb");
-    if (!file)
+    Release();
+    
+    // open file
     {
-        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
+#ifdef _UNICODE
+        wchar_t wideFilePath[4096];
+        size_t len = 0;
+        mbstowcs_s(&len, wideFilePath, 4096, filePath, _TRUNCATE);
+        fileHandle = ::CreateFile(wideFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+#else
+        fileHandle = ::CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+#endif
+
+        if (fileHandle == INVALID_HANDLE_VALUE)
+        {
+            fprintf(stderr, "CreateFile() failed, error = %lu.\n", GetLastError());
+            return false;
+        }
+    }
+
+    DWORD sizeLow = 0, sizeHigh = 0;
+    sizeLow = ::GetFileSize(fileHandle, &sizeHigh);
+    fileMapping = ::CreateFileMapping(fileHandle, NULL, PAGE_READONLY, sizeHigh, sizeLow, NULL);
+    if (fileMapping == INVALID_HANDLE_VALUE)
+    {
+        fprintf(stderr, "CreateFileMapping() failed, error = %lu.\n", GetLastError());
+        Release();
         return false;
     }
 
-    header = Header{};
-
-    if (1 != fread(&header, sizeof(Header), 1, file))
+    mappedData = (void*)MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
+    if (mappedData == nullptr)
     {
-        fclose(file);
-        header.numInputs = 0;
-        std::cerr << "Failed to load neural network: " << "cannot read header" << std::endl;
+        fprintf(stderr, "MapViewOfFile() failed, error = %lu.\n", GetLastError());
+        Release();
+        return false;
+    }
+
+    memcpy(&header, mappedData, sizeof(Header));
+
+    if (sizeof(Header) + GetWeightsBufferSize() > (sizeLow + ((uint64_t)sizeHigh << 32)))
+    {
+        std::cerr << "Failed to load neural network: " << "file it too small" << std::endl;
+        Release();
+        return false;
+    }
+
+    if (header.magic != MagicNumber)
+    {
+        std::cerr << "Failed to load neural network: " << "invalid magic" << std::endl;
+        Release();
         return false;
     }
 
     if (header.version != CurrentVersion)
     {
-        fclose(file);
-        header = Header{};
         std::cerr << "Failed to load neural network: " << "unsupported version" << std::endl;
+        Release();
         return false;
     }
 
     if (header.numInputs == 0 || header.numInputs > MaxNeuronsInLayer)
     {
-        fclose(file);
-        header = Header{};
         std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
+        Release();
         return false;
     }
 
-    const size_t layer0WeightsSize = header.numInputs * FirstLayerSize * sizeof(FirstLayerWeightType);
-    layer0_weights = (FirstLayerWeightType*)AlignedMalloc(layer0WeightsSize, 64);
-    
-    if (1 != fread(layer0_weights, layer0WeightsSize, 1, file))
-    {
-        fclose(file);
-        header = Header{};
-        std::cerr << "Failed to load neural network: " << "cannot read weights" << std::endl;
-        return false;
-    }
+    weightsBuffer = (uint8_t*)mappedData + sizeof(Header);
 
-    const size_t dataSize = sizeof(layer0_biases) +
-        sizeof(layer1_weights) + sizeof(layer1_biases) +
-        sizeof(layer2_weights) + sizeof(layer2_biases) +
-        sizeof(layer3_weights) + sizeof(layer3_biases);
-    if (1 != fread(layer0_biases, dataSize, 1, file))
-    {
-        fclose(file);
-        header = Header{};
-        std::cerr << "Failed to load neural network: " << "cannot read weights" << std::endl;
-        return false;
-    }
-
-    fclose(file);
     return true;
 }
 
@@ -541,24 +880,24 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator) const
     constexpr uint32_t bufferSize = std::max(FirstLayerSize, std::max(SecondLayerSize, ThirdLayerSize));
     constexpr uint32_t linearLayerBufferSize = std::max(SecondLayerSize, ThirdLayerSize);
 
-    IntermediateType tempA[bufferSize];
-    int32_t tempB[linearLayerBufferSize];
+    alignas(32) IntermediateType tempA[bufferSize];
+    alignas(32) int32_t tempB[linearLayerBufferSize];
 
     ClippedReLU_16(FirstLayerSize, tempA, accumulator.values);
 
-    LinearLayer(layer1_weights, layer1_biases, FirstLayerSize, SecondLayerSize, tempB, tempA);
+    LinearLayer(GetLayer1Weights(), GetLayer1Biases(), FirstLayerSize, SecondLayerSize, tempB, tempA);
     ClippedReLU_32(SecondLayerSize, tempA, tempB);
 
-    LinearLayer(layer2_weights, layer2_biases, SecondLayerSize, ThirdLayerSize, tempB, tempA);
+    LinearLayer(GetLayer2Weights(), GetLayer2Biases(), SecondLayerSize, ThirdLayerSize, tempB, tempA);
     ClippedReLU_32(ThirdLayerSize, tempA, tempB);
 
-    return LinearLayer_SingleOutput(layer3_weights, layer3_biases, ThirdLayerSize, 1, tempA);
+    return LinearLayer_SingleOutput(GetLayer3Weights(), GetLayer3Biases(), ThirdLayerSize, 1, tempA);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const
 {
     Accumulator accumulator;
-    accumulator.Refresh(layer0_weights, layer0_biases, header.numInputs, FirstLayerSize, numActiveInputs, activeInputIndices);
+    accumulator.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), header.numInputs, FirstLayerSize, numActiveInputs, activeInputIndices);
 
     return Run(accumulator);
 }

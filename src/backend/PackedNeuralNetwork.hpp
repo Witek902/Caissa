@@ -5,15 +5,22 @@
 #include <vector>
 #include <cmath>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif // NOMINMAX
+#include <Windows.h>
+
 namespace nn {
 
 class NeuralNetwork;
 
 static constexpr uint32_t CurrentVersion = 1;
+static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t FirstLayerSize = 512;
 static constexpr uint32_t SecondLayerSize = 32;
 static constexpr uint32_t ThirdLayerSize = 64;
+static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
 static constexpr float ActivationRangeScaling = 127;
@@ -60,11 +67,13 @@ public:
 
     struct Header
     {
+        uint32_t magic = 0;
         uint32_t version = 0;
         uint32_t numInputs = 0;
         uint32_t firstLayerSize = 0;
         uint32_t secondLayerSize = 0;
         uint32_t thirdLayerSize = 0;
+        uint32_t padding[10];
     };
 
     friend class NeuralNetwork;
@@ -74,6 +83,12 @@ public:
 
     PackedNeuralNetwork();
     ~PackedNeuralNetwork();
+
+    // unload weights
+    void Release();
+
+    // allocate weights
+    bool Resize(uint32_t numInputs);
 
     // load from file
     bool Load(const char* filePath);
@@ -88,26 +103,61 @@ public:
     int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const;
 
     INLINE uint32_t GetNumInputs() const { return header.numInputs; }
-    INLINE const FirstLayerWeightType* GetAccumulatorWeights() const { return layer0_weights; }
-    INLINE const FirstLayerBiasType* GetAccumulatorBiases() const { return layer0_biases; }
+
+    INLINE const FirstLayerWeightType* GetAccumulatorWeights() const
+    {
+        return reinterpret_cast<const FirstLayerWeightType*>(weightsBuffer);
+    }
+    INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
+    {
+        return reinterpret_cast<const FirstLayerWeightType*>(GetAccumulatorWeights() + GetNumInputs() * FirstLayerSize);
+    }
+
+    INLINE const HiddenLayerWeightType* GetLayer1Weights() const
+    {
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetAccumulatorBiases() + FirstLayerSize);
+    }
+    INLINE const HiddenLayerBiasType* GetLayer1Biases() const
+    {
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer1Weights() + FirstLayerSize * SecondLayerSize);
+    }
+
+    INLINE const HiddenLayerWeightType* GetLayer2Weights() const
+    {
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer1Biases() + SecondLayerSize);
+    }
+    INLINE const HiddenLayerBiasType* GetLayer2Biases() const
+    {
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer2Weights() + SecondLayerSize * ThirdLayerSize);
+    }
+
+    INLINE const HiddenLayerWeightType* GetLayer3Weights() const
+    {
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer2Biases() + ThirdLayerSize);
+    }
+    INLINE const HiddenLayerBiasType* GetLayer3Biases() const
+    {
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer3Weights() + ThirdLayerSize * OutputSize);
+    }
+
+    // calculate size of all weights buffer
+    size_t GetWeightsBufferSize() const;
 
     bool IsValid() const { return header.numInputs > 0; }
 
 private:
 
+    void ReleaseFileMapping();
+
     Header header;
 
-    FirstLayerWeightType* layer0_weights = nullptr;
-    FirstLayerBiasType layer0_biases[FirstLayerSize];
+    // file mapping
+    HANDLE fileHandle = INVALID_HANDLE_VALUE;
+    HANDLE fileMapping = INVALID_HANDLE_VALUE;
+    void* mappedData = nullptr;
 
-    HiddenLayerWeightType layer1_weights[FirstLayerSize * SecondLayerSize];
-    HiddenLayerBiasType layer1_biases[SecondLayerSize];
-
-    HiddenLayerWeightType layer2_weights[SecondLayerSize * ThirdLayerSize];
-    HiddenLayerBiasType layer2_biases[ThirdLayerSize];
-
-    HiddenLayerWeightType layer3_weights[ThirdLayerSize];
-    HiddenLayerBiasType layer3_biases[1];
+    // all weights and biases are stored in this buffer
+    uint8_t* weightsBuffer = nullptr;
 };
 
 } // namespace nn
