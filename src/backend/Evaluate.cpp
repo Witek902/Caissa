@@ -7,6 +7,9 @@
 #include "NeuralNetworkEvaluator.hpp"
 
 #include <unordered_map>
+#include <fstream>
+
+const char* c_DefaultEvalFile = "eval.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -94,11 +97,12 @@ PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
 static void LoadNetworkForMaterialKey(const MaterialKey key)
 {
-    const std::string path = "../../networks/" + key.ToString() + ".pnn";
+    const std::string path = "../../data/networks/" + key.ToString() + ".pnn";
 
     PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
     if (network->Load(path.c_str()))
     {
+        std::cout << "Loaded neural network: " << path.c_str() << std::endl;
         g_neuralNetworks[key] = std::move(network);
     }
 }
@@ -116,11 +120,45 @@ bool LoadMainNeuralNetwork(const char* path)
     return false;
 }
 
+static std::string GetDefaultEvalFilePath()
+{
+    std::string path = GetExecutablePath();
+
+    if (!path.empty())
+    {
+        path = path.substr(0, path.find_last_of("/\\")); // remove exec name
+        path += "/";
+        path += c_DefaultEvalFile;
+    }
+
+    return path;
+}
+
+bool TryLoadingDefaultEvalFile()
+{
+    std::string path = GetDefaultEvalFilePath();
+    if (!path.empty())
+    {
+        // check if file exists
+        {
+            std::ifstream f(path.c_str());
+            if (!f.good()) return false;
+        }
+
+        if (LoadMainNeuralNetwork(path.c_str()))
+        {
+            std::cout << "Loaded neural network: " << path.c_str() << std::endl;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void InitEvaluation()
 {
-    //LoadNetworkForMaterialKey({ 1,0,0,1,0,1,0,0,1,0 });
-    //LoadNetworkForMaterialKey({ 1,0,0,0,0,1,0,0,0,0 });
-    //LoadNetworkForMaterialKey({ 1,0,0,1,0,0,0,0,1,0 });
+    //LoadNetworkForMaterialKey({ 1,0,0,1,0, 0,0,0,1,0 });
+    //LoadNetworkForMaterialKey({ 0,0,0,1,0, 1,0,0,1,0 });
 }
 
 static uint32_t FlipRank(uint32_t square)
@@ -253,28 +291,39 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo)
         }
     }
 
-    /*
     {
-        auto iter = g_neuralNetworks.find(materialKey);
-        if (iter != g_neuralNetworks.end())
+        if (position.GetSideToMove() == Color::White)
         {
-            int32_t nnScore = EvaluateNeuralNetwork(*(iter->second), position);
-            ASSERT(nnScore < TablebaseWinValue&& nnScore > -TablebaseWinValue);
-            return (ScoreType)nnScore;
-        }
-
-        if (!materialKey.IsSymetric())
-        {
-            iter = g_neuralNetworks.find(materialKey.SwappedColors());
+            const auto iter = g_neuralNetworks.find(materialKey);
             if (iter != g_neuralNetworks.end())
             {
-                int32_t nnScore = -EvaluateNeuralNetwork(*(iter->second), position.SwappedColors());
+                const PackedNeuralNetworkPtr& network = iter->second;
+                int32_t nnScore = NNEvaluator::Evaluate(*network, position, NetworkInputMapping::MaterialPacked_Symmetrical);
+
+                // convert to centipawn range
+                nnScore = (nnScore * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+
                 ASSERT(nnScore < TablebaseWinValue&& nnScore > -TablebaseWinValue);
                 return (ScoreType)nnScore;
             }
         }
+        else
+        {
+            const MaterialKey swappedMaterialKey = materialKey.SwappedColors();
+            const auto iter = g_neuralNetworks.find(swappedMaterialKey);
+            if (iter != g_neuralNetworks.end())
+            {
+                const PackedNeuralNetworkPtr& network = iter->second;
+                int32_t nnScore = NNEvaluator::Evaluate(*network, position.SwappedColors(), NetworkInputMapping::MaterialPacked_Symmetrical);
+
+                // convert to centipawn range
+                nnScore = -((nnScore * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale);
+
+                ASSERT(nnScore < TablebaseWinValue && nnScore > -TablebaseWinValue);
+                return (ScoreType)nnScore;
+            }
+        }
     }
-    */
 
     int32_t value = 0;
     int32_t valueMG = 0;
@@ -384,14 +433,14 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo)
     if (g_mainNeuralNetwork && std::abs(value) < nnTreshold)
     {
         int32_t nnValue = nodeInfo ?
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo) :
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, position);
-
-        // NN output is side-to-move relative
-        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo, NetworkInputMapping::Full) :
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, position, NetworkInputMapping::Full);
         
         // convert to centipawn range
         nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+
+        // NN output is side-to-move relative
+        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
         const int32_t nnFactor = std::abs(value);
         value = (nnFactor * value + nnValue * (nnTreshold - 1 - nnFactor)) / nnTreshold;

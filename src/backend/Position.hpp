@@ -256,8 +256,7 @@ public:
 
     // convert position to neural network input features (active indices list)
     // returns number of active features
-    uint32_t ToSparseFeaturesVector(uint16_t* outFeatures) const;
-    uint32_t ToPackedFeaturesVector(uint16_t* outFeatures) const;
+    uint32_t ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMapping mapping) const;
 
     void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
     void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;

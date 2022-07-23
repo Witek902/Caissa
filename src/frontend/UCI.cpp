@@ -7,13 +7,6 @@
 #include "../backend/TimeManager.hpp"
 
 #include <math.h>
-#include <fstream>
-
-#if defined(PLATFORM_WINDOWS)
-	#define WIN32_LEAN_AND_MEAN
-	#define NOMINMAX
-	#include <Windows.h>
-#endif
 
 #define VersionNumber "0.7.0"
 
@@ -37,63 +30,9 @@ static const uint32_t c_DefaultTTSizeInMB = 16;
 static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
 
 static const uint32_t c_MaxNumThreads = 64;
-static const char* c_DefaultEvalFile = "eval.pnn";
+
 
 using UniqueLock = std::unique_lock<std::mutex>;
-
-static std::string GetExecutablePath()
-{
-    std::string ret;
-#if defined(PLATFORM_WINDOWS)
-    char path[MAX_PATH];
-    HMODULE hModule = GetModuleHandle(NULL);
-    if (hModule != NULL)
-    {
-        // Use GetModuleFileName() with module handle to get the path
-        GetModuleFileNameA(hModule, path, (sizeof(path)));
-        ret = std::string(path);
-    }
-#elif defined(PLATFORM_LINUX)
-    if (char* execPath = realpath("/proc/self/exe", nullptr))
-    {
-        ret = execPath;
-        free(execPath);
-    }
-#endif
-    return ret;
-}
-
-static std::string GetDefaultEvalFilePath()
-{
-    std::string path = GetExecutablePath();
-
-    if (!path.empty())
-    {
-        path = path.substr(0, path.find_last_of("/\\")); // remove exec name
-        path += "/";
-        path += c_DefaultEvalFile;
-    }
-
-    return path;
-}
-
-static void TryLoadingDefaultEvalFile()
-{
-    std::string path = GetDefaultEvalFilePath();
-    if (!path.empty())
-    {
-        // check if file exists
-        {
-            std::ifstream f(path.c_str());
-            if (!f.good()) return;
-        }
-
-        if (LoadMainNeuralNetwork(path.c_str()))
-        {
-            std::cout << "Loaded neural network: " << path.c_str() << std::endl;
-        }
-    }
-}
 
 UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
 {

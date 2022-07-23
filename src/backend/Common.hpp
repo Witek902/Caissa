@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <atomic>
+#include <string>
 
 #ifdef ARCHITECTURE_X64
     #include <immintrin.h>
@@ -287,6 +288,7 @@ class Game;
 class TranspositionTable;
 struct NodeInfo;
 struct NNEvaluatorContext;
+enum class NetworkInputMapping : uint8_t;
 
 using ScoreType = int16_t;
 
@@ -305,3 +307,6 @@ static constexpr ScoreType DrawScoreRandomness = 2;
 
 // initialize all engine subsystems
 EXPORT void InitEngine();
+
+// get exe path
+std::string GetExecutablePath();

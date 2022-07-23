@@ -37,7 +37,10 @@ uint32_t MaterialKey::GetNeuralNetworkInputsNumber() const
     {
         // pawnless position, can exploit vertical/horizonal/diagonal symmetry
         inputs += 16; // white king on files A-D, ranks 1-4
-        inputs += 36; // black king on bottom-right triangle (a1, b1, b2, c1, c2, c3, ...)
+        inputs += 64; // black king on any file
+
+        // TODO diagonal symmetry
+        //inputs += 36; // black king on bottom-right triangle (a1, b1, b2, c1, c2, c3, ...)
     }
 
     // knights/bishops/rooks/queens on any square

@@ -65,7 +65,7 @@ struct Layer
     void InitWeights();
     void Run(const Values& in);
     void Run(const uint16_t* featureIndices, uint32_t numFeatures);
-    void Backpropagate(const Values& error);
+    void Backpropagate(uint32_t layerIndex, const Values& error);
     void QuantizeWeights(float strength);
 
     // Get weight of a specific neuron input
@@ -74,9 +74,11 @@ struct Layer
     // Set a new weight for a specific neuron input
     void SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth);
 
+    std::vector<uint16_t> activeFeatures;
+    Values input;
+
     Values linearValue;
     Values output;
-    Values input;
     Values weights;
 
     // used for learning

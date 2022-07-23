@@ -30,14 +30,14 @@ INLINE static uint16_t DirtyPieceToFeatureIndex(const DirtyPiece piece, Color pe
     return index;
 }
 
-int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
+int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos, NetworkInputMapping mapping)
 {
     Position positionCopy = pos;
     if (pos.GetSideToMove() == Color::Black) positionCopy = pos.SwappedColors();
 
     const uint32_t maxFeatures = 64;
     uint16_t features[maxFeatures];
-    const uint32_t numFeatures = positionCopy.ToSparseFeaturesVector(features);
+    const uint32_t numFeatures = positionCopy.ToFeaturesVector(features, mapping);
     ASSERT(numFeatures <= maxFeatures);
 
     return network.Run(features, numFeatures);
@@ -58,7 +58,7 @@ INLINE static void AppendFeatureIndex(uint16_t featureIndex, uint16_t addedFeatu
     addedFeatures[numAddedFeatures++] = featureIndex;
 }
 
-int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node)
+int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, NetworkInputMapping mapping)
 {
     const uint32_t perspective = (uint32_t)node.position.GetSideToMove();
     nn::Accumulator& accumulator = node.nnContext.accumulator[perspective];
@@ -121,7 +121,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
         const uint32_t maxFeatures = 64;
         uint16_t features[maxFeatures];
-        const uint32_t numFeatures = positionCopy.ToSparseFeaturesVector(features);
+        const uint32_t numFeatures = positionCopy.ToFeaturesVector(features, mapping);
         ASSERT(numFeatures <= maxFeatures);
 
         accumulator.Refresh(
@@ -133,7 +133,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     const int32_t nnOutput = network.Run(accumulator);
 
     //{
-    //    const int32_t nnOutputReference = Evaluate(network, node.position);
+    //    const int32_t nnOutputReference = Evaluate(network, node.position, mapping);
     //    ASSERT(nnOutput == nnOutputReference);
     //}
 

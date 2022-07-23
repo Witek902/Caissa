@@ -22,7 +22,63 @@
 #include <string>
 #include <limits.h>
 
+static const bool probePositions = true;
+static const bool randomizeOrder = true;
+static const bool outputLabeledPositions = false;
+
 using namespace threadpool;
+
+uint32_t XorShift32(uint32_t state)
+{
+    /* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+    uint32_t x = state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
+class EvalProbing : public EvalProbingInterface
+{
+public:
+    static constexpr uint32_t ProbingFrequency = 1 << 16;
+
+    EvalProbing(std::ofstream& outputFile, uint32_t seed)
+        : probedPositionsFile(outputFile)
+        , randomSeed(seed)
+    {}
+
+    virtual void ReportPosition(const Position& pos, ScoreType eval) override
+    {
+        (void)eval;
+
+        randomSeed = XorShift32(randomSeed);
+
+        if (rand() % ProbingFrequency) return;
+        if (!pos.IsQuiet()) return;
+
+        PackedPosition packedPos;
+        PackPosition(pos, packedPos);
+        positions.push_back(packedPos);
+    }
+
+    void Flush()
+    {
+        for (const PackedPosition& pp : positions)
+        {
+            Position pos;
+            UnpackPosition(pp, pos);
+
+            probedPositionsFile << pos.ToFEN() << '\n';
+        }
+    }
+
+private:
+    std::ofstream& probedPositionsFile;
+    std::vector<PackedPosition> positions;
+
+    uint32_t randomSeed;
+};
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -37,7 +93,11 @@ bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& 
     while (std::getline(file, line))
     {
         Position pos;
-        if (!pos.FromFEN(line)) continue;
+        if (!pos.FromFEN(line))
+        {
+            std::cout << "Invalid FEN string: " << line << std::endl;
+            continue;
+        }
 
         PackedPosition packedPos;
         PackPosition(pos, packedPos);
@@ -53,11 +113,32 @@ void SelfPlay(const std::vector<std::string>& args)
 {
     FileOutputStream gamesFile("selfplay.dat");
     GameCollection::Writer writer(gamesFile);
-
     if (!writer.IsOK())
     {
-        std::cerr << "Failed to open output file!" << std::endl;
+        std::cerr << "Failed to open output file (games)!" << std::endl;
         return;
+    }
+
+    std::ofstream probedPositionsFile;
+    if (probePositions)
+    {
+        probedPositionsFile.open("probed.epd");
+        if (!probedPositionsFile.good())
+        {
+            std::cerr << "Failed to open output file (probed positions)!" << std::endl;
+            return;
+        }
+    }
+
+    std::ofstream labeledPositionsFile;
+    if (outputLabeledPositions)
+    {
+        labeledPositionsFile.open("labeled.epd");
+        if (!labeledPositionsFile.good())
+        {
+            std::cerr << "Failed to open output file (labeled positions)!" << std::endl;
+            return;
+        }
     }
 
     const size_t numThreads = ThreadPool::GetInstance().GetNumThreads();
@@ -78,14 +159,16 @@ void SelfPlay(const std::vector<std::string>& args)
     {
         LoadOpeningPositions(args[0], openingPositions);
     }
-    
-    std::mutex mutex;
-    uint32_t games = 0;
 
     std::cout << "Starting games..." << std::endl;
 
+    std::mutex mutex;
+    std::atomic<uint32_t> gameIndex = 0;
+
     const auto gameTask = [&](const TaskContext& context, uint32_t)
     {
+        const uint32_t index = gameIndex++;
+
         std::random_device rd;
         std::mt19937 gen(rd());
 
@@ -93,6 +176,7 @@ void SelfPlay(const std::vector<std::string>& args)
         TranspositionTable& tt = ttArray[context.threadId];
 
         SearchResult searchResult;
+        EvalProbing evalProbing(probedPositionsFile, gen());
 
         // start new game
         Game game;
@@ -103,10 +187,20 @@ void SelfPlay(const std::vector<std::string>& args)
         Position openingPos(Position::InitPositionFEN);
         if (!openingPositions.empty())
         {
-            std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
-            UnpackPosition(openingPositions[distrib(gen)], openingPos);
+            uint32_t openingIndex = index;
+            if (randomizeOrder)
+            {
+                std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
+                openingIndex = uint32_t(distrib(gen));
+            }
+            UnpackPosition(openingPositions[openingIndex], openingPos);
         }
         game.Reset(openingPos);
+
+        if (openingPos.IsMate() || openingPos.IsStalemate())
+        {
+            return;
+        }
 
         int32_t scoreDiffTreshold = 20;
 
@@ -118,8 +212,9 @@ void SelfPlay(const std::vector<std::string>& args)
 
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
-            searchParam.limits.maxDepth = 30;
-            searchParam.limits.maxNodes = 150000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
+            searchParam.limits.maxDepth = 20;
+            searchParam.limits.maxNodes = 200000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
             //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
             //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
             //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
@@ -197,7 +292,7 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 drawScoreCounter++;
 
-                if (drawScoreCounter >= 10 && halfMoveNumber >= 80)
+                if (drawScoreCounter >= 20 && halfMoveNumber >= 60)
                 {
                     game.SetScore(Game::Score::Draw);
                     break;
@@ -223,15 +318,38 @@ void SelfPlay(const std::vector<std::string>& args)
             }
         }
 
-        writer.WriteGame(game);
-
         {
             std::unique_lock<std::mutex> lock(mutex);
 
-            const uint32_t gameNumber = ++games;
+            writer.WriteGame(game);
+
+            if (probePositions)
+            {
+                evalProbing.Flush();
+            }
+
+            if (outputLabeledPositions)
+            {
+                labeledPositionsFile << openingPos.ToFEN() << " c9 \"";
+                if ((game.GetScore() == Game::Score::WhiteWins && openingPos.GetSideToMove() == Color::White) ||
+                    (game.GetScore() == Game::Score::BlackWins && openingPos.GetSideToMove() == Color::Black))
+                {
+                    labeledPositionsFile << "1-0";
+                }
+                else if ((game.GetScore() == Game::Score::WhiteWins && openingPos.GetSideToMove() == Color::Black) ||
+                         (game.GetScore() == Game::Score::BlackWins && openingPos.GetSideToMove() == Color::White))
+                {
+                    labeledPositionsFile << "0-1";
+                }
+                else
+                {
+                    labeledPositionsFile << "1/2-1/2";
+                }
+                labeledPositionsFile << "\";" << std::endl;
+            }
 
             GameMetadata metadata;
-            metadata.roundNumber = gameNumber;
+            metadata.roundNumber = index;
             game.SetMetadata(metadata);
 
             const std::string pgn = game.ToPGN(true);
@@ -244,7 +362,7 @@ void SelfPlay(const std::vector<std::string>& args)
     Waitable waitable;
     {
         TaskBuilder taskBuilder(waitable);
-        taskBuilder.ParallelFor("SelfPlay", 1000000, gameTask);
+        taskBuilder.ParallelFor("SelfPlay", (uint32_t)openingPositions.size(), gameTask);
         //taskBuilder.Fence();
     }
 

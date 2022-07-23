@@ -6,6 +6,8 @@
 #include <math.h>
 #include <algorithm>
 
+extern const char* c_DefaultEvalFile;
+
 struct PieceScore
 {
     int16_t mg;
@@ -31,6 +33,7 @@ static constexpr PieceScore c_pieceValues[] =
 
 void InitEvaluation();
 
+bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
 
 
