@@ -736,6 +736,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+
+            if (ctx.searchParam.evalProbingInterface)
+            {
+                ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
+            }
+
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1068,6 +1074,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
+
+            if (ctx.searchParam.evalProbingInterface)
+            {
+                ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
+            }
+
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
             wasPositionEvaluated = false;
         }

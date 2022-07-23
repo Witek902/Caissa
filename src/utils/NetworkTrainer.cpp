@@ -27,7 +27,7 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 4096;
+static const uint32_t cNumTrainingVectorsPerIteration = 8192;
 static const uint32_t cBatchSize = 128;
 static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48;
 
@@ -48,7 +48,7 @@ static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outV
     const uint32_t maxFeatures = 64;
 
     uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToSparseFeaturesVector(features);
+    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full);
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
@@ -149,7 +149,6 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 }
 
                 PackPosition(normalizedPos, entry.pos);
-
                 entries.push_back(entry);
             }
 
@@ -174,15 +173,15 @@ bool TrainNetwork()
 
     nn::NeuralNetwork network;
     network.Init(cNumNetworkInputs,
-                 { nn::FirstLayerSize, nn::SecondLayerSize, nn::ThirdLayerSize, 1 },
+                 { nn::FirstLayerSize, 32, 64, 1 },
                  nn::ActivationFunction::Sigmoid);
 
     nn::PackedNeuralNetwork packedNetwork;
 
     std::vector<PositionEntry> entries;
     LoadPositions("../../data/selfplayGames/selfplay2.dat", entries);
-    LoadPositions("../../data/selfplayGames/selfplay3.dat", entries);
-    LoadPositions("../../data/selfplayGames/selfplay4.dat", entries);
+    //LoadPositions("../../data/selfplayGames/selfplay3.dat", entries);
+    //LoadPositions("../../data/selfplayGames/selfplay4.dat", entries);
 
     std::cout << "Training with " << entries.size() << " positions" << std::endl;
 
@@ -204,6 +203,7 @@ bool TrainNetwork()
             Position pos;
             UnpackPosition(entry.pos, pos);
 
+            /*
             // flip the board randomly
             const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
             const bool noCastlingRights = pos.GetBlacksCastlingRights() == 0 && pos.GetWhitesCastlingRights() == 0;
@@ -221,6 +221,7 @@ bool TrainNetwork()
                     pos.MirrorVertically();
                 }
             }
+            */
 
             PositionToSparseVector(pos, outEntries[i].trainingVector);
             outEntries[i].trainingVector.output[0] = entry.score;
@@ -250,7 +251,11 @@ bool TrainNetwork()
                     batch[i] = trainingSet[i].trainingVector;
                 }
 
+                TimePoint startTime = TimePoint::GetCurrent();
                 network.Train(batch, tempValues, cBatchSize, learningRate);
+                TimePoint endTime = TimePoint::GetCurrent();
+
+                std::cout << "Training took " << (endTime - startTime).ToSeconds() << " sec" << std::endl;
 
                 for (uint32_t i = 0; i < nn::FirstLayerSize; ++i)
                 {

@@ -980,154 +980,186 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-uint32_t Position::ToSparseFeaturesVector(uint16_t* outFeatures) const
+uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMapping mapping) const
 {
-    const Square whiteKingSquare = Square(FirstBitSet(Whites().king));
-    const Square blackKingSquare = Square(FirstBitSet(Blacks().king));
-
     uint32_t numFeatures = 0;
-    uint32_t numInputs = 0;
 
-    const auto writePieceFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
-    {
-        bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA { outFeatures[numFeatures++] = (uint16_t)(numInputs + square); });
-        numInputs += 64;
-    };
-
-    const auto writePawnFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
-    {
-        // pawns cannot stand on first or last rank
-        // TODO use Iterate()
-        for (uint32_t i = 0; i < 48u; ++i)
-        {
-            const uint32_t squreIndex = i + 8u;
-            if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
-        }
-        numInputs += 48;
-    };
-
-    writePawnFeatures(Whites().pawns);
-    writePieceFeatures(Whites().knights);
-    writePieceFeatures(Whites().bishops);
-    writePieceFeatures(Whites().rooks);
-    writePieceFeatures(Whites().queens);
-
-    // white king
-    {
-        outFeatures[numFeatures++] = (uint16_t)(numInputs + whiteKingSquare.Index());
-        numInputs += 64;
-    }
-
-    writePawnFeatures(Blacks().pawns);
-    writePieceFeatures(Blacks().knights);
-    writePieceFeatures(Blacks().bishops);
-    writePieceFeatures(Blacks().rooks);
-    writePieceFeatures(Blacks().queens);
-
-    // black king
-    {
-        outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
-        numInputs += 64;
-    }
-
-    ASSERT(numInputs == (2 * 5 * 64 + 2 * 48));
-
-    return numFeatures;
-}
-
-uint32_t Position::ToPackedFeaturesVector(uint16_t* outFeatures) const
-{
     Square whiteKingSquare = Square(FirstBitSet(Whites().king));
     Square blackKingSquare = Square(FirstBitSet(Blacks().king));
 
-    Bitboard whiteQueens = Whites().queens;
-    Bitboard blackQueens = Blacks().queens;
-    Bitboard whiteRooks = Whites().rooks;
-    Bitboard blackRooks = Blacks().rooks;
-    Bitboard whiteBishops = Whites().bishops;
-    Bitboard blackBishops = Blacks().bishops;
-    Bitboard whiteKnights = Whites().knights;
-    Bitboard blackKnights = Blacks().knights;
-    Bitboard whitePawns = Whites().pawns;
-    Bitboard blackPawns = Blacks().pawns;
-
-    if (whiteKingSquare.File() >= 4)
+    if (mapping == NetworkInputMapping::Full)
     {
-        whiteKingSquare = whiteKingSquare.FlippedFile();
-        blackKingSquare = blackKingSquare.FlippedFile();
+        uint32_t numInputs = 0;
 
-        whiteQueens = whiteQueens.MirroredHorizontally();
-        blackQueens = blackQueens.MirroredHorizontally();
-
-        whiteRooks = whiteRooks.MirroredHorizontally();
-        blackRooks = blackRooks.MirroredHorizontally();
-
-        whiteBishops = whiteBishops.MirroredHorizontally();
-        blackBishops = blackBishops.MirroredHorizontally();
-
-        whiteKnights = whiteKnights.MirroredHorizontally();
-        blackKnights = blackKnights.MirroredHorizontally();
-
-        whitePawns = whitePawns.MirroredHorizontally();
-        blackPawns = blackPawns.MirroredHorizontally();
-    }
-
-    uint32_t numFeatures = 0;
-    uint32_t numInputs = 0;
-
-    // white king
-    {
-        const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
-        outFeatures[numFeatures++] = (uint16_t)whiteKingIndex;
-        numInputs += 32;
-    }
-
-    // black king
-    {
-        outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
-        numInputs += 64;
-    }
-
-    const auto writePieceFeatures = [&](const Bitboard bitboard)
-    {
-        if (bitboard)
+        const auto writePieceFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
         {
-            for (uint32_t i = 0; i < 64u; ++i)
-            {
-                if ((bitboard >> i) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
-            }
+            bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA { outFeatures[numFeatures++] = (uint16_t)(numInputs + square); });
             numInputs += 64;
-        }
-    };
+        };
 
-    const auto writePawnFeatures = [&](const Bitboard bitboard)
-    {
-        if (bitboard)
+        const auto writePawnFeatures = [&](const Bitboard bitboard) INLINE_LAMBDA
         {
             // pawns cannot stand on first or last rank
+            // TODO use Iterate()
             for (uint32_t i = 0; i < 48u; ++i)
             {
                 const uint32_t squreIndex = i + 8u;
                 if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
             }
             numInputs += 48;
+        };
+
+        writePawnFeatures(Whites().pawns);
+        writePieceFeatures(Whites().knights);
+        writePieceFeatures(Whites().bishops);
+        writePieceFeatures(Whites().rooks);
+        writePieceFeatures(Whites().queens);
+
+        // white king
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + whiteKingSquare.Index());
+            numInputs += 64;
         }
-    };
 
-    writePieceFeatures(whiteQueens);
-    writePieceFeatures(whiteRooks);
-    writePieceFeatures(whiteBishops);
-    writePieceFeatures(whiteKnights);
-    writePawnFeatures(whitePawns);
+        writePawnFeatures(Blacks().pawns);
+        writePieceFeatures(Blacks().knights);
+        writePieceFeatures(Blacks().bishops);
+        writePieceFeatures(Blacks().rooks);
+        writePieceFeatures(Blacks().queens);
 
-    writePieceFeatures(blackQueens);
-    writePieceFeatures(blackRooks);
-    writePieceFeatures(blackBishops);
-    writePieceFeatures(blackKnights);
-    writePawnFeatures(blackPawns);
+        // black king
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
+            numInputs += 64;
+        }
 
-    ASSERT(numInputs <= UINT16_MAX);
-    ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
+        ASSERT(numInputs == (2 * 5 * 64 + 2 * 48));
+    }
+    else if (mapping == NetworkInputMapping::MaterialPacked_Symmetrical)
+    {
+        const bool pawnless = Whites().pawns == 0 && Blacks().pawns == 0;
+
+        Bitboard whiteQueens = Whites().queens;
+        Bitboard blackQueens = Blacks().queens;
+        Bitboard whiteRooks = Whites().rooks;
+        Bitboard blackRooks = Blacks().rooks;
+        Bitboard whiteBishops = Whites().bishops;
+        Bitboard blackBishops = Blacks().bishops;
+        Bitboard whiteKnights = Whites().knights;
+        Bitboard blackKnights = Blacks().knights;
+        Bitboard whitePawns = Whites().pawns;
+        Bitboard blackPawns = Blacks().pawns;
+
+        if (whiteKingSquare.File() >= 4)
+        {
+            whiteKingSquare = whiteKingSquare.FlippedFile();
+            blackKingSquare = blackKingSquare.FlippedFile();
+
+            whiteQueens = whiteQueens.MirroredHorizontally();
+            blackQueens = blackQueens.MirroredHorizontally();
+
+            whiteRooks = whiteRooks.MirroredHorizontally();
+            blackRooks = blackRooks.MirroredHorizontally();
+
+            whiteBishops = whiteBishops.MirroredHorizontally();
+            blackBishops = blackBishops.MirroredHorizontally();
+
+            whiteKnights = whiteKnights.MirroredHorizontally();
+            blackKnights = blackKnights.MirroredHorizontally();
+
+            whitePawns = whitePawns.MirroredHorizontally();
+            blackPawns = blackPawns.MirroredHorizontally();
+        }
+
+        // vertical symmetry in pawnless positions
+        // TODO diagonal symmetry
+        if (pawnless && whiteKingSquare.Rank() >= 4)
+        {
+            whiteKingSquare = whiteKingSquare.FlippedRank();
+            blackKingSquare = blackKingSquare.FlippedRank();
+
+            whiteQueens = whiteQueens.MirroredVertically();
+            blackQueens = blackQueens.MirroredVertically();
+
+            whiteRooks = whiteRooks.MirroredVertically();
+            blackRooks = blackRooks.MirroredVertically();
+
+            whiteBishops = whiteBishops.MirroredVertically();
+            blackBishops = blackBishops.MirroredVertically();
+
+            whiteKnights = whiteKnights.MirroredVertically();
+            blackKnights = blackKnights.MirroredVertically();
+        }
+
+        uint32_t numInputs = 0;
+
+        // white king
+        if (pawnless)
+        {
+            const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
+            ASSERT(whiteKingIndex < 16);
+            outFeatures[numFeatures++] = (uint16_t)whiteKingIndex;
+            numInputs += 16;
+        }
+        else
+        {
+            const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
+            ASSERT(whiteKingIndex < 32);
+            outFeatures[numFeatures++] = (uint16_t)whiteKingIndex;
+            numInputs += 32;
+        }
+
+        // black king
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
+            numInputs += 64;
+        }
+
+        const auto writePieceFeatures = [&](const Bitboard bitboard)
+        {
+            if (bitboard)
+            {
+                for (uint32_t i = 0; i < 64u; ++i)
+                {
+                    if ((bitboard >> i) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
+                }
+                numInputs += 64;
+            }
+        };
+
+        const auto writePawnFeatures = [&](const Bitboard bitboard)
+        {
+            if (bitboard)
+            {
+                // pawns cannot stand on first or last rank
+                for (uint32_t i = 0; i < 48u; ++i)
+                {
+                    const uint32_t squreIndex = i + 8u;
+                    if ((bitboard >> squreIndex) & 1) outFeatures[numFeatures++] = (uint16_t)(numInputs + i);
+                }
+                numInputs += 48;
+            }
+        };
+
+        writePieceFeatures(whiteQueens);
+        writePieceFeatures(whiteRooks);
+        writePieceFeatures(whiteBishops);
+        writePieceFeatures(whiteKnights);
+        writePawnFeatures(whitePawns);
+
+        writePieceFeatures(blackQueens);
+        writePieceFeatures(blackRooks);
+        writePieceFeatures(blackBishops);
+        writePieceFeatures(blackKnights);
+        writePawnFeatures(blackPawns);
+
+        ASSERT(numInputs <= UINT16_MAX);
+        ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
+    }
+    else
+    {
+        DEBUG_BREAK();
+    }
 
     return numFeatures;
 }

@@ -40,6 +40,14 @@ struct SearchLimits
     bool analysisMode = false;
 };
 
+// Utility that allows for collecting evaluated positions during the search
+// This is used for collecting positions for parameter tuning
+class EvalProbingInterface
+{
+public:
+    virtual void ReportPosition(const Position& pos, ScoreType eval) = 0;
+};
+
 struct SearchParam
 {
     // shared transposition table
@@ -73,6 +81,9 @@ struct SearchParam
 
     // print verbose debug stats (not UCI comaptible)
     bool verboseStats = false;
+
+    // optional eval probing interface
+    EvalProbingInterface* evalProbingInterface = nullptr;
 };
 
 struct PvLine

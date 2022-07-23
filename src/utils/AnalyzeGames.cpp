@@ -132,7 +132,7 @@ void AnalyzeGames()
         {
             for (uint32_t file = 0; file < 8; ++file)
             {
-                std::cout << std::fixed << std::setprecision(4) << ((float)whiteKingOccupancy[8 * rank + file] / (float)numPositions) << " ";
+                std::cout << std::setw(10) << whiteKingOccupancy[8 * rank + file] << " ";
             }
             std::cout << std::endl;
         }
@@ -145,7 +145,7 @@ void AnalyzeGames()
         {
             for (uint32_t file = 0; file < 8; ++file)
             {
-                std::cout << std::fixed << std::setprecision(4) << ((float)blackKingOccupancy[8 * rank + file] / (float)numPositions) << " ";
+                std::cout << std::setw(10) << blackKingOccupancy[8 * rank + file] << " ";
             }
             std::cout << std::endl;
         }

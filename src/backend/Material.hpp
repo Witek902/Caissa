@@ -68,7 +68,9 @@ union MaterialKey
 
     INLINE constexpr MaterialKey SwappedColors() const
     {
-        return MaterialKey((value >> 30) | (value << 30));
+        const uint64_t whitesValue = (value >> 30) & 0x3FFFFFFFull;
+        const uint64_t blacksValue = (value & 0x3FFFFFFFull) << 30;
+        return MaterialKey(whitesValue | blacksValue);
     }
 
     uint32_t GetNeuralNetworkInputsNumber() const;

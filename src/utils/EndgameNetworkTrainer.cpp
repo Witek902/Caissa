@@ -17,7 +17,6 @@
 
 #include <iostream>
 #include <iomanip>
-#include <chrono>
 #include <random>
 #include <mutex>
 #include <fstream>
@@ -25,16 +24,16 @@
 
 using namespace threadpool;
 
-static const uint32_t cMaxIterations = 100000000;
+static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 32 * 1024;
-static const uint32_t cBatchSize = 256;
+static const uint32_t cBatchSize = 64;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
     const uint32_t maxFeatures = 64;
 
     uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToPackedFeaturesVector(features);
+    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
@@ -75,15 +74,15 @@ bool TrainEndgame()
     };
 
     MaterialKey materialKey;
-    materialKey.numWhitePawns   = 2;
+    materialKey.numWhitePawns   = 0;
     materialKey.numWhiteKnights = 0;
     materialKey.numWhiteBishops = 0;
-    materialKey.numWhiteRooks   = 0;
+    materialKey.numWhiteRooks   = 1;
     materialKey.numWhiteQueens  = 0;
-    materialKey.numBlackPawns   = 2;
+    materialKey.numBlackPawns   = 1;
     materialKey.numBlackKnights = 0;
     materialKey.numBlackBishops = 0;
-    materialKey.numBlackRooks   = 0;
+    materialKey.numBlackRooks   = 1;
     materialKey.numBlackQueens  = 0;
 
     std::cout << "Training network for: " << materialKey.ToString() << "..." << std::endl;
@@ -93,11 +92,9 @@ bool TrainEndgame()
 
     const auto generateTrainingSet = [&](TaskBuilder& taskBuilder, std::vector<TrainingEntry>& outSet)
     {
-        taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext& ctx, const uint32_t i)
+        taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext&, const uint32_t i)
         {
             std::mt19937_64 randomGenerator(randomDevice());
-
-            Search& search = searchArray[ctx.threadId];
 
             for (;;)
             {
@@ -112,38 +109,23 @@ bool TrainEndgame()
 
                 uint32_t dtz = 0;
                 int32_t wdl = 0;
-                Move tbMove;
-                if (!ProbeTablebase_Root(pos, tbMove, &dtz, &wdl))
+                if (!ProbeTablebase_WDL(pos, &wdl))
                 {
                     continue;
                 }
 
                 float score = 0.5f;
-                if (wdl < 0) score = 0.0f;
-                if (wdl > 0) score = 1.0f;
-
-                (void)search;
-/*
-                Game game;
-                game.Reset(pos);
-
-                SearchResult searchResult;
-                search.DoSearch(game, searchParam, searchResult);
-
-                const bool isStalemate = pos.IsStalemate();
-                if (!isStalemate)
+                if (wdl != 0)
                 {
-                    if (searchResult.empty())
+                    Move tbMove;
+                    if (!ProbeTablebase_Root(pos, tbMove, &dtz, &wdl))
                     {
-                        std::cout << "Broken position: " << std::endl;
-                        std::cout << pos.Print() << std::endl;
+                        continue;
                     }
 
-                    ASSERT(!searchResult.empty());
+                    if (wdl < 0) score = dtz / 300.0f;
+                    if (wdl > 0) score = 1.0f - dtz / 300.0f;
                 }
-
-                float score = PawnToWinProbability(isStalemate ? 0.0f : (float)searchResult[0].score / 100.0f);
-*/
 
                 PositionToPackedVector(pos, outSet[i].trainingVector);
                 outSet[i].trainingVector.output[0] = ScoreToNN(score);
@@ -157,7 +139,7 @@ bool TrainEndgame()
     const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { nn::FirstLayerSize, nn::SecondLayerSize, nn::ThirdLayerSize, 1 });
+    network.Init(numNetworkInputs, { nn::FirstLayerSize, 32, 32, 1 });
 
     nn::PackedNeuralNetwork packedNetwork;
 
@@ -180,7 +162,7 @@ bool TrainEndgame()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = 1.0f / (1.0f + 0.01f * iteration);
+        float learningRate = 1.0f / (1.0f + 0.0001f * iteration);
 
         // use validation set from previous iteration as training set in the current one
         trainingSet = validationSet;
@@ -198,10 +180,12 @@ bool TrainEndgame()
                     batch[i] = trainingSet[i].trainingVector;
                 }
 
+                TimePoint startTime = TimePoint::GetCurrent();
                 network.Train(batch, tempValues, cBatchSize, learningRate);
+                TimePoint endTime = TimePoint::GetCurrent();
+                std::cout << "Training took " << (endTime - startTime).ToSeconds() << " sec" << std::endl;
 
                 network.ToPackedNetwork(packedNetwork);
-                packedNetwork.Save("pawns.nn");
             });
 
             taskBuilder.Task("GenerateSet", [&](const TaskContext& ctx)
@@ -226,22 +210,8 @@ bool TrainEndgame()
 
         uint32_t correctPredictions = 0;
 
-        FILE* f = nullptr;
-        if (iteration == 0)
-        {
-            const std::string fileName = materialKey.ToString() + ".epd";
-            f = fopen(fileName.c_str(), "w");
-        }
-
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
-            if (iteration == 0)
-            {
-                const std::string fen = validationSet[i].pos.ToFEN();
-                fwrite(fen.c_str(), fen.size(), 1, f);
-                fwrite("\n", 1, 1, f);
-            }
-
             const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
             tempValues = network.Run(features.data(), (uint32_t)features.size());
             int32_t packedNetworkOutput = packedNetwork.Run(features.data(), (uint32_t)features.size());
@@ -253,9 +223,9 @@ bool TrainEndgame()
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 
-            if ((expectedValue >= 0.7f && nnValue >= 0.7f) ||
-                (expectedValue <= 0.3f && nnValue <= 0.3f) ||
-                (expectedValue > 0.3f && expectedValue < 0.7f && nnValue > 0.3f && nnValue < 0.7f))
+            if ((expectedValue >= 2.0f/3.0f && nnValue >= 2.0f/3.0f) ||
+                (expectedValue <= 1.0f/3.0f && nnValue <= 1.0f/3.0f) ||
+                (expectedValue > 1.0f/3.0f && expectedValue < 2.0f/3.0f && nnValue > 1.0f/3.0f && nnValue < 2.0f/3.0f))
             {
                 correctPredictions++;
             }

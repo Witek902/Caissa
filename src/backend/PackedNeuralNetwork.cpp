@@ -711,38 +711,38 @@ size_t PackedNeuralNetwork::GetWeightsBufferSize() const
 {
     size_t size = 0;
 
-    size += header.numInputs * FirstLayerSize * sizeof(FirstLayerWeightType);
-    size += FirstLayerSize * sizeof(FirstLayerBiasType);
+    size += header.layerSizes[0] * header.layerSizes[1] * sizeof(FirstLayerWeightType);
+    size += header.layerSizes[1] * sizeof(FirstLayerBiasType);
 
-    size += FirstLayerSize * SecondLayerSize * sizeof(HiddenLayerWeightType);
-    size += SecondLayerSize * sizeof(HiddenLayerBiasType);
+    size += header.layerSizes[1] * header.layerSizes[2] * sizeof(HiddenLayerWeightType);
+    size += header.layerSizes[2] * sizeof(HiddenLayerBiasType);
 
-    size += SecondLayerSize * ThirdLayerSize * sizeof(HiddenLayerWeightType);
-    size += ThirdLayerSize * sizeof(HiddenLayerBiasType);
+    size += header.layerSizes[2] * header.layerSizes[3] * sizeof(HiddenLayerWeightType);
+    size += header.layerSizes[3] * sizeof(HiddenLayerBiasType);
 
-    size += ThirdLayerSize * OutputSize * sizeof(HiddenLayerWeightType);
+    size += header.layerSizes[3] * OutputSize * sizeof(HiddenLayerWeightType);
     size += OutputSize * sizeof(HiddenLayerBiasType);
 
     return size;
 }
 
-bool PackedNeuralNetwork::Resize(uint32_t numInputs)
+bool PackedNeuralNetwork::Resize(uint32_t numInputs, uint32_t l1size, uint32_t l2size, uint32_t l3size)
 {
     Release();
 
     header.magic = MagicNumber;
     header.version = CurrentVersion;
-    header.numInputs = numInputs;
-    header.firstLayerSize = FirstLayerSize;
-    header.secondLayerSize = SecondLayerSize;
-    header.thirdLayerSize = ThirdLayerSize;
+    header.layerSizes[0] = numInputs;
+    header.layerSizes[1] = l1size;
+    header.layerSizes[2] = l2size;
+    header.layerSizes[3] = l3size;
 
     const size_t weightsSize = GetWeightsBufferSize();
-    weightsBuffer = (uint8_t*)AlignedMalloc(weightsSize, 64);
+    weightsBuffer = (uint8_t*)AlignedMalloc(weightsSize, CACHELINE_SIZE);
 
-    if (weightsBuffer)
+    if (!weightsBuffer)
     {
-        header = Header{};
+        Release();
         std::cerr << "Failed to allocate weights buffer" << std::endl;
         return false;
     }
@@ -863,11 +863,22 @@ bool PackedNeuralNetwork::Load(const char* filePath)
         return false;
     }
 
-    if (header.numInputs == 0 || header.numInputs > MaxNeuronsInLayer)
+    if (header.layerSizes[0] == 0 || header.layerSizes[0] > MaxInputs)
     {
         std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
         Release();
         return false;
+    }
+
+    for (uint32_t i = 1; i < MaxNumLayers; ++i)
+    {
+        const uint32_t maxNeurons = i > 1 ? MaxNeuronsInLaterLayers : MaxNeuronsInFirstLayer;
+        if ((header.layerSizes[i] == 0) || (header.layerSizes[i] % MinNeuronsInLaterLayers != 0) || (header.layerSizes[i] > maxNeurons))
+        {
+            std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
+            Release();
+            return false;
+        }
     }
 
     weightsBuffer = (uint8_t*)mappedData + sizeof(Header);
@@ -877,27 +888,28 @@ bool PackedNeuralNetwork::Load(const char* filePath)
 
 int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator) const
 {
-    constexpr uint32_t bufferSize = std::max(FirstLayerSize, std::max(SecondLayerSize, ThirdLayerSize));
-    constexpr uint32_t linearLayerBufferSize = std::max(SecondLayerSize, ThirdLayerSize);
+    ASSERT(GetLayerSize(1) <= MaxNeuronsInFirstLayer);
+    ASSERT(GetLayerSize(2) <= MaxNeuronsInLaterLayers);
+    ASSERT(GetLayerSize(3) <= MaxNeuronsInLaterLayers);
 
-    alignas(32) IntermediateType tempA[bufferSize];
-    alignas(32) int32_t tempB[linearLayerBufferSize];
+    alignas(CACHELINE_SIZE) IntermediateType tempA[MaxNeuronsInFirstLayer];
+    alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInLaterLayers];
 
-    ClippedReLU_16(FirstLayerSize, tempA, accumulator.values);
+    ClippedReLU_16(GetLayerSize(1), tempA, accumulator.values);
 
-    LinearLayer(GetLayer1Weights(), GetLayer1Biases(), FirstLayerSize, SecondLayerSize, tempB, tempA);
-    ClippedReLU_32(SecondLayerSize, tempA, tempB);
+    LinearLayer(GetLayer1Weights(), GetLayer1Biases(), GetLayerSize(1), GetLayerSize(2), tempB, tempA);
+    ClippedReLU_32(GetLayerSize(2), tempA, tempB);
 
-    LinearLayer(GetLayer2Weights(), GetLayer2Biases(), SecondLayerSize, ThirdLayerSize, tempB, tempA);
-    ClippedReLU_32(ThirdLayerSize, tempA, tempB);
+    LinearLayer(GetLayer2Weights(), GetLayer2Biases(), GetLayerSize(2), GetLayerSize(3), tempB, tempA);
+    ClippedReLU_32(GetLayerSize(3), tempA, tempB);
 
-    return LinearLayer_SingleOutput(GetLayer3Weights(), GetLayer3Biases(), ThirdLayerSize, 1, tempA);
+    return LinearLayer_SingleOutput(GetLayer3Weights(), GetLayer3Biases(), GetLayerSize(3), 1, tempA);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const
 {
     Accumulator accumulator;
-    accumulator.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), header.numInputs, FirstLayerSize, numActiveInputs, activeInputIndices);
+    accumulator.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), GetNumInputs(), GetLayerSize(1), numActiveInputs, activeInputIndices);
 
     return Run(accumulator);
 }

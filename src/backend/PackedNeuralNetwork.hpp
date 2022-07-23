@@ -18,8 +18,6 @@ static constexpr uint32_t CurrentVersion = 1;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t FirstLayerSize = 512;
-static constexpr uint32_t SecondLayerSize = 32;
-static constexpr uint32_t ThirdLayerSize = 64;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -44,7 +42,7 @@ using FirstLayerBiasType = int16_t;
 using HiddenLayerWeightType = int8_t;
 using HiddenLayerBiasType = int32_t;
 
-struct alignas(64) Accumulator
+struct alignas(CACHELINE_SIZE) Accumulator
 {
     FirstLayerWeightType values[FirstLayerSize];
 
@@ -69,16 +67,16 @@ public:
     {
         uint32_t magic = 0;
         uint32_t version = 0;
-        uint32_t numInputs = 0;
-        uint32_t firstLayerSize = 0;
-        uint32_t secondLayerSize = 0;
-        uint32_t thirdLayerSize = 0;
+        uint32_t layerSizes[4] = { 0, 0, 0, 0 };
         uint32_t padding[10];
     };
 
     friend class NeuralNetwork;
 
-    static constexpr uint32_t MaxNeuronsInLayer = 4096;
+    static constexpr uint32_t MaxInputs = 262144;
+    static constexpr uint32_t MaxNeuronsInFirstLayer = 1024;
+    static constexpr uint32_t MaxNeuronsInLaterLayers = 128;
+    static constexpr uint32_t MinNeuronsInLaterLayers = 16;
     static constexpr uint32_t MaxNumLayers = 4;
 
     PackedNeuralNetwork();
@@ -88,7 +86,7 @@ public:
     void Release();
 
     // allocate weights
-    bool Resize(uint32_t numInputs);
+    bool Resize(uint32_t numInputs, uint32_t l1size, uint32_t l2size, uint32_t l3size);
 
     // load from file
     bool Load(const char* filePath);
@@ -102,7 +100,8 @@ public:
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const;
 
-    INLINE uint32_t GetNumInputs() const { return header.numInputs; }
+    INLINE uint32_t GetNumInputs() const { return header.layerSizes[0]; }
+    INLINE uint32_t GetLayerSize(uint32_t i) const { return header.layerSizes[i]; }
 
     INLINE const FirstLayerWeightType* GetAccumulatorWeights() const
     {
@@ -110,40 +109,40 @@ public:
     }
     INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
     {
-        return reinterpret_cast<const FirstLayerWeightType*>(GetAccumulatorWeights() + GetNumInputs() * FirstLayerSize);
+        return reinterpret_cast<const FirstLayerWeightType*>(GetAccumulatorWeights() + GetNumInputs() * GetLayerSize(1));
     }
 
     INLINE const HiddenLayerWeightType* GetLayer1Weights() const
     {
-        return reinterpret_cast<const HiddenLayerWeightType*>(GetAccumulatorBiases() + FirstLayerSize);
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetAccumulatorBiases() + GetLayerSize(1));
     }
     INLINE const HiddenLayerBiasType* GetLayer1Biases() const
     {
-        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer1Weights() + FirstLayerSize * SecondLayerSize);
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer1Weights() + GetLayerSize(1) * GetLayerSize(2));
     }
 
     INLINE const HiddenLayerWeightType* GetLayer2Weights() const
     {
-        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer1Biases() + SecondLayerSize);
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer1Biases() + GetLayerSize(2));
     }
     INLINE const HiddenLayerBiasType* GetLayer2Biases() const
     {
-        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer2Weights() + SecondLayerSize * ThirdLayerSize);
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer2Weights() + GetLayerSize(2) * GetLayerSize(3));
     }
 
     INLINE const HiddenLayerWeightType* GetLayer3Weights() const
     {
-        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer2Biases() + ThirdLayerSize);
+        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer2Biases() + GetLayerSize(3));
     }
     INLINE const HiddenLayerBiasType* GetLayer3Biases() const
     {
-        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer3Weights() + ThirdLayerSize * OutputSize);
+        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer3Weights() + GetLayerSize(3) * OutputSize);
     }
 
     // calculate size of all weights buffer
     size_t GetWeightsBufferSize() const;
 
-    bool IsValid() const { return header.numInputs > 0; }
+    bool IsValid() const { return GetNumInputs() > 0; }
 
 private:
 

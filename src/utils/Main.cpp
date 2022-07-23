@@ -1,6 +1,7 @@
 #include "Common.hpp"
 
 #include "../backend/Tablebase.hpp"
+#include "../backend/Evaluate.hpp"
 
 #include <iostream>
 #include <vector>
@@ -34,8 +35,9 @@ int main(int argc, const char* argv[])
     }
 
     InitEngine();
+    TryLoadingDefaultEvalFile();
 
-    LoadTablebase("C:\\Program Files (x86)\\syzygy\\");
+    LoadTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
 
     if (argc > 1 && strcmp(argv[1], "unittest") == 0)
     {
