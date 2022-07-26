@@ -25,7 +25,7 @@ bool TestNetwork()
     trainingSet.resize(cNumTrainingVectorsPerIteration);
 
     nn::TrainingVector validationVector;
-    nn::Layer::Values tempValues;
+    nn::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
 

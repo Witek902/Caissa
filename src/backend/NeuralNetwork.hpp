@@ -7,13 +7,15 @@ namespace nn {
 
 class PackedNeuralNetwork;
 
+using Values = std::vector<float, AlignmentAllocator<float, 32>>;
+
 struct TrainingVector
 {
     // intput as float values or active features list
-    std::vector<float> inputs;
+    Values inputs;
     std::vector<uint16_t> features;
 
-    std::vector<float> output;
+    Values output;
 };
 
 inline float InvTan(float x)
@@ -58,8 +60,6 @@ enum class ActivationFunction
 
 struct Layer
 {
-    using Values = std::vector<float>;
-
     Layer(size_t inputSize, size_t outputSize);
 
     void InitWeights();
@@ -108,13 +108,13 @@ public:
     bool ToPackedNetwork(PackedNeuralNetwork& outNetwork) const;
 
     // Calculate neural network output based on arbitrary input
-    const Layer::Values& Run(const Layer::Values& input);
+    const Values& Run(const Values& input);
 
     // Calculate neural network output based on ssparse input (list of active features)
-    const Layer::Values& Run(const uint16_t* featureIndices, uint32_t numFeatures);
+    const Values& Run(const uint16_t* featureIndices, uint32_t numFeatures);
 
     // Train the neural network
-    void Train(const std::vector<TrainingVector>& trainingSet, Layer::Values& tempValues, size_t batchSize, float learningRate = 0.5f);
+    void Train(const std::vector<TrainingVector>& trainingSet, Values& tempValues, size_t batchSize, float learningRate = 0.5f);
 
     void PrintStats() const;
 
@@ -133,7 +133,7 @@ public:
         return layers.back().output.size();
     }
 
-    const Layer::Values& GetOutput() const
+    const Values& GetOutput() const
     {
         return layers.back().output;
     }
@@ -144,7 +144,7 @@ public:
     std::vector<Layer> layers;
 
     // used for learning
-    Layer::Values tempError;
+    Values tempError;
 };
 
 } // namespace nn

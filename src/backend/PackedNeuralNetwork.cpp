@@ -19,6 +19,7 @@
     #define NN_USE_SSE4
 #endif // USE_SSE
 
+// assume SSE
 constexpr uint32_t OptimalRegisterCount = 8;
 
 namespace nn {
@@ -34,6 +35,17 @@ void Accumulator::Refresh(
 {
     (void)numInputs;
     (void)numOutputs;
+
+#ifndef CONFIGURATION_FINAL
+    // check for duplicate features
+    for (uint32_t i = 0; i < numActiveFeatures; ++i)
+    {
+        for (uint32_t j = i + 1; j < numActiveFeatures; ++j)
+        {
+            ASSERT(activeFeatures[i] != activeFeatures[j]);
+        }
+    }
+#endif // CONFIGURATION_FINAL
 
 #if defined(NN_USE_AVX2)
 
@@ -441,7 +453,7 @@ INLINE static int32_t m128_hadd(__m128i a)
 
 #endif // USE_SSE4
 
-INLINE static void LinearLayer(
+NO_INLINE static void LinearLayer(
     const HiddenLayerWeightType* weights, const HiddenLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs, int32_t* output, const IntermediateType* input)
 {

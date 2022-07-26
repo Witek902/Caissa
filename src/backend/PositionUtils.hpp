@@ -20,4 +20,7 @@ struct PackedPosition
 bool PackPosition(const Position& inPos, PackedPosition& outPos);
 bool UnpackPosition(const PackedPosition& inPos, Position& outPos);
 
-bool GenerateRandomPosition(std::mt19937_64& randomGenerator, const MaterialKey& material, Position& outPosition);
+void GenerateRandomPosition(std::mt19937& randomGenerator, const MaterialKey& material, Position& outPosition);
+
+// generate random starting position for Transcendental Chess variant
+void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position& outPosition);

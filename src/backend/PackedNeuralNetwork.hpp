@@ -14,7 +14,7 @@ namespace nn {
 
 class NeuralNetwork;
 
-static constexpr uint32_t CurrentVersion = 1;
+static constexpr uint32_t CurrentVersion = 2;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t FirstLayerSize = 512;

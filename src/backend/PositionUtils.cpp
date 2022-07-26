@@ -990,7 +990,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     return nodes;
 }
 
-bool GenerateRandomPosition(std::mt19937_64& randomGenerator, const MaterialKey& material, Position& outPosition)
+void GenerateRandomPosition(std::mt19937& randomGenerator, const MaterialKey& material, Position& outPosition)
 {
     const auto genLegalSquare = [&randomGenerator](const Bitboard mask) -> Square
     {
@@ -1141,6 +1141,52 @@ bool GenerateRandomPosition(std::mt19937_64& randomGenerator, const MaterialKey&
 
     ASSERT(outPosition.IsValid());
     ASSERT(!outPosition.IsInCheck(Color::Black));
+}
 
-    return true;
+void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position& outPosition)
+{
+    std::vector<Piece> pieces = { Piece::Rook, Piece::Knight, Piece::Bishop, Piece::Queen, Piece::King, Piece::Bishop, Piece::Knight, Piece::Rook };
+
+    const auto randomizePieces = [&]()
+    {
+        for (;;)
+        {
+            std::shuffle(pieces.begin(), pieces.end(), randomGenerator);
+
+            size_t bishopIndex = 0;
+            size_t bishopPos[2];
+
+            for (size_t i = 0; i < 8; ++i)
+            {
+                if (pieces[i] == Piece::Bishop)
+                {
+                    bishopPos[bishopIndex++] = i;
+                }
+            }
+            ASSERT(bishopIndex == 2);
+
+            if ((bishopPos[1] - bishopPos[0]) % 2 == 1)
+            {
+                return;
+            }
+        }
+    };
+
+    outPosition = Position();
+
+    randomizePieces();
+
+    for (uint8_t i = 0; i < 8; ++i)
+    {
+        outPosition.SetPiece(Square(i, 0), pieces[i], Color::White);
+        outPosition.SetPiece(Square(i, 1), Piece::Pawn, Color::White);
+    }
+
+    randomizePieces();
+
+    for (uint8_t i = 0; i < 8; ++i)
+    {
+        outPosition.SetPiece(Square(i, 7), pieces[i], Color::Black);
+        outPosition.SetPiece(Square(i, 6), Piece::Pawn, Color::Black);
+    }
 }

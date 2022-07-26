@@ -23,13 +23,14 @@
 #include <mutex>
 #include <fstream>
 #include <limits.h>
+#include <filesystem>
 
 using namespace threadpool;
 
-static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 8192;
+static const uint32_t cMaxIterations = 10000000;
+static const uint32_t cNumTrainingVectorsPerIteration = 32 * 1024;
 static const uint32_t cBatchSize = 128;
-static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48;
+static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48 - 32;
 
 struct PositionEntry
 {
@@ -48,7 +49,7 @@ static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outV
     const uint32_t maxFeatures = 64;
 
     uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full);
+    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
@@ -73,6 +74,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
     GameCollection::Reader reader(gamesFile);
 
     uint32_t numGames = 0;
+    uint32_t numPositions = 0;
 
     Game game;
     while (reader.ReadGame(game))
@@ -95,12 +97,12 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
         // replay the game
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
-            const float gamePhase = (float)i / (float)game.GetMoves().size();
+            const float gamePhase = std::powf((float)i / (float)game.GetMoves().size(), 2.0f);
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            const ScoreType moveScore = game.GetMoveScores()[i];
+            const int32_t moveScore = game.GetMoveScores()[i];
             const MaterialKey matKey = pos.GetMaterialKey();
 
-            if (pos.GetHalfMoveCount() > 20 && i > 40 && gameScore == Game::Score::Draw)
+            if (pos.GetHalfMoveCount() > 25 && i > 50 && gameScore == Game::Score::Draw)
             {
                 break;
             }
@@ -113,12 +115,20 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 matKey.numBlackRooks == matKey.numWhiteRooks &&
                 matKey.numBlackQueens == matKey.numWhiteQueens &&
                 gameScore == Game::Score::Draw &&
-                std::abs(moveScore) < 15;
+                std::abs(moveScore) < 10;
 
-            if (!equalPosition &&
+            // skip positions that will be using simplified evaluation at the runtime
+            const bool simplifiedEvaluation = std::abs(Evaluate(pos, nullptr, false)) > c_nnTresholdMax;
+
+            // skip recognized endgame positions
+            int32_t endgameScore;
+            const bool knownEndgamePosition = EvaluateEndgame(pos, endgameScore);
+
+            if (!simplifiedEvaluation &&
+                !equalPosition &&
+                !knownEndgamePosition &&
                 !pos.IsInCheck() && !move.IsCapture() && !move.IsPromotion() &&
-                pos.GetNumPieces() >= 6 &&
-                std::abs(Evaluate(pos) < 1024))
+                pos.GetNumPieces() >= 5)
             {
                 PositionEntry entry{};
 
@@ -137,7 +147,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 scoreSum /= weightSum;
 
                 // blend between eval score and actual game score
-                const float blendWeight = std::lerp(0.0f, 0.5f, gamePhase);
+                const float blendWeight = std::lerp(0.0f, 0.75f, gamePhase);
                 entry.score = std::lerp(scoreSum, score, blendWeight);
 
                 Position normalizedPos = pos;
@@ -150,6 +160,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
 
                 PackPosition(normalizedPos, entry.pos);
                 entries.push_back(entry);
+                numPositions++;
             }
 
             if (!pos.DoMove(move))
@@ -161,7 +172,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
         numGames++;
     }
 
-    std::cout << "Parsed " << numGames << " games" << std::endl;
+    std::cout << "Parsed " << numGames << " games, extracted " << numPositions << " positions" << std::endl;
 
     return true;
 }
@@ -179,9 +190,14 @@ bool TrainNetwork()
     nn::PackedNeuralNetwork packedNetwork;
 
     std::vector<PositionEntry> entries;
-    LoadPositions("../../data/selfplayGames/selfplay2.dat", entries);
-    //LoadPositions("../../data/selfplayGames/selfplay3.dat", entries);
-    //LoadPositions("../../data/selfplayGames/selfplay4.dat", entries);
+    {
+        const std::string gamesPath = "../../data/selfplayGames";
+        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        {
+            std::cout << "Loading " << path.path().string() << "..." << std::endl;
+            LoadPositions(path.path().string().c_str(), entries);
+        }
+    }
 
     std::cout << "Training with " << entries.size() << " positions" << std::endl;
 
@@ -189,7 +205,7 @@ bool TrainNetwork()
     trainingSet.resize(cNumTrainingVectorsPerIteration);
     validationSet.resize(cNumTrainingVectorsPerIteration);
 
-    nn::Layer::Values tempValues;
+    nn::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
 
@@ -203,25 +219,14 @@ bool TrainNetwork()
             Position pos;
             UnpackPosition(entry.pos, pos);
 
-            /*
-            // flip the board randomly
-            const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
-            const bool noCastlingRights = pos.GetBlacksCastlingRights() == 0 && pos.GetWhitesCastlingRights() == 0;
-            if (pawnless || noCastlingRights)
-            {
-                if (std::uniform_int_distribution<>(0,1)(gen) != 0)
-                {
-                    pos.MirrorHorizontally();
-                }
-            }
-            if (pawnless)
+            // flip the board randomly in pawnless positions
+            if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
             {
                 if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
                 {
                     pos.MirrorVertically();
                 }
             }
-            */
 
             PositionToSparseVector(pos, outEntries[i].trainingVector);
             outEntries[i].trainingVector.output[0] = entry.score;
@@ -233,7 +238,7 @@ bool TrainNetwork()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = 1.0f / (1.0f + 0.0001f * iteration);
+        float learningRate = 1.0f / (1.0f + 0.00002f * iteration);
 
         // use validation set from previous iteration as training set in the current one
         trainingSet = validationSet;
@@ -294,7 +299,7 @@ bool TrainNetwork()
             const float expectedValue = validationSet[i].trainingVector.output[0];
             const float nnValue = tempValues[0];
             const float nnPackedValue = nn::Sigmoid((float)packedNetworkOutput / (float)nn::OutputScale);
-            const float evalValue = PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);
+            const float evalValue = 0.5f; // PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 
@@ -303,8 +308,8 @@ bool TrainNetwork()
                 std::cout
                     << validationSet[i].pos.ToFEN() << std::endl << validationSet[i].pos.Print() << std::endl
                     << "True Score:     " << expectedValue << std::endl
-                    << "NN eval:        " << nnValue << std::endl
-                    << "Packed NN eval: " << nnPackedValue << std::endl
+                    << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
+                    << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
                     << "Static eval:    " << evalValue << std::endl
                     << std::endl;
             }

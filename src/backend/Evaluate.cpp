@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <fstream>
 
-const char* c_DefaultEvalFile = "eval.pnn";
+const char* c_DefaultEvalFile = "eval-2.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -102,7 +102,7 @@ static void LoadNetworkForMaterialKey(const MaterialKey key)
     PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
     if (network->Load(path.c_str()))
     {
-        std::cout << "Loaded neural network: " << path.c_str() << std::endl;
+        std::cout << "info string Loaded neural network: " << path.c_str() << std::endl;
         g_neuralNetworks[key] = std::move(network);
     }
 }
@@ -113,6 +113,7 @@ bool LoadMainNeuralNetwork(const char* path)
     if (network->Load(path))
     {
         g_mainNeuralNetwork = std::move(network);
+        std::cout << "info string Loaded neural network: " << path << std::endl;
         return true;
     }
 
@@ -136,22 +137,39 @@ static std::string GetDefaultEvalFilePath()
 
 bool TryLoadingDefaultEvalFile()
 {
-    std::string path = GetDefaultEvalFilePath();
-    if (!path.empty())
+    // check if there's eval file in same directory as executable
     {
-        // check if file exists
+        std::string path = GetDefaultEvalFilePath();
+        if (!path.empty())
         {
-            std::ifstream f(path.c_str());
-            if (!f.good()) return false;
+            bool fileExists = false;
+            {
+                std::ifstream f(path.c_str());
+                fileExists = f.good();
+            }
+
+            if (fileExists && LoadMainNeuralNetwork(path.c_str()))
+            {
+                return true;
+            }
+        }
+    }
+
+    // try working directory
+    {
+        bool fileExists = false;
+        {
+            std::ifstream f(c_DefaultEvalFile);
+            fileExists = f.good();
         }
 
-        if (LoadMainNeuralNetwork(path.c_str()))
+        if (fileExists && LoadMainNeuralNetwork(c_DefaultEvalFile))
         {
-            std::cout << "Loaded neural network: " << path.c_str() << std::endl;
             return true;
         }
     }
 
+    std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
     return false;
 }
 
@@ -277,7 +295,7 @@ static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPaw
     return count;
 }
 
-ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo)
+ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
 {
     const MaterialKey materialKey = position.GetMaterialKey();
 
@@ -291,6 +309,7 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo)
         }
     }
 
+    if (!g_neuralNetworks.empty())
     {
         if (position.GetSideToMove() == Color::White)
         {
@@ -427,23 +446,23 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo)
     // accumulate middle/end game scores
     value += InterpolateScore(position, valueMG, valueEG);
 
-    constexpr int32_t nnTreshold = 1024;
-
     // use neural network for balanced positions
-    if (g_mainNeuralNetwork && std::abs(value) < nnTreshold)
+    if (useNN && g_mainNeuralNetwork && std::abs(value) < c_nnTresholdMax)
     {
         int32_t nnValue = nodeInfo ?
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo, NetworkInputMapping::Full) :
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, position, NetworkInputMapping::Full);
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, position, NetworkInputMapping::Full_Symmetrical);
+
+        // NN output is side-to-move relative
+        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
         
         // convert to centipawn range
         nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
 
-        // NN output is side-to-move relative
-        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
-
-        const int32_t nnFactor = std::abs(value);
-        value = (nnFactor * value + nnValue * (nnTreshold - 1 - nnFactor)) / nnTreshold;
+        constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
+        const int32_t nnFactor = std::max(0, std::abs(value) - c_nnTresholdMin);
+        ASSERT(nnFactor <= nnBlendRange);
+        value = (nnFactor * value + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
     }
 
     // saturate eval value so it doesn't exceed KnownWinValue

@@ -5,10 +5,12 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/Material.hpp"
 #include "../backend/TimeManager.hpp"
+#include "../backend/PositionUtils.hpp"
 
 #include <math.h>
+#include <random>
 
-#define VersionNumber "0.7.0"
+#define VersionNumber "0.7.2"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -250,6 +252,29 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     if (args.size() >= 2 && args[1] == "startpos")
     {
         pos.FromFEN(Position::InitPositionFEN);
+
+        if (args.size() >= 4 && args[2] == "moves")
+        {
+            extraMovesStart = 2;
+        }
+    }
+    else if (args.size() >= 2 && args[1] == "random")
+    {
+        MaterialKey matKey = { 8, 2, 2, 2, 1, 8, 2, 2, 2, 1 };
+        std::random_device rd;
+        std::mt19937 mt(rd());
+        GenerateRandomPosition(mt, matKey, pos);
+
+        if (args.size() >= 4 && args[2] == "moves")
+        {
+            extraMovesStart = 2;
+        }
+    }
+    else if (args.size() >= 2 && args[1] == "randomstartpos")
+    {
+        std::random_device rd;
+        std::mt19937 mt(rd());
+        GenerateTranscendentalChessPosition(mt, pos);
 
         if (args.size() >= 4 && args[2] == "moves")
         {
