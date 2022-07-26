@@ -39,7 +39,7 @@ float GameScoreToWinProbability(const Game::Score score)
 
 void AnalyzeGames()
 {
-    FileInputStream gamesFile("../../data/selfplayGames/selfplay4.dat");
+    FileInputStream gamesFile("../../data/selfplayGames/selfplay_random5.dat");
     //FileInputStream gamesFile("selfplay5.dat");
     GameCollection::Reader reader(gamesFile);
 

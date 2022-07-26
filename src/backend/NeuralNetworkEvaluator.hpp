@@ -13,6 +13,10 @@ enum class NetworkInputMapping : uint8_t
 	// always 2*(5*64+48)=736 inputs
 	Full,
 
+	// similar to "Full" but with horizontal symetry (white king is on A-D files)
+	// always 32+64+2*(4*64+48)=704 inputs
+	Full_Symmetrical,
+
 	// material key dependent, vertical and horizontal symmetry exploitation
 	// number of inputs depends on material
 	// horizontal symmetry in case of pawnful positions

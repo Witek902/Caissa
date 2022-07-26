@@ -1,19 +1,39 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
 
+// #define VALIDATE_NETWORK_OUTPUT
 
-INLINE static uint16_t DirtyPieceToFeatureIndex(const DirtyPiece piece, Color perspective)
+INLINE static uint32_t DirtyPieceToFeatureIndex(const DirtyPiece piece, const Position& pos)
 {
     // this must match Position::ToSparseFeaturesVector !!!
 
-    // flip the square according to the perspective
-    const Square relativeSquare = perspective == Color::White ? piece.square : piece.square.FlippedRank();
+    const Color perspective = pos.GetSideToMove();
 
-    uint16_t index;
+    Square relativeSquare = piece.square;
+    {
+        // flip the according to the perspective
+        if (perspective == Color::Black) relativeSquare = relativeSquare.FlippedRank();
+
+        // flip the according to the king placement
+        const Bitboard leftFilesMask = 0x0F0F0F0F0F0F0F0Full;
+        if ((pos.GetCurrentSide().king & leftFilesMask) == 0) relativeSquare = relativeSquare.FlippedFile();
+    }
+
+    uint32_t index;
     if (piece.piece == Piece::Pawn)
     {
         ASSERT(relativeSquare.Rank() > 0 && relativeSquare.Rank() < 7);
         index = relativeSquare.Index() - 8;
+    }
+    else if (piece.piece == Piece::King && piece.color == perspective)
+    {
+        // king of the side-to-move is a special case - it can be only present on A-D files
+        ASSERT(relativeSquare.File() < 4);
+        const uint32_t kingSquareIndex = 4 * relativeSquare.Rank() + relativeSquare.File();
+        ASSERT(kingSquareIndex < 32);
+
+        index = 48 + 4 * 64; // skip other pieces
+        index += kingSquareIndex;
     }
     else
     {
@@ -23,9 +43,9 @@ INLINE static uint16_t DirtyPieceToFeatureIndex(const DirtyPiece piece, Color pe
     }
 
     // opposite-side pieces features are in second half
-    if (piece.color != perspective) index += 48 + 5 * 64;
+    if (piece.color != perspective) index += 32 + 48 + 4 * 64;
 
-    ASSERT(index < 2 * 5 * 64 + 2 * 48);
+    ASSERT(index < (32 + 64 + 2 * (4 * 64 + 48)));
 
     return index;
 }
@@ -64,7 +84,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     nn::Accumulator& accumulator = node.nnContext.accumulator[perspective];
 
     uint32_t updateCost = 0;
-	const uint32_t refreshCost = node.position.GetNumPieces();
+    const uint32_t refreshCost = node.position.GetNumPieces();
+
+    const Bitboard leftFilesMask = 0x0F0F0F0F0F0F0F0Full;
+    const bool currKingSide = (static_cast<const Position&>(node.position).GetCurrentSide().king & leftFilesMask) != 0;
 
     const NodeInfo* prevAccumNode = nullptr;
     for (const NodeInfo* nodePtr = &node; nodePtr != nullptr; nodePtr = nodePtr->parentNode)
@@ -73,6 +96,13 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         if (updateCost > refreshCost)
         {
             // update cost higher than refresh cost, incremetal update not worth it
+            break;
+        }
+
+        // if king moved accros left and right files boundary, then we need to refresh the accumulator
+        const bool prevKingSide = (static_cast<const Position&>(nodePtr->position).GetCurrentSide().king & leftFilesMask) != 0;
+        if (currKingSide != prevKingSide)
+        {
             break;
         }
 
@@ -96,16 +126,41 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         {
             for (uint32_t i = 0; i < nodePtr->nnContext.numAddedPieces; ++i)
             {
-                const int16_t featureIdx = DirtyPieceToFeatureIndex(nodePtr->nnContext.addedPieces[i], node.position.GetSideToMove());
+                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nodePtr->nnContext.addedPieces[i], node.position);
                 AppendFeatureIndex(featureIdx, addedFeatures, numAddedFeatures, removedFeatures, numRemovedFeatures);
             }
 
             for (uint32_t i = 0; i < nodePtr->nnContext.numRemovedPieces; ++i)
             {
-                const int16_t featureIdx = DirtyPieceToFeatureIndex(nodePtr->nnContext.removedPieces[i], node.position.GetSideToMove());
+                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nodePtr->nnContext.removedPieces[i], node.position);
                 AppendFeatureIndex(featureIdx, removedFeatures, numRemovedFeatures, addedFeatures, numAddedFeatures);
             }
         }
+
+#ifdef VALIDATE_NETWORK_OUTPUT
+        Position positionCopy = node.position;
+        if (node.position.GetSideToMove() == Color::Black) positionCopy = node.position.SwappedColors();
+        const uint32_t maxFeatures = 64;
+        uint16_t referenceFeatures[maxFeatures];
+        const uint32_t numReferenceFeatures = positionCopy.ToFeaturesVector(referenceFeatures, mapping);
+
+        for (uint32_t i = 0; i < numAddedFeatures; ++i)
+        {
+            bool found = false;
+            for (uint32_t j = 0; j < numReferenceFeatures; ++j)
+            {
+                if (addedFeatures[i] == referenceFeatures[j]) found = true;
+            }
+            ASSERT(found);
+        }
+        for (uint32_t i = 0; i < numRemovedFeatures; ++i)
+        {
+            for (uint32_t j = 0; j < numReferenceFeatures; ++j)
+            {
+                ASSERT(removedFeatures[i] != referenceFeatures[j]);
+            }
+        }
+#endif // VALIDATE_NETWORK_OUTPUT
 
         accumulator.Update(
             prevAccumNode->nnContext.accumulator[perspective],
@@ -132,13 +187,15 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
     const int32_t nnOutput = network.Run(accumulator);
 
-    //{
-    //    const int32_t nnOutputReference = Evaluate(network, node.position, mapping);
-    //    ASSERT(nnOutput == nnOutputReference);
-    //}
+#ifdef VALIDATE_NETWORK_OUTPUT
+    {
+        const int32_t nnOutputReference = Evaluate(network, node.position, mapping);
+        ASSERT(nnOutput == nnOutputReference);
+    }
+#endif // VALIDATE_NETWORK_OUTPUT
 
     // mark accumulator as computed
     node.nnContext.accumDirty[perspective] = false;
 
-	return nnOutput;
+    return nnOutput;
 }

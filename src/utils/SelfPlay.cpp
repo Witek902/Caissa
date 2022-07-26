@@ -3,6 +3,7 @@
 #include "GameCollection.hpp"
 
 #include "../backend/Position.hpp"
+#include "../backend/Material.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Score.hpp"
 #include "../backend/Move.hpp"
@@ -150,7 +151,7 @@ void SelfPlay(const std::vector<std::string>& args)
     ttArray.resize(numThreads);
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray[i].Resize(32ull * 1024ull * 1024ull);
+        ttArray[i].Resize(64ull * 1024ull * 1024ull);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -167,8 +168,6 @@ void SelfPlay(const std::vector<std::string>& args)
 
     const auto gameTask = [&](const TaskContext& context, uint32_t)
     {
-        const uint32_t index = gameIndex++;
-
         std::random_device rd;
         std::mt19937 gen(rd());
 
@@ -178,13 +177,32 @@ void SelfPlay(const std::vector<std::string>& args)
         SearchResult searchResult;
         EvalProbing evalProbing(probedPositionsFile, gen());
 
-        // start new game
-        Game game;
-        tt.Clear();
-        search.Clear();
-
         // generate opening position
         Position openingPos(Position::InitPositionFEN);
+
+        //{
+        //    const uint32_t numPawns = std::uniform_int_distribution<uint32_t>(2, 8)(gen);
+        //    const uint32_t numKnights = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
+        //    const uint32_t numBishops = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
+        //    const uint32_t numRooks = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
+        //    const uint32_t numQueens = std::uniform_int_distribution<uint32_t>(0, 1)(gen);
+        //    const MaterialKey matKey = { numPawns, numKnights, numBishops, numRooks, numQueens, numPawns, numKnights, numBishops, numRooks, numQueens };
+        //    GenerateRandomPosition(gen, matKey, openingPos);
+
+        //    // don't generate position with more than one bishop on same color squares
+        //    if ((openingPos.Whites().bishops & Bitboard::DarkSquares()).Count() > 1 ||
+        //        (openingPos.Whites().bishops & Bitboard::LightSquares()).Count() > 1 ||
+        //        (openingPos.Blacks().bishops & Bitboard::DarkSquares()).Count() > 1 ||
+        //        (openingPos.Blacks().bishops & Bitboard::LightSquares()).Count() > 1)
+        //    {
+        //        return;
+        //    }
+        //}
+
+        //GenerateTranscendentalChessPosition(gen, openingPos);
+
+        const uint32_t index = gameIndex++;
+
         if (!openingPositions.empty())
         {
             uint32_t openingIndex = index;
@@ -195,12 +213,17 @@ void SelfPlay(const std::vector<std::string>& args)
             }
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
-        game.Reset(openingPos);
 
-        if (openingPos.IsMate() || openingPos.IsStalemate())
+        if (openingPos.IsInCheck() || openingPos.IsMate() || openingPos.IsStalemate() || !openingPos.IsQuiet())
         {
             return;
         }
+
+        // start new game
+        Game game;
+        tt.Clear();
+        search.Clear();
+        game.Reset(openingPos);
 
         int32_t scoreDiffTreshold = 20;
 
@@ -214,7 +237,7 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.debugLog = false;
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
             searchParam.limits.maxDepth = 20;
-            searchParam.limits.maxNodes = 200000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.limits.maxNodes = 400000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
             //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
             //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
             //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
@@ -227,6 +250,12 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 DEBUG_BREAK();
                 break;
+            }
+
+            // skip game if starting position is extremely  unbalanced
+            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > 800)
+            {
+                return;
             }
 
             // sort moves by score
@@ -361,8 +390,11 @@ void SelfPlay(const std::vector<std::string>& args)
 
     Waitable waitable;
     {
+        const uint32_t numGames = (uint32_t)openingPositions.size();
+        //const uint32_t numGames = 10000000;
+
         TaskBuilder taskBuilder(waitable);
-        taskBuilder.ParallelFor("SelfPlay", (uint32_t)openingPositions.size(), gameTask);
+        taskBuilder.ParallelFor("SelfPlay", numGames, gameTask);
         //taskBuilder.Fence();
     }
 

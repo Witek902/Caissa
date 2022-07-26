@@ -67,7 +67,7 @@ void RunPackedPositionTests()
     {
         using Distr = std::uniform_int_distribution<uint32_t>;
 
-        std::mt19937_64 mt;
+        std::mt19937 mt;
 
         for (uint32_t i = 0; i < 1000; ++i)
         {

@@ -31,6 +31,12 @@ static constexpr PieceScore c_pieceValues[] =
     {UINT16_MAX,UINT16_MAX},
 };
 
+// if abs(simpleEval) > nnTresholdMax, then we don't use NN at all
+// if abs(simpleEval) < nnTresholdMin, then we use NN purely
+// between the two values, the NN eval and simple eval are blended smoothly
+static constexpr int32_t c_nnTresholdMin = 256;
+static constexpr int32_t c_nnTresholdMax = 1024;
+
 void InitEvaluation();
 
 bool TryLoadingDefaultEvalFile();
@@ -56,9 +62,16 @@ inline float CentiPawnToWinProbability(int32_t centiPawnsDifference)
 // convert win probability to evaluation score (in pawns)
 inline float WinProbabilityToPawns(float w)
 {
+    ASSERT(w >= 0.0f && w <= 1.0f);
     w = std::clamp(w, 0.0f, 1.0f);
     return 4.0f * log10f(w / (1.0f - w));
 }
 
-ScoreType Evaluate(const Position& position, NodeInfo* node = nullptr);
+// convert win probability to evaluation score (in pawns)
+inline int32_t WinProbabilityToCentiPawns(float w)
+{
+    return (int32_t)std::round(100.0f * WinProbabilityToPawns(w));
+}
+
+ScoreType Evaluate(const Position& position, NodeInfo* node = nullptr, bool useNN = true);
 bool CheckInsufficientMaterial(const Position& position);

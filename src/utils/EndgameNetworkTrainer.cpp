@@ -94,7 +94,7 @@ bool TrainEndgame()
     {
         taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext&, const uint32_t i)
         {
-            std::mt19937_64 randomGenerator(randomDevice());
+            std::mt19937 randomGenerator(randomDevice());
 
             for (;;)
             {
@@ -147,7 +147,7 @@ bool TrainEndgame()
     trainingSet.resize(cNumTrainingVectorsPerIteration);
     validationSet.resize(cNumTrainingVectorsPerIteration);
 
-    nn::Layer::Values tempValues;
+    nn::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
 
