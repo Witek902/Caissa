@@ -128,8 +128,9 @@ struct NodeInfo
     bool isPvNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
+    bool isSingularSearch = false;
 
-    NNEvaluatorContext nnContext;
+    NNEvaluatorContext* nnContext = nullptr;
 
     bool ShouldCheckMove(const Move move) const
     {
@@ -233,6 +234,9 @@ private:
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
+
+        // neural network context for each node height
+        std::vector<NNEvaluatorContext, AlignmentAllocator<NNEvaluatorContext, CACHELINE_SIZE>> nnContextStack{ MaxSearchDepth };
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;

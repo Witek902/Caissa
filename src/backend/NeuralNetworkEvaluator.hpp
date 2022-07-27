@@ -32,23 +32,31 @@ struct DirtyPiece
 	Square square;
 };
 
-struct NNEvaluatorContext
+struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 {
 	// first layer accumulators for both perspectives
 	nn::Accumulator accumulator[2];
 
 	// indicates which accumulator is dirty
-	bool accumDirty[2] = { true, true };
+	bool accumDirty[2];
 
 	// added and removed pieces information
 	DirtyPiece addedPieces[2];
 	DirtyPiece removedPieces[2];
-	uint32_t numAddedPieces = 0;
-	uint32_t numRemovedPieces = 0;
+	uint32_t numAddedPieces;
+	uint32_t numRemovedPieces;
+
+	NNEvaluatorContext()
+	{
+		MarkAsDirty();
+	}
 
 	void MarkAsDirty()
 	{
-		accumDirty[0] = accumDirty[1] = true;
+		accumDirty[0] = true;
+		accumDirty[1] = true;
+		numAddedPieces = 0;
+		numRemovedPieces = 0;
 	}
 };
 

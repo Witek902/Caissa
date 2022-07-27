@@ -23,7 +23,6 @@
 
 static const float CurrentMoveReportDelay = 10.0f;
 
-static const uint8_t SingularitySearchPvIndex = UINT8_MAX;
 static const int32_t SingularitySearchMinDepth = 8;
 static const int32_t SingularitySearchScoreTresholdMin = 200;
 static const int32_t SingularitySearchScoreTresholdMax = 400;
@@ -540,12 +539,14 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             NodeInfo rootNode;
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
+            rootNode.isSingularSearch = true;
             rootNode.depth = singularDepth;
-            rootNode.pvIndex = SingularitySearchPvIndex;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
             rootNode.moveFilter = &primaryMove;
             rootNode.moveFilterCount = 1;
+            rootNode.nnContext = &thread.nnContextStack[0];
+            rootNode.nnContext->MarkAsDirty();
 
             ScoreType score = NegaMax(thread, rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -561,8 +562,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
 PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
 {
-    ASSERT(param.pvIndex != SingularitySearchPvIndex);
-
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
 
@@ -602,6 +601,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.beta = ScoreType(beta);
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
+        rootNode.nnContext = &thread.nnContextStack[0];
+        rootNode.nnContext->MarkAsDirty();
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
@@ -661,7 +662,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
-    if (!node.isPvNodeFromPrevIteration || prevPvLines.empty() || node.pvIndex == SingularitySearchPvIndex)
+    if (!node.isPvNodeFromPrevIteration || prevPvLines.empty() || node.isSingularSearch)
     {
         return Move::Invalid();
     }
@@ -674,6 +675,7 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 
     const Move pvMove = pvLine[node.height];
     ASSERT(pvMove.IsValid());
+    ASSERT(node.position.IsMoveLegal(pvMove));
 
     return pvMove;
 }
@@ -784,6 +786,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     childNode.isPvNode = node.isPvNode;
     childNode.depth = node.depth - 1;
     childNode.height = node.height + 1;
+    childNode.nnContext = &thread.nnContextStack[childNode.height];
+    childNode.nnContext->MarkAsDirty();
 
     uint32_t moveGenFlags = 0;
     if (!node.isInCheck)
@@ -792,14 +796,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
     }
 
-    const Move pvMove = thread.GetPvMove(node);
-
-    if (pvMove.IsValid() && ttEntry.moves[0].IsValid())
-    {
-        ASSERT(pvMove == ttEntry.moves[0]);
-    }
-
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, moveGenFlags);
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry, Move::Invalid(), moveGenFlags);
 
     int32_t moveScore = 0;
     Move move;
@@ -824,7 +821,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move, &childNode.nnContext))
+        if (!childNode.position.DoMove(move, childNode.nnContext))
         {
             continue;
         }
@@ -1072,6 +1069,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (staticEval == InvalidValue)
         {
+            // singular search can't evaluate because of NN context overlap
+            ASSERT(!node.isSingularSearch);
+
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
 
@@ -1151,9 +1151,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.isNullMove = true;
             childNode.height = node.height + 1;
             childNode.depth = node.depth - depthReduction;
+            childNode.nnContext = &thread.nnContextStack[childNode.height];
+            childNode.nnContext->MarkAsDirty();
 
             childNode.position.DoNullMove();
-            childNode.nnContext.MarkAsDirty();
 
             ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
 
@@ -1198,6 +1199,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     childNode.parentNode = &node;
     childNode.height = node.height + 1;
     childNode.pvIndex = node.pvIndex;
+    childNode.nnContext = &thread.nnContextStack[childNode.height];
+    childNode.nnContext->MarkAsDirty();
 
     int32_t extension = 0;
 
@@ -1245,7 +1248,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move, &childNode.nnContext))
+        if (!childNode.position.DoMove(move, childNode.nnContext))
         {
             continue;
         }
@@ -1350,8 +1353,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             NodeInfo singularChildNode = node;
             singularChildNode.isPvNode = false;
+            singularChildNode.isPvNodeFromPrevIteration = false;
+            singularChildNode.isSingularSearch = true;
             singularChildNode.depth = node.depth / 2;
-            singularChildNode.pvIndex = SingularitySearchPvIndex;
             singularChildNode.alpha = singularBeta - 1;
             singularChildNode.beta = singularBeta;
             singularChildNode.moveFilter = &move;
@@ -1378,6 +1382,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 moveExtension = 0;
             }
+
+            // NegaMax can overwrite NN context for child node, so we need to recreate it by doing the move again...
+            childNode.position = position;
+            VERIFY(childNode.position.DoMove(move, childNode.nnContext));
         }
 
         if (move.IsQuiet())

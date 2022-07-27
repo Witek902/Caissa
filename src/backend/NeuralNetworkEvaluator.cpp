@@ -80,8 +80,9 @@ INLINE static void AppendFeatureIndex(uint16_t featureIndex, uint16_t addedFeatu
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, NetworkInputMapping mapping)
 {
+    ASSERT(node.nnContext);
     const uint32_t perspective = (uint32_t)node.position.GetSideToMove();
-    nn::Accumulator& accumulator = node.nnContext.accumulator[perspective];
+    nn::Accumulator& accumulator = node.nnContext->accumulator[perspective];
 
     uint32_t updateCost = 0;
     const uint32_t refreshCost = node.position.GetNumPieces();
@@ -92,7 +93,9 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     const NodeInfo* prevAccumNode = nullptr;
     for (const NodeInfo* nodePtr = &node; nodePtr != nullptr; nodePtr = nodePtr->parentNode)
     {
-        updateCost += (nodePtr->nnContext.numAddedPieces + nodePtr->nnContext.numRemovedPieces);
+        ASSERT(nodePtr->nnContext);
+
+        updateCost += (nodePtr->nnContext->numAddedPieces + nodePtr->nnContext->numRemovedPieces);
         if (updateCost > refreshCost)
         {
             // update cost higher than refresh cost, incremetal update not worth it
@@ -106,7 +109,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
             break;
         }
 
-        if (!nodePtr->nnContext.accumDirty[perspective])
+        if (!nodePtr->nnContext->accumDirty[perspective])
         {
             // found parent node with valid accumulator
             prevAccumNode = nodePtr;
@@ -124,15 +127,17 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         // build a list of features to be updated
         for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; nodePtr = nodePtr->parentNode)
         {
-            for (uint32_t i = 0; i < nodePtr->nnContext.numAddedPieces; ++i)
+            NNEvaluatorContext& nnContext = *(nodePtr->nnContext);
+
+            for (uint32_t i = 0; i < nnContext.numAddedPieces; ++i)
             {
-                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nodePtr->nnContext.addedPieces[i], node.position);
+                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nnContext.addedPieces[i], node.position);
                 AppendFeatureIndex(featureIdx, addedFeatures, numAddedFeatures, removedFeatures, numRemovedFeatures);
             }
 
-            for (uint32_t i = 0; i < nodePtr->nnContext.numRemovedPieces; ++i)
+            for (uint32_t i = 0; i < nnContext.numRemovedPieces; ++i)
             {
-                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nodePtr->nnContext.removedPieces[i], node.position);
+                const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(nnContext.removedPieces[i], node.position);
                 AppendFeatureIndex(featureIdx, removedFeatures, numRemovedFeatures, addedFeatures, numAddedFeatures);
             }
         }
@@ -163,7 +168,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 #endif // VALIDATE_NETWORK_OUTPUT
 
         accumulator.Update(
-            prevAccumNode->nnContext.accumulator[perspective],
+            prevAccumNode->nnContext->accumulator[perspective],
             network.GetAccumulatorWeights(),
             network.GetNumInputs(), nn::FirstLayerSize,
             numAddedFeatures, addedFeatures,
@@ -195,7 +200,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 #endif // VALIDATE_NETWORK_OUTPUT
 
     // mark accumulator as computed
-    node.nnContext.accumDirty[perspective] = false;
+    node.nnContext->accumDirty[perspective] = false;
 
     return nnOutput;
 }

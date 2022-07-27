@@ -31,8 +31,10 @@
 
 #ifndef CONFIGURATION_FINAL
     #define ASSERT(x) if (!(x)) DEBUG_BREAK();
+    #define VERIFY(x) if (!(x)) DEBUG_BREAK();
 #else
     #define ASSERT(x)
+    #define VERIFY(x) (x)
 #endif
 
 #define CACHELINE_SIZE 64
