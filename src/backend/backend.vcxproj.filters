@@ -196,6 +196,9 @@
     <ClInclude Include="NeuralNetworkEvaluator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Pawns.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="backend.natvis" />
