@@ -987,10 +987,10 @@ static void RunPositionTests()
         TEST_EXPECT(IsPassedPawn(Square_g7, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
         TEST_EXPECT(!IsPassedPawn(Square_g2, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
 
-        TEST_EXPECT(!IsPassedPawn(Square_a5, Color::Black, pos.Blacks().pawns, pos.Whites().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_d3, Color::Black, pos.Blacks().pawns, pos.Whites().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_f7, Color::Black, pos.Blacks().pawns, pos.Whites().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_h2, Color::Black, pos.Blacks().pawns, pos.Whites().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_a5, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(IsPassedPawn(Square_d3, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_f7, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(IsPassedPawn(Square_h2, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
     }
 }
 
