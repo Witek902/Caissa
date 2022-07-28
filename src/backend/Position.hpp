@@ -28,12 +28,12 @@ struct SidePosition
 
     INLINE Bitboard Occupied() const
     {
-        return pawns | knights | bishops | rooks | queens | king;
+        return occupied;
     }
 
     INLINE Bitboard OccupiedExcludingKing() const
     {
-        return pawns | knights | bishops | rooks | queens;
+        return occupied & ~king;
     }
 
     INLINE Square GetKingSquare() const
@@ -64,6 +64,7 @@ struct SidePosition
             king != rhs.king;
     }
 
+    Bitboard occupied = 0;
     Bitboard pawns = 0;
     Bitboard knights = 0;
     Bitboard bishops = 0;
@@ -301,4 +302,4 @@ private:
     uint64_t mHash; // whole position hash
 };
 
-static_assert(sizeof(Position) == 112, "Invalid position size");
+static_assert(sizeof(Position) == 128, "Invalid position size");
