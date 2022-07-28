@@ -345,6 +345,7 @@
     <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="NeuralNetworkEvaluator.hpp" />
     <ClInclude Include="PackedNeuralNetwork.hpp" />
+    <ClInclude Include="Pawns.hpp" />
     <ClInclude Include="PGNParser.hpp" />
     <ClInclude Include="Piece.hpp" />
     <ClInclude Include="Position.hpp" />

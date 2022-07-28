@@ -5,6 +5,7 @@
 #include "PackedNeuralNetwork.hpp"
 #include "PieceSquareTables.h"
 #include "NeuralNetworkEvaluator.hpp"
+#include "Pawns.hpp"
 
 #include <unordered_map>
 #include <fstream>
@@ -261,38 +262,6 @@ bool CheckInsufficientMaterial(const Position& position)
     }
 
     return false;
-}
-
-static int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
-{
-    int32_t count = 0;
-
-    ourPawns.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const uint32_t rank = square / 8;
-        const uint32_t file = square % 8;
-        
-        if (rank >= 6)
-        {
-            // pawn is ready to promotion - consider is as passed
-            count++;
-        }
-        else
-        {
-            constexpr const Bitboard fileMask = Bitboard::FileBitboard<0>();
-
-            Bitboard passedPawnMask = fileMask << (square + 8);
-            if (file > 0) passedPawnMask |= fileMask << (square + 7);
-            if (file < 7) passedPawnMask |= fileMask << (square + 9);
-
-            if ((theirPawns & passedPawnMask) == 0)
-            {
-                count++;
-            }
-        }
-    });
-
-    return count;
 }
 
 ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
