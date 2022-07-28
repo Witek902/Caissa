@@ -75,6 +75,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     const Bitboard mask = square.GetBitboard();
     SidePosition& pos = mColors[(uint32_t)color];
 
+    ASSERT((pos.occupied & mask) == 0);
     ASSERT((pos.pawns & mask) == 0);
     ASSERT((pos.knights & mask) == 0);
     ASSERT((pos.bishops & mask) == 0);
@@ -84,6 +85,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 
+    pos.occupied |= mask;
     pos.GetPieceBitBoard(piece) |= mask;
 }
 
@@ -95,6 +97,9 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
 
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
+
+    ASSERT((pos.occupied & mask) == mask);
+    pos.occupied &= ~mask;
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
@@ -540,23 +545,17 @@ const Bitboard Position::GetAttackers(const Square square, const Color sideColor
     return bitboard;
 }
 
-NO_INLINE
 bool Position::IsSquareVisible(const Square square, const Color sideColor) const
 {
     const SidePosition& side = mColors[(uint8_t)sideColor];
+
+    if (Bitboard::GetKingAttacks(square) & side.king) return true;
+
+    if (side.knights && (Bitboard::GetKnightAttacks(square) & side.knights)) return true;
+
+    if (Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns) return true;
+
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
-
-    if (Bitboard::GetKingAttacks(square) & side.king)   return true;
-
-    if (side.knights)
-    {
-        if (Bitboard::GetKnightAttacks(square) & side.knights) return true;
-    }
-
-    if (side.pawns)
-    {
-        if (Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns) return true;
-    }
 
     if (side.bishops | side.queens)
     {
@@ -707,9 +706,9 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
         if (nnContext)
         {
+            nnContext->MarkAsDirty();
             nnContext->removedPieces[0] = { move.GetPiece(), mSideToMove, move.FromSquare() };
             nnContext->numRemovedPieces = 1;
-            nnContext->MarkAsDirty();
         }
     }
 
@@ -800,9 +799,12 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
         // clear all castling rights after moving a king
         CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
-        if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(mSideToMove, 0);
-        if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(mSideToMove, 1);
-        currentSideCastlingRights = CastlingRights(0);
+        if (currentSideCastlingRights)
+        {
+            if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(mSideToMove, 0);
+            if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(mSideToMove, 1);
+            currentSideCastlingRights = CastlingRights(0);
+        }
     }
 
     // clear specific castling right after moving a rook
