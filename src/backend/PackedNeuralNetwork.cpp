@@ -140,7 +140,6 @@ void Accumulator::Refresh(
             }
         }
 
-        // #TODO keep values as __m256i
         {
             FirstLayerWeightType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
@@ -178,7 +177,6 @@ void Accumulator::Refresh(
     }
 #endif
 }
-
 
 void Accumulator::Update(
     const Accumulator& source,
@@ -250,7 +248,7 @@ void Accumulator::Update(
     }
 
 #elif defined(NN_USE_SSE2)
-    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    constexpr uint32_t registerWidth = 128 / (8 * sizeof(FirstLayerWeightType));
     static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
     static_assert(numChunks% OptimalRegisterCount == 0);
@@ -453,7 +451,7 @@ INLINE static int32_t m128_hadd(__m128i a)
 
 #endif // USE_SSE4
 
-NO_INLINE static void LinearLayer(
+INLINE static void LinearLayer(
     const HiddenLayerWeightType* weights, const HiddenLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs, int32_t* output, const IntermediateType* input)
 {
