@@ -1,7 +1,31 @@
 # Caissa Chess Engine
-UCI command-line chess engine written in C++. Currently compiles only for Windows, Linux version is on the way.
+UCI command-line chess engine written in C++ from scratch. In development since beginning of 2021.
 
-Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
+### Strength
+
+Estimated Score of the newest version: **3240 Elo**
+CCRL Blitz Score: **3182 Elo** (#62) (version 0.7.0)
+
+### Supported UCI options
+
+* **Hash** (int) Sets transposition table size in megabytes.
+* **MultiPV** (int) Specifies number of searched and printed PV lines.
+* **MoveOverhead** (int) Sets move overhead in miliseconds. Should be increased if the engine is loosing on time.
+* **Threads** (int) Sets number of threads used for searching.
+* **Ponder** (bool) Enables pondering.
+* **EvalFile** (string) Neural network evaluation file.
+* **SyzygyPath** (string) Semicolon-separated list of paths to Syzygy endgame tablebases.
+* **UCI_AnalyseMode** (bool) Enables analysis mode: search full PV lines and disable any depth constrains.
+* **UseSAN** (bool) Enables short algebraic notation output (FIDE standard) instead of default long algebraic notation.
+* **ColorConsoleOutput** (bool) Enables colorful console output for better readibility.
+
+
+### Provided EXE versions
+
+* **AVX2/BMI2** Fastest, requires a x64 CPU with AVX2 and BMI2 instruction set support.
+* **POPCNT** Slower, requires a x64 CPU with SSE4 and POPCNT instruction set support.
+* **Legacy** Slowest, requires any x64 CPU.
+
 
 ## Features
 
@@ -22,11 +46,13 @@ Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 
 #### Evaluation
 * Custom neural network
-  * 736&rarr;512&rarr;32&rarr;64&rarr;1 layers architecture
-  * effectively updated first layer, AVX2 accelerated
-  * absolute piece coordinates (no symmetry, no king-relative features)
+  * 704&rarr;512&rarr;32&rarr;64&rarr;1 layers architecture
+  * effectively updated first layer, AVX2/SSE accelerated
+  * clipped-ReLU activation function
+  * absolute piece coordinates with horizontal symmetry, no king-relative features
+  * custom CPU-based trainer using Adagrad SGD algorithm
 * Endgame evaluation
-* Simple classic evaluation function based on Piece Square Tables
+* Simple classic evaluation function based purely on Piece Square Tables
 * NN and PSQT trained on data generated during self-play matches
 
 #### Selectivity
@@ -44,14 +70,12 @@ Estimated ELO: **3100** (10+1 time control, single threaded, with NNUE)
 * Sacrifice penalty / threat bonus
 
 #### Time Management
-* Heuristics based on approximate move count left
+* Heuristics based on approximate move count left and score fluctuations.
 * Reducing search time for singular root moves
 
 #### Misc
 * Large Pages Support for Transposition Table
 * Magic Bitboards
-* Analysis Mode (search full PV lines and disable any time and depth limits)
-
 
 ## Modules
 
@@ -62,4 +86,9 @@ The projects comprises folowing modules:
   
 ## TODO
 
+  * Better neural network architecture
+  * Better classic evaluation (king safety, mobility, pawns, etc.)
+  * Search tuning and improvement
+  * Move generation improvement (e.g. staged move generation)
+  * Chess960 support
   * More platforms support
