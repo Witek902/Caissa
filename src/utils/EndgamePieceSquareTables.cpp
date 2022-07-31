@@ -75,12 +75,8 @@ void GenerateEndgamePieceSquareTables()
             pos.SetPiece(whiteQueenSq, Piece::Queen, Color::White);
             ASSERT(pos.IsValid());
 
-            if (pos.IsInCheck()) continue;
-
             // generate only quiet position
-            moves.Clear();
-            pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
-            if (moves.Size() > 0) continue;
+            if (!pos.IsQuiet()) continue;
 
             Move bestMove;
             uint32_t dtz = UINT32_MAX;

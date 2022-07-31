@@ -142,6 +142,12 @@ struct Move
         return GetPromoteTo() != Piece::None;
     }
 
+    INLINE bool IsUnderpromotion() const
+    {
+        static_assert((int32_t)Piece::Rook - (int32_t)Piece::Knight == 2, "Unexpected piece order");
+        return GetPromoteTo() >= Piece::Knight && GetPromoteTo() <= Piece::Rook;
+    }
+
     std::string ToString() const;
 };
 

@@ -731,8 +731,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
     }
 
+    const bool maxDepthReached = false; // node.height + 1 >= MaxSearchDepth;
+
     // do not consider stand pat if in check
-    if (!node.isInCheck)
+    if (!node.isInCheck || maxDepthReached)
     {
         if (staticEval == InvalidValue)
         {
@@ -766,7 +768,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         bestValue = staticEval;
 
-        if (bestValue >= beta)
+        if (bestValue >= beta || maxDepthReached)
         {
             if (!ttEntry.IsValid())
             {
@@ -792,11 +794,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     childNode.nnContext = &thread.nnContextStack[childNode.height];
     childNode.nnContext->MarkAsDirty();
 
-    uint32_t moveGenFlags = 0;
-    if (!node.isInCheck)
+    uint32_t moveGenFlags = MOVE_GEN_MASK_CAPTURES|MOVE_GEN_MASK_PROMOTIONS;
+    if (node.isInCheck)
     {
-        moveGenFlags |= MOVE_GEN_ONLY_TACTICAL;
-        moveGenFlags |= MOVE_GEN_ONLY_QUEEN_PROMOTIONS;
+        moveGenFlags |= MOVE_GEN_MASK_QUIET;
     }
 
     MovePicker movePicker(position, thread.moveOrderer, ttEntry, Move::Invalid(), moveGenFlags);
@@ -814,10 +815,21 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         ASSERT(move.IsValid());
 
-        // skip losing captures
-        if (!node.isInCheck && moveScore < MoveOrderer::GoodCaptureValue)
+        if (!node.isInCheck)
         {
-            if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
+            ASSERT(!move.IsQuiet());
+
+            // skip losing captures
+            if (moveScore < MoveOrderer::GoodCaptureValue)
+            {
+                if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
+                {
+                    continue;
+                }
+            }
+
+            // skip underpromotions
+            if (move.IsUnderpromotion())
             {
                 continue;
             }
@@ -1208,7 +1220,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     const Move pvMove = thread.GetPvMove(node);
 
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove);
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
 
     // randomize move order for root node on secondary threads
     if (isRootNode && !thread.isMainThread)

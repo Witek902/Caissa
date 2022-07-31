@@ -170,6 +170,8 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 
 void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, uint32_t numMoves, const PackedMove* moves)
 {
+    ASSERT(position.GetHash() == position.ComputeHash());
+
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;

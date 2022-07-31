@@ -89,8 +89,10 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
 
-#define MOVE_GEN_ONLY_TACTICAL 1
-#define MOVE_GEN_ONLY_QUEEN_PROMOTIONS 2
+#define MOVE_GEN_MASK_CAPTURES          (1<<0)
+#define MOVE_GEN_MASK_PROMOTIONS        (1<<1)
+#define MOVE_GEN_MASK_QUIET             (1<<2)
+#define MOVE_GEN_MASK_ALL               MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS | MOVE_GEN_MASK_QUIET
 
 enum class MoveNotation : uint8_t
 {
@@ -171,7 +173,7 @@ public:
     // check if position is relatively quiet (no immediate winning captures and promotions)
     bool IsQuiet() const;
     
-    void GenerateMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GenerateMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
 
     // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;
@@ -259,12 +261,8 @@ public:
     // returns number of active features
     uint32_t ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMapping mapping) const;
 
-    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateKnightMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateRookMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateBishopMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateQueenMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
-    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = 0) const;
+    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
+    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
 
 private:
 

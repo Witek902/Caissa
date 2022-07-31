@@ -709,31 +709,85 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
     }
 
     const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(packedMove.FromSquare());
-    if (movedPiece == Piece::None)
-    {
-        return Move();
-    }
 
-    MoveList moves;
+    const Bitboard occupiedByCurrent = GetCurrentSide().Occupied();
+    const Bitboard occupiedByOpponent = GetOpponentSide().Occupied();
+    const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
+    const bool isCapture = packedMove.ToSquare().GetBitboard() & occupiedByOpponent;
 
-    // TODO
-    // instead of generating moves of all pieces of given type,
-    // generate only moves of the moved piece
     switch (movedPiece)
     {
-    case Piece::Pawn:   GeneratePawnMoveList(moves); break;
-    case Piece::Knight: GenerateKnightMoveList(moves); break;
-    case Piece::Rook:   GenerateRookMoveList(moves); break;
-    case Piece::Bishop: GenerateBishopMoveList(moves); break;
-    case Piece::Queen:  GenerateQueenMoveList(moves); break;
-    case Piece::King:   GenerateKingMoveList(moves); break;
-    }
-
-    for (uint32_t i = 0; i < moves.Size(); ++i)
-    {
-        if (moves[i].move == packedMove)
+        case Piece::Pawn:
         {
-            return moves[i].move;
+            // TODO generate pawn move directly
+            MoveList moves;
+            GeneratePawnMoveList(moves);
+            for (uint32_t i = 0; i < moves.Size(); ++i)
+            {
+                if (moves[i].move == packedMove)
+                {
+                    return moves[i].move;
+                }
+            }
+            break;
+        }
+
+        case Piece::Knight:
+        {
+            Bitboard attackBitboard = (~occupiedByCurrent) & Bitboard::GetKnightAttacks(packedMove.FromSquare());
+            if (packedMove.ToSquare().GetBitboard() & attackBitboard)
+            {
+                return Move::Make(packedMove.FromSquare(), packedMove.ToSquare(), movedPiece, Piece::None, isCapture);
+            }
+            break;
+        }
+
+        case Piece::Bishop:
+        {
+            Bitboard attackBitboard = (~occupiedByCurrent) & Bitboard::GenerateBishopAttacks(packedMove.FromSquare(), occupiedSquares);
+            if (packedMove.ToSquare().GetBitboard() & attackBitboard)
+            {
+                return Move::Make(packedMove.FromSquare(), packedMove.ToSquare(), movedPiece, Piece::None, isCapture);
+            }
+            break;
+        }
+
+        case Piece::Rook:
+        {
+            Bitboard attackBitboard = (~occupiedByCurrent) & Bitboard::GenerateRookAttacks(packedMove.FromSquare(), occupiedSquares);
+            if (packedMove.ToSquare().GetBitboard() & attackBitboard)
+            {
+                return Move::Make(packedMove.FromSquare(), packedMove.ToSquare(), movedPiece, Piece::None, isCapture);
+            }
+            break;
+        }
+
+        case Piece::Queen:
+        {
+            Bitboard attackBitboard = (~occupiedByCurrent) &
+                (Bitboard::GenerateRookAttacks(packedMove.FromSquare(), occupiedSquares) |
+                 Bitboard::GenerateBishopAttacks(packedMove.FromSquare(), occupiedSquares));
+            if (packedMove.ToSquare().GetBitboard() & attackBitboard)
+            {
+                return Move::Make(packedMove.FromSquare(), packedMove.ToSquare(), movedPiece, Piece::None, isCapture);
+            }
+            break;
+        }
+
+        case Piece::King:
+        {
+            // TODO generate king move directly
+            MoveList moves;
+            GenerateKingMoveList(moves);
+
+            for (uint32_t i = 0; i < moves.Size(); ++i)
+            {
+                if (moves[i].move == packedMove)
+                {
+                    return moves[i].move;
+                }
+            }
+            break;
         }
     }
 
@@ -838,8 +892,6 @@ bool Position::IsMoveValid(const Move& move) const
         return false;
     }
 
-    MoveList moveList;
-
     if (move.GetPiece() == Piece::Pawn)
     {
         if ((mSideToMove == Color::White && move.ToSquare().Rank() == 7) ||
@@ -852,61 +904,9 @@ bool Position::IsMoveValid(const Move& move) const
                 return false;
             }
         }
-
-        GeneratePawnMoveList(moveList);
-    }
-    else if (move.GetPiece() == Piece::Knight)
-    {
-        GenerateKnightMoveList(moveList);
-    }
-    else if (move.GetPiece() == Piece::Bishop)
-    {
-        GenerateBishopMoveList(moveList);
-    }
-    else if (move.GetPiece() == Piece::Rook)
-    {
-        GenerateRookMoveList(moveList);
-    }
-    else if (move.GetPiece() == Piece::Queen)
-    {
-        GenerateQueenMoveList(moveList);
-    }
-    else if (move.GetPiece() == Piece::King)
-    {
-        GenerateKingMoveList(moveList);
     }
 
-    bool isMoveValid = false;
-
-    for (uint32_t i = 0; i < moveList.Size(); ++i)
-    {
-        const Move refMove = moveList.GetMove(i);
-
-        bool isSame =
-            refMove.FromSquare() == move.FromSquare() &&
-            refMove.ToSquare() == move.ToSquare() &&
-            refMove.GetPiece() == move.GetPiece() &&
-            refMove.IsCapture() == move.IsCapture();
-
-        if (move.GetPiece() == Piece::King)
-        {
-            isSame &= refMove.IsCastling() == move.IsCastling();
-        }
-
-        if (move.GetPiece() == Piece::Pawn)
-        {
-            isSame &= refMove.GetPromoteTo() == move.GetPromoteTo();
-            isSame &= refMove.IsEnPassant() == move.IsEnPassant();
-        }
-
-        if (isSame)
-        {
-            isMoveValid = true;
-            break;
-        }
-    }
-
-    return isMoveValid;
+    return MoveFromPacked(PackedMove(move)).IsValid();
 }
 
 bool Position::IsMoveValid_Fast(const PackedMove& move) const
@@ -961,6 +961,8 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     for (uint32_t i = 0; i < moveList.Size(); i++)
     {
         const Move& move = moveList.GetMove(i);
+
+        ASSERT(move == MoveFromPacked(PackedMove(move)));
 
         Position child = *this;
         if (!child.DoMove(move))

@@ -2,11 +2,13 @@
 
 #include "Move.hpp"
 
+#include <algorithm>
+
 class MoveList
 {
     friend class Position;
     friend class Search;
-    friend class MoveOrderer;
+    friend class MovePicker;
 
 public:
 
@@ -18,13 +20,29 @@ public:
 
     static constexpr uint32_t MaxMoves = 255;
 
-    uint32_t Size() const { return numMoves; }
-    const Move& GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index].move; }
+    INLINE uint32_t Size() const { return numMoves; }
+    INLINE const Move& GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index].move; }
 
-    const MoveEntry& operator [] (uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
-    MoveEntry& operator [] (uint32_t index) { ASSERT(index < numMoves); return moves[index]; }
+    INLINE const MoveEntry& operator [] (uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
+    INLINE MoveEntry& operator [] (uint32_t index) { ASSERT(index < numMoves); return moves[index]; }
 
-    void RemoveMove(const Move& move);
+    template<typename MoveType>
+    void RemoveMove(const MoveType move)
+    {
+        static_assert(std::is_same_v<MoveType, Move> || std::is_same_v<MoveType, PackedMove>, "Invalid move type");
+
+        if (!move.IsValid()) return;
+
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            if (moves[i].move == move)
+            {
+                std::swap(moves[i], moves[numMoves - 1]);
+                numMoves--;
+                i--;
+            }
+        }
+    }
 
     void Clear()
     {
@@ -40,12 +58,32 @@ public:
         }
 
         uint32_t index = numMoves++;
-        moves[index] = { move, 0 };
+        moves[index] = { move, INT32_MIN };
     }
 
     uint32_t AssignTTScores(const TTEntry& ttEntry);
 
-    void AssignPVScore(const Move pvMove);
+    void RemoveByIndex(uint32_t index)
+    {
+        ASSERT(index < numMoves);
+        std::swap(moves[numMoves - 1], moves[index]);
+        numMoves--;
+    }
+
+    uint32_t BestMoveIndex() const
+    {
+        int32_t bestScore = INT32_MIN;
+        uint32_t bestMoveIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            if (moves[i].score > bestScore)
+            {
+                bestScore = moves[i].score;
+                bestMoveIndex = i;
+            }
+        }
+        return bestMoveIndex;
+    }
 
     const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
     {
@@ -97,9 +135,17 @@ public:
         return false;
     }
 
+    void Sort()
+    {
+        std::stable_sort(moves, moves + numMoves, [](const MoveEntry& a, const MoveEntry& b)
+        {
+            return a.score > b.score;
+        });
+    }
+
     void Shuffle();
 
-    void Print(const Position& pos, bool sorted = true) const;
+    void Print(const Position& pos) const;
 
 private:
 

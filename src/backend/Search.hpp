@@ -119,7 +119,7 @@ struct NodeInfo
 
     Move previousMove = Move::Invalid();
 
-    uint8_t pvIndex;
+    uint8_t pvIndex = 0;
 
     uint16_t pvLength = 0;
     PackedMove pvLine[MaxSearchDepth];

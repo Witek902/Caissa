@@ -1,25 +1,15 @@
 #include "MovePicker.hpp"
 #include "MoveOrderer.hpp"
 #include "Position.hpp"
+#include "TranspositionTable.hpp"
 
 MovePicker::MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags)
     : position(pos)
+    , ttEntry(ttEntry)
+    , pvMove(pvMove)
+    , moveGenFlags(moveGenFlags)
     , moveOrderer(moveOrderer)
-    , moveGenFlags(0)
 {
-    position.GenerateMoveList(moves, moveGenFlags);
-
-    // resolve move scoring
-    // the idea here is to defer scoring if we have a TT/PV move
-    // most likely we'll get beta cutoff on it so we won't need to score any other move
-    numScoredMoves = moves.Size();
-
-    if (numScoredMoves > 1u)
-    {
-        numScoredMoves = moves.AssignTTScores(ttEntry);
-    }
-
-    moves.AssignPVScore(pvMove);
 }
 
 void MovePicker::Shuffle()
@@ -30,17 +20,103 @@ void MovePicker::Shuffle()
 
 bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
-    if (moveIndex >= moves.Size())
+    const bool generateQuiets = moveGenFlags & MOVE_GEN_MASK_QUIET;
+
+    switch (stage)
     {
-        return false;
+        case Stage::PVMove:
+        {
+            stage = Stage::TTMove;
+            if (pvMove.IsValid() && (!pvMove.IsQuiet() || generateQuiets))
+            {
+                outMove = pvMove;
+                outScore = MoveOrderer::PVMoveValue;
+                return true;
+            }
+
+            // (fallthrough)
+        }
+
+        case Stage::TTMove:
+        {
+            for (; moveIndex < TTEntry::NumMoves; moveIndex++)
+            {
+                const Move move = position.MoveFromPacked(ttEntry.moves[moveIndex]);
+                if (move.IsValid() && (!move.IsQuiet() || generateQuiets))
+                {
+                    moveIndex++;
+                    outMove = move;
+                    outScore = MoveOrderer::TTMoveValue - moveIndex;
+                    return true;
+                }
+            }
+
+            // TT move not found - go to next stage
+            stage = Stage::Captures;
+            moveIndex = 0;
+            position.GenerateMoveList(moves, moveGenFlags & (MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS));
+
+            // remove PV and TT moves from generated list
+            moves.RemoveMove(pvMove);
+            for (uint32_t i = 0; i < TTEntry::NumMoves; i++) moves.RemoveMove(ttEntry.moves[i]);
+
+            moveOrderer.ScoreMoves(node, game, moves);
+
+            // (fallthrough)
+        }
+
+        case Stage::Captures:
+        {
+            if (moves.Size() > 0)
+            {
+                const uint32_t index = moves.BestMoveIndex();
+                outMove = moves[index].move;
+                outScore = moves[index].score;
+
+                ASSERT(outMove.IsValid());
+                ASSERT(outScore > INT32_MIN);
+
+                if (outScore >= MoveOrderer::PromotionValue)
+                {
+                    moves.RemoveByIndex(index);
+                    return true;
+                }
+            }
+
+            stage = Stage::Quiet;
+            moveIndex = 0;
+
+            if (moveGenFlags & MOVE_GEN_MASK_QUIET)
+            {
+                position.GenerateMoveList(moves, MOVE_GEN_MASK_QUIET);
+
+                // remove PV and TT moves from generated list
+                moves.RemoveMove(pvMove);
+                for (uint32_t i = 0; i < TTEntry::NumMoves; i++) moves.RemoveMove(ttEntry.moves[i]);
+
+                moveOrderer.ScoreMoves(node, game, moves);
+            }
+
+            // (fallthrough)
+        }
+
+        case Stage::Quiet:
+        {
+            if (moveIndex < moves.Size())
+            {
+                outMove = moves.PickBestMove(moveIndex++, outScore);
+
+                ASSERT(outMove.IsValid());
+                ASSERT(outScore > INT32_MIN);
+
+                return true;
+            }
+
+            stage = Stage::End;
+
+            break;
+        }
     }
 
-    if (moveIndex == numScoredMoves && !shuffleEnabled)
-    {
-        // we reached a point where moves are not scored anymore, so score them now
-        moveOrderer.ScoreMoves(node, game, moves);
-    }
-
-    outMove = moves.PickBestMove(moveIndex++, outScore);
-    return true;
+    return false;
 }
