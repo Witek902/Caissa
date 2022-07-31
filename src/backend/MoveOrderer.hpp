@@ -55,6 +55,7 @@ public:
 
     static constexpr int32_t WinningCaptureValue    = 20000000;
     static constexpr int32_t GoodCaptureValue       = 10000000;
+    static constexpr int32_t PromotionValue         = 5000000;
     static constexpr int32_t KillerMoveBonus        = 1000000;
     static constexpr int32_t LosingCaptureValue     = 0;
 

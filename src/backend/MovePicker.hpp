@@ -8,7 +8,7 @@ struct NodeInfo;
 class MovePicker
 {
 public:
-    MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags = 0);
+    MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags);
 
     void Shuffle();
 
@@ -17,10 +17,23 @@ public:
     INLINE uint32_t GetNumMoves() const { return moves.Size(); }
 
 private:
+
+    enum class Stage
+    {
+        PVMove,
+        TTMove,
+        Captures,
+        Quiet,
+        End,
+    };
+
     const Position& position;
+    const TTEntry& ttEntry;
+    const Move pvMove;
+    const uint32_t moveGenFlags;
+
     const MoveOrderer& moveOrderer;
-    uint32_t moveGenFlags;
-    uint32_t numScoredMoves = 0;
+    Stage stage = Stage::PVMove;
     uint32_t moveIndex = 0;
     bool shuffleEnabled = false;
     MoveList moves;

@@ -230,14 +230,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         if (!pos.IsValid(true)) continue;
         if (pos.IsInCheck(GetOppositeColor(param.sideToMove))) continue;
         if (pos.IsInCheck(param.sideToMove)) continue;
-
-        // check only quiet position
-        MoveList moves;
-        pos.GenerateMoveList(moves, MOVE_GEN_ONLY_TACTICAL);
-        if (moves.Size() > 0)
-        {
-            continue;
-        }
+        if (!pos.IsQuiet()) continue;
 
         int32_t wdl = 0;
         bool probeResult = ProbeTablebase_WDL(pos, &wdl);

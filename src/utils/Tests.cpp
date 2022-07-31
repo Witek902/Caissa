@@ -9,6 +9,8 @@
 #include "../backend/Game.hpp"
 #include "../backend/Material.hpp"
 #include "../backend/Pawns.hpp"
+#include "../backend/MovePicker.hpp"
+#include "../backend/MoveOrderer.hpp"
 #include "../backend/Waitable.hpp"
 
 #include <iostream>
@@ -745,6 +747,52 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(!pos.IsMoveLegal(move));
         }
+    }
+
+    // Move from packed
+    {
+        const Position pos("k7/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
+
+        TEST_EXPECT(Move::Make(Square_h2, Square_h4, Piece::Pawn) == pos.MoveFromPacked(PackedMove(Square_h2, Square_h4)));
+        TEST_EXPECT(Move::Make(Square_b1, Square_d3, Piece::Queen, Piece::None, true) == pos.MoveFromPacked(PackedMove(Square_b1, Square_d3)));
+    }
+
+    // Move picker
+    {
+        MoveOrderer moveOrderer;
+
+        //const Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP4/2N1PNP1/PP1B1PBP/R4RK1 w - - 0 17");
+        //const Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP3P/2N1PNP1/PP1B1PB1/R4RK1 b - - 0 17");
+        const Position pos("k2r4/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
+        const NodeInfo node{ pos };
+
+        uint8_t flags = MOVE_GEN_MASK_ALL;
+        //uint8_t flags = MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS;
+
+        MoveList allMoves;
+        pos.GenerateMoveList(allMoves, flags);
+        moveOrderer.ScoreMoves(node, Game(), allMoves);
+
+        int32_t moveScore = 0;
+        Move move;
+        uint32_t moveIndex = 0;
+        
+        MovePicker movePicker(pos, moveOrderer, TTEntry{}, Move::Invalid(), flags);
+        while (movePicker.PickMove(node, Game(), move, moveScore))
+        {
+            bool found = false;
+            for (uint32_t i = 0; i < allMoves.Size(); ++i)
+            {
+                if (allMoves[i].move == move)
+                {
+                    ASSERT(allMoves[i].score == moveScore);
+                    found = true;
+                }
+            }
+            TEST_EXPECT(found);
+            moveIndex++;
+        }
+        TEST_EXPECT(moveIndex == allMoves.Size());
     }
 
     // Standard Algebraic Notation tests
@@ -1578,10 +1626,10 @@ void RunUnitTests()
     RunMaterialTests();
     RunMovesListTests();
     RunPackedPositionTests();
-    RunGameTests();
+    RunPerftTests();
     RunEvalTests();
     RunSearchTests();
-    RunPerftTests();
+    RunGameTests();
 }
 
 bool RunPerformanceTests(const char* path)

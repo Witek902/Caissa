@@ -9,16 +9,6 @@
 
 static constexpr int32_t RecaptureBonus = 100000;
 
-static const int32_t c_PromotionScores[] =
-{
-    0,          // none
-    0,          // pawn
-    1000,       // knight
-    0,          // bishop
-    0,          // rook
-    9000000,    // queen
-};
-
 static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
 {
     return 8 * (int32_t)capturedPiece - (int32_t)attackingPiece;
@@ -265,7 +255,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         }
     }
 
-    for (uint32_t i = 0; i < moves.numMoves; ++i)
+    for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves[i].move;
         ASSERT(move.IsValid());
@@ -278,11 +268,8 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         ASSERT(from < 64);
         ASSERT(to < 64);
 
-        // skip PV & TT moves
-        if (moves[i].score >= TTMoveValue - 64)
-        {
-            continue;
-        }
+        // skip moves that has been scored
+        if (moves[i].score > INT32_MIN) continue;
 
         int64_t score = 0;
 
@@ -296,6 +283,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
             if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
             {
                 score = WinningCaptureValue + mvvLva;
+            }
+            else if ((uint32_t)attackingPiece == (uint32_t)capturedPiece)
+            {
+                score = GoodCaptureValue + mvvLva;
             }
             else
             {
@@ -389,11 +380,9 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
             }
         }
 
-        if (move.IsPromotion())
+        if (move.GetPromoteTo() == Piece::Queen)
         {
-            const uint32_t pieceIndex = (uint32_t)move.GetPromoteTo();
-            ASSERT(pieceIndex > 1 && pieceIndex < 6);
-            score += c_PromotionScores[pieceIndex];
+            score += PromotionValue;
         }
 
         moves[i].score = (int32_t)std::min<int64_t>(score, INT32_MAX);

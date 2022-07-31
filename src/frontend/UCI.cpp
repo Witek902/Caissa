@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "0.8.1"
+#define VersionNumber "0.8.2"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -851,6 +851,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves);
 
+    moves.Sort();
     moves.Print(mGame.GetPosition());
 
     return true;
