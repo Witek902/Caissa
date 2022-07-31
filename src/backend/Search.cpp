@@ -822,10 +822,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             // skip losing captures
             if (moveScore < MoveOrderer::GoodCaptureValue)
             {
-                if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
-                {
-                    continue;
-                }
+                continue;
             }
 
             // skip underpromotions
