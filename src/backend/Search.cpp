@@ -38,6 +38,7 @@ static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
 static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
+static const int32_t MaxDepthReduction = 8;
 static const int32_t LateMoveReductionStartDepth = 3;
 
 static const int32_t AspirationWindowMax = 80;
@@ -1156,6 +1157,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.isNullMove = true;
             childNode.height = node.height + 1;
             childNode.depth = node.depth - depthReduction;
+            childNode.isCutNode = !node.isCutNode;
             childNode.nnContext = &thread.nnContextStack[childNode.height];
             childNode.nnContext->MarkAsDirty();
 
@@ -1184,8 +1186,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // reduce depth if position was not found in transposition table
     if (node.depth >= 4 && !ttEntry.IsValid())
     {
-        node.depth--;
-        if (node.depth >= 6 && node.isPvNode) node.depth--;
+        node.depth -= 2;
+        if (node.isPvNode) node.depth--;
     }
 
     // determine global depth reduction for quiet moves
@@ -1210,7 +1212,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t extension = 0;
 
     // check extension
-    if (node.isInCheck)
+    if (node.isInCheck && node.depth >= 4)
     {
         extension++;
     }
@@ -1276,13 +1278,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (!isRootNode && bestValue > -KnownWinValue)
+        if (!node.isInCheck && !isRootNode && bestValue > -KnownWinValue)
         {
             // Late Move Pruning
             // skip quiet moves that are far in the list
             // the higher depth is, the less agressing pruning is
             if (move.IsQuiet() &&
-                !node.isInCheck &&
                 node.depth < 9 &&
                 quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)
             {
@@ -1292,9 +1293,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // History Pruning
             // if a move score is really bad, do not consider this move at low depth
             if (move.IsQuiet() &&
-                !node.isInCheck &&
-                node.depth < 9 &&
                 quietMoveIndex > 1 &&
+                node.depth < 9 &&
                 moveScore < GetHistoryPruningTreshold(node.depth))
             {
                 continue;
@@ -1305,7 +1305,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (move.IsQuiet() &&
                 quietMoveIndex > 1 &&
                 !node.isPvNode &&
-                !node.isInCheck &&
                 node.depth > 1 && node.depth < 9 &&
                 std::abs(staticEval) <= KnownWinValue &&
                 staticEval + 32 * node.depth * node.depth < alpha)
@@ -1316,16 +1315,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // Static Exchange Evaluation pruning
             // skip all moves that are bad according to SEE
             // the higher depth is, the less agressing pruning is
-            if (!node.isInCheck)
+            if (move.IsCapture() || childNode.isInCheck)
             {
-                if (move.IsCapture() || childNode.isInCheck)
-                {
-                    if (!position.StaticExchangeEvaluation(move, -256 * node.depth)) continue;
-                }
-                else
-                {
-                    if (!position.StaticExchangeEvaluation(move, -16 * node.depth * node.depth)) continue;
-                }
+                if (!position.StaticExchangeEvaluation(move, -256 * node.depth)) continue;
+            }
+            else
+            {
+                if (!position.StaticExchangeEvaluation(move, -16 * node.depth * node.depth)) continue;
             }
         }
 
@@ -1393,11 +1389,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             VERIFY(childNode.position.DoMove(move, childNode.nnContext));
         }
 
-        if (move.IsQuiet())
-        {
-            quietMovesTried[numQuietMovesTried++] = move;
-        }
-
         // avoid extending search too much (maximum 2x depth at root node)
         if (node.height < 2 * thread.rootDepth)
         {
@@ -1414,11 +1405,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         int32_t depthReduction = 0;
 
         // Late Move Reduction
-        // don't reduce PV moves, while in check, good captures, promotions, etc.
-        if (moveIndex > 1 &&
-            node.depth >= LateMoveReductionStartDepth &&
+        // don't reduce while in check, good captures, promotions, etc.
+        if (node.depth >= LateMoveReductionStartDepth &&
             !node.isInCheck &&
-            (moveScore < MoveOrderer::GoodCaptureValue && !move.IsPromotion()))
+            moveIndex > 1u &&
+            moveScore < MoveOrderer::GoodCaptureValue && // allow reducing bad captures
+            move.GetPromoteTo() != Piece::Queen)
         {
             depthReduction = globalDepthReduction;
 
@@ -1437,11 +1429,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // reduce less if move gives check
             if (childNode.isInCheck) depthReduction--;
 
+            if (node.isCutNode) depthReduction++;
+
             if (node.previousMove.IsCapture() && std::abs(staticEval) >= KnownWinValue) depthReduction++;
         }
 
-        // don't drop into QS
-        depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
+        // limit reduction, don't drop into QS
+        depthReduction = std::clamp(std::min(depthReduction, MaxDepthReduction), 0, node.depth + moveExtension - 1);
 
         ScoreType score = InvalidValue;
 
@@ -1454,6 +1448,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isPvNode = false;
+            childNode.isCutNode = true;
 
             score = -NegaMax(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -1469,6 +1464,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isPvNode = false;
+            childNode.isCutNode = !node.isCutNode;
 
             score = -NegaMax(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -1483,12 +1479,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isPvNode = true;
+                childNode.isCutNode = false;
 
                 score = -NegaMax(thread, childNode, ctx);
             }
         }
 
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+        if (move.IsQuiet())
+        {
+            quietMovesTried[numQuietMovesTried++] = move;
+        }
 
         if (score > bestValue) // new best move found
         {
