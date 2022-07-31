@@ -707,7 +707,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     ScoreType alpha = node.alpha;
     ScoreType beta = node.beta;
-    ScoreType bestValue = -InfValue;
+    ScoreType bestValue = -CheckmateValue + (ScoreType)node.height;
     ScoreType staticEval = InvalidValue;
 
     // transposition table lookup
@@ -768,7 +768,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         if (bestValue >= beta)
         {
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Bounds::Lower);
+            if (!ttEntry.IsValid())
+            {
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, TTEntry::Bounds::Lower);
+            }
             return bestValue;
         }
 
@@ -812,7 +815,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ASSERT(move.IsValid());
 
         // skip losing captures
-        if (!node.isInCheck && bestValue > -KnownWinValue && moveScore < MoveOrderer::GoodCaptureValue)
+        if (!node.isInCheck && moveScore < MoveOrderer::GoodCaptureValue)
         {
             if (!position.StaticExchangeEvaluation(move, QSearchSeeMargin))
             {
@@ -829,7 +832,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         // don't try all check evasions
         if (node.isInCheck && move.IsQuiet())
         {
-            if (bestValue > -KnownWinValue && numQuietCheckEvasion > 1)
+            if (numBestMoves > 0 && numQuietCheckEvasion > 1)
             {
                 continue;
             }
@@ -843,7 +846,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -KnownWinValue)
+        if (numBestMoves > 0)
         {
                  if (node.depth < -4 && moveIndex > 1) break;
             else if (node.depth < -2 && moveIndex > 2) break;
@@ -868,16 +871,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             numBestMoves = std::min(TTEntry::NumMoves, numBestMoves + 1);
             bestMoves[0] = move;
             bestValue = score;
-        }
 
-        if (score >= beta)
-        {
-            break;
-        }
-
-        if (score > alpha)
-        {
-            alpha = score;
+            if (score >= beta) break;
+            if (score > alpha) alpha = score;
         }
 
         if (CheckStopCondition(thread, ctx, false))
