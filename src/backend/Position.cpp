@@ -73,7 +73,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT(color == Color::White || color == Color::Black);
 
     const Bitboard mask = square.GetBitboard();
-    SidePosition& pos = mColors[(uint32_t)color];
+    SidePosition& pos = GetSide(color);
 
     ASSERT((pos.occupied & mask) == 0);
     ASSERT((pos.pawns & mask) == 0);
@@ -92,7 +92,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
 {
     const Bitboard mask = square.GetBitboard();
-    SidePosition& pos = mColors[(uint8_t)color];
+    SidePosition& pos = GetSide(color);
     Bitboard& targetBitboard = pos.GetPieceBitBoard(piece);
 
     ASSERT((targetBitboard & mask) == mask);
@@ -182,13 +182,11 @@ Bitboard Position::GetAttackedSquares(Color side) const
     {
         if (side == Color::White)
         {
-            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
-            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
+            bitboard |= Bitboard::GetPawnAttacks<Color::White>(currentSide.pawns);
         }
         else
         {
-            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
-            bitboard |= (currentSide.pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
+            bitboard |= Bitboard::GetPawnAttacks<Color::Black>(currentSide.pawns);
         }
     }
 
@@ -456,9 +454,9 @@ const Bitboard Position::GetAttackers(const Square square, const Bitboard occupi
     return bitboard;
 }
 
-const Bitboard Position::GetAttackers(const Square square, const Color sideColor) const
+const Bitboard Position::GetAttackers(const Square square, const Color color) const
 {
-    const SidePosition& side = mColors[(uint8_t)sideColor];
+    const SidePosition& side = GetSide(color);
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
     Bitboard bitboard = Bitboard::GetKingAttacks(square) & side.king;
@@ -466,20 +464,20 @@ const Bitboard Position::GetAttackers(const Square square, const Color sideColor
     if (side.knights)               bitboard |= Bitboard::GetKnightAttacks(square) & side.knights;
     if (side.rooks | side.queens)   bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens);
     if (side.bishops | side.queens) bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens);
-    if (side.pawns)                 bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns;
+    if (side.pawns)                 bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(color)) & side.pawns;
 
     return bitboard;
 }
 
-bool Position::IsSquareVisible(const Square square, const Color sideColor) const
+bool Position::IsSquareVisible(const Square square, const Color color) const
 {
-    const SidePosition& side = mColors[(uint8_t)sideColor];
+    const SidePosition& side = GetSide(color);
 
     if (Bitboard::GetKingAttacks(square) & side.king) return true;
 
-    if (side.knights && (Bitboard::GetKnightAttacks(square) & side.knights)) return true;
+    if (Bitboard::GetKnightAttacks(square) & side.knights) return true;
 
-    if (Bitboard::GetPawnAttacks(square, GetOppositeColor(sideColor)) & side.pawns) return true;
+    if (Bitboard::GetPawnAttacks(square, GetOppositeColor(color)) & side.pawns) return true;
 
     const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
 
@@ -498,18 +496,18 @@ bool Position::IsSquareVisible(const Square square, const Color sideColor) const
 
 bool Position::IsInCheck() const
 {
-    const SidePosition& currentSide = mColors[(uint8_t)mSideToMove];
+    const SidePosition& currentSide = GetCurrentSide();
 
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
     return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(mSideToMove));
 }
 
-bool Position::IsInCheck(Color sideColor) const
+bool Position::IsInCheck(Color color) const
 {
-    const SidePosition& currentSide = mColors[(uint8_t)sideColor];
+    const SidePosition& currentSide = GetSide(color);
 
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
-    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(sideColor));
+    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(color));
 }
 
 uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
@@ -545,12 +543,12 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 
 bool Position::IsMate() const
 {
-    return GetNumLegalMoves() == 0u && IsInCheck(mSideToMove);
+    return IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u);
 }
 
 bool Position::IsStalemate() const
 {
-    return GetNumLegalMoves() == 0u && !IsInCheck(mSideToMove);
+    return !IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u);
 }
 
 bool Position::IsMoveLegal(const Move& move) const
@@ -882,11 +880,13 @@ Position Position::MirroredHorizontally() const
 
 bool Position::HasNonPawnMaterial(Color color) const
 {
+    const SidePosition& side = GetSide(color);
+
     return
-        mColors[(uint32_t)color].queens     != 0 ||
-        mColors[(uint32_t)color].rooks      != 0 ||
-        mColors[(uint32_t)color].bishops    != 0 ||
-        mColors[(uint32_t)color].knights    != 0;
+        side.queens     != 0 ||
+        side.rooks      != 0 ||
+        side.bishops    != 0 ||
+        side.knights    != 0;
 }
 
 const MaterialKey Position::GetMaterialKey() const

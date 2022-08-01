@@ -649,12 +649,12 @@ static void RunPositionTests()
             Position pos("4kr2/8/8/8/8/8/8/R3K2R w KQ - 0 1");
             const Move move = pos.MoveFromString("e1g1");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.FromSquare() == Square_e1);
-            TEST_EXPECT(move.ToSquare() == Square_g1);
-            TEST_EXPECT(move.GetPiece() == Piece::King);
-            TEST_EXPECT(move.IsCapture() == false);
-            TEST_EXPECT(move.IsCastling() == true);
-            TEST_EXPECT(!pos.IsMoveValid(move));
+TEST_EXPECT(move.FromSquare() == Square_e1);
+TEST_EXPECT(move.ToSquare() == Square_g1);
+TEST_EXPECT(move.GetPiece() == Piece::King);
+TEST_EXPECT(move.IsCapture() == false);
+TEST_EXPECT(move.IsCastling() == true);
+TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move rook, loose castling rights
@@ -746,6 +746,21 @@ static void RunPositionTests()
             TEST_EXPECT(move.IsCastling() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(!pos.IsMoveLegal(move));
+        }
+    }
+
+    // castling through pawn attacks
+    {
+        {
+            Position pos("r3k2r/2P5/8/8/8/8/2p5/R3K2R b KQkq - 0 1");
+            TEST_EXPECT(pos.IsMoveLegal(pos.MoveFromString("e8g8")));
+            TEST_EXPECT(!pos.IsMoveValid(pos.MoveFromString("e8c8")));
+        }
+
+        {
+            Position pos("r3k2r/2P5/8/8/8/8/2p5/R3K2R w KQkq - 0 1");
+            TEST_EXPECT(pos.IsMoveLegal(pos.MoveFromString("e1g1")));
+            TEST_EXPECT(!pos.IsMoveValid(pos.MoveFromString("e1c1")));
         }
     }
 

@@ -984,8 +984,11 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
 
     if (print)
     {
-        std::cout << "Total nodes: " << nodes << std::endl;
-        std::cout << "Time: " << (endTime - startTime).ToSeconds() << " seconds" << std::endl;
+        const float t = (endTime - startTime).ToSeconds();
+
+        std::cout << "Total nodes:      " << nodes << std::endl;
+        std::cout << "Time:             " << t << " seconds" << std::endl;
+        std::cout << "Nodes per second: " << 1.0e-6f * (nodes / t) << "M" << std::endl;
     }
 
     return nodes;
