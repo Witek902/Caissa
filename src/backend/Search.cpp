@@ -47,9 +47,9 @@ static const int32_t AspirationWindowStep = 5;
 
 static const int32_t SingularExtensionScoreMarigin = 10;
 
-static const int32_t BetaPruningDepth = 8;
-static const int32_t BetaMarginMultiplier = 80;
-static const int32_t BetaMarginBias = 10;
+static const int32_t BetaPruningDepth = 7;
+static const int32_t BetaMarginMultiplier = 128;
+static const int32_t BetaMarginBias = 5;
 
 static const int32_t QSearchSeeMargin = -50;
 
