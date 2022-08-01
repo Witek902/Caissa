@@ -268,11 +268,11 @@ private:
 
     friend class Search;
 
-    //INLINE SidePosition& Whites() { return mColors[0]; }
-    //INLINE SidePosition& Blacks() { return mColors[1]; }
+    INLINE SidePosition& GetSide(const Color color) { return color == Color::White ? mColors[0] : mColors[1]; }
+    INLINE const SidePosition& GetSide(const Color color) const { return color == Color::White ? mColors[0] : mColors[1]; }
 
-    INLINE SidePosition& GetCurrentSide() { return mColors[(uint8_t)mSideToMove]; }
-    INLINE SidePosition& GetOpponentSide() { return mColors[(uint8_t)mSideToMove ^ 1]; }
+    INLINE SidePosition& GetCurrentSide() { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
+    INLINE SidePosition& GetOpponentSide() { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
     Square ExtractEnPassantSquareFromMove(const Move& move) const;
 

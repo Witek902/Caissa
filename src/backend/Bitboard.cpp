@@ -4,6 +4,7 @@
 
 #include <iostream>
 
+static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
 static Bitboard gRookAttacksMasks[Square::NumSquares];
@@ -77,6 +78,194 @@ static uint64_t gRookAttackTable[Square::NumSquares][RookAttackTableSize];
 static const uint32_t BishopAttackTableSize = 512;
 static uint64_t gBishopAttackTable[Square::NumSquares][BishopAttackTableSize];
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
+{
+    ASSERT(square.IsValid());
+    ASSERT(static_cast<uint32_t>(dir) < 8u);
+    return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
+}
+
+Bitboard Bitboard::GetBetween(const Square squareA, const Square squareB)
+{
+    ASSERT(squareA.IsValid());
+    ASSERT(squareB.IsValid());
+    return gBetweenBitboards[squareA.Index()][squareB.Index()];
+}
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
+{
+    Bitboard bitboard;
+    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
+    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
+    return bitboard;
+}
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Square square)
+{
+    Bitboard bitboard;
+    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
+    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
+    return bitboard;
+}
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::White>(const Bitboard pawns)
+{
+    Bitboard bitboard;
+    bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
+    bitboard |= (pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
+    return bitboard;
+}
+
+template<>
+Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Bitboard pawns)
+{
+    Bitboard bitboard;
+    bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
+    bitboard |= (pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
+    return bitboard;
+}
+
+Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
+{
+    ASSERT(square.IsValid());
+    return gPawnAttacksBitboard[square.Index()][(uint32_t)color];
+}
+
+Bitboard Bitboard::GetKingAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gKingAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetKnightAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gKnightAttacksBitboard[square.Index()];
+}
+
+NO_INLINE Bitboard Bitboard::GetKnightAttacks(const Bitboard squares)
+{
+    Bitboard result = 0;
+    if (squares)
+    {
+        // based on: https://www.chessprogramming.org/Knight_Pattern
+        const Bitboard l1 = (squares >> 1) & 0x7f7f7f7f7f7f7f7full;
+        const Bitboard l2 = (squares >> 2) & 0x3f3f3f3f3f3f3f3full;
+        const Bitboard r1 = (squares << 1) & 0xfefefefefefefefeull;
+        const Bitboard r2 = (squares << 2) & 0xfcfcfcfcfcfcfcfcull;
+        const Bitboard h1 = l1 | r1;
+        const Bitboard h2 = l2 | r2;
+        result = (h1 << 16) | (h1 >> 16) | (h2 << 8) | (h2 >> 8);
+    }
+    return result;
+}
+
+Bitboard Bitboard::GetRookAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gRookAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetBishopAttacks(const Square square)
+{
+    ASSERT(square.IsValid());
+    return gBishopAttacksBitboard[square.Index()];
+}
+
+Bitboard Bitboard::GetQueenAttacks(const Square square)
+{
+    return GetRookAttacks(square) | GetBishopAttacks(square);
+}
+
+Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)
+{
+    uint64_t b = blockers;
+    b &= gRookAttacksMasks[square.Index()];
+    b *= cRookMagics[square.Index()];
+    b >>= cRookMagicOffsets[square.Index()];
+    return gRookAttackTable[square.Index()][b];
+}
+
+Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blockers)
+{
+    uint64_t b = blockers;
+    b &= gBishopAttacksMasks[square.Index()];
+    b *= cBishopMagics[square.Index()];
+    b >>= cBishopMagicOffsets[square.Index()];
+    return gBishopAttackTable[square.Index()][b];
+}
+
+Bitboard Bitboard::GenerateRookAttacks_Slow(const Square square, const Bitboard blockers)
+{
+    uint32_t blockerIndexN;
+    uint64_t bitboardN = GetRay(square, RayDir::North);
+    if (Bitboard(bitboardN & blockers).BitScanForward(blockerIndexN))
+    {
+        bitboardN &= ~GetRay(blockerIndexN, RayDir::North);
+    }
+
+    uint32_t blockerIndexE;
+    uint64_t bitboardE = GetRay(square, RayDir::East);
+    if (Bitboard(bitboardE & blockers).BitScanForward(blockerIndexE))
+    {
+        bitboardE &= ~GetRay(blockerIndexE, RayDir::East);
+    }
+
+    uint32_t blockerIndexS;
+    uint64_t bitboardS = GetRay(square, RayDir::South);
+    if (Bitboard(bitboardS & blockers).BitScanReverse(blockerIndexS))
+    {
+        bitboardS &= ~GetRay(blockerIndexS, RayDir::South);
+    }
+
+    uint32_t blockerIndexW;
+    uint64_t bitboardW = GetRay(square, RayDir::West);
+    if (Bitboard(bitboardW & blockers).BitScanReverse(blockerIndexW))
+    {
+        bitboardW &= ~GetRay(blockerIndexW, RayDir::West);
+    }
+
+    return bitboardN | bitboardS | bitboardE | bitboardW;
+}
+
+Bitboard Bitboard::GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers)
+{
+    uint32_t blockerIndexNW;
+    uint64_t bitboardNW = GetRay(square, RayDir::NorthWest);
+    if (Bitboard(bitboardNW & blockers).BitScanForward(blockerIndexNW))
+    {
+        bitboardNW &= ~GetRay(blockerIndexNW, RayDir::NorthWest);
+    }
+
+    uint32_t blockerIndexNE;
+    uint64_t bitboardNE = GetRay(square, RayDir::NorthEast);
+    if (Bitboard(bitboardNE & blockers).BitScanForward(blockerIndexNE))
+    {
+        bitboardNE &= ~GetRay(blockerIndexNE, RayDir::NorthEast);
+    }
+
+    uint32_t blockerIndexSE;
+    uint64_t bitboardSE = GetRay(square, RayDir::SouthEast);
+    if (Bitboard(bitboardSE & blockers).BitScanReverse(blockerIndexSE))
+    {
+        bitboardSE &= ~GetRay(blockerIndexSE, RayDir::SouthEast);
+    }
+
+    uint32_t blockerIndexSW;
+    uint64_t bitboardSW = GetRay(square, RayDir::SouthWest);
+    if (Bitboard(bitboardSW & blockers).BitScanReverse(blockerIndexSW))
+    {
+        bitboardSW &= ~GetRay(blockerIndexSW, RayDir::SouthWest);
+    }
+
+    return bitboardNW | bitboardNE | bitboardSE | bitboardSW;
+}
+
 std::string Bitboard::Print() const
 {
     std::string str;
@@ -128,6 +317,17 @@ static void InitRays()
         gRaysBitboard[squareIndex][(uint32_t)RayDir::NorthWest] = Bitboard::ShiftLeft(0x102040810204000ull, 7u - square.File()) << (square.Rank() * 8u);
         gRaysBitboard[squareIndex][(uint32_t)RayDir::SouthEast] = Bitboard::ShiftRight(0x2040810204080ull, square.File()) >> ((7 - square.Rank()) * 8u);
         gRaysBitboard[squareIndex][(uint32_t)RayDir::SouthWest] = Bitboard::ShiftLeft(0x40201008040201ull, 7u - square.File()) >> ((7 - square.Rank()) * 8u);
+    }
+}
+
+void InitPawnAttacks()
+{
+    for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
+    {
+        const Square square(squareIndex);
+
+        gPawnAttacksBitboard[squareIndex][0] = Bitboard::GetPawnAttacks<Color::White>(square);
+        gPawnAttacksBitboard[squareIndex][1] = Bitboard::GetPawnAttacks<Color::Black>(square);
     }
 }
 
@@ -427,6 +627,7 @@ static void InitBetweenBitboards()
 void InitBitboards()
 {
     InitRays();
+    InitPawnAttacks();
     InitKingAttacks();
     InitKnightAttacks();
     InitRookAttacks();
@@ -438,191 +639,4 @@ void InitBitboards()
     InitBetweenBitboards();
 
     //InitMagicBitboards();
-}
-
-Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
-{
-    ASSERT(square.IsValid());
-    ASSERT(static_cast<uint32_t>(dir) < 8u);
-    return gRaysBitboard[square.Index()][static_cast<uint32_t>(dir)];
-}
-
-Bitboard Bitboard::GetBetween(const Square squareA, const Square squareB)
-{
-    ASSERT(squareA.IsValid());
-    ASSERT(squareB.IsValid());
-    return gBetweenBitboards[squareA.Index()][squareB.Index()];
-}
-
-template<>
-Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
-{
-    Bitboard bitboard;
-    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
-    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) << 9u;
-    return bitboard;
-}
-
-template<>
-Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Square square)
-{
-    Bitboard bitboard;
-    bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
-    bitboard |= (square.GetBitboard() & ~Bitboard::FileBitboard<7u>()) >> 7u;
-    return bitboard;
-}
-
-template<>
-Bitboard Bitboard::GetPawnAttacks<Color::White>(const Bitboard pawns)
-{
-    Bitboard bitboard;
-    bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
-    bitboard |= (pawns & ~Bitboard::FileBitboard<7u>()) << 9u;
-    return bitboard;
-}
-
-template<>
-Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Bitboard pawns)
-{
-    Bitboard bitboard;
-    bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
-    bitboard |= (pawns & ~Bitboard::FileBitboard<7u>()) >> 7u;
-    return bitboard;
-}
-
-Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
-{
-    return color == Color::White ?
-        GetPawnAttacks<Color::White>(square) :
-        GetPawnAttacks<Color::Black>(square);
-}
-
-Bitboard Bitboard::GetKingAttacks(const Square square)
-{
-    ASSERT(square.IsValid());
-    return gKingAttacksBitboard[square.Index()];
-}
-
-Bitboard Bitboard::GetKnightAttacks(const Square square)
-{
-    ASSERT(square.IsValid());
-    return gKnightAttacksBitboard[square.Index()];
-}
-
-NO_INLINE Bitboard Bitboard::GetKnightAttacks(const Bitboard squares)
-{
-    Bitboard result = 0;
-    if (squares)
-    {
-        // based on: https://www.chessprogramming.org/Knight_Pattern
-        const Bitboard l1 = (squares >> 1) & 0x7f7f7f7f7f7f7f7full;
-        const Bitboard l2 = (squares >> 2) & 0x3f3f3f3f3f3f3f3full;
-        const Bitboard r1 = (squares << 1) & 0xfefefefefefefefeull;
-        const Bitboard r2 = (squares << 2) & 0xfcfcfcfcfcfcfcfcull;
-        const Bitboard h1 = l1 | r1;
-        const Bitboard h2 = l2 | r2;
-        result = (h1 << 16) | (h1 >> 16) | (h2 << 8) | (h2 >> 8);
-    }
-    return result;
-}
-
-Bitboard Bitboard::GetRookAttacks(const Square square)
-{
-    ASSERT(square.IsValid());
-    return gRookAttacksBitboard[square.Index()];
-}
-
-Bitboard Bitboard::GetBishopAttacks(const Square square)
-{
-    ASSERT(square.IsValid());
-    return gBishopAttacksBitboard[square.Index()];
-}
-
-Bitboard Bitboard::GetQueenAttacks(const Square square)
-{
-    return GetRookAttacks(square) | GetBishopAttacks(square);
-}
-
-Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)
-{
-    uint64_t b = blockers;
-    b &= gRookAttacksMasks[square.Index()];
-    b *= cRookMagics[square.Index()];
-    b >>= cRookMagicOffsets[square.Index()];
-    return gRookAttackTable[square.Index()][b];
-}
-
-Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blockers)
-{
-    uint64_t b = blockers;
-    b &= gBishopAttacksMasks[square.Index()];
-    b *= cBishopMagics[square.Index()];
-    b >>= cBishopMagicOffsets[square.Index()];
-    return gBishopAttackTable[square.Index()][b];
-}
-
-Bitboard Bitboard::GenerateRookAttacks_Slow(const Square square, const Bitboard blockers)
-{
-    uint32_t blockerIndexN;
-    uint64_t bitboardN = GetRay(square, RayDir::North);
-    if (Bitboard(bitboardN & blockers).BitScanForward(blockerIndexN))
-    {
-        bitboardN &= ~GetRay(blockerIndexN, RayDir::North);
-    }
-
-    uint32_t blockerIndexE;
-    uint64_t bitboardE = GetRay(square, RayDir::East);
-    if (Bitboard(bitboardE & blockers).BitScanForward(blockerIndexE))
-    {
-        bitboardE &= ~GetRay(blockerIndexE, RayDir::East);
-    }
-
-    uint32_t blockerIndexS;
-    uint64_t bitboardS = GetRay(square, RayDir::South);
-    if (Bitboard(bitboardS & blockers).BitScanReverse(blockerIndexS))
-    {
-        bitboardS &= ~GetRay(blockerIndexS, RayDir::South);
-    }
-
-    uint32_t blockerIndexW;
-    uint64_t bitboardW = GetRay(square, RayDir::West);
-    if (Bitboard(bitboardW & blockers).BitScanReverse(blockerIndexW))
-    {
-        bitboardW &= ~GetRay(blockerIndexW, RayDir::West);
-    }
-
-    return bitboardN | bitboardS | bitboardE | bitboardW;
-}
-
-Bitboard Bitboard::GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers)
-{
-    uint32_t blockerIndexNW;
-    uint64_t bitboardNW = GetRay(square, RayDir::NorthWest);
-    if (Bitboard(bitboardNW & blockers).BitScanForward(blockerIndexNW))
-    {
-        bitboardNW &= ~GetRay(blockerIndexNW, RayDir::NorthWest);
-    }
-
-    uint32_t blockerIndexNE;
-    uint64_t bitboardNE = GetRay(square, RayDir::NorthEast);
-    if (Bitboard(bitboardNE & blockers).BitScanForward(blockerIndexNE))
-    {
-        bitboardNE &= ~GetRay(blockerIndexNE, RayDir::NorthEast);
-    }
-
-    uint32_t blockerIndexSE;
-    uint64_t bitboardSE = GetRay(square, RayDir::SouthEast);
-    if (Bitboard(bitboardSE & blockers).BitScanReverse(blockerIndexSE))
-    {
-        bitboardSE &= ~GetRay(blockerIndexSE, RayDir::SouthEast);
-    }
-
-    uint32_t blockerIndexSW;
-    uint64_t bitboardSW = GetRay(square, RayDir::SouthWest);
-    if (Bitboard(bitboardSW & blockers).BitScanReverse(blockerIndexSW))
-    {
-        bitboardSW &= ~GetRay(blockerIndexSW, RayDir::SouthWest);
-    }
-
-    return bitboardNW | bitboardNE | bitboardSE | bitboardSW;
 }
