@@ -422,11 +422,11 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
             NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
             NNEvaluator::Evaluate(*g_mainNeuralNetwork, position, NetworkInputMapping::Full_Symmetrical);
 
-        // NN output is side-to-move relative
-        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
-        
         // convert to centipawn range
         nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+
+        // NN output is side-to-move relative
+        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
         constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
         const int32_t nnFactor = std::max(0, std::abs(value) - c_nnTresholdMin);

@@ -336,7 +336,7 @@ static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
     }
     else // whiteKnights >= 3
     {
-        outScore = numKnights > 3 ? KnownWinValue : 0;
+        outScore = KnownWinValue;
         outScore += c_knightValue.eg * (numKnights - 3); // prefer keeping the knights
         outScore += 8 * (3 - weakKing.AnyCornerDistance()); // push king to corner
         outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
