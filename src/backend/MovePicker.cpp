@@ -42,7 +42,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             for (; moveIndex < TTEntry::NumMoves; moveIndex++)
             {
                 const Move move = position.MoveFromPacked(ttEntry.moves[moveIndex]);
-                if (move.IsValid() && (!move.IsQuiet() || generateQuiets))
+                if (move.IsValid() && (!move.IsQuiet() || generateQuiets) && move != pvMove)
                 {
                     moveIndex++;
                     outMove = move;
