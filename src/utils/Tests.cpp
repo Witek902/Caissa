@@ -19,6 +19,7 @@
 #include <fstream>
 #include <sstream>
 #include <iterator>
+#include <algorithm>
 
 using namespace threadpool;
 
@@ -1671,7 +1672,7 @@ void RunUnitTests()
     RunGameTests();
 }
 
-bool RunPerformanceTests(const char* path)
+bool RunPerformanceTests(const std::vector<std::string>& paths)
 {
     using MovesListType = std::vector<std::string>;
 
@@ -1680,6 +1681,9 @@ bool RunPerformanceTests(const char* path)
         std::string positionStr;
         MovesListType bestMoves;
         MovesListType avoidMoves;
+
+        bool operator < (const TestCaseEntry& rhs) const { return positionStr < rhs.positionStr; }
+        bool operator == (const TestCaseEntry& rhs) const { return positionStr == rhs.positionStr; }
     };
 
     enum class ParsingMode
@@ -1690,11 +1694,12 @@ bool RunPerformanceTests(const char* path)
     };
 
     std::vector<TestCaseEntry> testVector;
+    for (const std::string& path : paths)
     {
         std::ifstream file(path);
         if (!file.good())
         {
-            std::cout << "Failed to open testcases file" << std::endl;
+            std::cout << "Failed to open testcases file: " << path << std::endl;
             return false;
         }
 
@@ -1770,23 +1775,36 @@ bool RunPerformanceTests(const char* path)
             testVector.push_back({positionStr, bestMoves, avoidMoves});
         }
     }
-    std::cout << testVector.size() << " test positions loaded" << std::endl;
+
+    // remove duplicates
+    {
+        const size_t size = testVector.size();
+        std::sort(testVector.begin(), testVector.end());
+        testVector.erase(std::unique(testVector.begin(), testVector.end()), testVector.end());
+        if (testVector.size() != size)
+        {
+            std::cout << "Found " << (size - testVector.size()) << " duplicate positions" << std::endl;
+        }
+    }
+
+    std::cout << testVector.size() << " test positions loaded" << std::endl << std::endl;
+
+    std::cout << "MaxNodes; Correct; CorrectRate; Time; Time/Correct" << std::endl;
 
     bool verbose = false;
 
-    TranspositionTable tt(2048ull * 1024ull * 1024ull);
     std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
 
-    uint32_t maxSearchTime = 4;
+    std::vector<TranspositionTable> ttArray;
+    ttArray.resize(std::thread::hardware_concurrency());
+
+    uint32_t maxNodes = 2048;
 
     for (;;)
     {
         std::mutex mutex;
         std::atomic<uint32_t> success = 0;
-
-        auto startTimeAll = std::chrono::high_resolution_clock::now();
-
-        tt.NextGeneration();
+        std::atomic<float> accumTime = 0.0f;
 
         Waitable waitable;
         {
@@ -1794,9 +1812,17 @@ bool RunPerformanceTests(const char* path)
 
             for (const TestCaseEntry& testCase : testVector)
             {
-                taskBuilder.Task("SearchTest", [testCase, &searchArray, maxSearchTime, &mutex, verbose, &success, &tt](const TaskContext& ctx)
+                taskBuilder.Task("SearchTest", [testCase, &searchArray, maxNodes, &mutex, verbose, &success, &ttArray, &accumTime](const TaskContext& ctx)
                 {
                     Search& search = searchArray[ctx.threadId];
+                    search.Clear();
+
+                    TranspositionTable& tt = ttArray[ctx.threadId];
+                    if (tt.GetSize() == 0)
+                    {
+                        tt.Resize(16 * 1024 * 1024);
+                    }
+                    tt.Clear();
 
                     const Position position(testCase.positionStr);
                     TEST_EXPECT(position.IsValid());
@@ -1804,18 +1830,18 @@ bool RunPerformanceTests(const char* path)
                     Game game;
                     game.Reset(position);
 
-                    const TimePoint startTimePoint = TimePoint::GetCurrent();
-
                     SearchParam searchParam{ tt };
                     searchParam.debugLog = false;
-                    searchParam.numThreads = 1;
-                    searchParam.limits.maxDepth = UINT8_MAX;
-                    searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f);
-                    searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(maxSearchTime * 0.001f / 2.0f);
-                    searchParam.limits.analysisMode = true;
+                    searchParam.limits.maxNodes = maxNodes;
+
+                    const TimePoint startTimePoint = TimePoint::GetCurrent();
 
                     SearchResult searchResult;
                     search.DoSearch(game, searchParam, searchResult);
+
+                    const TimePoint endTimePoint = TimePoint::GetCurrent();
+
+                    accumTime += (endTimePoint - startTimePoint).ToSeconds();
 
                     Move foundMove = Move::Invalid();
                     if (!searchResult[0].moves.empty())
@@ -1895,25 +1921,18 @@ bool RunPerformanceTests(const char* path)
         waitable.Wait();
 
         auto endTimeAll = std::chrono::high_resolution_clock::now();
-        const float time = std::chrono::duration_cast<std::chrono::microseconds>(endTimeAll - startTimeAll).count() / 1000000.0f;
-        
+
         const float passRate = !testVector.empty() ? (float)success / (float)testVector.size() : 0.0f;
-        const float factor = passRate / time;
+        const float factor = accumTime / passRate;
 
         std::cout
-            << maxSearchTime << "; "
+            << maxNodes << "; "
             << success << "; "
             << passRate << "; "
-            << time << "; "
+            << accumTime << "; "
             << factor << std::endl;
 
-        maxSearchTime *= 3;
-        maxSearchTime /= 2;
-
-        tt.Clear();
-
-        //std::cout << "Passed: " << success << "/" << testVector.size() << std::endl;
-        //std::cout << "Time:   " << std::chrono::duration_cast<std::chrono::milliseconds>(endTimeAll - startTimeAll).count() << "ms" << std::endl << std::endl;
+        maxNodes *= 2;
     }
 
     return true;
