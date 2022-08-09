@@ -349,7 +349,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
                 const int32_t highEval = lowEval + 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
                 const uint64_t value = param.searchContext.stats.evalHistogram[i];
 
-                printf("    %4d...%4d %lu\n", lowEval, highEval, value);
+                printf("    %4d...%4d %" PRIu64 "\n", lowEval, highEval, value);
             }
         }
     }
