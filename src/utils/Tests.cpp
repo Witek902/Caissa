@@ -56,6 +56,9 @@ static void RunPositionTests()
         // only kings
         TEST_EXPECT(Position().FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 0 1"));
 
+        // missing side to move
+        TEST_EXPECT(!Position().FromFEN("r3k3/8/8/8/8/8/8/R3K2R "));
+
         // invalid castling rights
         TEST_EXPECT(!Position().FromFEN("r3k3/8/8/8/8/8/8/R3K2R w k - 0 1"));
         TEST_EXPECT(!Position().FromFEN("4k2r/8/8/8/8/8/8/R3K2R w q - 0 1"));
@@ -791,9 +794,10 @@ TEST_EXPECT(!pos.IsMoveValid(move));
 
         int32_t moveScore = 0;
         Move move;
+        TTEntry ttEntry;
         uint32_t moveIndex = 0;
         
-        MovePicker movePicker(pos, moveOrderer, TTEntry{}, Move::Invalid(), flags);
+        MovePicker movePicker(pos, moveOrderer, ttEntry, Move::Invalid(), flags);
         while (movePicker.PickMove(node, Game(), move, moveScore))
         {
             bool found = false;

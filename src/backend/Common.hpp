@@ -6,6 +6,7 @@
 #include <math.h>
 #include <atomic>
 #include <string>
+#include <iostream>
 
 #ifdef ARCHITECTURE_X64
     #include <immintrin.h>
@@ -30,8 +31,8 @@
 
 
 #ifndef CONFIGURATION_FINAL
-    #define ASSERT(x) if (!(x)) DEBUG_BREAK();
-    #define VERIFY(x) if (!(x)) DEBUG_BREAK();
+    #define ASSERT(x) if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); }
+    #define VERIFY(x) if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); }
 #else
     #define ASSERT(x)
     #define VERIFY(x) (x)
