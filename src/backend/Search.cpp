@@ -106,6 +106,7 @@ void Search::Clear()
     for (ThreadData& threadData : mThreadData)
     {
         threadData.moveOrderer.Clear();
+        threadData.stats = ThreadStats{};
     }
 }
 
@@ -587,7 +588,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     PvLine pvLine; // working copy
     PvLine finalPvLine;
 
-    const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? param.depth : std::min(param.depth, DefaultMaxPvLineLength);
+    const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? UINT32_MAX : std::min(param.depth, DefaultMaxPvLineLength);
 
     for (;;)
     {
@@ -607,7 +608,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
-        SearchUtils::GetPvLine(param.searchContext.game, rootNode, param.searchParam.transpositionTable, maxPvLine, pvLine.moves);
+        SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
 
         // flush pending per-thread stats
         param.searchContext.stats.Append(thread.stats);
@@ -695,10 +696,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     // update stats
     thread.stats.nodes++;
     thread.stats.quiescenceNodes++;
-    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height);
+    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height + 1);
     ctx.stats.Append(thread.stats);
 
-    // Not checking for draw by repetition in the quiesence search
+    // Not checking for draw by repetition in the quiescence search
     if (CheckInsufficientMaterial(node.position))
     {
         return 0;
@@ -873,6 +874,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         if (score > bestValue) // new best move found
         {
+            // update PV line
+            if (node.isPvNode)
+            {
+                node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+                node.pvLine[0] = move;
+                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+            }
+
             // push new best move to the beginning of the list
             for (uint32_t j = TTEntry::NumMoves; j-- > 1; )
             {
@@ -942,7 +951,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     // update stats
     thread.stats.nodes++;
-    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height);
+    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height + 1);
     ctx.stats.Append(thread.stats);
 
     const Position& position = node.position;
@@ -960,7 +969,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (alpha >= beta) return alpha;
     }
 
-    // maximum search depth reached, enter quisence search to find final evaluation
+    // maximum search depth reached, enter quiescence search to find final evaluation
     if (node.depth <= 0)
     {
         return QuiescenceNegaMax(thread, node, ctx);
@@ -978,13 +987,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-    // TODO use proper stack
-    const NodeInfo* prevNodes[4] = { nullptr };
-    prevNodes[0] = node.parentNode;
-    prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
-    prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
-    prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
-    
     ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
 
     const ScoreType oldAlpha = node.alpha;
@@ -1104,6 +1106,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         node.staticEval = staticEval;
     }
 
+    // TODO use proper stack
+    const NodeInfo* prevNodes[4] = { nullptr };
+    prevNodes[0] = node.parentNode;
+    prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
+
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     int32_t evalImprovement = 0;
@@ -1111,9 +1118,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         evalImprovement = staticEval - prevNodes[1]->staticEval;
     }
-    else if (prevNodes[3] && prevNodes[3]->staticEval != InvalidValue)
+    else
     {
-        evalImprovement = staticEval - prevNodes[3]->staticEval;
+        prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
+        prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
+
+        if (prevNodes[3] && prevNodes[3]->staticEval != InvalidValue)
+        {
+            evalImprovement = staticEval - prevNodes[3]->staticEval;
+        }
     }
     const bool isImproving = evalImprovement >= -5; // leave some small marigin
 
@@ -1282,7 +1295,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             // Late Move Pruning
             // skip quiet moves that are far in the list
-            // the higher depth is, the less agressing pruning is
+            // the higher depth is, the less aggressive pruning is
             if (move.IsQuiet() &&
                 node.depth < 9 &&
                 quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)

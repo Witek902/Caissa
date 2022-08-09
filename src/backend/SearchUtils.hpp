@@ -16,6 +16,6 @@ public:
     // or a past position could directly reach the current position
     static bool CanReachGameCycle(const NodeInfo& node);
 
-    // reconstruct PV line from cache and TT table
-    static void GetPvLine(const Game& game, const NodeInfo& rootNode, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine);
+    // reconstruct PV line from cache
+    static void GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, std::vector<Move>& outLine);
 };
