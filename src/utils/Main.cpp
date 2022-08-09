@@ -8,7 +8,7 @@
 #include <string>
 
 extern void RunUnitTests();
-extern bool RunPerformanceTests(const char* path);
+extern bool RunPerformanceTests(const std::vector<std::string>& paths);
 extern void SelfPlay(const std::vector<std::string>& args);
 extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
@@ -45,7 +45,7 @@ int main(int argc, const char* argv[])
     }
     else if (argc > 2 && strcmp(argv[1], "perftest") == 0)
     {
-        RunPerformanceTests(argv[2]);
+        RunPerformanceTests(args);
     }
     else if (0 == strcmp(argv[1], "selfplay"))
     {
