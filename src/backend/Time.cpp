@@ -73,7 +73,6 @@ TimePoint& TimePoint::operator *= (const double rhs)
 	return *this;
 }
 
-
 bool TimePoint::operator >= (const TimePoint& rhs) const
 {
 	return mValue.QuadPart >= rhs.mValue.QuadPart;
@@ -84,7 +83,9 @@ bool TimePoint::operator != (const TimePoint& rhs) const
 	return mValue.QuadPart != rhs.mValue.QuadPart;
 }
 
+
 #elif defined(PLATFORM_LINUX)
+
 
 float TimePoint::ToSeconds() const
 {
@@ -124,9 +125,20 @@ TimePoint TimePoint::operator + (const TimePoint& rhs) const
 	return { mValue + rhs.mValue };
 }
 
+TimePoint& TimePoint::operator *= (const double rhs)
+{
+	mValue = (uint64_t)(mValue * rhs);
+	return *this;
+}
+
 bool TimePoint::operator >= (const TimePoint& rhs) const
 {
 	return mValue >= rhs.mValue;
+}
+
+bool TimePoint::operator != (const TimePoint& rhs) const
+{
+	return mValue != rhs.mValue;
 }
 
 #endif // PLATFORM

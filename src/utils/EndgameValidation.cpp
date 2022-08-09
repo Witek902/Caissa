@@ -361,12 +361,12 @@ static void ValidateEndgame_2v2(const EndgameValidationParam& param)
                     continue;
                 }
 
-                taskBuilder.Task("ValidateEndgame", [&param, whiteKingSq, blackKingSq, &stats](const TaskContext&)
+                taskBuilder.Task("ValidateEndgame", [&param, whiteKingSq, blackKingSq, &stats, &statsMutex](const TaskContext&)
                 {
                     EndgameValidationStats localStats;
                     ValidateEndgameForKingsPlacement(param, whiteKingSq, blackKingSq, localStats);
                     {
-                        std::unique_lock<std::mutex>(statsMutex);
+                        std::unique_lock<std::mutex> lock(statsMutex);
                         stats.Append(localStats);
                     }
                 });

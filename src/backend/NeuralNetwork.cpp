@@ -5,6 +5,7 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <immintrin.h>
 
 namespace nn {
 
@@ -69,6 +70,8 @@ INLINE static float GetActivationFunctionDerivative(float x, ActivationFunction 
     return 1.0f;
 }
 
+#ifdef USE_AVX
+
 INLINE static float m256_hadd(__m256 x)
 {
     const __m128 hiQuad = _mm256_extractf128_ps(x, 1);
@@ -82,6 +85,8 @@ INLINE static float m256_hadd(__m256 x)
     const __m128 sum = _mm_add_ss(lo, hi);
     return _mm_cvtss_f32(sum);
 }
+
+#endif // USE_AVX
 
 void Layer::Run(const Values& in)
 {
@@ -507,7 +512,7 @@ void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, f
             }
 
             // avoid rounding to zero
-            if (layerIndex > 0 && std::abs(std::round(w * biasQuantizationScale)) < FLT_EPSILON)
+            if (layerIndex > 0 && std::abs(std::round(w * biasQuantizationScale)) < 1.0e-5f)
             {
                 if (w > 0.0f)
                 {

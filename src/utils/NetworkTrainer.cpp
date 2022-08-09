@@ -97,7 +97,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
         // replay the game
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
-            const float gamePhase = std::powf((float)i / (float)game.GetMoves().size(), 2.0f);
+            const float gamePhase = powf((float)i / (float)game.GetMoves().size(), 2.0f);
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const int32_t moveScore = game.GetMoveScores()[i];
             const MaterialKey matKey = pos.GetMaterialKey();

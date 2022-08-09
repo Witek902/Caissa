@@ -51,8 +51,6 @@ static const int32_t BetaPruningDepth = 7;
 static const int32_t BetaMarginMultiplier = 128;
 static const int32_t BetaMarginBias = 5;
 
-static const int32_t QSearchSeeMargin = -50;
-
 static const int32_t HistoryPruningScoreBase = 0;
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
@@ -351,7 +349,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
                 const int32_t highEval = lowEval + 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
                 const uint64_t value = param.searchContext.stats.evalHistogram[i];
 
-                printf("    %4d...%4d %llu\n", lowEval, highEval, value);
+                printf("    %4d...%4d %lu\n", lowEval, highEval, value);
             }
         }
     }

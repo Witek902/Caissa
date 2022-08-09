@@ -5,10 +5,12 @@
 #include <vector>
 #include <cmath>
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif // NOMINMAX
-#include <Windows.h>
+#if defined(PLATFORM_WINDOWS)
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif // NOMINMAX
+    #include <Windows.h>
+#endif // PLATFORM_WINDOWS
 
 namespace nn {
 
@@ -151,9 +153,15 @@ private:
     Header header;
 
     // file mapping
+#if defined(PLATFORM_WINDOWS)
     HANDLE fileHandle = INVALID_HANDLE_VALUE;
     HANDLE fileMapping = INVALID_HANDLE_VALUE;
+#else
+    int fileDesc = -1;
+#endif // PLATFORM_WINDOWS
+
     void* mappedData = nullptr;
+    size_t mappedSize = 0;
 
     // all weights and biases are stored in this buffer
     uint8_t* weightsBuffer = nullptr;

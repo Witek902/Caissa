@@ -5,7 +5,14 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
-#include <intrin.h>
+#include <immintrin.h>
+
+#if defined(PLATFORM_LINUX)
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <sys/mman.h>
+    #include <sys/stat.h>
+#endif // PLATFORM_LINUX
 
 #ifdef USE_AVX2
     #define NN_USE_AVX2
@@ -795,6 +802,7 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
 
 void PackedNeuralNetwork::ReleaseFileMapping()
 {
+#if defined(PLATFORM_WINDOWS)
     if (fileMapping == INVALID_HANDLE_VALUE)
     {
         CloseHandle(fileMapping);
@@ -806,13 +814,31 @@ void PackedNeuralNetwork::ReleaseFileMapping()
         CloseHandle(fileHandle);
         fileHandle = INVALID_HANDLE_VALUE;
     }
+#else
+    if (mappedData)
+    {
+        if (0 != munmap(mappedData, mappedSize))
+        {
+            perror("munmap");
+        }
+    }
+
+    if (fileDesc != -1)
+    {
+        close(fileDesc);
+        fileDesc = -1;
+    }
+#endif // PLATFORM_WINDOWS
 
     mappedData = nullptr;
+    mappedSize = 0;
 }
 
 bool PackedNeuralNetwork::Load(const char* filePath)
 {
     Release();
+
+#if defined(PLATFORM_WINDOWS)
     
     // open file
     {
@@ -842,6 +868,7 @@ bool PackedNeuralNetwork::Load(const char* filePath)
         return false;
     }
 
+    mappedSize = (uint64_t)sizeLow + ((uint64_t)sizeHigh << 32);
     mappedData = (void*)MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
     if (mappedData == nullptr)
     {
@@ -850,9 +877,38 @@ bool PackedNeuralNetwork::Load(const char* filePath)
         return false;
     }
 
+#else
+
+    fileDesc = open(filePath, O_RDONLY);
+    if (fileDesc == -1)
+    {
+        perror("open");
+        Release();
+        return false;
+    }
+
+    struct stat statbuf;
+    if (fstat(fileDesc, &statbuf))
+    {
+        perror("fstat");
+        Release();
+        return false;
+    }
+
+    mappedSize = statbuf.st_size;
+    mappedData = mmap(NULL, statbuf.st_size, PROT_READ, MAP_SHARED, fileDesc, 0);
+    if (mappedData == MAP_FAILED)
+    {
+        perror("mmap");
+        Release();
+        return false;
+    }
+
+#endif // PLATFORM_WINDOWS
+
     memcpy(&header, mappedData, sizeof(Header));
 
-    if (sizeof(Header) + GetWeightsBufferSize() > (sizeLow + ((uint64_t)sizeHigh << 32)))
+    if (sizeof(Header) + GetWeightsBufferSize() > mappedSize)
     {
         std::cerr << "Failed to load neural network: " << "file it too small" << std::endl;
         Release();
