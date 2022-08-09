@@ -112,7 +112,7 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
     return false;
 }
 
-void SearchUtils::GetPvLine(const Game& game, const NodeInfo& rootNode, const TranspositionTable& tt, uint32_t maxLength, std::vector<Move>& outLine)
+void SearchUtils::GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, std::vector<Move>& outLine)
 {
     outLine.clear();
 
@@ -133,24 +133,6 @@ void SearchUtils::GetPvLine(const Game& game, const NodeInfo& rootNode, const Tr
             if (!iteratedPosition.DoMove(move)) break;
 
             outLine.push_back(move);
-        }
-
-        // reconstruct PV line using transposition table
-        for (; i < maxLength; ++i)
-        {
-            TTEntry ttEntry;
-            if (!tt.Read(iteratedPosition, ttEntry)) break;
-
-            const Move move = iteratedPosition.MoveFromPacked(ttEntry.moves[0]);
-
-            // Note: move in transpostion table may be invalid due to hash collision
-            if (!move.IsValid()) break;
-            if (!iteratedPosition.DoMove(move)) break;
-
-            outLine.push_back(move);
-
-            if (IsRepetition(rootNode, game)) break;
-            if (iteratedPosition.GetHalfMoveCount() >= 100) break;
         }
     }
 }
