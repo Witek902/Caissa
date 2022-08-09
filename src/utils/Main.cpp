@@ -80,7 +80,5 @@ int main(int argc, const char* argv[])
         TrainNetwork();
     }
 
-    system("pause");
-
     return 0;
 }

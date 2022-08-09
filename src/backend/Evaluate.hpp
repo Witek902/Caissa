@@ -19,6 +19,7 @@ static constexpr PieceScore c_knightValue   = { 344,    474 };
 static constexpr PieceScore c_bishopValue   = { 374,    508 };
 static constexpr PieceScore c_rookValue     = { 548,    808 };
 static constexpr PieceScore c_queenValue    = { 1064,   1513 };
+static constexpr PieceScore c_kingValue     = { std::numeric_limits<int16_t>::max(), std::numeric_limits<int16_t>::max() };
 
 static constexpr PieceScore c_pieceValues[] =
 {
@@ -28,7 +29,7 @@ static constexpr PieceScore c_pieceValues[] =
     c_bishopValue,
     c_rookValue,
     c_queenValue,
-    {UINT16_MAX,UINT16_MAX},
+    c_kingValue,
 };
 
 // if abs(simpleEval) > nnTresholdMax, then we don't use NN at all

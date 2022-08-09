@@ -11,7 +11,7 @@ struct TimeManagerInitData
 	int32_t theirRemainingTime;
 	int32_t theirTimeIncrement;
 
-	int32_t movesToGo;
+	uint32_t movesToGo;
 
 	int32_t moveOverhead;
 };

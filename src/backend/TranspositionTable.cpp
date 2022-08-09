@@ -5,6 +5,10 @@
 #include <algorithm>
 #include <cstring>
 
+#ifdef USE_SSE
+    #include <xmmintrin.h>
+#endif // USE_SSE
+
 static_assert(sizeof(TTEntry) == 3 * sizeof(uint32_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "Invalid TT cluster size");
 

@@ -1,9 +1,9 @@
-file(GLOB CHESS_SOURCES *.cpp)
+file(GLOB CAISSA_SOURCES *.cpp)
 
-add_executable(chess ${CHESS_SOURCES})
+add_executable(caissa ${CAISSA_SOURCES})
 
-add_dependencies(chess backend)
+add_dependencies(caissa backend)
 
-target_link_libraries(chess backend)
+target_link_libraries(caissa backend)
 
-set_target_properties(chess PROPERTIES LINK_FLAGS "-pthread")
+set_target_properties(caissa PROPERTIES LINK_FLAGS "-pthread")

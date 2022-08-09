@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 #include <fstream>
+#include <memory>
 
 const char* c_DefaultEvalFile = "eval-2.pnn";
 

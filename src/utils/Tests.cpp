@@ -1804,7 +1804,7 @@ bool RunPerformanceTests(const std::vector<std::string>& paths)
     {
         std::mutex mutex;
         std::atomic<uint32_t> success = 0;
-        std::atomic<float> accumTime = 0.0f;
+        float accumTime = 0.0f;
 
         Waitable waitable;
         {
@@ -1841,7 +1841,10 @@ bool RunPerformanceTests(const std::vector<std::string>& paths)
 
                     const TimePoint endTimePoint = TimePoint::GetCurrent();
 
-                    accumTime += (endTimePoint - startTimePoint).ToSeconds();
+                    {
+                        std::unique_lock<std::mutex> lock(mutex);
+                        accumTime += (endTimePoint - startTimePoint).ToSeconds();
+                    }
 
                     Move foundMove = Move::Invalid();
                     if (!searchResult[0].moves.empty())
@@ -1919,8 +1922,6 @@ bool RunPerformanceTests(const std::vector<std::string>& paths)
         }
 
         waitable.Wait();
-
-        auto endTimeAll = std::chrono::high_resolution_clock::now();
 
         const float passRate = !testVector.empty() ? (float)success / (float)testVector.size() : 0.0f;
         const float factor = accumTime / passRate;
