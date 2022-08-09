@@ -14,6 +14,11 @@ static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attacki
     return 8 * (int32_t)capturedPiece - (int32_t)attackingPiece;
 }
 
+MoveOrderer::MoveOrderer()
+{
+    Clear();
+}
+
 void MoveOrderer::DebugPrint() const
 {
 #ifndef CONFIGURATION_FINAL

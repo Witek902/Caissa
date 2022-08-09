@@ -63,6 +63,8 @@ public:
 
     using CounterType = int16_t;
 
+    MoveOrderer();
+
     void NewSearch();
     void Clear();
 
