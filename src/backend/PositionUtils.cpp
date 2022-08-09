@@ -234,15 +234,15 @@ bool Position::FromFEN(const std::string& fenString)
         return false;
     }
 
-    const char* p = fenString.c_str();
+    size_t loc = 0;
 
     // board
     {
         uint8_t rank = 7;
         uint8_t file = 0;
-        for (; *p != ' '; ++p)
+        for (; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            const char ch = *p;
+            const char ch = fenString[loc];
 
             if (isdigit(ch))
             {
@@ -282,8 +282,9 @@ bool Position::FromFEN(const std::string& fenString)
     }
 
     // next to move
+    if (++loc < fenString.length())
     {
-        const char nextToMove = (char)tolower(*++p);
+        const char nextToMove = (char)tolower(fenString[loc]);
         if (nextToMove == 'w')
         {
             mSideToMove = Color::White;
@@ -298,14 +299,20 @@ bool Position::FromFEN(const std::string& fenString)
             return false;
         }
     }
+    else
+    {
+        fprintf(stderr, "Invalid FEN: missing side to move\n");
+        return false;
+    }
 
     // castling rights
     {
         mWhitesCastlingRights = (CastlingRights)0;
         mBlacksCastlingRights = (CastlingRights)0;
-        for (p += 2; *p != ' '; ++p)
+
+        for (loc += 2; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            switch (*p)
+            switch (fenString[loc])
             {
             case 'A':
             case 'K':
@@ -333,9 +340,9 @@ bool Position::FromFEN(const std::string& fenString)
     }
 
     std::string enPassantSquare;
-    for (++p; *p != ' ' && *p != 0; ++p)
+    for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
     {
-        enPassantSquare += *p;
+        enPassantSquare += fenString[loc];
     }
 
     if (enPassantSquare != "-")
@@ -384,9 +391,9 @@ bool Position::FromFEN(const std::string& fenString)
     // parse half-moves counter
     {
         std::string halfMovesStr;
-        for (++p; *p != ' ' && *p != 0; ++p)
+        for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            halfMovesStr += *p;
+            halfMovesStr += fenString[loc];
         }
 
         if (!halfMovesStr.empty())
@@ -402,9 +409,9 @@ bool Position::FromFEN(const std::string& fenString)
     // parse moves number
     {
         std::string moveNumberStr;
-        for (++p; *p != ' ' && *p != 0; ++p)
+        for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            moveNumberStr += *p;
+            moveNumberStr += fenString[loc];
         }
 
         if (!moveNumberStr.empty())
