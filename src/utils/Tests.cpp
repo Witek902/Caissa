@@ -20,6 +20,7 @@
 #include <sstream>
 #include <iterator>
 #include <algorithm>
+#include <iomanip>
 
 using namespace threadpool;
 
@@ -1931,11 +1932,11 @@ bool RunPerformanceTests(const std::vector<std::string>& paths)
         const float factor = accumTime / passRate;
 
         std::cout
-            << maxNodes << "; "
-            << success << "; "
-            << passRate << "; "
-            << accumTime << "; "
-            << factor << std::endl;
+            << std::setw(10) << maxNodes << "; "
+            << std::setw(4) << success << "; "
+            << std::setw(8) << std::setprecision(4) << passRate << "; "
+            << std::setw(8) << std::setprecision(4) << accumTime << "; "
+            << std::setw(8) << std::setprecision(4) << factor << std::endl;
 
         maxNodes *= 2;
     }
