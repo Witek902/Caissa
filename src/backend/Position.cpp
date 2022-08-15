@@ -1048,17 +1048,17 @@ uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMap
             numInputs += 64;
         }
 
-        writePawnFeatures(Whites().pawns, bitFlipMask);
-        writePieceFeatures(Whites().knights, bitFlipMask);
-        writePieceFeatures(Whites().bishops, bitFlipMask);
-        writePieceFeatures(Whites().rooks, bitFlipMask);
-        writePieceFeatures(Whites().queens, bitFlipMask);
+        if (Whites().pawns)     writePawnFeatures(Whites().pawns, bitFlipMask);
+        if (Whites().knights)   writePieceFeatures(Whites().knights, bitFlipMask);
+        if (Whites().bishops)   writePieceFeatures(Whites().bishops, bitFlipMask);
+        if (Whites().rooks)     writePieceFeatures(Whites().rooks, bitFlipMask);
+        if (Whites().queens)    writePieceFeatures(Whites().queens, bitFlipMask);
 
-        writePawnFeatures(Blacks().pawns, bitFlipMask);
-        writePieceFeatures(Blacks().knights, bitFlipMask);
-        writePieceFeatures(Blacks().bishops, bitFlipMask);
-        writePieceFeatures(Blacks().rooks, bitFlipMask);
-        writePieceFeatures(Blacks().queens, bitFlipMask);
+        if (Blacks().pawns)     writePawnFeatures(Blacks().pawns, bitFlipMask);
+        if (Blacks().knights)   writePieceFeatures(Blacks().knights, bitFlipMask);
+        if (Blacks().bishops)   writePieceFeatures(Blacks().bishops, bitFlipMask);
+        if (Blacks().rooks)     writePieceFeatures(Blacks().rooks, bitFlipMask);
+        if (Blacks().queens)    writePieceFeatures(Blacks().queens, bitFlipMask);
 
         ASSERT(numInputs <= UINT16_MAX);
         ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
