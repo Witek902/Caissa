@@ -49,6 +49,16 @@ inline float ClippedReLuDerivative(float x)
     if (x >= 1.0f) return 0.0f;
     return 1.0f;
 }
+inline __m256 ClippedReLu(const __m256 x)
+{
+    return _mm256_min_ps(_mm256_set1_ps(1.0f), _mm256_max_ps(_mm256_setzero_ps(), x));
+}
+inline __m256 ClippedReLuDerivative(const __m256 x, const __m256 coeff)
+{
+    return _mm256_and_ps(coeff,
+                         _mm256_and_ps(_mm256_cmp_ps(x, _mm256_setzero_ps(),  _CMP_GT_OQ),
+                                       _mm256_cmp_ps(x, _mm256_set1_ps(1.0f), _CMP_LT_OQ)));
+}
 
 enum class ActivationFunction
 {
@@ -67,12 +77,7 @@ struct Layer
     void Run(const uint16_t* featureIndices, uint32_t numFeatures);
     void Backpropagate(uint32_t layerIndex, const Values& error);
     void QuantizeWeights(float strength);
-
-    // Get weight of a specific neuron input
-    float GetWeight(size_t neuronIdx, size_t neuronInputIdx) const;
-
-    // Set a new weight for a specific neuron input
-    void SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth);
+    void ComputeOutput();
 
     std::vector<uint16_t> activeFeatures;
     Values input;

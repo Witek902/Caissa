@@ -37,14 +37,15 @@ void Layer::InitWeights()
     size_t offs = 0;
     for (size_t i = 0; i < output.size(); i++)
     {
-        weights[offs + input.size()] = 0.0f;
-
         for (size_t j = 0; j < input.size(); j++)
         {
-            weights[offs + j] = ((float)(rand() % RAND_MAX) / (float)(RAND_MAX)-0.5f) * scale;
+            weights[++offs] = ((float)(rand() % RAND_MAX) / (float)(RAND_MAX)-0.5f) * scale;
         }
+    }
 
-        offs += input.size() + 1;
+    for (size_t j = 0; j < output.size(); j++)
+    {
+        weights[offs + j] = 0.0f;
     }
 }
 
@@ -93,56 +94,52 @@ void Layer::Run(const Values& in)
     ASSERT(in.size() == input.size());
 
     const size_t numInputs = input.size();
-    ASSERT(numInputs % 16 == 0);
+    const size_t numOutputs = output.size();
+    ASSERT(numInputs % 8 == 0);
 
     input = in;
 
-    size_t offs = 0;
-    for (size_t i = 0; i < output.size(); i++)
+    // apply biases
+    memcpy(linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
+
+    // accumulate weights
+    for (size_t j = 0; j < numInputs; j++)
     {
-        float x = weights[offs + input.size()];
+        if (input[j] > 0.0f)
+        {
+            size_t i = 0;
 
 #ifdef USE_AVX
-        {
-            const float* inputsPtr = input.data();
-            ASSERT(((size_t)inputsPtr % 32) == 0);
-            const float* weightsPtr = weights.data() + offs;
-            __m256 sum1 = _mm256_setzero_ps();
-            __m256 sum2 = _mm256_setzero_ps();
-            for (size_t j = 0; j < numInputs; j += 16)
+            const float* weightsPtr = weights.data() + j * numOutputs;
+            float* valuesPtr = linearValue.data();
+            const __m256 inputValue = _mm256_set1_ps(input[j]);
+            for (; i + 8 <= numOutputs; i += 8)
             {
-                // unroll twice
-                sum1 = _mm256_fmadd_ps(_mm256_load_ps(inputsPtr), _mm256_loadu_ps(weightsPtr), sum1);
-                inputsPtr += 8;
-                weightsPtr += 8;
-                sum2 = _mm256_fmadd_ps(_mm256_load_ps(inputsPtr), _mm256_loadu_ps(weightsPtr), sum2);
-                inputsPtr += 8;
-                weightsPtr += 8;
+                _mm256_store_ps(valuesPtr + i,
+                                _mm256_fmadd_ps(inputValue,
+                                                _mm256_load_ps(weightsPtr + i),
+                                                _mm256_load_ps(valuesPtr + i)));
             }
-            x += m256_hadd(_mm256_add_ps(sum1, sum2));
+#endif // USE_AVX
+
+            for (; i < numOutputs; i++)
+            {
+                linearValue[i] += weights[j * numOutputs + i] * input[j];
+            }
         }
-#else
-        for (size_t j = 0; j < numInputs; j++)
-        {
-            x += weights[offs + j] * input[j];
-        }
-#endif
-
-        ASSERT(!std::isnan(x));
-        ASSERT(fabsf(x) < 10000.0f);
-
-        linearValue[i] = x;
-        output[i] = ApplyActivationFunction(x, activationFunction);
-
-        offs += input.size() + 1;
     }
+
+    ComputeOutput();
 }
 
 void Layer::Run(const uint16_t* featureIndices, uint32_t numFeatures)
 {
     activeFeatures.resize(numFeatures);
 
-    memset(input.data(), 0, input.size() * sizeof(float));
+    const size_t numInputs = input.size();
+    const size_t numOutputs = output.size();
+
+    memset(input.data(), 0, numInputs * sizeof(float));
 
     for (uint32_t i = 0; i < numFeatures; ++i)
     {
@@ -152,110 +149,212 @@ void Layer::Run(const uint16_t* featureIndices, uint32_t numFeatures)
         activeFeatures[i] = idx;
     }
 
-    size_t offs = 0;
-    for (size_t i = 0; i < output.size(); i++)
+    // apply biases
+    for (size_t i = 0; i < numOutputs; i++)
     {
-        float x = weights[offs + input.size()];
-        for (uint32_t j = 0; j < numFeatures; ++j)
-        {
-            const uint16_t idx = featureIndices[j];
-            x += weights[offs + idx];
-        }
+        linearValue[i] = weights[numOutputs * numInputs + i];
+    }
 
+    // accumulate active feature weights
+    for (uint32_t j = 0; j < numFeatures; ++j)
+    {
+        const uint32_t idx = featureIndices[j];
+
+        size_t i = 0;
+
+#ifdef USE_AVX
+        const float* weightsPtr = weights.data() + idx * numOutputs;
+        float* valuesPtr = linearValue.data();
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            _mm256_store_ps(valuesPtr + i,
+                            _mm256_add_ps(_mm256_load_ps(valuesPtr + i),
+                                          _mm256_load_ps(weightsPtr + i)));
+        }
+#endif // USE_AVX
+
+        for (; i < numOutputs; i++)
+        {
+            linearValue[i] += weights[idx * numOutputs + i];
+        }
+    }
+
+    ComputeOutput();
+}
+
+void Layer::ComputeOutput()
+{
+    const size_t numOutputs = output.size();
+
+#ifndef CONFIGURATION_FINAL
+    for (size_t i = 0; i < numOutputs; i++)
+    {
+        const float x = linearValue[i];
         ASSERT(!std::isnan(x));
         ASSERT(fabsf(x) < 10000.0f);
+    }
+#endif // CONFIGURATION_FINAL
 
-        linearValue[i] = x;
-        output[i] = ApplyActivationFunction(x, activationFunction);
-
-        offs += input.size() + 1;
+    size_t i = 0;
+#ifdef USE_AVX
+    if (activationFunction == ActivationFunction::ClippedReLu)
+    {
+        float* outputsPtr = output.data();
+        const float* valuesPtr = linearValue.data();
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            _mm256_store_ps(outputsPtr + i, ClippedReLu(_mm256_load_ps(valuesPtr + i)));
+        }
+    }
+#endif // USE_AVX
+    for (; i < numOutputs; i++)
+    {
+        output[i] = ApplyActivationFunction(linearValue[i], activationFunction);
     }
 }
 
 void Layer::Backpropagate(uint32_t layerIndex, const Values& error)
 {
     const size_t numInputs = input.size();
+    const size_t numOutputs = output.size();
 
-    if (layerIndex > 0)
+    ASSERT(output.size() <= PackedNeuralNetwork::MaxNeuronsInFirstLayer);
+    alignas(CACHELINE_SIZE) float errorGradients[PackedNeuralNetwork::MaxNeuronsInFirstLayer];
+
+    // precompute error gradients
     {
-        std::fill(nextError.begin(), nextError.end(), 0.0f);
-    }
-
-    size_t offs = 0;
-    for (size_t i = 0; i < output.size(); i++)
-    {
-        float errorGradient = error[i];
-        errorGradient *= GetActivationFunctionDerivative(linearValue[i], activationFunction);
-
-        if (layerIndex > 0)
-        {
-            // for later layers, use exact input values and compute nextError (for back propagation)
-
+        size_t i = 0;
 #ifdef USE_AVX
-            float* nextErrorPtr = nextError.data();
-            const float* weightsPtr = weights.data() + offs;
-            const float* inputsPtr = input.data();
-            ASSERT(((size_t)inputsPtr % 32) == 0);
-            float* gradientPtr = gradient.data() + offs;
-            for (size_t j = 0; j < numInputs; j += 8)
-            {
-                _mm256_storeu_ps(nextErrorPtr + j,
-                                 _mm256_fmadd_ps(_mm256_loadu_ps(weightsPtr + j), _mm256_set1_ps(errorGradient), _mm256_loadu_ps(nextErrorPtr + j)));
-                _mm256_storeu_ps(gradientPtr + j,
-                                 _mm256_fmadd_ps(_mm256_load_ps(inputsPtr + j), _mm256_set1_ps(errorGradient), _mm256_loadu_ps(gradientPtr + j)));
-            }
-#else
-            for (size_t j = 0; j < numInputs; j++)
-            {
-                const size_t idx = offs + j;
-                nextError[j] += weights[idx] * errorGradient;
-                gradient[idx] += input[j] * errorGradient;
-            }
-#endif
-
-            // bias error propagation
-            nextError[numInputs] += weights[offs + numInputs] * errorGradient;
-        }
-        else
+        if (activationFunction == ActivationFunction::ClippedReLu)
         {
-            // for first layer, use active feature indices and don't compute nextError (there's no more layers before to backpropagate)
-            for (const uint16_t j : activeFeatures)
+            const float* errorsPtr = error.data();
+            const float* valuesPtr = linearValue.data();
+            for (; i + 8 <= numOutputs; i += 8)
             {
-                const size_t idx = offs + j;
+                _mm256_store_ps(errorGradients + i,
+                                ClippedReLuDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
+            }
+        }
+#endif // USE_AVX
+        for (; i < numOutputs; i++)
+        {
+            errorGradients[i] = error[i] * GetActivationFunctionDerivative(linearValue[i], activationFunction);
+        }
+    }
+
+    if (layerIndex == 0)
+    {
+        // for first layer, use active feature indices and don't compute nextError (there's no more layers before to backpropagate)
+
+        // update gradient of active features
+        for (const uint16_t j : activeFeatures)
+        {
+            size_t i = 0;
+#ifdef USE_AVX
+            float* gradientPtr = gradient.data() + j * numOutputs;
+            for (; i + 8 <= numOutputs; i += 8)
+            {
+                _mm256_store_ps(gradientPtr + i,
+                                _mm256_add_ps(_mm256_load_ps(errorGradients + i), _mm256_load_ps(gradientPtr + i)));
+            }
+#endif // USE_AVX
+            for (; i < numOutputs; i++)
+            {
                 // not multiplying by input value, because it's equal to 1.0 in case of first layer
-                gradient[idx] += errorGradient;
+                gradient[j * numOutputs + i] += errorGradients[i];
+            }
+        }
+    }
+    else
+    {
+        // for later layers, use exact input values and compute nextError (for back propagation)
+
+        // weight error propagation
+        for (size_t j = 0; j < numInputs; j++)
+        {
+            float errorSum = 0.0f;
+            {
+                size_t i = 0;
+#ifdef USE_AVX
+                const float* weightsPtr = weights.data() + j * numOutputs;
+                __m256 sum = _mm256_setzero_ps();
+                for (; i + 8 <= numOutputs; i += 8)
+                {
+                    sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i),
+                                          _mm256_load_ps(errorGradients + i),
+                                          sum);
+                }
+                errorSum = m256_hadd(sum);
+#endif // USE_AVX
+
+                for (; i < numOutputs; i++)
+                {
+                    errorSum += weights[j * numOutputs + i] * errorGradients[i];
+                }
+            }
+            nextError[j] = errorSum;
+
+            if (input[j] > 0.0f)
+            {
+                size_t i = 0;
+#ifdef USE_AVX
+                float* gradientPtr = gradient.data() + j * numOutputs;
+                const __m256 inputValue = _mm256_set1_ps(input[j]);
+                for (; i + 8 <= numOutputs; i += 8)
+                {
+                    _mm256_store_ps(gradientPtr + i,
+                                    _mm256_fmadd_ps(inputValue,
+                                                    _mm256_load_ps(errorGradients + i),
+                                                    _mm256_load_ps(gradientPtr + i)));
+                }
+#endif // USE_AVX
+                for (; i < numOutputs; i++)
+                {
+                    gradient[j * numOutputs + i] += input[j] * errorGradients[i];
+                }
             }
         }
 
-        // update gradient for bias
-        gradient[offs + numInputs] += errorGradient;
+        // bias error propagation
+        {
+            float errorSum = 0.0f;
+            size_t i = 0;
+#ifdef USE_AVX
+            const float* weightsPtr = weights.data() + numInputs * numOutputs;
+            __m256 sum = _mm256_setzero_ps();
+            for (; i + 8 <= numOutputs; i += 8)
+            {
+                sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i),
+                                      _mm256_load_ps(errorGradients + i),
+                                      sum);
+            }
+            errorSum = m256_hadd(sum);
+#endif // USE_AVX
+            for (; i < numOutputs; i++)
+            {
+                errorSum += weights[numInputs * numOutputs + i] * errorGradients[i];
+            }
 
-        offs += numInputs + 1;
+            nextError[numInputs] = errorSum;
+        }
     }
-}
 
-float Layer::GetWeight(size_t neuronIdx, size_t neuronInputIdx) const
-{
-    size_t inputsNum = input.size();
-    size_t outputsNum = output.size();
-
-    (void)outputsNum;
-    ASSERT(neuronIdx < outputsNum);
-    ASSERT(neuronInputIdx <= inputsNum);
-
-    return weights[(inputsNum + 1) * neuronIdx + neuronInputIdx];
-}
-
-void Layer::SetWeight(size_t neuronIdx, size_t neuronInputIdx, float newWeigth)
-{
-    size_t inputsNum = input.size();
-    size_t outputsNum = output.size();
-
-    (void)outputsNum;
-    ASSERT(neuronIdx < outputsNum);
-    ASSERT(neuronInputIdx <= inputsNum);
-
-    weights[(inputsNum + 1) * neuronIdx + neuronInputIdx] = newWeigth;
+    // update gradient for bias
+    {
+        size_t i = 0;
+#ifdef USE_AVX
+        float* gradientPtr = gradient.data() + numInputs * numOutputs;
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            _mm256_store_ps(gradientPtr + i,
+                            _mm256_add_ps(_mm256_load_ps(errorGradients + i), _mm256_load_ps(gradientPtr + i)));
+        }
+#endif // USE_AVX
+        for (; i < numOutputs; i++)
+        {
+            gradient[numInputs * numOutputs + i] += errorGradients[i];
+        }
+    }
 }
 
 bool NeuralNetwork::Save(const char* filePath) const
@@ -420,85 +519,76 @@ const Values& NeuralNetwork::Run(const uint16_t* featureIndices, uint32_t numFea
 
 void NeuralNetwork::UpdateLayerWeights(Layer& layer, float learningRate) const
 {
-    const size_t inputSize = layer.input.size();
-
-    size_t offs = 0;
+    const size_t numInputs = layer.input.size();
+    const size_t numOutputs = layer.output.size();
+    const size_t numAllWeights = (numInputs + 1) * numOutputs;
 
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-7f;
 
-    for (size_t i = 0; i < layer.output.size(); i++)
-    {
-        size_t j = 0;
+    size_t i = 0;
 
 #ifdef USE_AVX
-        const __m256 cOneMinusRhoVec = _mm256_set1_ps(1.0f - cRho);
-        const __m256 cRhoVec = _mm256_set1_ps(cRho);
-        const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
+    const __m256 cOneMinusRhoVec = _mm256_set1_ps(1.0f - cRho);
+    const __m256 cRhoVec = _mm256_set1_ps(cRho);
+    const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
 
-        for (; j < inputSize; j += 8)
-        {
-            const size_t idx = offs + j;
+    for (; i + 8 <= numAllWeights; i += 8)
+    {
+        float* mPtr = layer.m.data() + i;
+        float* vPtr = layer.v.data() + i;
+        float* wPtr = layer.weights.data() + i;
+        const float* gPtr = layer.gradient.data() + i;
 
-            float* mPtr = layer.m.data() + idx;
-            float* vPtr = layer.v.data() + idx;
-            float* wPtr = layer.weights.data() + idx;
-            const float* gPtr = layer.gradient.data() + idx;
+        __m256 v = _mm256_load_ps(vPtr);
+        __m256 m = _mm256_load_ps(mPtr);
+        __m256 w = _mm256_load_ps(wPtr);
+        const __m256 g = _mm256_load_ps(gPtr);
 
-            __m256 v = _mm256_loadu_ps(vPtr);
-            __m256 m = _mm256_loadu_ps(mPtr);
-            __m256 w = _mm256_loadu_ps(wPtr);
-            const __m256 g = _mm256_loadu_ps(gPtr);
+        // ADADELTA algorithm
+        m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
+        __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
+        v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
+        w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
 
-            // ADADELTA algorithm
-            m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
-            __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
-            v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
-            w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
-
-            _mm256_storeu_ps(vPtr, v);
-            _mm256_storeu_ps(mPtr, m);
-            _mm256_storeu_ps(wPtr, w);
-        }
+        _mm256_store_ps(vPtr, v);
+        _mm256_store_ps(mPtr, m);
+        _mm256_store_ps(wPtr, w);
+    }
 #endif // USE_AVX
 
-        for (; j <= inputSize; j++)
-        {
-            const size_t idx = offs + j;
+    for (; i < numAllWeights; ++i)
+    {
+        float& m = layer.m[i];
+        float& v = layer.v[i];
+        float& w = layer.weights[i];
+        const float g = layer.gradient[i];
 
-            float& m = layer.m[idx];
-            float& v = layer.v[idx];
-            float& w = layer.weights[idx];
-            const float g = layer.gradient[idx];
+        // ADADELTA algorithm
+        m = cRho * m + (1.0f - cRho) * g * g;
+        float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
+        v = cRho * v + (1.0f - cRho) * delta * delta;
+        w -= delta * learningRate;
 
-            // ADADELTA algorithm
-            m = cRho * m + (1.0f - cRho) * g * g;
-            float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
-            v = cRho * v + (1.0f - cRho) * delta * delta;
-            w -= delta * learningRate;
-
-            ASSERT(!std::isnan(m));
-            ASSERT(!std::isnan(v));
-            ASSERT(!std::isnan(w));
-        }
-
-        offs += inputSize + 1;
+        ASSERT(!std::isnan(m));
+        ASSERT(!std::isnan(v));
+        ASSERT(!std::isnan(w));
     }
 }
 
 void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
 {
     Layer& layer = layers[layerIndex];
-    const size_t inputSize = layer.input.size();
+    const size_t numInputs = layer.input.size();
+    const size_t numOutputs = layer.output.size();
 
-    size_t offs = 0;
-
-    for (size_t i = 0; i < layer.output.size(); i++)
+    for (size_t j = 0; j < numInputs; j++)
     {
-        for (size_t j = 0; j <= inputSize; j++)
+        const bool isBiasWeight = (j == numInputs);
+
+        for (size_t i = 0; i < numOutputs; i++)
         {
-            const size_t idx = offs + j;
-            const bool isBiasWeight = (j == inputSize);
+            const size_t idx = j * numOutputs + i;
 
             float& w = layer.weights[idx];
 
@@ -524,8 +614,6 @@ void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, f
                 }
             }
         }
-
-        offs += inputSize + 1;
     }
 }
 
@@ -621,35 +709,35 @@ void NeuralNetwork::Train(const std::vector<TrainingVector>& trainingSet, Values
 template<typename WeightType, typename BiasType>
 static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
 {
-    size_t offs = 0;
-    for (size_t i = 0; i < layer.output.size(); i++)
+    const size_t numInputs = layer.input.size();
+    const size_t numOutputs = layer.output.size();
+
+    for (size_t i = 0; i < numOutputs; i++)
     {
         {
-            const float bias = layer.weights[offs + layer.input.size()];
+            const float bias = layer.weights[numInputs * numOutputs + i];
             const int32_t quantizedBias = (int32_t)std::round(bias * biasScale);
             ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
             ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
             outBiases[i] = (BiasType)quantizedBias;
         }
 
-        for (size_t j = 0; j < layer.input.size(); j++)
+        for (size_t j = 0; j < numInputs; j++)
         {
-            const float weight = layer.weights[offs + j];
+            const float weight = layer.weights[j * numOutputs + i];
             const int32_t quantizedWeight = (int32_t)std::round(weight * weightScale);
             ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
             ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
 
             if (transpose)
             {
-                outWeights[layer.output.size() * j + i] = (WeightType)quantizedWeight;
+                outWeights[numOutputs * j + i] = (WeightType)quantizedWeight;
             }
             else
             {
-                outWeights[layer.input.size() * i + j] = (WeightType)quantizedWeight;
+                outWeights[numInputs * i + j] = (WeightType)quantizedWeight;
             }
         }
-
-        offs += layer.input.size() + 1;
     }
 }
 
@@ -686,22 +774,22 @@ void NeuralNetwork::PrintStats() const
 
     for (const Layer& layer : layers)
     {
-        size_t offs = 0;
-        for (size_t i = 0; i < layer.output.size(); i++)
+        const size_t numInputs = layer.input.size();
+        const size_t numOutputs = layer.output.size();
+
+        for (size_t i = 0; i < numOutputs; i++)
         {
-            float bias = layer.weights[offs + layer.input.size()];    
+            float bias = layer.weights[numInputs * numOutputs + i];
             minBias = std::min(minBias, bias);
             maxBias = std::max(maxBias, bias);
 
-            for (size_t j = 0; j < layer.input.size(); j++)
+            for (size_t j = 0; j < numInputs; j++)
             {
-                const float weight = layer.weights[offs + j];
+                const float weight = layer.weights[j * numOutputs + i];
 
                 minWeight = std::min(minWeight, weight);
                 maxWeight = std::max(maxWeight, weight);
             }
-
-            offs += layer.input.size() + 1;
         }
     }
 
