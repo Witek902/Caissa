@@ -1,5 +1,4 @@
 #include "PackedNeuralNetwork.hpp"
-#include "NeuralNetwork.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -56,7 +55,7 @@ void Accumulator::Refresh(
 
 #if defined(NN_USE_AVX2)
 
-    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
     static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     ASSERT(FirstLayerSize == numOutputs);
     ASSERT((size_t)weights % 32 == 0);
@@ -67,7 +66,7 @@ void Accumulator::Refresh(
     static_assert(numChunks % OptimalRegisterCount == 0);
     constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
 
-    FirstLayerWeightType* valuesStart = values;
+    AccumulatorType* valuesStart = values;
 
     __m256i regs[OptimalRegisterCount];
     for (uint32_t tile = 0; tile < numTiles; ++tile)
@@ -87,6 +86,7 @@ void Accumulator::Refresh(
         {
             ASSERT(activeFeatures[j] < numInputs);
             const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * FirstLayerSize);
+            ASSERT((size_t)weightsStart % 32 == 0); // make sure loads are aligned
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
@@ -109,7 +109,7 @@ void Accumulator::Refresh(
 
 #elif defined(NN_USE_SSE2)
 
-    constexpr uint32_t registerWidth = 128 / (8 * sizeof(FirstLayerWeightType));
+    constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
     static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     ASSERT(FirstLayerSize == numOutputs);
     ASSERT((size_t)weights % 16 == 0);
@@ -148,7 +148,7 @@ void Accumulator::Refresh(
         }
 
         {
-            FirstLayerWeightType* valuesStart = values + chunkBase;
+            AccumulatorType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
@@ -158,7 +158,7 @@ void Accumulator::Refresh(
 
 #else // no SIMD support
 
-    int32_t regs[FirstLayerSize];
+    int16_t regs[FirstLayerSize];
 
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
     {
@@ -172,15 +172,16 @@ void Accumulator::Refresh(
 
         for (uint32_t i = 0; i < FirstLayerSize; ++i)
         {
+            ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) <= std::numeric_limits<AccumulatorType>::max());
+            ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) >= std::numeric_limits<AccumulatorType>::min());
+
             regs[i] += weights[weightsDataOffset + i];
         }
     }
 
     for (uint32_t i = 0; i < FirstLayerSize; ++i)
     {
-        ASSERT(regs[i] <= std::numeric_limits<FirstLayerWeightType>::max());
-        ASSERT(regs[i] >= std::numeric_limits<FirstLayerWeightType>::min());
-        values[i] = static_cast<FirstLayerWeightType>(regs[i]);
+        values[i] = static_cast<AccumulatorType>(regs[i]);
     }
 #endif
 }
@@ -197,7 +198,7 @@ void Accumulator::Update(
     ASSERT(numOutputs == FirstLayerSize);
 
 #if defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 256 / (8 * sizeof(FirstLayerWeightType));
+    constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
     static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
     static_assert(numChunks % OptimalRegisterCount == 0);
@@ -212,7 +213,7 @@ void Accumulator::Update(
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
 
         {
-            const FirstLayerWeightType* valuesStart = source.values + chunkBase;
+            const AccumulatorType* valuesStart = source.values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm256_load_si256(reinterpret_cast<const __m256i*>(valuesStart + i * registerWidth));
@@ -246,7 +247,7 @@ void Accumulator::Update(
         }
 
         {
-            FirstLayerWeightType* valuesStart = values + chunkBase;
+            AccumulatorType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 _mm256_store_si256(reinterpret_cast<__m256i*>(valuesStart + i * registerWidth), regs[i]);
@@ -268,7 +269,7 @@ void Accumulator::Update(
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
 
         {
-            const FirstLayerWeightType* valuesStart = source.values + chunkBase;
+            const AccumulatorType* valuesStart = source.values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm_load_si128(reinterpret_cast<const __m128i*>(valuesStart + i * registerWidth));
@@ -302,7 +303,7 @@ void Accumulator::Update(
         }
 
         {
-            FirstLayerWeightType* valuesStart = values + chunkBase;
+            AccumulatorType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
@@ -337,10 +338,11 @@ void Accumulator::Update(
 #endif
 }
 
-INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const FirstLayerWeightType* input)
+INLINE static void ClippedReLU_Accum(uint32_t size, IntermediateType* output, const AccumulatorType* input)
 {
+    static_assert(std::is_same_v<AccumulatorType, int16_t>, "Invalid type");
+
 #if defined(NN_USE_AVX2)
-    static_assert(std::is_same_v<FirstLayerWeightType, int16_t>, "Invalid type");
     constexpr uint32_t inRegisterWidth = 256 / 16;
     constexpr uint32_t outRegisterWidth = 256 / 8;
     ASSERT(size % outRegisterWidth == 0);
@@ -368,7 +370,6 @@ INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const
     }
 
 #elif defined(NN_USE_SSE4)
-    static_assert(std::is_same_v<FirstLayerWeightType, int16_t>, "Invalid type");
     constexpr uint32_t inRegisterWidth = 128 / 16;
     constexpr uint32_t outRegisterWidth = 128 / 8;
     ASSERT(size % outRegisterWidth == 0);
@@ -393,7 +394,7 @@ INLINE static void ClippedReLU_16(uint32_t size, IntermediateType* output, const
 #else // no SIMD support
     for (uint32_t i = 0; i < size; ++i)
     {
-        output[i] = (IntermediateType)std::clamp<FirstLayerWeightType>(input[i], 0, std::numeric_limits<IntermediateType>::max());
+        output[i] = (IntermediateType)std::clamp<AccumulatorType>(input[i], 0, std::numeric_limits<IntermediateType>::max());
     }
 #endif
 }
@@ -639,7 +640,7 @@ INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const
 }
 
 INLINE static int32_t LinearLayer_SingleOutput(
-    const HiddenLayerWeightType* weights, const HiddenLayerBiasType* biases,
+    const LastLayerWeightType* weights, const LastLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs,
     const IntermediateType* input)
 {
@@ -650,7 +651,7 @@ INLINE static int32_t LinearLayer_SingleOutput(
     int32_t val = biases[0];
 
 #if defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 256 / 8;
+    constexpr uint32_t registerWidth = 16;
     ASSERT(numInputs % registerWidth == 0);
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)biases % 32 == 0);
@@ -658,15 +659,19 @@ INLINE static int32_t LinearLayer_SingleOutput(
     __m256i sum = _mm256_setzero_si256();
     for (uint32_t j = 0; j < numInputs; j += registerWidth)
     {
-        const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
-        m256_add_dpbusd_epi32(sum, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j)));
+        // load 8bit inputs and expand to 16bit values
+        const __m256i in = _mm256_cvtepi8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(input + j)));
+
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        const __m256i w = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
+        sum = _mm256_add_epi32(sum, _mm256_madd_epi16(in, w));
     }
 
     // add 8 int32s horizontally
     val += m256_hadd(sum);
 
 #elif defined(NN_USE_SSE4)
-    constexpr uint32_t registerWidth = 128 / 8;
+    constexpr uint32_t registerWidth = 8;
     ASSERT(numInputs % registerWidth == 0);
     ASSERT((size_t)weights % 16 == 0);
     ASSERT((size_t)biases % 16 == 0);
@@ -674,11 +679,16 @@ INLINE static int32_t LinearLayer_SingleOutput(
     __m128i sum = _mm_setzero_si128();
     for (uint32_t j = 0; j < numInputs; j += registerWidth)
     {
-        const __m128i in = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j));
-        m128_add_dpbusd_epi32(sum, in, _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j)));
+        // load 8bit inputs and expand to 16bit values
+        const __m128i in = _mm_loadu_si64(reinterpret_cast<const __m128i*>(input + j));
+        const __m128i in16 = _mm_unpacklo_epi8(in, _mm_cmplt_epi8(in, _mm_setzero_si128()));
+
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        const __m128i w = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j));
+        sum = _mm_add_epi32(sum, _mm_madd_epi16(in16, w));
     }
 
-    // add 8 int32s horizontally
+    // add 4 int32s horizontally
     val += m128_hadd(sum);
 
 #else
@@ -737,8 +747,8 @@ size_t PackedNeuralNetwork::GetWeightsBufferSize() const
     size += header.layerSizes[2] * header.layerSizes[3] * sizeof(HiddenLayerWeightType);
     size += header.layerSizes[3] * sizeof(HiddenLayerBiasType);
 
-    size += header.layerSizes[3] * OutputSize * sizeof(HiddenLayerWeightType);
-    size += OutputSize * sizeof(HiddenLayerBiasType);
+    size += header.layerSizes[3] * OutputSize * sizeof(LastLayerWeightType);
+    size += OutputSize * sizeof(LastLayerBiasType);
 
     return size;
 }
@@ -793,6 +803,36 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
     {
         fclose(file);
         std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
+        return false;
+    }
+
+    fclose(file);
+    return true;
+}
+
+bool PackedNeuralNetwork::SaveAsImage(const char* filePath) const
+{
+    uint32_t dataSize = GetNumInputs() * GetLayerSize(1);
+
+    FILE* file = fopen(filePath, "wb");
+    if (!file)
+    {
+        std::cout << "Failed to open target image '" << filePath << "': " << stderr << std::endl;
+        return false;
+    }
+
+    const FirstLayerWeightType* weights = GetAccumulatorWeights();
+
+    std::vector<uint8_t> tempValues;
+    for (uint32_t i = 0; i < dataSize; ++i)
+    {
+        tempValues.push_back((uint8_t)std::clamp(weights[i] / 4 + 128, 0, 255));
+    }
+
+    if (fwrite(tempValues.data(), tempValues.size(), 1, file) != 1)
+    {
+        std::cout << "Failed to write bitmap image data: " << stderr << std::endl;
+        fclose(file);
         return false;
     }
 
@@ -961,7 +1001,7 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator) const
     alignas(CACHELINE_SIZE) IntermediateType tempA[MaxNeuronsInFirstLayer];
     alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInLaterLayers];
 
-    ClippedReLU_16(GetLayerSize(1), tempA, accumulator.values);
+    ClippedReLU_Accum(GetLayerSize(1), tempA, accumulator.values);
 
     LinearLayer(GetLayer1Weights(), GetLayer1Biases(), GetLayerSize(1), GetLayerSize(2), tempB, tempA);
     ClippedReLU_32(GetLayerSize(2), tempA, tempB);

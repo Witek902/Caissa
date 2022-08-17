@@ -1,5 +1,6 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
+#include "NeuralNetwork.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/PositionUtils.hpp"
@@ -11,7 +12,6 @@
 #include "../backend/Material.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/NeuralNetwork.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
 
@@ -33,6 +33,7 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
     const uint32_t maxFeatures = 64;
 
     uint16_t features[maxFeatures];
+    //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_KingPiece_Symmetrical);
     uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
@@ -123,8 +124,8 @@ bool TrainEndgame()
                         continue;
                     }
 
-                    if (wdl < 0) score = dtz / 300.0f;
-                    if (wdl > 0) score = 1.0f - dtz / 300.0f;
+                    if (wdl < 0) score = dtz / 200.0f;
+                    if (wdl > 0) score = 1.0f - dtz / 200.0f;
                 }
 
                 PositionToPackedVector(pos, outSet[i].trainingVector);
@@ -137,17 +138,22 @@ bool TrainEndgame()
     };
 
     const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
+    //const uint32_t numNetworkInputs = 2 * 3 * 32 * 64;
 
     nn::NeuralNetwork network;
     network.Init(numNetworkInputs, { nn::FirstLayerSize, 32, 32, 1 });
 
+    nn::NeuralNetworkRunContext networkRunCtx;
+    networkRunCtx.Init(network);
+
+    nn::NeuralNetworkTrainer trainer;
     nn::PackedNeuralNetwork packedNetwork;
 
     std::vector<TrainingEntry> trainingSet, validationSet;
     trainingSet.resize(cNumTrainingVectorsPerIteration);
     validationSet.resize(cNumTrainingVectorsPerIteration);
 
-    nn::Values tempValues;
+    std::vector<int32_t> packedNetworkOutputs(cNumTrainingVectorsPerIteration);
 
     uint32_t numTrainingVectorsPassed = 0;
 
@@ -171,28 +177,27 @@ bool TrainEndgame()
         Waitable waitable;
         {
             TaskBuilder taskBuilder(waitable);
-
-            taskBuilder.Task("Train", [&](const TaskContext&)
-            {
-                std::vector<nn::TrainingVector> batch(trainingSet.size());
-                for (size_t i = 0; i < trainingSet.size(); ++i)
-                {
-                    batch[i] = trainingSet[i].trainingVector;
-                }
-
-                TimePoint startTime = TimePoint::GetCurrent();
-                network.Train(batch, tempValues, cBatchSize, learningRate);
-                TimePoint endTime = TimePoint::GetCurrent();
-                std::cout << "Training took " << (endTime - startTime).ToSeconds() << " sec" << std::endl;
-
-                network.ToPackedNetwork(packedNetwork);
-            });
-
             taskBuilder.Task("GenerateSet", [&](const TaskContext& ctx)
             {
                 TaskBuilder childTaskBuilder(ctx);
                 generateTrainingSet(childTaskBuilder, validationSet);
             });
+        }
+
+        float trainingTime = 0.0f;
+        {
+            std::vector<nn::TrainingVector> batch(trainingSet.size());
+            for (size_t i = 0; i < trainingSet.size(); ++i)
+            {
+                batch[i] = trainingSet[i].trainingVector;
+            }
+
+            TimePoint startTime = TimePoint::GetCurrent();
+            trainer.Train(network, batch, cBatchSize, learningRate);
+            network.QuantizeWeights();
+            trainingTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
+
+            network.ToPackedNetwork(packedNetwork);
         }
         waitable.Wait();
 
@@ -210,14 +215,25 @@ bool TrainEndgame()
 
         uint32_t correctPredictions = 0;
 
+        float packedNetworkRunTime = 0.0f;
+        {
+            TimePoint startTime = TimePoint::GetCurrent();
+            for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
+            {
+                const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
+                packedNetworkOutputs[i] = packedNetwork.Run(features.data(), (uint32_t)features.size());
+            }
+            packedNetworkRunTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
+        }
+
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
             const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
-            tempValues = network.Run(features.data(), (uint32_t)features.size());
-            int32_t packedNetworkOutput = packedNetwork.Run(features.data(), (uint32_t)features.size());
+            const nn::Values& networkOutput = network.Run(features.data(), (uint32_t)features.size(), networkRunCtx);
+            const int32_t packedNetworkOutput = packedNetworkOutputs[i];
 
             const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.output[0]);
-            const float nnValue = ScoreFromNN(tempValues[0]);
+            const float nnValue = ScoreFromNN(networkOutput[0]);
             const float nnPackedValue = ScoreFromNN(nn::Sigmoid((float)packedNetworkOutput / (float)nn::OutputScale));
             const float evalValue = PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);
 
@@ -273,6 +289,7 @@ bool TrainEndgame()
         nnPackedQuantizationErrorSum = sqrtf(nnPackedQuantizationErrorSum / cNumTrainingVectorsPerIteration);
 
         std::cout
+            << "Epoch:                  " << iteration << std::endl
             << "Num training vectors:   " << numTrainingVectorsPassed << std::endl
             << "Learning rate:          " << learningRate << std::endl
             << "Accuracy:               " << (100.0f * accuracy) << "%" << std::endl
@@ -283,8 +300,15 @@ bool TrainEndgame()
 
         network.PrintStats();
 
-        network.Save((materialKey.ToString() + ".nn").c_str());
-        packedNetwork.Save((materialKey.ToString() + ".pnn").c_str());
+        std::cout << "Training time:    " << trainingTime << " sec" << std::endl;
+        std::cout << "Network run time: " << 1000.0f * packedNetworkRunTime << " ms" << std::endl << std::endl;
+
+        if (iteration % 10 == 0)
+        {
+            network.Save((materialKey.ToString() + ".nn").c_str());
+            packedNetwork.Save((materialKey.ToString() + ".pnn").c_str());
+            packedNetwork.SaveAsImage((materialKey.ToString() + ".raw").c_str());
+        }
     }
 
     return true;

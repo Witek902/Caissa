@@ -318,6 +318,28 @@ INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
     while (prev < value && !outMax.compare_exchange_weak(prev, value)) { }
 }
 
+class SpinLock
+{
+public:
+    void lock()
+    {
+        for (;;)
+        {
+            if (!lock_.exchange(true, std::memory_order_acquire)) break;
+            while (lock_.load(std::memory_order_relaxed));
+        }
+    }
+
+    void unlock()
+    {
+        lock_.store(false, std::memory_order_release);
+    }
+
+private:
+    std::atomic<bool> lock_ = { false };
+};
+
+
 union MaterialKey;
 class Position;
 struct TTEntry;

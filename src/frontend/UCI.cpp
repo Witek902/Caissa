@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "0.8.6"
+#define VersionNumber "0.9.0"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -150,7 +150,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "setoption")
     {
-        if (args.size() >= 5 && args[1] == "name" && args[3] == "value")
+        if (args.size() >= 4 && args[1] == "name" && args[3] == "value")
         {
             size_t offset = commandString.find("value");
             offset += 5; // skip "value" string
@@ -719,7 +719,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
-        size_t hashSize = 1024 * 1024 * static_cast<size_t>(atoi(value.c_str()));
+        size_t hashSize = 1024 * 1024 * static_cast<size_t>(std::max(1, atoi(value.c_str())));
         mTranspositionTable.Resize(hashSize);
     }
     else if (lowerCaseName == "usesan" || lowerCaseName == "usestandardalgebraicnotation")

@@ -1,6 +1,7 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
 #include "GameCollection.hpp"
+#include "NeuralNetwork.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/PositionUtils.hpp"
@@ -12,7 +13,6 @@
 #include "../backend/Material.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/NeuralNetwork.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
 
@@ -299,6 +299,11 @@ bool TrainPieceSquareTables()
     nn::NeuralNetwork network;
     network.Init(cNumNetworkInputs, { 1 }, nn::ActivationFunction::Sigmoid);
 
+    nn::NeuralNetworkRunContext networkRunCtx;
+    networkRunCtx.Init(network);
+
+    nn::NeuralNetworkTrainer trainer;
+
     // reset king weights
     for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
     {
@@ -312,8 +317,6 @@ bool TrainPieceSquareTables()
     trainingSet.resize(cNumTrainingVectorsPerIteration);
 
     nn::TrainingVector validationVector;
-
-    nn::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
 
@@ -350,7 +353,7 @@ bool TrainPieceSquareTables()
         }
 
         const float learningRate = 0.5f / (1.0f + 0.001f * iteration);
-        network.Train(trainingSet, tempValues, cBatchSize, learningRate);
+        trainer.Train(network, trainingSet, cBatchSize, learningRate);
 
         // normalize king weights
         {
@@ -380,18 +383,18 @@ bool TrainPieceSquareTables()
             PositionToTrainingVector(pos, validationVector);
             validationVector.output[0] = entry.score;
 
-            tempValues = network.Run(validationVector.features.data(), (uint32_t)validationVector.features.size());
+            const nn::Values& networkOutput = network.Run(validationVector.features.data(), (uint32_t)validationVector.features.size(), networkRunCtx);
 
             const float expectedValue = validationVector.output[0];
 
             if (i == 0)
             {
                 std::cout << pos.ToFEN() << std::endl << pos.Print();
-                std::cout << "    value= " << tempValues[0] << ", expected=" << expectedValue << std::endl;
+                std::cout << "    value= " << networkOutput[0] << ", expected=" << expectedValue << std::endl;
                 PrintPieceSquareTableWeigts(network);
             }
 
-            const float error = expectedValue - tempValues[0];
+            const float error = expectedValue - networkOutput[0];
             minError = std::min(minError, fabsf(error));
             maxError = std::max(maxError, fabsf(error));
             const float sqrError = error * error;

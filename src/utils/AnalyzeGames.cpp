@@ -1,5 +1,6 @@
 #include "Common.hpp"
 #include "GameCollection.hpp"
+#include "NeuralNetwork.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/Material.hpp"
@@ -10,7 +11,6 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/NeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
 
 #include <chrono>

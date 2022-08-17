@@ -35,7 +35,7 @@ int main(int argc, const char* argv[])
     }
 
     InitEngine();
-    TryLoadingDefaultEvalFile();
+    //TryLoadingDefaultEvalFile();
 
     LoadTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
 
