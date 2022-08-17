@@ -47,6 +47,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="NetworkTrainer.cpp" />
+    <ClCompile Include="NeuralNetwork.cpp" />
     <ClCompile Include="PackedPositionTests.cpp" />
     <ClCompile Include="PieceSquareTablesTrainer.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
@@ -54,12 +55,15 @@
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="EndgameNetworkTrainer.cpp" />
+    <ClCompile Include="TrainerCommon.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="GameCollection.hpp" />
+    <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="Stream.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
+    <ClInclude Include="TrainerCommon.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -180,6 +184,7 @@
       <WholeProgramOptimization />
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -193,6 +198,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -206,6 +212,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -217,6 +224,7 @@
       <AdditionalIncludeDirectories>$(ProjectDir)../backend/tablebase;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WholeProgramOptimization />
       <BasicRuntimeChecks />
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -230,6 +238,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -243,6 +252,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -254,6 +264,7 @@
       <AdditionalIncludeDirectories>$(ProjectDir)../backend/tablebase;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WholeProgramOptimization />
       <BasicRuntimeChecks />
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -267,6 +278,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -280,6 +292,7 @@
       </WholeProgramOptimization>
       <BasicRuntimeChecks>
       </BasicRuntimeChecks>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

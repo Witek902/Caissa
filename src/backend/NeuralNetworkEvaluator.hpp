@@ -23,6 +23,12 @@ enum class NetworkInputMapping : uint8_t
 	// horizontal and vertical symmetry in case of pawnless positions
 	// TODO: diagonal symmetry
 	MaterialPacked_Symmetrical,
+
+	// king-relative
+	KingPiece_Symmetrical,
+
+	// king-relative
+	MaterialPacked_KingPiece_Symmetrical,
 };
 
 struct DirtyPiece

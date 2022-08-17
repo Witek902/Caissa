@@ -73,6 +73,22 @@ union MaterialKey
         return MaterialKey(whitesValue | blacksValue);
     }
 
+    INLINE uint32_t GetActivePiecesCount() const
+    {
+        uint32_t count = 0;
+        count += numWhitePawns > 0 ? 1 : 0;
+        count += numWhiteKnights > 0 ? 1 : 0;
+        count += numWhiteBishops > 0 ? 1 : 0;
+        count += numWhiteRooks > 0 ? 1 : 0;
+        count += numWhiteQueens > 0 ? 1 : 0;
+        count += numBlackPawns > 0 ? 1 : 0;
+        count += numBlackKnights > 0 ? 1 : 0;
+        count += numBlackBishops > 0 ? 1 : 0;
+        count += numBlackRooks > 0 ? 1 : 0;
+        count += numBlackQueens > 0 ? 1 : 0;
+        return count;
+    }
+
     uint32_t GetNeuralNetworkInputsNumber() const;
 
     std::string ToString() const;

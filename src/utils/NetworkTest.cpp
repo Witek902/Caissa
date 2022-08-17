@@ -1,6 +1,5 @@
 #include "Common.hpp"
-
-#include "../backend/NeuralNetwork.hpp"
+#include "NeuralNetwork.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 
 #include <iostream>
@@ -19,13 +18,17 @@ bool TestNetwork()
     nn::NeuralNetwork network;
     network.Init(2, { nn::FirstLayerSize, 16, 1 });
 
+    nn::NeuralNetworkRunContext networkRunCtx;
+    networkRunCtx.Init(network);
+
+    nn::NeuralNetworkTrainer trainer;
+
     nn::PackedNeuralNetwork packedNetwork;
 
     std::vector<nn::TrainingVector> trainingSet;
     trainingSet.resize(cNumTrainingVectorsPerIteration);
 
     nn::TrainingVector validationVector;
-    nn::Values tempValues;
 
     uint32_t numTrainingVectorsPassed = 0;
 
@@ -49,7 +52,7 @@ bool TestNetwork()
 
     for (uint32_t iteration = 0; ; ++iteration)
     {
-        network.Train(trainingSet, tempValues, cBatchSize);
+        trainer.Train(network, trainingSet, cBatchSize);
         //network.PrintStats();
         network.ToPackedNetwork(packedNetwork);
 
@@ -84,11 +87,11 @@ bool TestNetwork()
                 featureIndices[1] = 1;
             }
 
-            tempValues = network.Run(featureIndices, numFeatures);
+            const auto& networkOutput = network.Run(featureIndices, numFeatures, networkRunCtx);
             int32_t packedNetworkOutput = packedNetwork.Run(featureIndices, numFeatures);
 
             const float expectedValue = trainingSet[i].output[0];
-            const float nnValue = tempValues[0];
+            const float nnValue = networkOutput[0];
             const float nnPackedValue = (float)packedNetworkOutput / (float)nn::WeightScale / (float)nn::OutputScale;
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 

@@ -12,7 +12,6 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/NeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
 
 #include <chrono>

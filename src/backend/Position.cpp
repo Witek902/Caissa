@@ -805,12 +805,14 @@ Position Position::SwappedColors() const
     result.mColors[0].bishops       = mColors[1].bishops.MirroredVertically();
     result.mColors[0].knights       = mColors[1].knights.MirroredVertically();
     result.mColors[0].pawns         = mColors[1].pawns.MirroredVertically();
+    result.mColors[0].occupied      = mColors[1].occupied.MirroredVertically();
     result.mColors[1].king          = mColors[0].king.MirroredVertically();
     result.mColors[1].queens        = mColors[0].queens.MirroredVertically();
     result.mColors[1].rooks         = mColors[0].rooks.MirroredVertically();
     result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
     result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
     result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
+    result.mColors[1].occupied      = mColors[0].occupied.MirroredVertically();
     result.mBlacksCastlingRights    = mWhitesCastlingRights;
     result.mWhitesCastlingRights    = mBlacksCastlingRights;
     result.mSideToMove              = GetOppositeColor(mSideToMove);
@@ -828,6 +830,7 @@ void Position::MirrorVertically()
     mColors[0].bishops  = mColors[0].bishops.MirroredVertically();
     mColors[0].knights  = mColors[0].knights.MirroredVertically();
     mColors[0].pawns    = mColors[0].pawns.MirroredVertically();
+    mColors[0].occupied = mColors[0].occupied.MirroredVertically();
 
     mColors[1].king     = mColors[1].king.MirroredVertically();
     mColors[1].queens   = mColors[1].queens.MirroredVertically();
@@ -835,6 +838,7 @@ void Position::MirrorVertically()
     mColors[1].bishops  = mColors[1].bishops.MirroredVertically();
     mColors[1].knights  = mColors[1].knights.MirroredVertically();
     mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
+    mColors[1].occupied = mColors[1].occupied.MirroredVertically();
 
     mWhitesCastlingRights = CastlingRights_None;
     mBlacksCastlingRights = CastlingRights_None;
@@ -850,6 +854,7 @@ void Position::MirrorHorizontally()
     mColors[0].bishops  = mColors[0].bishops.MirroredHorizontally();
     mColors[0].knights  = mColors[0].knights.MirroredHorizontally();
     mColors[0].pawns    = mColors[0].pawns.MirroredHorizontally();
+    mColors[0].occupied = mColors[0].occupied.MirroredHorizontally();
 
     mColors[1].king     = mColors[1].king.MirroredHorizontally();
     mColors[1].queens   = mColors[1].queens.MirroredHorizontally();
@@ -857,6 +862,7 @@ void Position::MirrorHorizontally()
     mColors[1].bishops  = mColors[1].bishops.MirroredHorizontally();
     mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
     mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
+    mColors[1].occupied = mColors[1].occupied.MirroredHorizontally();
 
     mWhitesCastlingRights = CastlingRights_None;
     mBlacksCastlingRights = CastlingRights_None;
@@ -929,6 +935,15 @@ uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMap
         constexpr Bitboard mask = ~(Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>());
         (bitboard & mask).Iterate([&](uint32_t square) INLINE_LAMBDA { outFeatures[numFeatures++] = (uint16_t)(numInputs + (square ^ bitFlipMask) - 8u); });
         numInputs += 48;
+    };
+
+    const auto writeKingRelativePieceFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask, const uint32_t kingSquareIndex) INLINE_LAMBDA
+    {
+        bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + 32u * kingSquareIndex + (square ^ bitFlipMask));
+        });
+        numInputs += 32 * 64;
     };
 
     if (mapping == NetworkInputMapping::Full)
@@ -1053,7 +1068,6 @@ uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMap
         if (Whites().bishops)   writePieceFeatures(Whites().bishops, bitFlipMask);
         if (Whites().rooks)     writePieceFeatures(Whites().rooks, bitFlipMask);
         if (Whites().queens)    writePieceFeatures(Whites().queens, bitFlipMask);
-
         if (Blacks().pawns)     writePawnFeatures(Blacks().pawns, bitFlipMask);
         if (Blacks().knights)   writePieceFeatures(Blacks().knights, bitFlipMask);
         if (Blacks().bishops)   writePieceFeatures(Blacks().bishops, bitFlipMask);
@@ -1062,6 +1076,116 @@ uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMap
 
         ASSERT(numInputs <= UINT16_MAX);
         ASSERT(numInputs == GetMaterialKey().GetNeuralNetworkInputsNumber());
+    }
+    else if (mapping == NetworkInputMapping::KingPiece_Symmetrical)
+    {
+        // white perspective
+        {
+            uint32_t bitFlipMask = 0;
+
+            if (whiteKingSquare.File() >= 4)
+            {
+                whiteKingSquare = whiteKingSquare.FlippedFile();
+                bitFlipMask = 0b000111; // flip file
+            }
+
+            const uint32_t kingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
+            ASSERT(kingIndex < 32);
+
+            writeKingRelativePieceFeatures(Whites().pawns, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().knights, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().bishops, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().rooks, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().queens, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().pawns, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().knights, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().bishops, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().rooks, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().queens, bitFlipMask, kingIndex);
+        }
+
+        // black perspective
+        {
+            uint32_t bitFlipMask = 0;
+
+            if (blackKingSquare.File() >= 4)
+            {
+                blackKingSquare = blackKingSquare.FlippedFile();
+                bitFlipMask = 0b000111; // flip file
+            }
+
+            const uint32_t kingIndex = 4 * blackKingSquare.Rank() + blackKingSquare.File();
+            ASSERT(kingIndex < 32);
+
+            writeKingRelativePieceFeatures(Whites().pawns, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().knights, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().bishops, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().rooks, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Whites().queens, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().pawns, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().knights, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().bishops, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().rooks, bitFlipMask, kingIndex);
+            writeKingRelativePieceFeatures(Blacks().queens, bitFlipMask, kingIndex);
+        }
+
+        // 2 perspectives, 10 pieces, 32 king locations, 64 piece locations
+        ASSERT(numInputs == 2 * 10 * 32 * 64);
+    }
+    else if (mapping == NetworkInputMapping::MaterialPacked_KingPiece_Symmetrical)
+    {
+        // white perspective
+        {
+            uint32_t bitFlipMask = 0;
+
+            if (whiteKingSquare.File() >= 4)
+            {
+                whiteKingSquare = whiteKingSquare.FlippedFile();
+                bitFlipMask = 0b000111; // flip file
+            }
+
+            const uint32_t kingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
+            ASSERT(kingIndex < 32);
+
+            if (Whites().pawns)     writeKingRelativePieceFeatures(Whites().pawns, bitFlipMask, kingIndex);
+            if (Whites().knights)   writeKingRelativePieceFeatures(Whites().knights, bitFlipMask, kingIndex);
+            if (Whites().bishops)   writeKingRelativePieceFeatures(Whites().bishops, bitFlipMask, kingIndex);
+            if (Whites().rooks)     writeKingRelativePieceFeatures(Whites().rooks, bitFlipMask, kingIndex);
+            if (Whites().queens)    writeKingRelativePieceFeatures(Whites().queens, bitFlipMask, kingIndex);
+            if (Blacks().pawns)     writeKingRelativePieceFeatures(Blacks().pawns, bitFlipMask, kingIndex);
+            if (Blacks().knights)   writeKingRelativePieceFeatures(Blacks().knights, bitFlipMask, kingIndex);
+            if (Blacks().bishops)   writeKingRelativePieceFeatures(Blacks().bishops, bitFlipMask, kingIndex);
+            if (Blacks().rooks)     writeKingRelativePieceFeatures(Blacks().rooks, bitFlipMask, kingIndex);
+            if (Blacks().queens)    writeKingRelativePieceFeatures(Blacks().queens, bitFlipMask, kingIndex);
+        }
+
+        // black perspective
+        {
+            uint32_t bitFlipMask = 0;
+
+            if (blackKingSquare.File() >= 4)
+            {
+                blackKingSquare = blackKingSquare.FlippedFile();
+                bitFlipMask = 0b000111; // flip file
+            }
+
+            const uint32_t kingIndex = 4 * blackKingSquare.Rank() + blackKingSquare.File();
+            ASSERT(kingIndex < 32);
+
+            if (Whites().pawns)     writeKingRelativePieceFeatures(Whites().pawns, bitFlipMask, kingIndex);
+            if (Whites().knights)   writeKingRelativePieceFeatures(Whites().knights, bitFlipMask, kingIndex);
+            if (Whites().bishops)   writeKingRelativePieceFeatures(Whites().bishops, bitFlipMask, kingIndex);
+            if (Whites().rooks)     writeKingRelativePieceFeatures(Whites().rooks, bitFlipMask, kingIndex);
+            if (Whites().queens)    writeKingRelativePieceFeatures(Whites().queens, bitFlipMask, kingIndex);
+            if (Blacks().pawns)     writeKingRelativePieceFeatures(Blacks().pawns, bitFlipMask, kingIndex);
+            if (Blacks().knights)   writeKingRelativePieceFeatures(Blacks().knights, bitFlipMask, kingIndex);
+            if (Blacks().bishops)   writeKingRelativePieceFeatures(Blacks().bishops, bitFlipMask, kingIndex);
+            if (Blacks().rooks)     writeKingRelativePieceFeatures(Blacks().rooks, bitFlipMask, kingIndex);
+            if (Blacks().queens)    writeKingRelativePieceFeatures(Blacks().queens, bitFlipMask, kingIndex);
+        }
+
+        // 2 perspectives, X pieces, 32 king locations, 64 piece locations
+        ASSERT(numInputs == 2 * GetMaterialKey().GetActivePiecesCount() * 32 * 64);
     }
     else
     {

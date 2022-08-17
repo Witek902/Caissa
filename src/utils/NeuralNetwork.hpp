@@ -1,10 +1,14 @@
 #include "Common.hpp"
 
 #include <vector>
+#include <deque>
 #include <cmath>
+#include <mutex>
 
 namespace nn {
 
+class Layer;
+class NeuralNetwork;
 class PackedNeuralNetwork;
 
 using Values = std::vector<float, AlignmentAllocator<float, 32>>;
@@ -17,6 +21,8 @@ struct TrainingVector
 
     Values output;
 };
+
+using TrainingSet = std::vector<TrainingVector>;
 
 inline float InvTan(float x)
 {
@@ -68,40 +74,73 @@ enum class ActivationFunction
     ATan,
 };
 
-struct Layer
+class LayerRunContext
 {
-    Layer(size_t inputSize, size_t outputSize);
-
-    void InitWeights();
-    void Run(const Values& in);
-    void Run(const uint16_t* featureIndices, uint32_t numFeatures);
-    void Backpropagate(uint32_t layerIndex, const Values& error);
-    void QuantizeWeights(float strength);
-    void ComputeOutput();
-
+public:
     std::vector<uint16_t> activeFeatures;
     Values input;
+    bool useActiveFeaturesList{ false };
 
     Values linearValue;
     Values output;
+
+    // used for learning
+    Values inputGradient;
+
+    void Init(const Layer& layer);
+    void ComputeOutput(ActivationFunction activationFunction);
+};
+
+struct Gradients
+{
+    Values values;
+    std::vector<bool> dirty;
+};
+
+class Layer
+{
+public:
+    Layer(uint32_t inputSize, uint32_t outputSize);
+
+    void InitWeights();
+    void Run(const Values& in, LayerRunContext& ctx) const;
+    void Run(const uint16_t* featureIndices, uint32_t numFeatures, LayerRunContext& ctx) const;
+    void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
+    void UpdateWeights_SGD(float learningRate, const Gradients& gradients);
+    void UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients);
+    void QuantizeWeights(float strength);
+
+    uint32_t numInputs;
+    uint32_t numOutputs;
+
+    ActivationFunction activationFunction;
+
     Values weights;
 
     // used for learning
-    Values gradient;
-    Values nextError;
-    Values m;
-    Values v;
-
-    ActivationFunction activationFunction;
+    Values gradientMean;
+    Values gradientMoment;
 };
 
+class NeuralNetworkRunContext
+{
+public:
+    std::vector<LayerRunContext> layers;
+    
+    // used for learning
+    Values tempValues;
+
+    void Init(const NeuralNetwork& network);
+};
 
 class NeuralNetwork
 {
+    friend class NeuralNetworkTrainer;
+
 public:
 
     // Create multi-layer neural network
-    void Init(size_t inputSize, const std::vector<size_t>& layersSizes, ActivationFunction outputLayerActivationFunc = ActivationFunction::Sigmoid);
+    void Init(uint32_t inputSize, const std::vector<uint32_t>& layersSizes, ActivationFunction outputLayerActivationFunc = ActivationFunction::Sigmoid);
 
     // save to file
     bool Save(const char* filePath) const;
@@ -113,43 +152,41 @@ public:
     bool ToPackedNetwork(PackedNeuralNetwork& outNetwork) const;
 
     // Calculate neural network output based on arbitrary input
-    const Values& Run(const Values& input);
+    const Values& Run(const Values& input, NeuralNetworkRunContext& ctx) const;
 
     // Calculate neural network output based on ssparse input (list of active features)
-    const Values& Run(const uint16_t* featureIndices, uint32_t numFeatures);
-
-    // Train the neural network
-    void Train(const std::vector<TrainingVector>& trainingSet, Values& tempValues, size_t batchSize, float learningRate = 0.5f);
+    const Values& Run(const uint16_t* featureIndices, uint32_t numFeatures, NeuralNetworkRunContext& ctx) const;
 
     void PrintStats() const;
 
-    size_t GetLayersNumber() const
+    uint32_t GetLayersNumber() const
     {
-        return layers.size();
+        return (uint32_t)layers.size();
     }
 
-    size_t GetInputSize() const
+    uint32_t GetInputSize() const
     {
-        return layers.front().input.size();
+        return layers.front().numInputs;
     }
 
-    size_t GetOutputSize() const
+    uint32_t GetOutputSize() const
     {
-        return layers.back().output.size();
+        return layers.back().numOutputs;
     }
 
-    const Values& GetOutput() const
-    {
-        return layers.back().output;
-    }
-
-    void UpdateLayerWeights(Layer& layer, float learningRate) const;
+    void QuantizeWeights();
     void QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale);
 
     std::vector<Layer> layers;
+};
 
-    // used for learning
-    Values tempError;
+class NeuralNetworkTrainer
+{
+public:
+    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, size_t batchSize, float learningRate = 0.5f);
+
+    std::deque<Gradients> gradients;
+    std::vector<NeuralNetworkRunContext> perThreadRunContext;
 };
 
 } // namespace nn

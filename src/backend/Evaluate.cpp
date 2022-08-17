@@ -11,7 +11,7 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-2.pnn";
+const char* c_DefaultEvalFile = "eval-3.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
