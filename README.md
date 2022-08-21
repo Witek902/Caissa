@@ -1,10 +1,13 @@
 # Caissa Chess Engine
 UCI command-line chess engine written in C++ from scratch. In development since beginning of 2021.
 
-### Strength
+### Playing strength
 
-Estimated Score of the newest version: **3240 Elo**
-CCRL Blitz Score: **3182 Elo** (#62) (version 0.7.0)
+Estimated score of the newest version: **~3290 Elo**
+
+CCRL 40/15 Score: **3218** (#45) (version 0.8.0)
+
+CCRL 2+1 Score: **3191** (#62) (version 0.7.0)
 
 ### Supported UCI options
 
@@ -46,7 +49,7 @@ CCRL Blitz Score: **3182 Elo** (#62) (version 0.7.0)
 
 #### Evaluation
 * Custom neural network
-  * 704&rarr;512&rarr;32&rarr;64&rarr;1 layers architecture
+  * 704&rarr;256&rarr;32&rarr;32&rarr;1 layers architecture
   * effectively updated first layer, AVX2/SSE accelerated
   * clipped-ReLU activation function
   * absolute piece coordinates with horizontal symmetry, no king-relative features
