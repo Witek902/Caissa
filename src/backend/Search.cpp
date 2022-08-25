@@ -37,9 +37,11 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 static const int32_t MaxDepthReduction = 8;
 static const int32_t LateMoveReductionStartDepth = 3;
 
-static const int32_t AspirationWindowMax = 80;
-static const int32_t AspirationWindowMin = 25;
-static const int32_t AspirationWindowStep = 5;
+static const int32_t AspirationWindowDepthStart = 6;
+static const int32_t AspirationWindowMaxSize = 500;
+static const int32_t AspirationWindowStart = 40;
+static const int32_t AspirationWindowEnd = 20;
+static const int32_t AspirationWindowStep = 4;
 
 static const int32_t SingularExtensionScoreMarigin = 10;
 
@@ -569,23 +571,24 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 {
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
+    uint32_t depth = param.depth;
 
     // decrease aspiration window with increasing depth
-    int32_t aspirationWindow = AspirationWindowMax - param.depth * AspirationWindowStep;
-    aspirationWindow = std::max<int32_t>(AspirationWindowMin, aspirationWindow);
-    ASSERT(aspirationWindow > 0);
+    int32_t window = AspirationWindowStart - (param.depth - AspirationWindowDepthStart) * AspirationWindowStep;
+    window = std::max<int32_t>(AspirationWindowEnd, window);
+    ASSERT(window > 0);
 
-    // scale aspiration window based on score
-    aspirationWindow = (128 + std::abs(param.previousScore) / 4) * aspirationWindow / 128;
+    // increase window based on score
+    window += std::abs(param.previousScore) / 10;
 
     // start applying aspiration window at given depth
-    if (param.depth > 5 &&
+    if (param.depth >= AspirationWindowDepthStart &&
         param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(thread, param.searchContext, true))
     {
-        alpha = std::max<int32_t>(param.previousScore - aspirationWindow, -InfValue);
-        beta = std::min<int32_t>(param.previousScore + aspirationWindow, InfValue);
+        alpha = std::max<int32_t>(param.previousScore - window, -InfValue);
+        beta = std::min<int32_t>(param.previousScore + window, InfValue);
     }
 
     PvLine pvLine; // working copy
@@ -595,12 +598,14 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     for (;;)
     {
+        //std::cout << "Window: " << alpha << " ... " << beta << std::endl;
+
         NodeInfo rootNode;
         rootNode.position = param.position;
         rootNode.isInCheck = param.position.IsInCheck();
         rootNode.isPvNode = true;
         rootNode.isPvNodeFromPrevIteration = true;
-        rootNode.depth = param.depth;
+        rootNode.depth = depth;
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
@@ -616,25 +621,33 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         // flush pending per-thread stats
         param.searchContext.stats.Append(thread.stats);
 
+        // increase window, fallback to full window after some treshold
+        window = 2 * window + 5;
+        if (window > AspirationWindowMaxSize) window = CheckmateValue;
+
         BoundsType boundsType = BoundsType::Exact;
 
-        aspirationWindow *= 2;
-        if (aspirationWindow > 400) aspirationWindow = CheckmateValue;
-        
         // out of aspiration window, redo the search in wider score range
         if (pvLine.score <= alpha)
         {
             pvLine.score = ScoreType(alpha);
-            alpha -= aspirationWindow;
+            beta = (alpha + beta + 1) / 2;
+            alpha = pvLine.score - window;
             alpha = std::max<int32_t>(alpha, -CheckmateValue);
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
         {
             pvLine.score = ScoreType(beta);
-            beta += aspirationWindow;
+            beta += window;
             beta = std::min<int32_t>(beta, CheckmateValue);
             boundsType = BoundsType::LowerBound;
+
+            // reduce re-search depth
+            if (depth > AspirationWindowDepthStart && depth + 3 > param.depth)
+            {
+                depth--;
+            }
         }
 
         const bool stopSearch = param.depth > 1 && CheckStopCondition(thread, param.searchContext, true);
@@ -992,11 +1005,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
 
-    const ScoreType oldAlpha = node.alpha;
-    ScoreType bestValue = -InfValue;
-    ScoreType staticEval = InvalidValue;
-    bool tbHit = false;
-
     // mate distance pruning
     if (!isRootNode)
     {
@@ -1004,6 +1012,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node.height - 1, beta);
         if (alpha >= beta) return alpha;
     }
+
+    const ScoreType oldAlpha = node.alpha;
+    ScoreType bestValue = -InfValue;
+    ScoreType staticEval = InvalidValue;
+    bool tbHit = false;
 
     // transposition table lookup
     TTEntry ttEntry;
