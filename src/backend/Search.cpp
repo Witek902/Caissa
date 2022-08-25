@@ -10,10 +10,6 @@
 #include "PositionHash.hpp"
 #include "Score.hpp"
 
-#ifdef USE_TABLE_BASES
-    #include "tablebase/tbprobe.h"
-#endif // USE_TABLE_BASES
-
 #include <iostream>
 #include <sstream>
 #include <cstring>
@@ -202,7 +198,16 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
         {
             int32_t wdl = 0;
             Move tbMove;
-            if (ProbeTablebase_Root(game.GetPosition(), tbMove, nullptr, &wdl))
+
+            if (ProbeGaviota_Root(game.GetPosition(), tbMove, nullptr, &wdl))
+            {
+                ASSERT(tbMove.IsValid());
+                outResult.front().moves.push_back(tbMove);
+                outResult.front().tbScore = static_cast<ScoreType>(wdl * TablebaseWinValue);
+                return;
+            }
+
+            if (ProbeSyzygy_Root(game.GetPosition(), tbMove, nullptr, &wdl))
             {
                 ASSERT(tbMove.IsValid());
                 outResult.front().moves.push_back(tbMove);
@@ -1032,7 +1037,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (!isRootNode &&
             (node.depth >= WdlTablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
             position.GetNumPieces() <= WdlTablebaseProbeMaxNumPieces &&
-            ProbeTablebase_WDL(position, &wdl))
+            (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
             tbHit = true;
 #ifdef COLLECT_SEARCH_STATS

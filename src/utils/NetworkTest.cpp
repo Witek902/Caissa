@@ -16,7 +16,7 @@ static const uint32_t cBatchSize = 10;
 bool TestNetwork()
 {
     nn::NeuralNetwork network;
-    network.Init(2, { nn::FirstLayerSize, 16, 1 });
+    network.Init(2, { 64, 16, 1 });
 
     nn::NeuralNetworkRunContext networkRunCtx;
     networkRunCtx.Init(network);

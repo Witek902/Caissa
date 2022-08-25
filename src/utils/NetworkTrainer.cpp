@@ -26,8 +26,8 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 10000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 32 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 32 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
 static const uint32_t cBatchSize = 128;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
@@ -70,14 +70,14 @@ bool TrainNetwork()
     nn::NeuralNetwork checkpointNetwork;
     checkpointNetwork.Load("eval_fullSymmetrical.nn");
 
-    const uint32_t numNetworks = 16;
+    const uint32_t numNetworks = 2;
 
     std::vector<PerThreadData> networksData;
     networksData.resize(numNetworks);
 
     for (uint32_t i = 0; i < numNetworks; ++i)
     {
-        networksData[i].network.Init(cNumNetworkInputs, { nn::FirstLayerSize, 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
+        networksData[i].network.Init(cNumNetworkInputs, { 256, 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
         networksData[i].runCtx.Init(networksData[i].network);
     }
 
@@ -124,7 +124,7 @@ bool TrainNetwork()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.0001f * iteration));
+        float learningRate = std::max(0.05f, 0.8f / (1.0f + 0.0001f * iteration));
 
         std::mutex mutex;
         float trainingTime = 0.0f;
@@ -155,7 +155,6 @@ bool TrainNetwork()
 
                     TimePoint startTime = TimePoint::GetCurrent();
                     data.trainer.Train(data.network, batch, cBatchSize, learningRate);
-                    data.network.QuantizeWeights();
                     TimePoint endTime = TimePoint::GetCurrent();
 
                     {

@@ -9,8 +9,26 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="tablebase">
+    <Filter Include="syzygy">
       <UniqueIdentifier>{3757118d-478d-43bc-8cd9-888d8625def8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota">
+      <UniqueIdentifier>{488b4dea-32d7-4868-bea7-3351d27b025a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota\compression">
+      <UniqueIdentifier>{b35bbe69-bf91-48b9-a6c3-8c14449a5dd4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota\compression\zlib">
+      <UniqueIdentifier>{5dfe9d32-a7bb-44dd-84c2-7c5276755046}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota\compression\lzma">
+      <UniqueIdentifier>{06addc9c-83d6-4854-b77d-1bfd48460650}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota\compression\huffman">
+      <UniqueIdentifier>{d1aab7f8-893d-4940-9f87-8161f11ac675}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gaviota\compression\liblzf">
+      <UniqueIdentifier>{1f3f6026-9ee0-4c2d-85a0-088662396fc6}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -40,9 +58,6 @@
     </ClCompile>
     <ClCompile Include="MoveList.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tablebase\tbprobe.c">
-      <Filter>tablebase</Filter>
     </ClCompile>
     <ClCompile Include="Game.cpp">
       <Filter>Source Files</Filter>
@@ -95,6 +110,87 @@
     <ClCompile Include="NeuralNetworkEvaluator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="syzygy\tbprobe.c">
+      <Filter>syzygy</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\gtb-dec.c">
+      <Filter>gaviota</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\gtb-probe.c">
+      <Filter>gaviota</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\gtb-att.c">
+      <Filter>gaviota</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\crc32.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\deflate.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\infback.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\inffast.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\inflate.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\inftrees.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\trees.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\uncompr.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\zcompress.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\zutil.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\zlib\adler32.c">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\LzFind.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\Lzma86Dec.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\Lzma86Enc.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\LzmaDec.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\LzmaEnc.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\Alloc.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\lzma\Bra86.c">
+      <Filter>gaviota\compression\lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\huffman\hzip.c">
+      <Filter>gaviota\compression\huffman</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\liblzf\lzf_d.c">
+      <Filter>gaviota\compression\liblzf</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\liblzf\lzf_c.c">
+      <Filter>gaviota\compression\liblzf</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\compression\wrap.c">
+      <Filter>gaviota\compression</Filter>
+    </ClCompile>
+    <ClCompile Include="gaviota\sysport\sysport.c">
+      <Filter>gaviota</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -129,15 +225,6 @@
     </ClInclude>
     <ClInclude Include="MoveList.hpp">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tablebase\stdendian.h">
-      <Filter>tablebase</Filter>
-    </ClInclude>
-    <ClInclude Include="tablebase\tbconfig.h">
-      <Filter>tablebase</Filter>
-    </ClInclude>
-    <ClInclude Include="tablebase\tbprobe.h">
-      <Filter>tablebase</Filter>
     </ClInclude>
     <ClInclude Include="Game.hpp">
       <Filter>Header Files</Filter>
@@ -192,6 +279,48 @@
     </ClInclude>
     <ClInclude Include="Pawns.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="syzygy\stdendian.h">
+      <Filter>syzygy</Filter>
+    </ClInclude>
+    <ClInclude Include="syzygy\tbconfig.h">
+      <Filter>syzygy</Filter>
+    </ClInclude>
+    <ClInclude Include="syzygy\tbprobe.h">
+      <Filter>syzygy</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\deflate.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\inffast.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\inffixed.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\inflate.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\inftrees.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\trees.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\zconf.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\zconf.in.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\zlib.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\zutil.h">
+      <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="gaviota\compression\zlib\crc32.h">
+      <Filter>gaviota\compression\zlib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

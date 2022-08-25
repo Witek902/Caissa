@@ -6,6 +6,7 @@
 #include <cmath>
 
 #if defined(PLATFORM_WINDOWS)
+    #define WIN32_LEAN_AND_MEAN
     #ifndef NOMINMAX
     #define NOMINMAX
     #endif // NOMINMAX
@@ -19,7 +20,7 @@ class NeuralNetwork;
 static constexpr uint32_t CurrentVersion = 3;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t FirstLayerSize = 256;
+static constexpr uint32_t FirstLayerMaxSize = 512;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -51,7 +52,7 @@ using LastLayerBiasType = int32_t;
 
 struct alignas(CACHELINE_SIZE) Accumulator
 {
-    AccumulatorType values[FirstLayerSize];
+    AccumulatorType values[FirstLayerMaxSize];
 
     void Refresh(
         const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,

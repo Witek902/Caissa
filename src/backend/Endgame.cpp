@@ -746,7 +746,7 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
-    if (pos.Whites().rooks.Count() == 1 && pos.Blacks().pawns.Count() == 1)
+    if (pos.Whites().rooks.Count() == 1 && pos.Blacks().pawns.Count() == 1 && pos.GetSideToMove() == Color::White)
     {
         const Square strongKing(FirstBitSet(pos.Whites().king));
         const Square weakKing(FirstBitSet(pos.Blacks().king));
@@ -1052,74 +1052,6 @@ static bool EvaluateEndgame_KRPvKR(const Position& pos, int32_t& outScore)
             outScore = 0;
             return true;
         }
-
-        static const int16_t strongPawnPsqt[] =
-        {
-              0,      0,      0,      0,      0,      0,      0,      0,
-             84,    151,    136,    105,    105,    136,    151,     84,
-             91,    157,    143,    115,    115,    143,    157,     91,
-            141,    189,    179,    168,    168,    179,    189,    141,
-            190,    222,    217,    216,    216,    217,    222,    190,
-            290,    304,    303,    310,    310,    303,    304,    290,
-            247,    260,    263,    266,    266,    263,    260,    247,
-              0,      0,      0,      0,      0,      0,      0,      0,
-        };
-        static const int16_t strongRookPsqt[] =
-        {
-            151,    156,    161,    166,    166,    161,    156,    151,
-            158,    160,    166,    173,    173,    166,    160,    158,
-            162,    165,    170,    177,    177,    170,    165,    162,
-            176,    180,    185,    190,    190,    185,    180,    176,
-            181,    187,    191,    195,    195,    191,    187,    181,
-            178,    184,    188,    191,    191,    188,    184,    178,
-            176,    184,    189,    192,    192,    189,    184,    176,
-            200,    208,    213,    217,    217,    213,    208,    200,
-        };
-        static const int16_t strongKingPsqt[] =
-        {
-             76,     87,    100,    106,    106,    100,     87,     76,
-            101,    114,    137,    148,    148,    137,    114,    101,
-            131,    156,    187,    200,    200,    187,    156,    131,
-            151,    189,    228,    240,    240,    228,    189,    151,
-            168,    216,    262,    278,    278,    262,    216,    168,
-            177,    234,    280,    302,    302,    280,    234,    177,
-            167,    216,    261,    281,    281,    261,    216,    167,
-            150,    188,    219,    234,    234,    219,    188,    150,
-        };
-        static const int16_t weakRookPsqt[] =
-        {
-            211,    213,    205,    198,    198,    205,    213,    211,
-            207,    209,    201,    197,    197,    201,    209,    207,
-            197,    198,    189,    184,    184,    189,    198,    197,
-            181,    179,    168,    163,    163,    168,    179,    181,
-            180,    175,    163,    156,    156,    163,    175,    180,
-            182,    176,    163,    154,    154,    163,    176,    182,
-            183,    172,    158,    149,    149,    158,    172,    183,
-            174,    169,    159,    154,    154,    159,    169,    174,
-        };
-        static const int16_t weakKingPsqt[] =
-        {
-            384,    350,    320,    308,    308,    320,    350,    384,
-            324,    281,    246,    232,    232,    246,    281,    324,
-            272,    232,    196,    178,    178,    196,    232,    272,
-            228,    186,    152,    133,    133,    152,    186,    228,
-            196,    151,    116,     97,     97,    116,    151,    196,
-            176,    128,     92,     71,     71,     92,    128,    176,
-            170,    123,     87,     67,     67,     87,    123,    170,
-            187,    135,    107,     93,     93,    107,    135,    187,
-        };
-
-        outScore = (
-            strongPawnPsqt[strongPawn.mIndex] +
-            strongRookPsqt[strongRook.mIndex] +
-            strongKingPsqt[strongKing.mIndex] +
-            weakRookPsqt[weakRook.mIndex] +
-            weakKingPsqt[weakKing.mIndex]) / 5;
-
-        outScore += 16 * Square::Distance(weakKing, queeningSquare);
-        outScore -= 16 * Square::Distance(strongKing, queeningSquare);
-
-        return true;
     }
 
     return false;

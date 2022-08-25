@@ -12,6 +12,7 @@
 #include <memory>
 
 const char* c_DefaultEvalFile = "eval-3.pnn";
+const char* c_DefaultEndgameEvalFile = "endgame-3.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -94,20 +95,8 @@ const PieceScore KingPSQT[Square::NumSquares] =
 };
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
-static std::unordered_map<MaterialKey, PackedNeuralNetworkPtr> g_neuralNetworks;
-PackedNeuralNetworkPtr g_mainNeuralNetwork;
-
-static void LoadNetworkForMaterialKey(const MaterialKey key)
-{
-    const std::string path = "../../data/networks/" + key.ToString() + ".pnn";
-
-    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
-    if (network->Load(path.c_str()))
-    {
-        std::cout << "info string Loaded neural network: " << path.c_str() << std::endl;
-        g_neuralNetworks[key] = std::move(network);
-    }
-}
+static PackedNeuralNetworkPtr g_mainNeuralNetwork;
+static PackedNeuralNetworkPtr g_endgameNeuralNetwork;
 
 bool LoadMainNeuralNetwork(const char* path)
 {
@@ -123,6 +112,20 @@ bool LoadMainNeuralNetwork(const char* path)
     return false;
 }
 
+bool LoadEndgameNeuralNetwork(const char* path)
+{
+    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
+    if (network->Load(path))
+    {
+        g_endgameNeuralNetwork = std::move(network);
+        std::cout << "info string Loaded endgame neural network: " << path << std::endl;
+        return true;
+    }
+
+    g_endgameNeuralNetwork.reset();
+    return false;
+}
+
 static std::string GetDefaultEvalFilePath()
 {
     std::string path = GetExecutablePath();
@@ -131,7 +134,6 @@ static std::string GetDefaultEvalFilePath()
     {
         path = path.substr(0, path.find_last_of("/\\")); // remove exec name
         path += "/";
-        path += c_DefaultEvalFile;
     }
 
     return path;
@@ -141,7 +143,7 @@ bool TryLoadingDefaultEvalFile()
 {
     // check if there's eval file in same directory as executable
     {
-        std::string path = GetDefaultEvalFilePath();
+        std::string path = GetDefaultEvalFilePath() + c_DefaultEvalFile;
         if (!path.empty())
         {
             bool fileExists = false;
@@ -166,6 +168,44 @@ bool TryLoadingDefaultEvalFile()
         }
 
         if (fileExists && LoadMainNeuralNetwork(c_DefaultEvalFile))
+        {
+            return true;
+        }
+    }
+
+    std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
+    return false;
+}
+
+bool TryLoadingDefaultEndgameEvalFile()
+{
+    // check if there's eval file in same directory as executable
+    {
+        std::string path = GetDefaultEvalFilePath() + c_DefaultEndgameEvalFile;
+        if (!path.empty())
+        {
+            bool fileExists = false;
+            {
+                std::ifstream f(path.c_str());
+                fileExists = f.good();
+            }
+
+            if (fileExists && LoadEndgameNeuralNetwork(path.c_str()))
+            {
+                return true;
+            }
+        }
+    }
+
+    // try working directory
+    {
+        bool fileExists = false;
+        {
+            std::ifstream f(c_DefaultEndgameEvalFile);
+            fileExists = f.good();
+        }
+
+        if (fileExists && LoadEndgameNeuralNetwork(c_DefaultEndgameEvalFile))
         {
             return true;
         }
@@ -268,6 +308,7 @@ bool CheckInsufficientMaterial(const Position& position)
 ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
 {
     const MaterialKey materialKey = position.GetMaterialKey();
+    const uint32_t numPieces = position.GetNumPieces();
 
     // check endgame evaluation first
     {
@@ -276,41 +317,6 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
         {
             ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
             return (ScoreType)endgameScore;
-        }
-    }
-
-    if (!g_neuralNetworks.empty())
-    {
-        if (position.GetSideToMove() == Color::White)
-        {
-            const auto iter = g_neuralNetworks.find(materialKey);
-            if (iter != g_neuralNetworks.end())
-            {
-                const PackedNeuralNetworkPtr& network = iter->second;
-                int32_t nnScore = NNEvaluator::Evaluate(*network, position, NetworkInputMapping::MaterialPacked_Symmetrical);
-
-                // convert to centipawn range
-                nnScore = (nnScore * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
-
-                ASSERT(nnScore < TablebaseWinValue&& nnScore > -TablebaseWinValue);
-                return (ScoreType)nnScore;
-            }
-        }
-        else
-        {
-            const MaterialKey swappedMaterialKey = materialKey.SwappedColors();
-            const auto iter = g_neuralNetworks.find(swappedMaterialKey);
-            if (iter != g_neuralNetworks.end())
-            {
-                const PackedNeuralNetworkPtr& network = iter->second;
-                int32_t nnScore = NNEvaluator::Evaluate(*network, position.SwappedColors(), NetworkInputMapping::MaterialPacked_Symmetrical);
-
-                // convert to centipawn range
-                nnScore = -((nnScore * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale);
-
-                ASSERT(nnScore < TablebaseWinValue && nnScore > -TablebaseWinValue);
-                return (ScoreType)nnScore;
-            }
         }
     }
 
@@ -416,12 +422,24 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
     // accumulate middle/end game scores
     value += InterpolateScore(position, valueMG, valueEG);
 
-    // use neural network for balanced positions
-    if (useNN && g_mainNeuralNetwork && std::abs(value) < c_nnTresholdMax)
+    const nn::PackedNeuralNetwork* networkToUse = nullptr;
+    bool useIncrementalUpdate = false;
+    if (numPieces >= 4 && numPieces <= 5)
     {
-        int32_t nnValue = nodeInfo ?
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, position, NetworkInputMapping::Full_Symmetrical);
+        networkToUse = g_endgameNeuralNetwork.get();
+    }
+    if (!networkToUse)
+    {
+        networkToUse = g_mainNeuralNetwork.get();
+        useIncrementalUpdate = true;
+    }
+
+    // use neural network for balanced positions
+    if (useNN && networkToUse && std::abs(value) < c_nnTresholdMax)
+    {
+        int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
+            NNEvaluator::Evaluate(*networkToUse, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
+            NNEvaluator::Evaluate(*networkToUse, position, NetworkInputMapping::Full_Symmetrical);
 
         // convert to centipawn range
         nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;

@@ -2,11 +2,17 @@
 
 #include "Common.hpp"
 
-bool HasTablebases();
+bool HasSyzygyTablebases();
+bool HasGaviotaTablebases();
 
-void LoadTablebase(const char* path);
+void LoadSyzygyTablebase(const char* path);
+void LoadGaviotaTablebase(const char* path);
+void SetGaviotaCacheSize(size_t cacheSize);
 
 void UnloadTablebase();
 
-bool ProbeTablebase_Root(const Position& pos, Move& outMove, uint32_t* outDistanceToZero = nullptr, int32_t* outWDL = nullptr);
-bool ProbeTablebase_WDL(const Position& pos, int32_t* outWDL);
+bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDTZ = nullptr, int32_t* outWDL = nullptr);
+bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL);
+
+bool ProbeGaviota(const Position& pos, uint32_t* outDTM = nullptr, int32_t* outWDL = nullptr);
+bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM = nullptr, int32_t* outWDL = nullptr);
