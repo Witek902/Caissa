@@ -418,7 +418,13 @@ bool NeuralNetwork::Load(const char* filePath)
 {
     FILE* file = fopen(filePath, "rb");
 
-    uint32_t numLayers = (uint32_t)layers.size();
+    if (!file)
+    {
+        std::cout << "Failed to load neural network: " << filePath << std::endl;
+        return false;
+    }
+
+    uint32_t numLayers = 0;
     if (1 != fread(&numLayers, sizeof(uint32_t), 1, file))
     {
         fclose(file);
@@ -446,6 +452,7 @@ bool NeuralNetwork::Load(const char* filePath)
         return false;
     }
 
+    layers.clear();
     layers.reserve(numLayers);
     uint32_t prevLayerSize = numInputs;
 
@@ -628,6 +635,9 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
 
 void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
 {
+    biasRange *= 0.98f;
+    weightRange *= 0.98f;
+
     Layer& layer = layers[layerIndex];
 
     for (uint32_t j = 0; j < layer.numInputs; j++)
@@ -645,12 +655,6 @@ void NeuralNetwork::QuantizeLayerWeights(size_t layerIndex, float weightRange, f
             else
             {
                 w = std::clamp(w * weightQuantizationScale, -weightRange, weightRange) / weightQuantizationScale;
-
-                // avoid rounding to zero in later layers
-                //if (layerIndex > 0 && std::abs(w * biasQuantizationScale) <= 0.5f)
-                //{
-                //    w = (w > 0.0f ? 1.0f : -1.0f) / (isBiasWeight ? biasQuantizationScale : weightQuantizationScale);
-                //}
             }
         }
     }
@@ -754,9 +758,9 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
         {
             network.layers[i].UpdateWeights_AdaDelta(learningRate, gradients[i]);
         }
-    }
 
-    //network.QuantizeWeights();
+        network.QuantizeWeights();
+    }
 }
 
 void NeuralNetwork::QuantizeWeights()
@@ -864,8 +868,8 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
 bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 {
     ASSERT(layers.size() == 4);
-    ASSERT(layers[0].numOutputs == FirstLayerSize);
-    ASSERT(layers[1].numInputs == FirstLayerSize);
+    ASSERT(layers[0].numOutputs <= FirstLayerMaxSize);
+    ASSERT(layers[1].numInputs <= FirstLayerMaxSize);
     ASSERT(layers[3].numOutputs == 1);
 
     if (!outNetwork.Resize(layers[0].numInputs,

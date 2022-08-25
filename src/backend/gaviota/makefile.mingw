@@ -1,0 +1,93 @@
+
+INCLUDE = -Isysport/ \
+	  -Icompression/ \
+	  -Icompression/liblzf/ \
+	  -Icompression/zlib/ \
+	  -Icompression/lzma/ \
+	  -Icompression/huffman/
+
+MAKE = make -f makefile.mingw
+AR = i386-mingw32-ar
+RANLIB = i386-mingw32-ranlib
+DEFAULT_CC = i386-mingw32-gcc
+DEFAULT_DEFINE = -DZ_PREFIX
+DEFAULT_ARCHFLAGS = -m32
+DEFAULT_CFLAGS = -Wall -Wextra $(INCLUDE) $(DEFAULT_DEFINE) \
+		 $(DEFAULT_ARCHFLAGS) -DMINGW
+OPTFLAGS = -O3 -msse -DNDEBUG
+DEBUGFLAGS = -O0 -g -DDEBUG
+PGO1FLAGS = $(OPTFLAGS) -fprofile-generate
+PGO2FLAGS = $(OPTFLAGS) -fprofile-use
+
+SRCFILES := gtb-probe.c gtb-dec.c gtb-att.c sysport/sysport.c \
+	   compression/wrap.c compression/huffman/hzip.c \
+	   compression/lzma/LzmaEnc.c compression/lzma/LzmaDec.c \
+	   compression/lzma/Alloc.c compression/lzma/LzFind.c \
+	   compression/lzma/Lzma86Enc.c compression/lzma/Lzma86Dec.c \
+	   compression/lzma/Bra86.c compression/zlib/zcompress.c \
+	   compression/zlib/uncompr.c compression/zlib/inflate.c \
+	   compression/zlib/deflate.c compression/zlib/adler32.c \
+	   compression/zlib/crc32.c compression/zlib/infback.c \
+	   compression/zlib/inffast.c compression/zlib/inftrees.c \
+	   compression/zlib/trees.c compression/zlib/zutil.c \
+	   compression/liblzf/lzf_c.c compression/liblzf/lzf_d.c
+OBJFILES := $(patsubst %.c,%.o,$(SRCFILES))
+PROFFILES := $(SRCFILES:.c=.gcno) $(SRCFILES:.c=.gcda)
+LIBNAME := libgtb.a
+
+.PHONY: all clean
+.DEFAULT_GOAL := all
+
+all:
+	$(MAKE) $(LIBNAME) \
+	    CC='$(DEFAULT_CC)' \
+	    ARCHFLAGS='$(DEFAULT_ARCHFLAGS)' \
+	    DEFINE='$(DEFAULT_DEFINE)' \
+	    CFLAGS='$(OPPTFLAGS) $(DEFAULT_CFLAGS)'
+
+$(LIBNAME): $(OBJFILES)
+	$(AR) rcs $@ $(OBJFILES)
+	$(RANLIB) $@
+
+opt:
+	$(MAKE) $(LIBNAME) \
+	    CC='$(DEFAULT_CC)' \
+	    ARCHFLAGS='$(DEFAULT_ARCHFLAGS)' \
+	    DEFINE='$(DEFAULT_DEFINE)' \
+	    CFLAGS='$(OPTFLAGS) $(DEFAULT_CFLAGS)' \
+	    LDFLAGS='$(LDFLAGS)'
+
+debug:
+	$(MAKE) $(LIBNAME) \
+	    CC='$(DEFAULT_CC)' \
+	    ARCHFLAGS='$(DEFAULT_ARCHFLAGS)' \
+	    DEFINE='$(DEFAULT_DEFINE)' \
+	    CFLAGS='$(DEBUGFLAGS) $(DEFAULT_CFLAGS)' \
+	    LDFLAGS='$(LDFLAGS)'
+
+pgo-start:
+	$(MAKE) $(LIBNAME) \
+	    CC='$(DEFAULT_CC)' \
+	    ARCHFLAGS='$(DEFAULT_ARCHFLAGS)' \
+	    DEFINE='$(DEFAULT_DEFINE)' \
+	    CFLAGS='$(PGO1FLAGS) $(DEFAULT_CFLAGS)' \
+	    LDFLAGS='$(LDFLAGS) -fprofile-generate'
+
+pgo-finish:
+	$(MAKE) $(LIBNAME) \
+	    CC='$(DEFAULT_CC)' \
+	    ARCHFLAGS='$(DEFAULT_ARCHFLAGS)' \
+	    DEFINE='$(DEFAULT_DEFINE)' \
+	    CFLAGS='$(PGO2FLAGS) $(DEFAULT_CFLAGS)' \
+	    LDFLAGS='$(LDFLAGS) -fprofile-generate'
+
+clean:
+	$(RM) -f $(OBJFILES) $(LIBNAME)
+
+pgo-clean:
+	$(RM) -f $(PROFFILES)
+
+.depend:
+	$(CC) -MM $(DEFAULT_CFLAGS) $(SRCFILES) > $@
+
+include .depend

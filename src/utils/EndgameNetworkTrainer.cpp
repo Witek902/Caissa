@@ -25,8 +25,8 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 10000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 32 * 1024;
-static const uint32_t cBatchSize = 64;
+static const uint32_t cNumTrainingVectorsPerIteration = 4 * 1024;
+static const uint32_t cBatchSize = 128;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -34,7 +34,8 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
 
     uint16_t features[maxFeatures];
     //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_KingPiece_Symmetrical);
-    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
+    //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
+    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
@@ -47,11 +48,6 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
     }
 }
 
-static float ScoreToNN(float score)
-{
-    return score;
-}
-
 static float ScoreFromNN(float score)
 {
     return std::clamp(score, 0.0f, 1.0f);
@@ -59,58 +55,69 @@ static float ScoreFromNN(float score)
 
 bool TrainEndgame()
 {
-    TranspositionTable tt{ 2048ull * 1024ull * 1024ull };
-    std::vector<Search> searchArray{ std::thread::hardware_concurrency() };
-
-    SearchParam searchParam{ tt };
-    searchParam.limits.maxDepth = 10;
-    searchParam.limits.maxNodes = 100000;
-    searchParam.limits.analysisMode = true;
-    searchParam.debugLog = false;
-
     struct TrainingEntry
     {
         Position pos;
         nn::TrainingVector trainingVector;
     };
 
-    MaterialKey materialKey;
-    materialKey.numWhitePawns   = 0;
-    materialKey.numWhiteKnights = 0;
-    materialKey.numWhiteBishops = 0;
-    materialKey.numWhiteRooks   = 1;
-    materialKey.numWhiteQueens  = 0;
-    materialKey.numBlackPawns   = 1;
-    materialKey.numBlackKnights = 0;
-    materialKey.numBlackBishops = 0;
-    materialKey.numBlackRooks   = 1;
-    materialKey.numBlackQueens  = 0;
-
-    std::cout << "Training network for: " << materialKey.ToString() << "..." << std::endl;
-
-
-    std::random_device randomDevice;
-
     const auto generateTrainingSet = [&](TaskBuilder& taskBuilder, std::vector<TrainingEntry>& outSet)
     {
         taskBuilder.ParallelFor("", (uint32_t)outSet.size(), [&](const TaskContext&, const uint32_t i)
         {
+            const uint32_t longestDTM = 253; // for 5 pieces
+
+            std::random_device randomDevice;
             std::mt19937 randomGenerator(randomDevice());
+            std::uniform_int_distribution<uint32_t> pieceIndexDistr(0, 9);
+            std::uniform_int_distribution<uint32_t> scoreDistr(0, 18);
+            std::uniform_int_distribution<uint32_t> numPiecesDistr(0, 63);
 
             for (;;)
             {
+                MaterialKey materialKey;
+
+                const uint32_t numPieces = numPiecesDistr(randomGenerator) == 0 ? 4 : 5;
+
+                for (uint32_t j = 0; j < numPieces - 2; ++j)
+                {
+                    const uint32_t pieceIndex = pieceIndexDistr(randomGenerator);
+                    ASSERT(pieceIndex < 10);
+                    switch (pieceIndex)
+                    {
+                    case 0: materialKey.numWhitePawns++; break;
+                    case 1: materialKey.numWhiteKnights++; break;
+                    case 2: materialKey.numWhiteBishops++; break;
+                    case 3: materialKey.numWhiteRooks++; break;
+                    case 4: materialKey.numWhiteQueens++; break;
+                    case 5: materialKey.numBlackPawns++; break;
+                    case 6: materialKey.numBlackKnights++; break;
+                    case 7: materialKey.numBlackBishops++; break;
+                    case 8: materialKey.numBlackRooks++; break;
+                    case 9: materialKey.numBlackQueens++; break;
+                    }
+                }
+
+                // generate unbalanced positions with lower probability
+                const int64_t whitesScore = materialKey.numWhitePawns + 3 * materialKey.numWhiteKnights + 3 * materialKey.numWhiteBishops + 5 * materialKey.numWhiteRooks + 9 * materialKey.numWhiteQueens;
+                const int64_t blacksScore = materialKey.numBlackPawns + 3 * materialKey.numBlackKnights + 3 * materialKey.numBlackBishops + 5 * materialKey.numBlackRooks + 9 * materialKey.numBlackQueens;
+                const int64_t scoreDiff = std::abs(whitesScore - blacksScore);
+                if (scoreDiff > 2)
+                {
+                    if (scoreDistr(randomGenerator) < scoreDiff) continue;
+                }
+
                 Position pos;
                 GenerateRandomPosition(randomGenerator, materialKey, pos);
 
                 // generate only quiet position
-                if (!pos.IsQuiet())
+                if (!pos.IsQuiet() || pos.GetNumLegalMoves() == 0)
                 {
                     continue;
                 }
 
-                uint32_t dtz = 0;
                 int32_t wdl = 0;
-                if (!ProbeTablebase_WDL(pos, &wdl))
+                if (!ProbeSyzygy_WDL(pos, &wdl))
                 {
                     continue;
                 }
@@ -118,18 +125,30 @@ bool TrainEndgame()
                 float score = 0.5f;
                 if (wdl != 0)
                 {
-                    Move tbMove;
-                    if (!ProbeTablebase_Root(pos, tbMove, &dtz, &wdl))
-                    {
-                        continue;
-                    }
+                    uint32_t gaviotaDTM = 0;
+                    int32_t gaviotaWDL = 0;
 
-                    if (wdl < 0) score = dtz / 200.0f;
-                    if (wdl > 0) score = 1.0f - dtz / 200.0f;
+                    if (ProbeGaviota(pos, &gaviotaDTM, &gaviotaWDL))
+                    {
+                        ASSERT(gaviotaDTM > 0);
+                        ASSERT(wdl == gaviotaWDL);
+
+                        const float power = 1.5f;
+                        const float scale = 0.45f;
+                        const float offset = 0.001f;
+
+                        if (wdl < 0) score = offset + scale * powf((float)(gaviotaDTM - 1) / (float)longestDTM, power);
+                        if (wdl > 0) score = 1.0f - offset - scale * powf((float)(gaviotaDTM - 1) / (float)longestDTM, power);
+                    }
+                    else
+                    {
+                        if (wdl < 0) score = 0.0f;
+                        if (wdl > 0) score = 1.0f;
+                    }
                 }
 
                 PositionToPackedVector(pos, outSet[i].trainingVector);
-                outSet[i].trainingVector.output[0] = ScoreToNN(score);
+                outSet[i].trainingVector.output[0] = score;
                 outSet[i].pos = pos;
 
                 break;
@@ -137,11 +156,15 @@ bool TrainEndgame()
         });
     };
 
-    const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
+    const uint32_t numNetworkInputs = 704;
+    //const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
     //const uint32_t numNetworkInputs = 2 * 3 * 32 * 64;
 
+    std::string name = "endgame_5_4";
+
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { nn::FirstLayerSize, 32, 32, 1 });
+    network.Init(numNetworkInputs, { 256, 32, 32, 1 });
+    network.Load((name + ".nn").c_str());
 
     nn::NeuralNetworkRunContext networkRunCtx;
     networkRunCtx.Init(network);
@@ -168,7 +191,7 @@ bool TrainEndgame()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = 1.0f / (1.0f + 0.0001f * iteration);
+        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.0002f * iteration));
 
         // use validation set from previous iteration as training set in the current one
         trainingSet = validationSet;
@@ -194,7 +217,6 @@ bool TrainEndgame()
 
             TimePoint startTime = TimePoint::GetCurrent();
             trainer.Train(network, batch, cBatchSize, learningRate);
-            network.QuantizeWeights();
             trainingTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
 
             network.ToPackedNetwork(packedNetwork);
@@ -250,10 +272,10 @@ bool TrainEndgame()
             {
                 std::cout
                     << validationSet[i].pos.ToFEN() << std::endl << validationSet[i].pos.Print() << std::endl
-                    << "True Score:     " << expectedValue << std::endl
-                    << "NN eval:        " << nnValue << std::endl
-                    << "Packed NN eval: " << nnPackedValue << std::endl
-                    << "Static eval:    " << evalValue << std::endl
+                    << "True Score:     " << expectedValue << " (" << WinProbabilityToCentiPawns(expectedValue) << ")" << std::endl
+                    << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
+                    << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
+                    << "Static eval:    " << evalValue << " (" << WinProbabilityToCentiPawns(evalValue) << ")" << std::endl
                     << std::endl;
             }
 
@@ -305,9 +327,9 @@ bool TrainEndgame()
 
         if (iteration % 10 == 0)
         {
-            network.Save((materialKey.ToString() + ".nn").c_str());
-            packedNetwork.Save((materialKey.ToString() + ".pnn").c_str());
-            packedNetwork.SaveAsImage((materialKey.ToString() + ".raw").c_str());
+            network.Save((name + ".nn").c_str());
+            packedNetwork.Save((name + ".pnn").c_str());
+            packedNetwork.SaveAsImage((name + ".raw").c_str());
         }
     }
 

@@ -647,4 +647,149 @@ b2b1r1k/3R1ppp/4qP2/4p1PQ/4P3/5B2/4N1K1/8 w - - bm g6; id "WAC.300";
 8/8/7p/3KNN1k/2p4p/8/3P2p1/8 w - - bm Kc6; id "Behting Study";
 2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - bm Qg3; id "Mate in 3";
 8/8/1b1ppNbB/nQr2k2/n1p3N1/1P2p1p1/2Kp1q2/1B1R1R2 w - - 0 1 bm Rc1; id "Mate in 2";
-8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1 bm a1b1; id "Lasker-Reichhelm";
+8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1 bm Kb1; id "Lasker-Reichhelm";
+r3r1k1/1pq2pp1/2p2n2/1PNn4/2QN2b1/6P1/3RPP2/2R3KB b - - bm Re3; id "WMT 01"; c0 "...Re8-e3 (K)"; 
+r1q2rk1/p2bb2p/1p1p2p1/2pPp2n/2P1PpP1/3B1P2/PP2QR1P/R1B2NK1 b - - bm Bxg4; id "WMT 02"; c0 "...Bd7xg4 (K)";
+3r1r2/pp1q2bk/2n1nppp/2p5/3pP1P1/P2P1NNQ/1PPB3P/1R3R1K w - - bm Nf5; id "WMT 03"; c0 "...Ng3-f5 (K)";
+2rr2k1/pp2b1pp/1nb1p3/5p2/1P1B4/P2BPP2/3NK1PP/R6R b - - bm e5; id "WMT 04"; c0 "...e6-e5 (K)";
+rnbqnrk1/5ppp/pp1b4/3NpP2/P2N4/8/1PP1B1PP/R1BQ1R1K w - - bm f6; id "WMT 05"; c0 "f5-f6 (K)";
+r3k1nr/pp1b1ppp/2n1p3/1B4B1/3N4/2q5/P1P2PPP/R2Q1RK1 w kq - bm Nf5; id "WMT 06"; c0 "Nd4-f5 (K)";
+r4k1r/pp2pp1p/8/2PPb3/Q7/4p3/B2q1PPP/2R2RK1 w - - bm Rcd1; id "WMT 07"; c0 "Rc1-d1 (K)";
+r2qrbk1/5ppp/pn1p4/np2P1P1/3p4/5N2/PPB2PP1/R1BQR1K1 w - - bm Bxh7+; id "WMT 08"; c0 "Bc2-h7+ (K)";
+rnbr2k1/pp3p2/1qp3pp/4Q1N1/4P3/2P3P1/PP3PBP/R3R1K1 w - - bm Nxf7; id "WMT 09"; c0 "Ng5xf7 (K)";
+r1bqr1k1/5p2/p2p1npb/1p1Pp2p/4P1P1/1PP1NPP1/2BBQ1K1/5R1R w - - bm Nf5; id "WMT 10"; c0 "Ne3-f5 (K)";
+r1b2rk1/p3bp1p/4pp2/n3p3/1p1qNP2/1B4N1/PPP3PP/R2Q1R1K w - - bm Qh5; id "WMT 11"; c0 "Qd1-h5 (K)";
+3q3r/4b1k1/4P1p1/rpp2p1p/1nn2Q2/5N1P/P4PP1/RBB1R1K1 w - - bm Bxf5; id "WMT 12"; c0 "Bb1xf5 (K)";
+1rb1r1k1/p1p1qppp/2pb4/8/2P3n1/4P1P1/PB2BP1P/R1QN1RK1 b - - bm Nxh2; id "WMT 13"; c0 "...Ng4xh2 (K)";
+q4bk1/pp1b1r1p/3p2n1/P2Pp3/1PB1Pp2/5Pn1/5RPP/2RQN1K1 b - - bm a6; id "WMT 14"; c0 "...a7-a6 (K)";
+b2r3r/k4p1p/p2q1np1/NppP4/3p1Q2/P4PPB/1PP4P/1K1RR3 w - - bm Rxd4; id "WMT 15"; c0 "Rd1xd4 (K)";
+r1k4r/1b1q1pp1/p6p/3n4/1B3Pn1/1P1B4/P1PQ3P/2KRR3 w - - bm Ba5; id "WMT 16"; c0 "Bb4-a5 (K)";
+6k1/p4p1p/1p3np1/8/3pr3/4P2q/PP3PRP/2RQ2K1 w - - bm Rc4; id "WMT 17"; c0 "Rc1-c4 (P)";
+r4rk1/2qbbppp/1pp1pn2/p7/1PNP4/P1N1P1P1/2Q2PBP/R4RK1 w - - bm Ne5; id "WMT 18"; c0 "Nc4-e5 (P)";
+r3k2r/pp3ppp/2n2n2/q2p4/1b4b1/P1N2N2/1P2BPPP/R1BQ1RK1 w kq - bm axb4; id "WMT 19"; c0 "a3xb4 (P)";
+Q3b3/2q1k1p1/5p1p/1pP1p3/nPnp4/3N2P1/4PPBP/B5K1 w - - bm f4; id "WMT 20"; c0 "f2-f4 (P)";
+r4rk1/1p1nbppp/p2p1n2/Pq1Pp3/8/1N2BB2/1PP2PPP/R2Q1RK1 w - - bm Qd3; id "WMT 21"; c0 "Qd1-d3 (P)";
+3q1rk1/1r3ppp/pp2Pb2/2p2Q2/3P4/6P1/PP3P1P/R1BR2K1 b - - bm Re7; id "WMT 22"; c0 "...Rb7-e7 (P)";
+r3r1k1/1bnq1pbn/p2p2p1/1p1P3p/2p1PP1B/P1N2B1P/1PQN2P1/3RR1K1 w - - bm e5; id "WMT 23"; c0 "e4-e5 (P)";
+2b2r1k/5qb1/2Np3p/2pNpn2/2P5/3PBQPp/P4P1P/5RK1 b - - bm Qe8; id "WMT 24"; c0 "...Qf7-e8 (P)";
+r2q1rk1/pp3p1p/3p2p1/4P3/2PQP1b1/2N5/PP4PP/R3K2R b KQ - bm Qh4+; id "WMT 25"; c0 "...Qd8-h4+ (P)";
+4k2r/1Q1nq1pp/5n2/5R2/4P3/8/PPr3PP/R1B3K1 w k - bm Bg5; id "WMT 26"; c0 "Bc1-g5 (P)";
+3r2k1/p3r2p/1pbpnbp1/2p1pp2/1PP4q/PBB1PP2/2QP2PP/3RNRK1 b - - bm Nd4; id "WMT 27"; c0 "...Ne6-d4 (P)";
+2q2r1k/4pp2/3p1np1/3P1P2/pP2P3/2p1N3/5PQP/2R3K1 b - - bm a3; id "WMT 28"; c0 "...a4-a3";
+5rk1/1p1bbr1p/1qp1p1p1/p1pnP3/4NP1P/6P1/PPQB2BK/4RR2 w - - bm Be3; id "WMT 29"; c0 "Bd2-e3 (P)";
+1q2k2r/1b1n2pp/3bNn2/8/1p2P3/5N2/1P2QPPP/2B2RK1 b k - bm h6; id "WMT 30"; c0 "...h7-h6 (P)";
+3q1rk1/r3bppp/p4n2/np1p2B1/7Q/5N2/PPB2PPP/3R1RK1 b - - bm h5; id "WMT 31"; c0 "...h7-h5 (P)";
+2r1r1k1/p2q2pn/2bn1p1p/P2p4/2pP2N1/2Q1PP1P/2B2BP1/R3R1K1 w - - bm e4; id "WMT 32"; c0 "e3-e4 (P)";
+8/8/4b3/2Bp2Pp/7P/1pK1Pk2/8/8 b - - bm d4+; id "WMT 33"; c0 "...d5-d4+ (E)";
+8/pp4pp/4k3/3rPp2/1Pr4P/2B1KPP1/1P6/4R3 b - - bm Rxc3+; id "WMT 34"; c0 "...Rc4xc3+ (E)";
+1r4k1/5p2/1p3npp/pR6/P1Pr3P/2R2B2/1P4P1/7K w - - bm c5; id "WMT 35"; c0 "c4-c5 (E)";
+2r2k2/4pp1p/P2p2p1/1prn4/3R1PPP/PK2R3/2P5/5B2 w - - bm Rxd5; id "WMT 36"; c0 "Rd4xd5 (E)";
+4kb2/8/2P4p/1p2B1pP/8/6p1/3K2P1/8 w - - bm Bf6; id "WMT 37"; c0 "Be5-f6 (E)";
+8/1k4n1/1p1p3p/2pPp1pP/1PP1P1P1/1K2N3/8/8 w - - bm Ka4; id "WMT 38"; c0 "Kb3-a4 (E)";
+8/1k4n1/3p3p/K1pPp1pP/2P1P1P1/4N3/8/8 w - - bm Kb5; id "WMT 39"; c0 "Ka5-b5 (E)";
+3Rnk1r/5ppp/4p3/8/PN6/7P/1P2bPP1/6K1 w - - bm f3; id "WMT 40"; c0 "f2-f3 (E)";
+r3k2r/pp1qn1pp/2p2p2/8/3P4/5N2/PP2QPPP/2R1R1K1 w kq - bm d5; id "WMT 41"; c0 "d4-d5 (K)";
+r1b1kb1r/1p4pp/p2ppn2/8/2qNP3/2N1B3/PPP3PP/R2Q1RK1 w kq - bm Rxf6; id "WMT 42"; c0 "Rf1xf6 (K)";
+5k2/p1p4R/1pr5/3p1pP1/P2P1P2/2P2K2/8/8 w - - bm Kg3; id "WMT 43"; c0 "Kf3-g3 (E)";
+r1bk1n1r/pp1n1q1p/2p2p1R/3p4/3PpN2/2NB2Q1/PPP2PP1/2K1R3 w - - bm Bxe4; id "WMT 44"; c0 "Bd3xe4 (K)";
+r1b1n2r/1p2q3/1Qp1npk1/4p1p1/P1B1P3/2P1BNP1/1P3PK1/R3R3 b - - bm Nf4+; id "WMT 45"; c0 "...Ne6-f4+ (K)";
+1nr3k1/p4pbp/1n1Rp1p1/2p5/4bB2/P4NPB/1P3P1P/R5K1 w - - bm Ng5; id "WMT 46"; c0 "Nf3-g5 (P)";
+2rq1rk1/pb3p1p/1p2pbp1/3p3R/2PP4/PP5R/1B3PPP/3Q1BK1 b - - bm dxc4; id "WMT 47"; c0 "...d5xc4 (P)";
+6k1/rpr1ppb1/1Q1p2p1/P2P1q1p/8/2P2nPP/1P3P2/R2R1B1K b - - bm Rc4; id "WMT 48"; c0 "...Rc7-c4 (K)";
+2r1nrk1/pbqn1p1p/1p6/2p1pP2/2Pp3P/1P1Pb1P1/PB2Q1BK/RN2NR2 b - - bm e4; id "WMT 49"; c0 "...e5-e4 (P)";
+1qr2rk1/1p3pp1/7p/3p4/1P1N2Q1/1P6/PK1n2PP/2R4R w - - bm Qg3; id "WMT 50"; c0 "Qg4-g3 (P)";
+2r5/R6p/5p2/1k2p1p1/1b1pP1P1/3K1P2/4N2P/8 b - - bm Ba5; id "WMT 51"; c0 "...Bb4-a5 (E)";
+8/4kpbn/p1p3p1/Pp2p2p/1P2Pn2/N1P1BP2/5P1P/5BK1 w - - bm Nxb5; id "WMT 52"; c0 "Na3xb5 (E)";
+r3rnk1/3qbppp/1p2p1n1/pPppP2N/3P3P/2P2NP1/1P3PK1/R1BQR3 w - - bm Bh6; id "WMT 53"; c0 "Bc1-h6 (K)";
+r1b2rk1/p2nbqpp/p3p3/2ppPpB1/N2P1N1P/8/PPP2PP1/R2Q1RK1 w - - bm c4; id "WMT 54"; c0 "c2-c4 (P)";
+5b2/p2k1p2/P3pP1p/n2pP1p1/1p1P2P1/1P1KBN2/7P/8 w - - bm Nxg5; id "WMT 55"; c0 "Nf3xg5 (E)";
+3r2k1/1r2bpp1/p2pbn1p/8/qp1BPQ2/1N1B4/PPP3PP/1KR1R3 b - - bm Rb5; id "WMT 56"; c0 "...Rb7-b5 (K)";
+r1b1r1k1/ppp2ppp/2nb1q2/8/2B5/1P1Q1N2/P1PP1PPP/R1B2RK1 w - - bm Bb2; id "WMT 57"; c0 "Bc1-b2 (K)";
+2b1rb1k/2r2ppp/n2p4/3P2PN/3NPQ2/2p3RP/1q3PK1/1B1R4 w - - bm Nf6; id "WMT 58"; c0 "Nh5-f6 (K)";
+1r1qk2r/pp1n2pp/3bp2n/3p1p1b/3P4/1Q3NPP/PP1NPPB1/R1B1R1K1 w k - bm e4; id "WMT 59"; c0 "e2-e4 (K)";
+r3r1k1/pp1bp2p/1n2q1P1/6b1/1B2B3/5Q2/5PPP/1R3RK1 w - - bm Bd2; id "WMT 60"; c0 "Bb4-d2 (P)";
+rn3rk1/pbq2ppp/1p2pn2/8/2BP4/2P2N2/PB2QPPP/R2R2K1 b - - bm Bxf3; id "WMT 61"; c0 "...Bb7xf3 (P)";
+2k5/p1p5/1pbppR2/7p/2PP3P/2P1K1r1/P3B1P1/8 w - - bm Kf4; id "WMT 62"; c0 "Ke3-f4 (E)";
+2k5/2p3Rp/p1p5/1p2p3/1b2P3/1N1P1P2/PP2KP1r/8 w - - bm a3; id "WMT 63"; c0 "a2-a3 (E)";
+2r3k1/2r1ppb1/3p2p1/pq4Pn/1p1BP3/1B3P2/PPPQ4/1K1R3R w - - bm Rxh5; id "WMT 64"; c0 "Rh1xh5 (K)";
+1rb2rk1/p3qp2/2p2n1b/1p2p3/n3P1pP/3B2B1/PPP2QPN/1KNR3R w - - bm h5; id "WMT 65"; c0 "h4-h5 (K)";
+r3kb1r/1b1q1pp1/p3p2p/3n4/Np1N1Pn1/1P1BB3/P1PQ3P/2KRR3 w kq - bm Nb6; id "WMT 66"; c0 "Na4-b6 (K)";
+r1b2b1r/p1q2k1p/4ppB1/3p3Q/3p1P2/2P5/PP4PP/R1B1K2R b KQ - bm hxg6; id "WMT 67"; c0 "...h7xg6 (P)";
+3r2k1/4b1pp/p3p1r1/1ppqB3/4R3/6P1/PPP1QP1P/4R1K1 w - - bm Bf4; id "WMT 68"; c0 "Be5-f4 (P)";
+4k3/7p/1pr1np2/p1p1pNpP/P1P1K1P1/1P2P3/3R1P2/8 w - - bm Rd6; id "WMT 69"; c0 "Rd2-d6 (E)";
+r1r5/1Rp2k1p/2p1b1pB/p1b1Pp2/P1P5/2P5/4B1PP/1R5K b - - bm Ra6; id "WMT 70"; c0 "...Ra8-a6 (E)";
+r4rk1/pp3ppp/1bbp1n2/q3pP2/4P3/1BN5/PPP1QBPP/3R1RK1 w - - bm g4; id "WMT 71"; c0 "g2-g4 (K)";
+r1b1rk2/2qp1pp1/2p2n1p/p3pP2/1bB1P3/2N3R1/PPPBQ1PP/R6K w - - bm Qe3; id "WMT 72"; c0 "Qe2-e3 (K)";
+r3k2r/p1qnbpp1/1pb1p2p/2p5/3PP3/P1PB1N2/2Q2PPP/R1BR2K1 w kq - bm d5; id "WMT 73"; c0 "d4-d5 (K)";
+1nbqkbr1/r4p1p/p2p4/5B2/Np6/8/PPP3PP/R1BQ1RK1 b - - bm Re7; id "WMT 74"; c0 "...Ra7-e7 (P)";
+r2q1rk1/1p1n2np/p2p2pB/2pPp3/P1P1Pp1P/5QP1/1PB2P2/R3R1K1 w - - bm g4; id "WMT 75"; c0 "g3-g4 (P)";
+3r4/p1k3rp/b4p2/2Bpn3/2p5/2P2PP1/P2R1K1P/3R1B2 b - - bm Nd3+; id "WMT 76"; c0 "...Ne5-d3+ (P)";
+2k5/2b5/pp6/4p3/1P4P1/1KP2p2/1P1R4/8 w - - bm Rd5; id "WMT 77"; c0 "Rd2-d5 (E)";
+2n5/5k1p/1n1p2pP/2pPp3/2P1P1B1/1K3P2/3B4/8 w - - bm Bxc8; id "WMT 78"; c0 "Bg4xc8 (E)";
+3r4/p1k3pp/1p3p2/2p1p2P/P1B3r1/1K6/1P4P1/2R4R w - - bm h6; id "WMT 79"; c0 "h5-h6 (E)";
+8/8/p2k1p2/1p1p3p/1P1P3p/P3NPP1/5K2/1b6 w - - bm Ng2; id "WMT 80"; c0 "Ne3-g2 (E)";
+r3q3/1ppr4/p2b1k1p/5P1Q/4P3/8/PP4PP/R4RK1 w - - bm e5+; id "WMT 81"; c0 "e4-e5+ (K)";
+r1bq1rk1/pp3pbp/n3p3/3n4/6p1/PNNQB3/1PP3BP/2KR3R w - -  bm h3; id "WMT 82"; c0 "h2-h3 (K)";
+r3qrk1/2p1bppp/p3n3/1p2P3/4N3/4BQ2/PP3PPP/R2R2K1 w - - bm Nf6+; id "WMT 83"; c0 "Ne4-f6+ (K)";
+3q2k1/2r2pp1/BQ3bb1/p7/PP1N4/3P2PP/1B2P2K/8 b - - bm Rd7; id "WMT 84"; c0 "...Rc7-d7 (P)";
+3rk2r/5ppp/3qpn2/p1p3Q1/1pPP4/3B2PP/PP3P2/1K1R3R b k - bm h6; id "WMT 85"; c0 "...h7-h6 (P)";
+r1b1r1k1/1p4bp/6p1/8/1p1qp3/P5P1/1P2PPBP/RQ1NK2R b KQ - bm Bg4; id "WMT 86"; c0 "...Bc8-g4 (P)";
+r2q2k1/4p1b1/pnn2rp1/1p1b2N1/2pPN1P1/4BP2/PP6/R2QKB1R b KQ - bm e5; id "WMT 87"; c0 "...e7-e5 (P)";
+3rn3/1pp2k2/pn4p1/3P1pP1/3B1P2/1P3B2/P7/2R2K2 w - - bm d6; id "WMT 88"; c0 "d5-d6 (E)";
+8/8/1p2k1n1/p1p2pBp/P1P5/1P4P1/3K4/8 b - - bm f4; id "WMT 89"; c0 "...f5-f4 (E)";
+2B1k3/1b2r2p/1P3pp1/2R1p3/8/4P1P1/7P/6K1 w - - bm g4; id "WMT 90"; c0 "g3-g4 (E)";
+1r3bk1/5p2/b5pB/2nP4/2p3N1/N2n2RP/1q3PP1/1B1Q2K1 w - - bm Qf3; id "WMT 91"; c0 "Qd1-f3 (K)";
+r3qb1k/1b4p1/p2pr2p/3n4/Pnp1N1N1/6RP/1B3PP1/1B1QR1K1 w - - bm Nxh6; id "WMT 92"; c0 "Ng4xh6 (K)";
+brq2rk1/3p2pp/1pnPp2n/5pNQ/2P2P2/3B3P/2R3PK/2B2R2 w - - bm Bb2; id "WMT 93"; c0 "Bc1-b2 (K)";
+r3r3/2p2p1k/1p3Pp1/p2b4/Pn1R2N1/1P4NP/5RP1/6K1 w - - bm Nh6; id "WMT 94"; c0 "Ng4-h6 (P)";
+r4rk1/3q2bp/n1bp1pp1/p3pPP1/PpPpP2P/1P1P2N1/6B1/R1BQ1R1K w - - bm Ra2; id "WMT 95"; c0 "Ra1-a2 (P)";
+1r3rk1/p1pn1ppp/2p1pq2/8/3P3P/8/PPPQ1PP1/2KR1B1R w - - bm Rh3; id "WMT 96"; c0 "Rh1-h3 (P)";
+5r1k/1p2r1b1/p2p1q1p/P2B1P1R/2P1p2R/4Q2K/7P/8 w - - bm Rg4; id "WMT 97"; c0 "Rh4-g4 (P)";
+8/1b6/pp3kp1/7p/2P4P/1P2rP2/P5B1/3R1K2 b - - bm Bxf3; id "WMT 98"; c0 "...Bb7xf3 (E)";
+8/2k1n3/1p4p1/pKp2p1p/P4P1P/2P2BP1/1P6/8 w - - bm Ka6; id "WMT 99"; c0 "Kb5-a6 (E)";
+3r1k2/R4pp1/7p/8/8/7P/P3RPPK/3r4 b - - bm R1d2; id "WMT 100"; c0 "...Rd1-d2 (E)";
+2rqk2r/pb1nbp1p/4p1p1/1B1n4/Np1N4/7Q/PP3PPP/R1B1R1K1 w k - - bm Rxe6;
+r1bq1rk1/3nbppp/p2pp3/6PQ/1p1BP2P/2NB4/PPP2P2/2KR3R w - - bm Bxg7;
+2kr4/ppq2pp1/2b1pn2/2P4r/2P5/3BQN1P/P4PP1/R4RK1 b - - bm Ng4;
+r1bqr1k1/pp1n1ppp/5b2/4N1B1/3p3P/8/PPPQ1PP1/2K1RB1R w - - bm Nxf7;
+3r4/2r5/p3nkp1/1p3p2/1P1pbP2/P2B3R/2PRN1P1/6K1 b - - bm Rc3;
+6k1/p3b1np/6pr/6P1/1B2p2Q/K7/7P/8 w - - am Qxh6??;
+3b4/p3P1q1/P1n2pr1/4p3/2B1n1Pk/1P1R4/P1p3KN/1N6 w - - bm Rh3+ M15;
+7r/8/pB1p1R2/4k2q/1p6/1Pr5/P5Q1/6K1 w - - bm Bd4+ M15;
+3r1r1k/1b4pp/ppn1p3/4Pp1R/Pn5P/3P4/4QP2/1qB1NKR1 w - - bm Rxh7+ M18;
+1k2r2r/pbb2p2/2qn2p1/8/PP6/2P2N2/1Q2NPB1/R4RK1 b - - bm Qxf3;
+r6k/6R1/p4p1p/2p2P1P/1pq1PN2/6P1/1PP5/2KR4 w - - bm b3;
+3rr1k1/1b1q1p1p/p2b1npB/2pP4/1p2n3/4N1P1/PPQ1NPBP/R2R2K1 b - - bm Nxf2; id Hoogovens - Zviaginsev;
+7Q/kp3ppp/8/8/q3p3/P5PP/5b2/R1R3K1 w - - am Kxf2?;
+r5k1/1bbq1ppp/p6r/P1Nnp3/1p1B4/5B2/1PPQ2PP/R4R1K b - -  bm Rxh2+;
+1k4r1/3r1p1q/1p2pQpP/pPp1P1B1/P1Pp2P1/3P1R2/2n1KR2/8 w - - bm Qxf7;
+1r3kr1/2p2p2/2Q4p/1NPPbp2/4p2q/6P1/5P1P/3RR1K1 w - -  am Nxc7;
+r1b1kb1r/1p1n1ppp/p2ppn2/6BB/2qNP3/2N5/PPP2PPP/R2Q1RK1 w kq - bm Nxe6;
+r1bqk2r/pp4p1/2pb1n2/3p1p2/2PPp3/PP2P1P1/3N2BP/RN1QR1K1 b kq - bm Rxh2;
+r3r1k1/1b2qppp/pp1b4/3p1BPP/2pPn3/2N1PN2/PPQ2P2/2K3RR w - - bm Bxh7+;
+r1bq1rk1/1p2bppp/p3p3/n3P3/4N3/1P1P1N2/PB4PP/R3QR1K w - - bm Nf6+;
+1rr3k1/2q1ppb1/p2pbnp1/6Q1/1p1BP1P1/P1N2P2/1PP4R/2K2B1R w - - bm Qh6;
+8/8/1p1r1k2/p1pPN1p1/P3KnP1/1P6/8/3R4 b - - bm Nxd5; id "ZPTS.01"; CCC post 27.4.2004 by Gerd Isenberg
+4KBkr/7p/6PP/4P3/8/3P1p2/8/8 w - - bm g7; id "ZPTS.02"; CCC post 27.4.2004 by Gerd Isenberg
+8/6B1/p5p1/Pp4kp/1P5r/5P1Q/4q1PK/8 w - - bm Qxh4+; id "ZPTS.03"; CCC post 10.9.2004 by Alvaro Begue
+8/8/8/2p5/1pp5/brpp4/1pprp2P/qnkbK3 w - - bm h3; id "ZPTS.04"; CCC post by Joachim Rang, mate in 15
+6Q1/8/8/7k/8/8/3p1pp1/3Kbrrb w - - bm Qg7; id "ZPTS.05"; CCC post by Joachim Rang, mate in 4
+n1QBq1k1/5p1p/5KP1/p7/8/8/8/8 w - - bm Bc7; id "ZPTS.06"; CCC post
+3nQ1k1/p2P2p1/1p6/8/5q1P/8/PP6/1K6 b - - bm Kh7; id "ZPTS.07"; CCC post
+8/8/8/1B6/6p1/8/4KPpp/3N2kr w - - bm Kd3; id "ZPTS.08"; CCC post by Tim Foden, id "MES.831"
+8/3p1p2/5Ppp/K2R2bk/4pPrr/6Pp/4B2P/3N4 w - - bm Nc3; id "ZPTS.09"; CCC post by Tim Foden, id "CCC.321751"
+8/1B6/8/5p2/8/8/5Qrq/1K1R2bk w - - bm Qa7; id "ZPTS.10"; CCC post by Tim Foden, id "CCC.321759"
+5R2/2K5/1pP5/4k2p/3pp3/2p4N/B4N1b/n1R1B2b w - - bm Rxc4; id "ZPTS.11"; CCC post by Tim Foden, id "CCC.321966"
+4B3/8/p7/k2N4/7p/K6p/PP5P/2q5 w - - bm Ba4; id "ZPTS.12"; CCC post by Tim Foden, id "CCC.347609"
+1b6/8/8/7p/6k1/6P1/8/6K1 w - - bm Kg2; id "ZPTS.17"; CCC post by Dr. Robert Hyatt, draw
+k2N2K1/8/8/8/5R2/3n4/3p4/8 w - - bm Rf7; id "ZPTS.18"; CCC post by Ed Schroeder, Troitzky
+2n5/8/Pp5n/5N2/8/5k2/3P4/7K w - - bm d4; id "ZPTS.19"; CCC post by Ed Schroeder, Troitzky
+8/5b2/p2k4/1p1p1p1p/1P1K1P1P/2P1PB2/8/8 w - - bm Be2; id "ZPTS.20"; CCC post by Sune Fischer, white wins
+8/8/p3R3/1p5p/1P5p/6rp/5K1p/7k w - - bm Re1; id "ZPTS.21"; CCC post by Eduard Nemeth, mate in 7
+8/p7/1p6/p7/kq1Q4/8/K7/8 w - - bm Qd3; id "ZPTS.22"; post in Avler chess forum
+1r4RK/2n5/7k/8/8/8/8/8 b - - bm Ne8; id "ZPTS.24"; Polgar - Kasparov, 1996
+8/8/1p1K4/Pp6/2k1p3/8/1P6/8 w - - bm a6; id "ZPTS.25"; Kubbel 1927
+6k1/3p4/P2P4/8/5Kp1/1p4Q1/p5p1/b7 w - - bm Qxg2; id "ZPTS.26"; Kasparyan 1959
+8/5p2/4b1p1/7R/5K1P/2r3B1/7N/4b1k1 w - - bm Nf3; id "ZPTS.27"; Noam Elkies 1984
+8/8/7p/2R5/4pp1K/8/8/3k2b1 w - - bm Rc4; id "ZPTS.28"; Kricheli 1986
+8/1p5k/1P1p4/3p4/3Pp2p/2K1P2p/7P/8 w - - bm Kb2; id "ZPTS.29"; 1 Kb2! Kg8 2 Ka1!!, draw

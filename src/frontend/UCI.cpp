@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "0.9.0"
+#define VersionNumber "0.9.1"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -30,7 +30,7 @@ static const uint32_t c_DefaultTTSizeInMB = 256;
 static const uint32_t c_DefaultTTSizeInMB = 16;
 #endif
 static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
-
+static const uint32_t c_DefaultGaviotaTbCacheInMB = 64;
 static const uint32_t c_MaxNumThreads = 64;
 
 
@@ -46,6 +46,10 @@ UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
     std::cout << c_EngineName << " by " << c_Author << std::endl;
 
     TryLoadingDefaultEvalFile();
+    TryLoadingDefaultEndgameEvalFile();
+
+    // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
+    SetGaviotaCacheSize(1024 * 1024 * c_DefaultGaviotaTbCacheInMB);
 
     for (int i = 1; i < argc; ++i)
     {
@@ -133,7 +137,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
+        std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
         std::cout << "option name SyzygyPath type string default <empty>\n";
+        std::cout << "option name GaviotaTbPath type string default <empty>\n";
+        std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
@@ -741,12 +748,25 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 #ifdef USE_TABLE_BASES
     else if (lowerCaseName == "syzygypath")
     {
-        LoadTablebase(value.c_str());
+        LoadSyzygyTablebase(value.c_str());
+    }
+    else if (lowerCaseName == "gaviotatbpath")
+    {
+        LoadGaviotaTablebase(value.c_str());
+    }
+    else if (lowerCaseName == "gaviotatbcache")
+    {
+        const size_t cacheSize = 1024 * 1024 * static_cast<size_t>(std::max(1, atoi(value.c_str())));
+        SetGaviotaCacheSize(cacheSize);
     }
 #endif // USE_TABLE_BASES
     else if (lowerCaseName == "evalfile")
     {
         LoadMainNeuralNetwork(value.c_str());
+    }
+    else if (lowerCaseName == "endgameevalfile")
+    {
+        LoadEndgameNeuralNetwork(value.c_str());
     }
     else if (lowerCaseName == "ponder")
     {
@@ -810,26 +830,33 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
 
 bool UniversalChessInterface::Command_TablebaseProbe()
 {
-    TTEntry ttEntry;
+    {
+        Move tbMove;
+        int32_t wdl = 0;
+        uint32_t dtz = 0;
+        if (ProbeSyzygy_Root(mGame.GetPosition(), tbMove, &dtz, &wdl))
+        {
+            std::cout << "Syzygy tablebase entry found!" << std::endl;
+            std::cout << "Score:            " << wdl << std::endl;
+            std::cout << "Distance to zero: " << dtz << std::endl;
+            std::cout << "Move:             " << tbMove.ToString() << std::endl;
+        }
+        else if (ProbeSyzygy_WDL(mGame.GetPosition(), &wdl))
+        {
+            std::cout << "Syzygy tablebase entry found!" << std::endl;
+            std::cout << "Score: " << wdl << std::endl;
+        }
+    }
 
-    Move tbMove;
-    int32_t wdl = 0;
-    uint32_t dtz = 0;
-    if (ProbeTablebase_Root(mGame.GetPosition(), tbMove, &dtz, &wdl))
     {
-        std::cout << "Tablebase entry found!" << std::endl;
-        std::cout << "Score:            " << wdl << std::endl;
-        std::cout << "Distance to zero: " << dtz << std::endl;
-        std::cout << "Move:             " << tbMove.ToString() << std::endl;
-    }
-    else if (ProbeTablebase_WDL(mGame.GetPosition(), &wdl))
-    {
-        std::cout << "Tablebase entry found!" << std::endl;
-        std::cout << "Score: " << wdl << std::endl;
-    }
-    else
-    {
-        std::cout << "(tablebase entry not found)" << std::endl;
+        int32_t wdl = 0;
+        uint32_t dtm = 0;
+        if (ProbeGaviota(mGame.GetPosition(), &dtm, &wdl))
+        {
+            std::cout << "Gaviota tablebase entry found!" << std::endl;
+            std::cout << "Score:            " << wdl << std::endl;
+            std::cout << "Distance to mate: " << dtm << std::endl;
+        }
     }
 
     return true;

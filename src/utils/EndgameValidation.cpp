@@ -217,11 +217,6 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         for (uint32_t i = 0; i < param.matKey.numBlackRooks; ++i)     placePiece(Piece::Rook, Color::Black, param.blackRooksAllowedSquares);
         for (uint32_t i = 0; i < param.matKey.numBlackQueens; ++i)    placePiece(Piece::Queen, Color::Black, param.blackQueensAllowedSquares);
 
-        //if (Square(FirstBitSet(pos.Whites().pawns)) != Square_b6)
-        //{
-        //    continue;
-        //}
-
         if (!positionValid)
         {
             continue;
@@ -233,7 +228,8 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         if (!pos.IsQuiet()) continue;
 
         int32_t wdl = 0;
-        bool probeResult = ProbeTablebase_WDL(pos, &wdl);
+        bool probeResult = ProbeSyzygy_WDL(pos, &wdl);
+        //bool probeResult = ProbeGaviota(pos, nullptr, &wdl);
 
         ASSERT(wdl >= -1 && wdl <= 1);
 
@@ -334,7 +330,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
     }
 }
 
-static void ValidateEndgame_2v2(const EndgameValidationParam& param)
+static void ValidateEndgame(const EndgameValidationParam& param)
 {
     using namespace threadpool;
 
@@ -398,17 +394,15 @@ void ValidateEndgame()
     EndgameValidationParam param;
     param.matKey.numWhiteBishops = 0;
     param.matKey.numWhiteRooks = 0;
-    param.matKey.numWhitePawns = 2;
-    param.matKey.numBlackRooks = 0;
+    param.matKey.numWhitePawns = 1;
+    param.matKey.numBlackRooks = 1;
     param.matKey.numBlackPawns = 0;
     param.matKey.numBlackKnights = 0;
     param.matKey.numBlackBishops = 0;
 
-    //param.whitePawnsAllowedSquares = Square(0, 6).GetBitboard();// Bitboard::FileBitboard<0>() | Bitboard::FileBitboard<1>() | Bitboard::FileBitboard<2>() | Bitboard::FileBitboard<3>();
-
-    ValidateEndgame_2v2(param);
+    ValidateEndgame(param);
 
     param.sideToMove = Color::Black;
 
-    ValidateEndgame_2v2(param);
+    ValidateEndgame(param);
 }

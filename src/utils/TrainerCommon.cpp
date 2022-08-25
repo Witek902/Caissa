@@ -54,7 +54,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
 
             // skip boring equal positions
             const bool equalPosition =
-                i > 4 &&
+                i > 20 &&
                 matKey.numBlackPawns == matKey.numWhitePawns &&
                 matKey.numBlackKnights == matKey.numWhiteKnights &&
                 matKey.numBlackBishops == matKey.numWhiteBishops &&
@@ -75,8 +75,8 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 !knownEndgamePosition &&
                 !equalPosition &&
                 !pos.IsInCheck() && !move.IsCapture() && !move.IsPromotion() &&
-                pos.GetNumPieces() >= 5 &&
-                pos.GetHalfMoveCount() < 80)
+                pos.GetNumPieces() >= 6 &&
+                pos.GetHalfMoveCount() < 60)
             {
                 PositionEntry entry{};
 
@@ -103,6 +103,9 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 // blend between eval score and actual game score
                 const float lambda = std::lerp(0.9f, 0.6f, gamePhase);
                 entry.score = std::lerp(score, scoreSum, lambda);
+
+                const float offset = 0.001f;
+                entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
                 if (pos.GetSideToMove() == Color::Black)

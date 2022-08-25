@@ -18,6 +18,8 @@ CCRL 2+1 Score: **3191** (#62) (version 0.7.0)
 * **Ponder** (bool) Enables pondering.
 * **EvalFile** (string) Neural network evaluation file.
 * **SyzygyPath** (string) Semicolon-separated list of paths to Syzygy endgame tablebases.
+* **GaviotaTbPath** (string) Path to Gaviota endgame tablebases.
+* **GaviotaTbCache** (int) Gaviota cache size in megabytes.
 * **UCI_AnalyseMode** (bool) Enables analysis mode: search full PV lines and disable any depth constrains.
 * **UseSAN** (bool) Enables short algebraic notation output (FIDE standard) instead of default long algebraic notation.
 * **ColorConsoleOutput** (bool) Enables colorful console output for better readibility.
@@ -35,7 +37,7 @@ CCRL 2+1 Score: **3191** (#62) (version 0.7.0)
 #### General
 * UCI protocol
 * Neural network evaluation
-* Syzygy endgame tablebases support
+* Syzygy and Gaviota endgame tablebases support
 
 #### Search Algorithm
 * Negamax with alpha-beta pruning
@@ -54,6 +56,7 @@ CCRL 2+1 Score: **3191** (#62) (version 0.7.0)
   * clipped-ReLU activation function
   * absolute piece coordinates with horizontal symmetry, no king-relative features
   * custom CPU-based trainer using Adagrad SGD algorithm
+  * dedicated network for endgame positions (5 or less pieces on board)
 * Endgame evaluation
 * Simple classic evaluation function based purely on Piece Square Tables
 * NN and PSQT trained on data generated during self-play matches

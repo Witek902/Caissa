@@ -63,6 +63,7 @@ typedef size_t map_t;
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define SEP_CHAR ';'
 #define FD HANDLE
@@ -308,10 +309,10 @@ static FD open_tb(const char *str, const char *suffix)
     size_t len;
     mbstowcs_s(&len, ucode_name, 4096, file, _TRUNCATE);
     fd = CreateFile(ucode_name, GENERIC_READ, FILE_SHARE_READ, NULL,
-			  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL|FILE_FLAG_RANDOM_ACCESS, NULL);
 #else
     fd = CreateFile(file, GENERIC_READ, FILE_SHARE_READ, NULL,
-			  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL|FILE_FLAG_RANDOM_ACCESS, NULL);
 #endif
 #endif
     free(file);
@@ -804,7 +805,7 @@ static void free_tb_entry(struct BaseEntry *be)
   }
 }
 
-bool tb_init(const char *path)
+bool syzygy_tb_init(const char *path)
 {
   if (!initialized) {
     init_indices();
@@ -985,7 +986,7 @@ finished:
 
 void tb_free(void)
 {
-  tb_init("");
+  syzygy_tb_init("");
   free(pieceEntry);
   free(pawnEntry);
 }

@@ -34,13 +34,13 @@ static_assert(sizeof(PackedNeuralNetwork::Header) % CACHELINE_SIZE == 0, "Networ
 
 using IntermediateType = int8_t;
 
+NO_INLINE
 void Accumulator::Refresh(
     const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs,
     uint32_t numActiveFeatures, const uint16_t* activeFeatures)
 {
     (void)numInputs;
-    (void)numOutputs;
 
 #ifndef CONFIGURATION_FINAL
     // check for duplicate features
@@ -56,15 +56,15 @@ void Accumulator::Refresh(
 #if defined(NN_USE_AVX2)
 
     constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
-    ASSERT(FirstLayerSize == numOutputs);
+    ASSERT(numOutputs % registerWidth == 0);
+    ASSERT(numOutputs <= FirstLayerMaxSize);
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)biases % 32 == 0);
     ASSERT((size_t)values % 32 == 0);
 
-    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0);
-    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    const uint32_t numChunks = numOutputs / registerWidth;
+    ASSERT(numChunks % OptimalRegisterCount == 0);
+    const uint32_t numTiles = numChunks / OptimalRegisterCount;
 
     AccumulatorType* valuesStart = values;
 
@@ -85,7 +85,7 @@ void Accumulator::Refresh(
         for (uint32_t j = 0; j < numActiveFeatures; ++j)
         {
             ASSERT(activeFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * numOutputs);
             ASSERT((size_t)weightsStart % 32 == 0); // make sure loads are aligned
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
@@ -194,15 +194,14 @@ void Accumulator::Update(
     uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
 {
     (void)numInputs;
-    (void)numOutputs;
-    ASSERT(numOutputs == FirstLayerSize);
+    ASSERT(numOutputs <= FirstLayerMaxSize);
 
 #if defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
-    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0);
-    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    ASSERT(numOutputs % registerWidth == 0);
+    const uint32_t numChunks = numOutputs / registerWidth;
+    ASSERT(numChunks % OptimalRegisterCount == 0);
+    const uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)source.values % 32 == 0);
     ASSERT((size_t)values % 32 == 0);
@@ -223,7 +222,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numRemovedFeatures; ++j)
         {
             ASSERT(removedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * numOutputs);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm256_sub_epi16(
@@ -236,7 +235,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numAddedFeatures; ++j)
         {
             ASSERT(addedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * numOutputs);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm256_add_epi16(
@@ -259,7 +258,7 @@ void Accumulator::Update(
     constexpr uint32_t registerWidth = 128 / (8 * sizeof(FirstLayerWeightType));
     static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
     constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
-    static_assert(numChunks% OptimalRegisterCount == 0);
+    static_assert(numChunks % OptimalRegisterCount == 0);
     constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 16 == 0);
 
@@ -972,6 +971,13 @@ bool PackedNeuralNetwork::Load(const char* filePath)
     if (header.layerSizes[0] == 0 || header.layerSizes[0] > MaxInputs)
     {
         std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
+        Release();
+        return false;
+    }
+
+    if (header.layerSizes[1] == 0 || header.layerSizes[1] > FirstLayerMaxSize)
+    {
+        std::cerr << "Failed to load neural network: " << "invalid first layer size" << std::endl;
         Release();
         return false;
     }

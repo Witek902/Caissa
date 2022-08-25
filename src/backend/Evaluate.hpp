@@ -7,6 +7,7 @@
 #include <algorithm>
 
 extern const char* c_DefaultEvalFile;
+extern const char* c_DefaultEndgameEvalFile;
 
 struct PieceScore
 {
@@ -41,7 +42,10 @@ static constexpr int32_t c_nnTresholdMax = 1024;
 void InitEvaluation();
 
 bool TryLoadingDefaultEvalFile();
+bool TryLoadingDefaultEndgameEvalFile();
+
 bool LoadMainNeuralNetwork(const char* path);
+bool LoadEndgameNeuralNetwork(const char* path);
 
 
 // scaling factor when converting from neural network output (logistic space) to centipawn value

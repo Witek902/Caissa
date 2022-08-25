@@ -81,7 +81,7 @@ void GenerateEndgamePieceSquareTables()
             Move bestMove;
             uint32_t dtz = UINT32_MAX;
             int32_t wdl = 0;
-            bool probeResult = ProbeTablebase_Root(pos, bestMove, &dtz, &wdl);
+            bool probeResult = ProbeSyzygy_Root(pos, bestMove, &dtz, &wdl);
 
             if (probeResult)
             {

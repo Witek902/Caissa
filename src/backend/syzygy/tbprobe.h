@@ -173,10 +173,10 @@ extern unsigned TB_LARGEST;
  *   initialized.  If no tablebase files are found, then `true' is returned
  *   and TB_LARGEST is set to zero.
  */
-bool tb_init(const char *_path);
+bool syzygy_tb_init(const char *_path);
 
 /*
- * Free any resources allocated by tb_init
+ * Free any resources allocated by syzygy_tb_init
  */
 void tb_free(void);
 

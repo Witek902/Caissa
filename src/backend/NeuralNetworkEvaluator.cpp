@@ -170,7 +170,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         accumulator.Update(
             prevAccumNode->nnContext->accumulator[perspective],
             network.GetAccumulatorWeights(),
-            network.GetNumInputs(), nn::FirstLayerSize,
+            network.GetNumInputs(), network.GetLayerSize(1),
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
     }
@@ -186,7 +186,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
         accumulator.Refresh(
             network.GetAccumulatorWeights(), network.GetAccumulatorBiases(),
-            network.GetNumInputs(), nn::FirstLayerSize,
+            network.GetNumInputs(), network.GetLayerSize(1),
             numFeatures, features);
     }
 

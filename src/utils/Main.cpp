@@ -35,9 +35,10 @@ int main(int argc, const char* argv[])
     }
 
     InitEngine();
-    //TryLoadingDefaultEvalFile();
+    TryLoadingDefaultEvalFile();
 
-    LoadTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
+    LoadSyzygyTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
+    LoadGaviotaTablebase("C:\\Program Files (x86)\\gaviota\\");
 
     if (argc > 1 && strcmp(argv[1], "unittest") == 0)
     {
