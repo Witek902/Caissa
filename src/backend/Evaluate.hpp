@@ -15,6 +15,8 @@ struct PieceScore
     int16_t eg;
 };
 
+extern const PieceScore PSQT[6][Square::NumSquares];
+
 static constexpr PieceScore c_pawnValue     = { 127,    184 };
 static constexpr PieceScore c_knightValue   = { 344,    474 };
 static constexpr PieceScore c_bishopValue   = { 374,    508 };

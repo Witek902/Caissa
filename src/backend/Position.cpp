@@ -3,6 +3,7 @@
 #include "Bitboard.hpp"
 #include "Material.hpp"
 #include "PositionHash.hpp"
+#include "Evaluate.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 
 #include <random>
@@ -63,8 +64,32 @@ Position::Position()
     , mBlacksCastlingRights(CastlingRights(0))
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
+    , mPieceSquareValueMG(0)
+    , mPieceSquareValueEG(0)
     , mHash(0u)
 {}
+
+void Position::UpdatePieceSquareValue(Square square, const Piece piece, const Color color, bool remove)
+{
+    if (color != Color::White)
+    {
+        square = square.FlippedRank();
+        remove = !remove;
+    }
+
+    const PieceScore pieceScore = PSQT[(uint32_t)piece - (uint32_t)Piece::Pawn][square.mIndex];
+
+    if (remove)
+    {
+        mPieceSquareValueMG -= pieceScore.mg;
+        mPieceSquareValueEG -= pieceScore.eg;
+    }
+    else
+    {
+        mPieceSquareValueMG += pieceScore.mg;
+        mPieceSquareValueEG += pieceScore.eg;
+    }
+}
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
@@ -75,7 +100,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     const Bitboard mask = square.GetBitboard();
     SidePosition& pos = GetSide(color);
 
-    ASSERT((pos.occupied & mask) == 0);
     ASSERT((pos.pawns & mask) == 0);
     ASSERT((pos.knights & mask) == 0);
     ASSERT((pos.bishops & mask) == 0);
@@ -83,9 +107,10 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.queens & mask) == 0);
     ASSERT((pos.king & mask) == 0);
 
+    UpdatePieceSquareValue(square, piece, color, false);
+
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 
-    pos.occupied |= mask;
     pos.GetPieceBitBoard(piece) |= mask;
 }
 
@@ -98,8 +123,7 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
 
-    ASSERT((pos.occupied & mask) == mask);
-    pos.occupied &= ~mask;
+    UpdatePieceSquareValue(square, piece, color, true);
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
@@ -805,14 +829,12 @@ Position Position::SwappedColors() const
     result.mColors[0].bishops       = mColors[1].bishops.MirroredVertically();
     result.mColors[0].knights       = mColors[1].knights.MirroredVertically();
     result.mColors[0].pawns         = mColors[1].pawns.MirroredVertically();
-    result.mColors[0].occupied      = mColors[1].occupied.MirroredVertically();
     result.mColors[1].king          = mColors[0].king.MirroredVertically();
     result.mColors[1].queens        = mColors[0].queens.MirroredVertically();
     result.mColors[1].rooks         = mColors[0].rooks.MirroredVertically();
     result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
     result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
     result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
-    result.mColors[1].occupied      = mColors[0].occupied.MirroredVertically();
     result.mBlacksCastlingRights    = mWhitesCastlingRights;
     result.mWhitesCastlingRights    = mBlacksCastlingRights;
     result.mSideToMove              = GetOppositeColor(mSideToMove);
@@ -830,7 +852,6 @@ void Position::MirrorVertically()
     mColors[0].bishops  = mColors[0].bishops.MirroredVertically();
     mColors[0].knights  = mColors[0].knights.MirroredVertically();
     mColors[0].pawns    = mColors[0].pawns.MirroredVertically();
-    mColors[0].occupied = mColors[0].occupied.MirroredVertically();
 
     mColors[1].king     = mColors[1].king.MirroredVertically();
     mColors[1].queens   = mColors[1].queens.MirroredVertically();
@@ -838,7 +859,6 @@ void Position::MirrorVertically()
     mColors[1].bishops  = mColors[1].bishops.MirroredVertically();
     mColors[1].knights  = mColors[1].knights.MirroredVertically();
     mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
-    mColors[1].occupied = mColors[1].occupied.MirroredVertically();
 
     mWhitesCastlingRights = CastlingRights_None;
     mBlacksCastlingRights = CastlingRights_None;
@@ -854,7 +874,6 @@ void Position::MirrorHorizontally()
     mColors[0].bishops  = mColors[0].bishops.MirroredHorizontally();
     mColors[0].knights  = mColors[0].knights.MirroredHorizontally();
     mColors[0].pawns    = mColors[0].pawns.MirroredHorizontally();
-    mColors[0].occupied = mColors[0].occupied.MirroredHorizontally();
 
     mColors[1].king     = mColors[1].king.MirroredHorizontally();
     mColors[1].queens   = mColors[1].queens.MirroredHorizontally();
@@ -862,7 +881,6 @@ void Position::MirrorHorizontally()
     mColors[1].bishops  = mColors[1].bishops.MirroredHorizontally();
     mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
     mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
-    mColors[1].occupied = mColors[1].occupied.MirroredHorizontally();
 
     mWhitesCastlingRights = CastlingRights_None;
     mBlacksCastlingRights = CastlingRights_None;
