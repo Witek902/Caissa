@@ -28,12 +28,12 @@ struct SidePosition
 
     INLINE Bitboard Occupied() const
     {
-        return occupied;
+        return pawns | knights | bishops | rooks | queens | king;
     }
 
     INLINE Bitboard OccupiedExcludingKing() const
     {
-        return occupied & ~king;
+        return pawns | knights | bishops | rooks | queens;
     }
 
     INLINE Square GetKingSquare() const
@@ -64,7 +64,6 @@ struct SidePosition
             king != rhs.king;
     }
 
-    Bitboard occupied = 0;
     Bitboard pawns = 0;
     Bitboard knights = 0;
     Bitboard bishops = 0;
@@ -237,6 +236,10 @@ public:
     // get all occupied pieces bitboard
     INLINE Bitboard Occupied() const { return Whites().Occupied() | Blacks().Occupied(); }
 
+    // get piece square value
+    INLINE int32_t GetPieceSquareValueMG() const { return mPieceSquareValueMG; }
+    INLINE int32_t GetPieceSquareValueEG() const { return mPieceSquareValueEG; }
+
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
 
@@ -278,6 +281,8 @@ private:
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
+    void UpdatePieceSquareValue(Square square, const Piece piece, const Color color, bool remove);
+
     // BOARD STATE & FLAGS
 
     // bitboards for whites and blacks
@@ -297,7 +302,10 @@ private:
 
     // METADATA
 
+    int32_t mPieceSquareValueMG;
+    int32_t mPieceSquareValueEG;
+
     uint64_t mHash; // whole position hash
 };
 
-static_assert(sizeof(Position) == 128, "Invalid position size");
+static_assert(sizeof(Position) <= 128, "Invalid position size");

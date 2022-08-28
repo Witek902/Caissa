@@ -255,6 +255,11 @@ bool ProbeGaviota(const Position& pos, uint32_t* outDTM, int32_t* outWDL)
         return false;
     }
 
+    if (pos.GetNumPieces() > 5)
+    {
+        return false;
+    }
+
     uint32_t pliesToMate = 0;
     uint32_t info = tb_UNKNOWN;
 
