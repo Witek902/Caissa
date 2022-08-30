@@ -339,7 +339,20 @@ static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
         outScore = KnownWinValue;
         outScore += c_knightValue.eg * (numKnights - 3); // prefer keeping the knights
         outScore += 8 * (3 - weakKing.AnyCornerDistance()); // push king to corner
-        outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
+        outScore -= Square::Distance(weakKing, strongKing); // push kings close
+
+        // limit weak king movement
+        const Bitboard kingLegalSquares =
+            Bitboard::GetKingAttacks(weakKing) &
+            ~Bitboard::GetKnightAttacks(pos.Whites().knights) &
+            ~Bitboard::GetKingAttacks(strongKing);
+        outScore -= kingLegalSquares.Count();
+
+        // push knights towards king
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outScore -= Square::Distance(Square(square), weakKing);
+        });
     }
 
     return true;
@@ -400,8 +413,16 @@ static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore)
     outScore = KnownWinValue;
     outScore += c_knightValue.eg * (whiteBishops - 1); // prefer keeping the knights
     outScore += c_bishopValue.eg * (whiteKnights - 1); // prefer keeping the knights
-    outScore += 8 * (7 - kingSquare.DarkCornerDistance()); // push king to corner
+    outScore += 4 * (3 - kingSquare.EdgeDistance()); // push king to edge
+    outScore += 4 * (7 - kingSquare.DarkCornerDistance()); // push king to right corner
     outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
+
+    // limit weak king movement
+    const Bitboard kingLegalSquares =
+        Bitboard::GetKingAttacks(weakKing) &
+        ~Bitboard::GetKnightAttacks(pos.Whites().knights) &
+        ~Bitboard::GetKingAttacks(strongKing);
+    outScore -= kingLegalSquares.Count();
 
     return true;
 }
