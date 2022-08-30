@@ -110,14 +110,14 @@ void Accumulator::Refresh(
 #elif defined(NN_USE_SSE2)
 
     constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
-    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
-    ASSERT(FirstLayerSize == numOutputs);
+    ASSERT(numOutputs % registerWidth == 0);
+    ASSERT(numOutputs <= FirstLayerMaxSize);
     ASSERT((size_t)weights % 16 == 0);
     ASSERT((size_t)biases % 16 == 0);
 
-    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0);
-    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    const uint32_t numChunks = numOutputs / registerWidth;
+    ASSERT(numChunks % OptimalRegisterCount == 0);
+    const uint32_t numTiles = numChunks / OptimalRegisterCount;
 
     __m128i regs[OptimalRegisterCount];
 
@@ -136,7 +136,7 @@ void Accumulator::Refresh(
         for (uint32_t j = 0; j < numActiveFeatures; ++j)
         {
             ASSERT(activeFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * numOutputs);
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
@@ -255,12 +255,14 @@ void Accumulator::Update(
     }
 
 #elif defined(NN_USE_SSE2)
-    constexpr uint32_t registerWidth = 128 / (8 * sizeof(FirstLayerWeightType));
-    static_assert(FirstLayerSize % registerWidth == 0, "Layer size must be multiple of SIMD register");
-    constexpr uint32_t numChunks = FirstLayerSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0);
-    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+    constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
+    ASSERT(numOutputs % registerWidth == 0);
+    const uint32_t numChunks = numOutputs / registerWidth;
+    ASSERT(numChunks % OptimalRegisterCount == 0);
+    const uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 16 == 0);
+    ASSERT((size_t)source.values % 16 == 0);
+    ASSERT((size_t)values % 16 == 0);
 
     __m128i regs[OptimalRegisterCount];
     for (uint32_t tile = 0; tile < numTiles; ++tile)
@@ -278,7 +280,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numRemovedFeatures; ++j)
         {
             ASSERT(removedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * numOutputs);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm_sub_epi16(
@@ -291,7 +293,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numAddedFeatures; ++j)
         {
             ASSERT(addedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * FirstLayerSize);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * numOutputs);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm_add_epi16(
