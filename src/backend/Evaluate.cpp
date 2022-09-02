@@ -6,12 +6,13 @@
 #include "PieceSquareTables.h"
 #include "NeuralNetworkEvaluator.hpp"
 #include "Pawns.hpp"
+#include "Search.hpp"
 
 #include <unordered_map>
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-3.pnn";
+const char* c_DefaultEvalFile = "eval-4.pnn";
 const char* c_DefaultEndgameEvalFile = "endgame-3.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
@@ -19,6 +20,23 @@ const char* c_DefaultEndgameEvalFile = "endgame-3.pnn";
 static constexpr int32_t c_evalSaturationTreshold   = 4000;
 
 static constexpr int32_t c_castlingRightsBonus  = 20;
+static constexpr PieceScore c_tempoBonus = S(10, 1);
+
+static constexpr int32_t c_ourPawnDistanceBonus         = -3;
+static constexpr int32_t c_ourKnightDistanceBonus       = -1;
+static constexpr int32_t c_ourBishopDistanceBonus       =  1;
+static constexpr int32_t c_ourRookDistanceBonus         =  3;
+static constexpr int32_t c_ourQueenDistanceBonus        =  5;
+
+static constexpr int32_t c_theirPawnDistanceBonus       = -1;
+static constexpr int32_t c_theirKnightDistanceBonus     =  5;
+static constexpr int32_t c_theirBishopDistanceBonus     = -1;
+static constexpr int32_t c_theirRookDistanceBonus       =  2;
+static constexpr int32_t c_theirQueenDistanceBonus      =  8;
+
+static constexpr int32_t c_bishopMobilityBonus          =  5;
+static constexpr int32_t c_rookMobilityBonus            =  4;
+static constexpr int32_t c_queenMobilityBonus           =  3;
 
 alignas(CACHELINE_SIZE)
 const PieceScore PSQT[6][Square::NumSquares] =
@@ -206,22 +224,16 @@ bool TryLoadingDefaultEndgameEvalFile()
     return false;
 }
 
-void InitEvaluation()
-{
-    //LoadNetworkForMaterialKey({ 1,0,0,1,0, 0,0,0,1,0 });
-    //LoadNetworkForMaterialKey({ 0,0,0,1,0, 1,0,0,1,0 });
-}
-
-static int32_t InterpolateScore(const Position& pos, int32_t mgScore, int32_t egScore)
+static int32_t InterpolateScore(const int32_t phase, int32_t mgScore, int32_t egScore)
 {
     // 32 at the beginning, 0 at the end
-    const int32_t mgPhase = std::min(32u, (pos.Whites().Occupied() | pos.Blacks().Occupied()).Count());
-    const int32_t egPhase = 32 - mgPhase;
+    const int32_t mgPhase = std::min(64, phase);
+    const int32_t egPhase = 64 - mgPhase;
 
-    ASSERT(mgPhase >= 0 && mgPhase <= 32);
-    ASSERT(egPhase >= 0 && egPhase <= 32);
+    ASSERT(mgPhase >= 0 && mgPhase <= 64);
+    ASSERT(egPhase >= 0 && egPhase <= 64);
 
-    return (mgScore * mgPhase + egScore * egPhase) / 32;
+    return (mgScore * mgPhase + egScore * egPhase) / 64;
 }
 
 bool CheckInsufficientMaterial(const Position& position)
@@ -282,6 +294,13 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
         }
     }
 
+    const Square whiteKingSq(FirstBitSet(position.Whites().king));
+    const Square blackKingSq(FirstBitSet(position.Blacks().king));
+
+    const Bitboard whitesOccupied = position.Whites().Occupied();
+    const Bitboard blacksOccupied = position.Blacks().Occupied();
+    const Bitboard allOccupied = whitesOccupied | blacksOccupied;
+
     int32_t value = 0;
     int32_t valueMG = 0;
     int32_t valueEG = 0;
@@ -297,6 +316,14 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
     const int32_t blackBishops  = materialKey.numBlackBishops;
     const int32_t blackKnights  = materialKey.numBlackKnights;
     const int32_t blackPawns    = materialKey.numBlackPawns;
+
+    // 0 - endgame, 64 - opening
+    const int32_t gamePhase =
+        1 * (whitePawns + blackPawns) +
+        2 * (whiteKnights + blackKnights) +
+        2 * (whiteBishops + blackBishops) +
+        4 * (whiteRooks + blackRooks) +
+        8 * (whiteQueens + blackQueens);
 
     int32_t queensDiff = whiteQueens - blackQueens;
     int32_t rooksDiff = whiteRooks - blackRooks;
@@ -322,48 +349,119 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
 
     value += c_castlingRightsBonus * ((int32_t)PopCount(position.GetWhitesCastlingRights()) - (int32_t)PopCount(position.GetBlacksCastlingRights()));
 
+    /*
+    // white pieces
+    {
+        position.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value += c_ourPawnDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_theirPawnDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+        });
+        position.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value += c_ourKnightDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_theirKnightDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+        });
+        position.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value += c_ourBishopDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_theirBishopDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_bishopMobilityBonus * (Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+        });
+        position.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value += c_ourRookDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_theirRookDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_rookMobilityBonus * (Bitboard::GenerateRookAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+        });
+        position.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value += c_ourQueenDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_theirQueenDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_queenMobilityBonus * (Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+        });
+    }
+
+    // black pieces
+    {
+        position.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value -= c_ourPawnDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_theirPawnDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+        });
+        position.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value -= c_ourKnightDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_theirKnightDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+        });
+        position.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value -= c_ourBishopDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_theirBishopDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_bishopMobilityBonus * (Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+        });
+        position.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value -= c_ourRookDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_theirRookDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_rookMobilityBonus * (Bitboard::GenerateRookAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+        });
+        position.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            value -= c_ourQueenDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_theirQueenDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_queenMobilityBonus * (Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+        });
+    }
+    */
+
     // tempo bonus
     if (position.GetSideToMove() == Color::White)
     {
-        value += position.Whites().Occupied().Count();
+        valueMG += c_tempoBonus.mg;
+        valueEG += c_tempoBonus.eg;
     }
     else
     {
-        value += position.Blacks().Occupied().Count();
+        valueMG -= c_tempoBonus.mg;
+        valueEG -= c_tempoBonus.eg;
     }
 
     // accumulate middle/end game scores
-    value += InterpolateScore(position, valueMG, valueEG);
+    value += InterpolateScore(gamePhase, valueMG, valueEG);
 
-    const nn::PackedNeuralNetwork* networkToUse = nullptr;
-    bool useIncrementalUpdate = false;
-    if (numPieces >= 4 && numPieces <= 5)
+    if (useNN)
     {
-        networkToUse = g_endgameNeuralNetwork.get();
-    }
-    if (!networkToUse)
-    {
-        networkToUse = g_mainNeuralNetwork.get();
-        useIncrementalUpdate = true;
-    }
+        const nn::PackedNeuralNetwork* networkToUse = nullptr;
+        bool useIncrementalUpdate = false;
+        if (numPieces >= 4 && numPieces <= 5)
+        {
+            networkToUse = g_endgameNeuralNetwork.get();
+        }
+        if (!networkToUse)
+        {
+            networkToUse = g_mainNeuralNetwork.get();
+            useIncrementalUpdate = true;
+        }
 
-    // use neural network for balanced positions
-    if (useNN && networkToUse && std::abs(value) < c_nnTresholdMax)
-    {
-        int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
-            NNEvaluator::Evaluate(*networkToUse, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
-            NNEvaluator::Evaluate(*networkToUse, position, NetworkInputMapping::Full_Symmetrical);
+        // use neural network for balanced positions
+        if (networkToUse && std::abs(value) < c_nnTresholdMax)
+        {
+            int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
+                NNEvaluator::Evaluate(*networkToUse, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
+                NNEvaluator::Evaluate(*networkToUse, position, NetworkInputMapping::Full_Symmetrical);
 
-        // convert to centipawn range
-        nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+            // convert to centipawn range
+            nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
 
-        // NN output is side-to-move relative
-        if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
+            // NN output is side-to-move relative
+            if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
-        constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
-        const int32_t nnFactor = std::max(0, std::abs(value) - c_nnTresholdMin);
-        ASSERT(nnFactor <= nnBlendRange);
-        value = (nnFactor * value + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
+            constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
+            const int32_t nnFactor = std::max(0, std::abs(value) - c_nnTresholdMin);
+            ASSERT(nnFactor <= nnBlendRange);
+            value = (nnFactor * value + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
+        }
     }
 
     // saturate eval value so it doesn't exceed KnownWinValue

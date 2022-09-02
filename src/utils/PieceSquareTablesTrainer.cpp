@@ -26,13 +26,13 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
-static const uint32_t cBatchSize = 1024;
-//static const uint32_t cNumNetworkInputs = 5 * 64 + 48;
-static const uint32_t cNumNetworkInputs = 704; // 2 * 10 * 32 * 64;
+static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cBatchSize = 128;
+static const uint32_t cNumNetworkInputs = 5 * 64 + 48 + 4 + 2 * 5;
 
 static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
 {
+    /*
     const uint32_t maxFeatures = 124;
 
     uint16_t features[maxFeatures];
@@ -47,8 +47,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     {
         outVector.features.push_back(features[i]);
     }
+    */
 
-    /*
     ASSERT(pos.GetSideToMove() == Color::White);
 
     outVector.output.resize(1);
@@ -98,15 +98,92 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     writePieceFeatures(pos.Blacks().queens.MirroredVertically(), Color::Black);
     offset += 64;
 
-    // white kings
+    const Square whiteKingSq(FirstBitSet(pos.Whites().king));
+    const Square blackKingSq(FirstBitSet(pos.Blacks().king));
+
+    outVector.inputs[offset + FirstBitSet(pos.Whites().king)] += 1.0f;
+    outVector.inputs[offset + FirstBitSet(pos.Blacks().king.MirroredVertically())] += -1.0f;
+    offset += 64;
+
+    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
     {
-        outVector.inputs[offset + FirstBitSet(pos.Whites().king)] += 1.0f;
-        outVector.inputs[offset + FirstBitSet(pos.Blacks().king.MirroredVertically())] += -1.0f;
-        offset += 64;
-    }
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Whites().Occupied();
+        outVector.inputs[offset] += attacks.Count();
+    });
+    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Blacks().Occupied();
+        outVector.inputs[offset] -= attacks.Count();
+    });
+    offset++;
+
+    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
+        outVector.inputs[offset] += attacks.Count();
+    });
+    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
+        outVector.inputs[offset] -= attacks.Count();
+    });
+    offset++;
+
+    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
+        outVector.inputs[offset] += attacks.Count();
+    });
+    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
+        outVector.inputs[offset] -= attacks.Count();
+    });
+    offset++;
+
+    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
+        outVector.inputs[offset] += attacks.Count();
+    });
+    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        const Bitboard blockers = pos.Occupied();
+        const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
+        outVector.inputs[offset] -= attacks.Count();
+    });
+    offset++;
+
+    pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+
+    pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
+    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
 
     ASSERT(offset == cNumNetworkInputs);
-    */
 }
 
 static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
@@ -196,12 +273,32 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     printPieceWeights("Queen");
     printPieceWeights("King");
 
-    std::cout << "Eval offset: " << int32_t(c_nnOutputToCentiPawns * weights[offset]) << std::endl;
+    std::cout << "Knight mobility bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Bishop mobility bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Rook mobility bonus:   " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Queen mobility bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Pawn vs. King (same color) distance bonus:       " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Knight vs. King (same color) distance bonus:     " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Bishop vs. King (same color) distance bonus:     " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Rook vs. King (same color) distance bonus:       " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Queen vs. King (same color) distance bonus:      " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Pawn vs. King (opposite color)  distance bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Knight vs. King (opposite color) distance bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Bishop vs. King (opposite color) distance bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Rook vs. King (opposite color distance bonus:    " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Queen vs. King (opposite color) distance bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Tempo bonus:           " << int32_t(c_nnOutputToCentiPawns * weights[offset]) << std::endl;
 
     //std::cout << "Code:" << std::endl;
     //std::cout << code.str() << std::endl;
 
-    ASSERT(offset == 5 * 64 + 48);
+    ASSERT(offset == cNumNetworkInputs);
 }
 
 bool TrainPieceSquareTables()
@@ -220,7 +317,7 @@ bool TrainPieceSquareTables()
     nn::NeuralNetworkTrainer trainer;
 
     // reset king weights
-    for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
+    for (uint32_t i = 4 * 64 + 48; i < 5 * 64 + 48; ++i)
     {
         network.layers[0].weights[i] = 0.0f;
     }
@@ -245,44 +342,44 @@ bool TrainPieceSquareTables()
             Position pos;
             UnpackPosition(entry.pos, pos);
 
-            //// flip the board randomly
-            //const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
-            //const bool noCastlingRights = pos.GetBlacksCastlingRights() == 0 && pos.GetWhitesCastlingRights() == 0;
-            //if (pawnless || noCastlingRights)
-            //{
-            //    if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
-            //    {
-            //        pos.MirrorHorizontally();
-            //    }
-            //}
-            //if (pawnless)
-            //{
-            //    if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
-            //    {
-            //        pos.MirrorVertically();
-            //    }
-            //}
+            // flip the board randomly
+            const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
+            const bool noCastlingRights = pos.GetBlacksCastlingRights() == 0 && pos.GetWhitesCastlingRights() == 0;
+            if (pawnless || noCastlingRights)
+            {
+                if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
+                {
+                    pos.MirrorHorizontally();
+                }
+            }
+            if (pawnless)
+            {
+                if (std::uniform_int_distribution<>(0, 1)(gen) != 0)
+                {
+                    pos.MirrorVertically();
+                }
+            }
 
             PositionToTrainingVector(pos, trainingSet[i]);
             trainingSet[i].output[0] = entry.score;
         }
 
         const float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.001f * iteration));
-        trainer.Train(network, trainingSet, cBatchSize, learningRate);
+        trainer.Train(network, trainingSet, cBatchSize, learningRate, false);
 
-        //// normalize king weights
-        //{
-        //    float kingAvg = 0.0f;
-        //    for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
-        //    {
-        //        kingAvg += network.layers[0].weights[i];
-        //    }
-        //    kingAvg /= 64.0f;
-        //    for (uint32_t i = cNumNetworkInputs - 64; i < cNumNetworkInputs; ++i)
-        //    {
-        //        network.layers[0].weights[i] -= kingAvg;
-        //    }
-        //}
+        // normalize king weights
+        {
+            float kingAvg = 0.0f;
+            for (uint32_t i = 4 * 64 + 48; i < 5 * 64 + 48; ++i)
+            {
+                kingAvg += network.layers[0].weights[i];
+            }
+            kingAvg /= 64.0f;
+            for (uint32_t i = 4 * 64 + 48; i < 5 * 64 + 48; ++i)
+            {
+                network.layers[0].weights[i] -= kingAvg;
+            }
+        }
 
         numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
@@ -298,8 +395,7 @@ bool TrainPieceSquareTables()
             PositionToTrainingVector(pos, validationVector);
             validationVector.output[0] = entry.score;
 
-            //const nn::Values& networkOutput = network.Run(validationVector.inputs, networkRunCtx);
-            const nn::Values& networkOutput = network.Run(validationVector.features.data(), (uint32_t)validationVector.features.size(), networkRunCtx);
+            const nn::Values& networkOutput = network.Run(validationVector.inputs, networkRunCtx);
 
             const float expectedValue = validationVector.output[0];
 
@@ -308,17 +404,7 @@ bool TrainPieceSquareTables()
                 std::cout << pos.ToFEN() << std::endl << pos.Print();
                 std::cout << "Value:    " << networkOutput[0] << std::endl;
                 std::cout << "Expected: " << expectedValue << std::endl;
-                //PrintPieceSquareTableWeigts(network);
-            }
-
-
-            if (i == 0)
-            {
-                Position pos2("rnbqkbnr/pppppppp/8/K7/8/8/PPPPPPPP/RNBQ1BNR w kq - 0 1");
-                PositionToTrainingVector(pos2, validationVector);
-                const nn::Values& networkOutput2 = network.Run(validationVector.features.data(), (uint32_t)validationVector.features.size(), networkRunCtx);
-                std::cout << pos.ToFEN() << std::endl << pos2.Print();
-                std::cout << "Value:    " << networkOutput2[0] << std::endl;
+                PrintPieceSquareTableWeigts(network);
             }
 
             const float error = expectedValue - networkOutput[0];
