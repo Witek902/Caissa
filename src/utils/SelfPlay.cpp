@@ -150,7 +150,7 @@ void SelfPlay(const std::vector<std::string>& args)
     ttArray.resize(numThreads);
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray[i].Resize(64ull * 1024ull * 1024ull);
+        ttArray[i].Resize(16ull * 1024ull * 1024ull);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -198,7 +198,31 @@ void SelfPlay(const std::vector<std::string>& args)
         //    }
         //}
 
-        //GenerateTranscendentalChessPosition(gen, openingPos);
+        GenerateTranscendentalChessPosition(gen, openingPos);
+
+        // bongcloud position
+        {
+            //openingPos.RemovePiece(FirstBitSet(openingPos.Whites().king), Piece::King, Color::White);
+            openingPos.RemovePiece(FirstBitSet(openingPos.Blacks().king), Piece::King, Color::Black);
+
+            //const Square whiteKingSquare((uint8_t)std::uniform_int_distribution<uint32_t>(0, 7)(gen), (uint8_t)std::uniform_int_distribution<uint32_t>(2, 4)(gen));
+            const Square blackKingSquare((uint8_t)std::uniform_int_distribution<uint32_t>(0, 7)(gen), (uint8_t)std::uniform_int_distribution<uint32_t>(3, 5)(gen));
+
+            //if (Square::Distance(whiteKingSquare, blackKingSquare) <= 1)
+            //{
+            //    return;
+            //}
+
+            //openingPos.SetPiece(whiteKingSquare, Piece::King, Color::White);
+            openingPos.SetPiece(blackKingSquare, Piece::King, Color::Black);
+            //openingPos.SetWhitesCastlingRights(CastlingRights_None);
+            openingPos.SetBlacksCastlingRights(CastlingRights_None);
+
+            if (!openingPos.IsValid())
+            {
+                return;
+            }
+        }
 
         const uint32_t index = gameIndex++;
 
@@ -224,7 +248,7 @@ void SelfPlay(const std::vector<std::string>& args)
         search.Clear();
         game.Reset(openingPos);
 
-        int32_t scoreDiffTreshold = 20;
+        int32_t scoreDiffTreshold = 10;
 
         uint32_t halfMoveNumber = 0;
         uint32_t drawScoreCounter = 0;
@@ -236,7 +260,8 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.debugLog = false;
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
             searchParam.limits.maxDepth = 20;
-            searchParam.limits.maxNodes = 400000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.limits.maxNodes = 300000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.numPvLines = 1; // halfMoveNumber < 10 ? 2 : 1;
             //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
             //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
             //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
@@ -320,7 +345,7 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 drawScoreCounter++;
 
-                if (drawScoreCounter >= 20 && halfMoveNumber >= 60)
+                if (drawScoreCounter >= 10 && halfMoveNumber >= 40 && game.GetPosition().GetHalfMoveCount() > 20)
                 {
                     game.SetScore(Game::Score::Draw);
                     break;
@@ -389,12 +414,11 @@ void SelfPlay(const std::vector<std::string>& args)
 
     Waitable waitable;
     {
-        const uint32_t numGames = (uint32_t)openingPositions.size();
-        //const uint32_t numGames = 10000000;
+        //const uint32_t numGames = (uint32_t)openingPositions.size();
+        const uint32_t numGames = 10000000;
 
         TaskBuilder taskBuilder(waitable);
         taskBuilder.ParallelFor("SelfPlay", numGames, gameTask);
-        //taskBuilder.Fence();
     }
 
     waitable.Wait();

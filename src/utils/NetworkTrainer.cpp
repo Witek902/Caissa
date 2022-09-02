@@ -28,7 +28,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
-static const uint32_t cBatchSize = 128;
+static const uint32_t cBatchSize = 64;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
 
@@ -70,7 +70,7 @@ bool TrainNetwork()
     nn::NeuralNetwork checkpointNetwork;
     checkpointNetwork.Load("eval_fullSymmetrical.nn");
 
-    const uint32_t numNetworks = 2;
+    const uint32_t numNetworks = 8;
 
     std::vector<PerThreadData> networksData;
     networksData.resize(numNetworks);
@@ -124,7 +124,7 @@ bool TrainNetwork()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.05f, 0.8f / (1.0f + 0.0001f * iteration));
+        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.0001f * iteration));
 
         std::mutex mutex;
         float trainingTime = 0.0f;

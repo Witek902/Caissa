@@ -24,7 +24,6 @@ void InitEngine()
     InitBitboards();
     InitZobristHash();
     InitEndgame();
-    InitEvaluation();
     SearchUtils::Init();
 }
 

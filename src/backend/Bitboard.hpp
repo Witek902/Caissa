@@ -206,6 +206,7 @@ struct Bitboard
 
     static Bitboard GenerateRookAttacks(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks(const Square square, const Bitboard blockers);
+    static Bitboard GenerateQueenAttacks(const Square square, const Bitboard blockers);
 
     static Bitboard GenerateRookAttacks_Slow(const Square square, const Bitboard blockers);
     static Bitboard GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers);

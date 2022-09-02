@@ -107,7 +107,7 @@ public:
     void Run(const uint16_t* featureIndices, uint32_t numFeatures, LayerRunContext& ctx) const;
     void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
     void UpdateWeights_SGD(float learningRate, const Gradients& gradients);
-    void UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients);
+    void UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients, const float gradientScale);
     void QuantizeWeights(float strength);
 
     uint32_t numInputs;
@@ -174,8 +174,8 @@ public:
         return layers.back().numOutputs;
     }
 
-    void QuantizeWeights();
-    void QuantizeLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale);
+    void ClampWeights();
+    void ClampLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale);
 
     std::vector<Layer> layers;
 };
@@ -183,7 +183,7 @@ public:
 class NeuralNetworkTrainer
 {
 public:
-    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, size_t batchSize, float learningRate = 0.5f);
+    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, size_t batchSize, float learningRate = 0.5f, bool clampWeights = true);
 
     std::deque<Gradients> gradients;
     std::vector<NeuralNetworkRunContext> perThreadRunContext;

@@ -200,6 +200,11 @@ Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blo
     return gBishopAttackTable[square.Index()][b];
 }
 
+Bitboard Bitboard::GenerateQueenAttacks(const Square square, const Bitboard blockers)
+{
+    return GenerateRookAttacks(square, blockers) | GenerateBishopAttacks(square, blockers);
+}
+
 Bitboard Bitboard::GenerateRookAttacks_Slow(const Square square, const Bitboard blockers)
 {
     uint32_t blockerIndexN;

@@ -7,6 +7,7 @@
 #include "../backend/Waitable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
+#include "../backend/Tablebase.hpp"
 
 #include <filesystem>
 
@@ -47,21 +48,11 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
         // replay the game
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
-            const float gamePhase = powf((float)i / (float)game.GetMoves().size(), 2.0f);
+            const float gamePhase = (float)i / (float)game.GetMoves().size();
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            const ScoreType moveScore = game.GetMoveScores()[i];
+            const Move nextMove = i + 1 < game.GetMoves().size() ? pos.MoveFromPacked(game.GetMoves()[i + 1]) : Move::Invalid();
+            //const ScoreType moveScore = game.GetMoveScores()[i];
             const MaterialKey matKey = pos.GetMaterialKey();
-
-            // skip boring equal positions
-            const bool equalPosition =
-                i > 20 &&
-                matKey.numBlackPawns == matKey.numWhitePawns &&
-                matKey.numBlackKnights == matKey.numWhiteKnights &&
-                matKey.numBlackBishops == matKey.numWhiteBishops &&
-                matKey.numBlackRooks == matKey.numWhiteRooks &&
-                matKey.numBlackQueens == matKey.numWhiteQueens &&
-                gameScore == Game::Score::Draw &&
-                std::abs(moveScore) < 5;
 
             // skip positions that will be using simplified evaluation at the runtime
             const int32_t staticEval = Evaluate(pos, nullptr, false);
@@ -71,41 +62,57 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
             int32_t endgameScore;
             const bool knownEndgamePosition = EvaluateEndgame(pos, endgameScore);
 
-            if (!simplifiedEvaluation &&
+            const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
+            const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
+
+            if (i >= 2 &&
+                !simplifiedEvaluation &&
                 !knownEndgamePosition &&
-                !equalPosition &&
-                !pos.IsInCheck() && !move.IsCapture() && !move.IsPromotion() &&
+                (!move.IsCapture() && !move.IsPromotion()) &&
+                (!nextMove.IsValid() || (!nextMove.IsCapture() && !nextMove.IsPromotion())) &&
                 pos.GetNumPieces() >= 6 &&
-                pos.GetHalfMoveCount() < 60)
+                pos.GetHalfMoveCount() < 60 &&
+                whitePawnsMoved && blackPawnsMoved &&
+                !pos.IsInCheck() && pos.GetNumLegalMoves())
             {
                 PositionEntry entry{};
 
-                // blend in future scores into current move score
-                float scoreSum = 0.0f;
-                float weightSum = 0.0f;
-                const size_t maxLookahead = 8;
-                for (size_t j = 0; j < maxLookahead; ++j)
+                int32_t wdl = 0;
+                if (ProbeSyzygy_WDL(pos, &wdl))
                 {
-                    if (i + j >= game.GetMoves().size()) break;
-                    const float weight = 1.0f / (j + 1);
-                    scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
-                    weightSum += weight;
+                    if (wdl > 0)        entry.score = 1.0f;
+                    else if (wdl < 0)   entry.score = 0.0f;
+                    else                entry.score = 0.5f;
                 }
-                ASSERT(weightSum > 0.0f);
-                scoreSum /= weightSum;
-
-                // scale position that approach fifty-move rule
-                if (gameScore == Game::Score::Draw && pos.GetHalfMoveCount() > 2)
+                else
                 {
-                    scoreSum = std::lerp(scoreSum, 0.5f, pos.GetHalfMoveCount() / 100.0f);
+                    // blend in future scores into current move score
+                    float scoreSum = 0.0f;
+                    float weightSum = 0.0f;
+                    const size_t maxLookahead = 8;
+                    for (size_t j = 0; j < maxLookahead; ++j)
+                    {
+                        if (i + j >= game.GetMoves().size()) break;
+                        const float weight = expf(-(float)j);
+                        scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
+                        weightSum += weight;
+                    }
+                    ASSERT(weightSum > 0.0f);
+                    scoreSum /= weightSum;
+
+                    // scale position that approach fifty-move rule
+                    if (gameScore == Game::Score::Draw && pos.GetHalfMoveCount() > 2)
+                    {
+                        scoreSum = std::lerp(scoreSum, 0.5f, pos.GetHalfMoveCount() / 100.0f);
+                    }
+
+                    // blend between eval score and actual game score
+                    const float lambda = std::lerp(0.9f, 0.9f, gamePhase);
+                    entry.score = std::lerp(score, scoreSum, lambda);
+
+                    const float offset = 0.00001f;
+                    entry.score = offset + entry.score * (1.0f - 2.0f * offset);
                 }
-
-                // blend between eval score and actual game score
-                const float lambda = std::lerp(0.9f, 0.6f, gamePhase);
-                entry.score = std::lerp(score, scoreSum, lambda);
-
-                const float offset = 0.001f;
-                entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
                 if (pos.GetSideToMove() == Color::Black)

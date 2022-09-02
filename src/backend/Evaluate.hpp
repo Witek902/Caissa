@@ -41,8 +41,6 @@ static constexpr PieceScore c_pieceValues[] =
 static constexpr int32_t c_nnTresholdMin = 256;
 static constexpr int32_t c_nnTresholdMax = 1024;
 
-void InitEvaluation();
-
 bool TryLoadingDefaultEvalFile();
 bool TryLoadingDefaultEndgameEvalFile();
 
