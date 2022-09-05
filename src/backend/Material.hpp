@@ -18,6 +18,7 @@ union MaterialKey
         uint64_t numBlackBishops : 6;
         uint64_t numBlackRooks : 6;
         uint64_t numBlackQueens : 6;
+        uint64_t __padding : 4;
     };
 
     uint64_t value;
@@ -41,6 +42,7 @@ union MaterialKey
         numBlackBishops = bb;
         numBlackRooks   = br;
         numBlackQueens  = bq;
+        __padding       = 0;
     }
 
     INLINE MaterialKey& operator = (const MaterialKey& rhs)
