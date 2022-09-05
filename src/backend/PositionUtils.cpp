@@ -639,13 +639,15 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
 
                         for (uint32_t i = 0; i < moves.numMoves; ++i)
                         {
-                            const Move& otherMove = moves[i].move;
-                            if (otherMove.GetPiece() == move.GetPiece() &&
-                                otherMove.ToSquare() == move.ToSquare() &&
-                                otherMove.FromSquare() != move.FromSquare())
+                            const Move& refMove = moves[i].move;
+                            
+                            if (refMove.GetPiece() == move.GetPiece() &&
+                                refMove.ToSquare() == move.ToSquare() &&
+                                refMove.FromSquare() != move.FromSquare() &&
+                                IsMoveLegal(refMove))
                             {
-                                if (otherMove.FromSquare().File() == move.FromSquare().File())  ambiguousFile = true;
-                                if (otherMove.FromSquare().Rank() == move.FromSquare().Rank())  ambiguousRank = true;
+                                if (refMove.FromSquare().File() == move.FromSquare().File())  ambiguousFile = true;
+                                if (refMove.FromSquare().Rank() == move.FromSquare().Rank())  ambiguousRank = true;
                                 ambiguousPiece = true;
                             }
                         }
@@ -684,6 +686,8 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
         {
             str += '+';
         }
+
+        ASSERT(move == MoveFromString(str, MoveNotation::SAN));
     }
     else
     {
@@ -801,50 +805,223 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
     return Move();
 }
 
-Move Position::MoveFromString(const std::string& str) const
+Move Position::MoveFromString(const std::string& str, MoveNotation notation) const
 {
-    if (str.length() < 4)
+    if (notation == MoveNotation::LAN)
     {
-        fprintf(stderr, "MoveFromString: Move string too short\n");
-        return {};
-    }
-
-    const Square fromSquare = Square::FromString(str.substr(0, 2));
-    const Square toSquare = Square::FromString(str.substr(2, 2));
-
-    if (!fromSquare.IsValid() || !toSquare.IsValid())
-    {
-        fprintf(stderr, "MoveFromString: Failed to parse square\n");
-        return {};
-    }
-
-    const SidePosition& currentSide = GetCurrentSide();
-    const SidePosition& opponentSide = GetOpponentSide();
-
-    const Piece movedPiece = currentSide.GetPieceAtSquare(fromSquare);
-    const Piece targetPiece = opponentSide.GetPieceAtSquare(toSquare);
-
-    bool isCapture = targetPiece != Piece::None;
-    bool isEnPassant = false;
-    bool isCastling = movedPiece == Piece::King && IsMoveCastling(fromSquare, toSquare);
-
-    if (movedPiece == Piece::Pawn && toSquare == mEnPassantSquare)
-    {
-        isCapture = true;
-        isEnPassant = true;
-    }
-
-    Piece promoteTo = Piece::None;
-    if (str.length() > 4)
-    {
-        if (!CharToPiece(str[4], promoteTo))
+        if (str.length() < 4)
         {
-            fprintf(stderr, "MoveFromString: Failed to parse promotion\n");
+            fprintf(stderr, "MoveFromString: Move string too short\n");
             return {};
         }
+
+        const Square fromSquare = Square::FromString(str.substr(0, 2));
+        const Square toSquare = Square::FromString(str.substr(2, 2));
+
+        if (!fromSquare.IsValid() || !toSquare.IsValid())
+        {
+            fprintf(stderr, "MoveFromString: Failed to parse square\n");
+            return {};
+        }
+
+        const SidePosition& currentSide = GetCurrentSide();
+        const SidePosition& opponentSide = GetOpponentSide();
+
+        const Piece movedPiece = currentSide.GetPieceAtSquare(fromSquare);
+        const Piece targetPiece = opponentSide.GetPieceAtSquare(toSquare);
+
+        bool isCapture = targetPiece != Piece::None;
+        bool isEnPassant = false;
+        bool isCastling = movedPiece == Piece::King && IsMoveCastling(fromSquare, toSquare);
+
+        if (movedPiece == Piece::Pawn && toSquare == mEnPassantSquare)
+        {
+            isCapture = true;
+            isEnPassant = true;
+        }
+
+        Piece promoteTo = Piece::None;
+        if (str.length() > 4)
+        {
+            if (!CharToPiece(str[4], promoteTo))
+            {
+                fprintf(stderr, "MoveFromString: Failed to parse promotion\n");
+                return {};
+            }
+        }
+
+        return Move::Make(fromSquare, toSquare, movedPiece, promoteTo, isCapture, isEnPassant, isCastling);
+    }
+    else if (notation == MoveNotation::SAN)
+    {
+        if (str.length() < 2)
+        {
+            fprintf(stderr, "MoveFromString: Move string too short\n");
+            return {};
+        }
+
+        // short castle
+        if (str == "O-O" || str == "0-0")
+        {
+            if (mSideToMove == Color::White)
+            {
+                return Move::Make(Square_e1, Square_g1, Piece::King, Piece::None, false, false, true);
+            }
+            else
+            {
+                return Move::Make(Square_e8, Square_g8, Piece::King, Piece::None, false, false, true);
+            }
+        }
+
+        // long castle
+        if (str == "O-O-O" || str == "0-0-0")
+        {
+            if (mSideToMove == Color::White)
+            {
+                return Move::Make(Square_e1, Square_c1, Piece::King, Piece::None, false, false, true);
+            }
+            else
+            {
+                return Move::Make(Square_e8, Square_c8, Piece::King, Piece::None, false, false, true);
+            }
+        }
+
+        uint32_t offset = 0;
+
+        bool isCapture = false;
+        Piece movedPiece = Piece::Pawn;
+        Piece promoteTo = Piece::None;
+
+        int32_t fromFile = -1;
+        int32_t fromRank = -1;
+        int32_t toFile = -1;
+        int32_t toRank = -1;
+
+        switch (str[0])
+        {
+        case 'P':   movedPiece = Piece::Pawn; offset++; break;
+        case 'N':   movedPiece = Piece::Knight; offset++; break;
+        case 'B':   movedPiece = Piece::Bishop; offset++; break;
+        case 'R':   movedPiece = Piece::Rook; offset++; break;
+        case 'Q':   movedPiece = Piece::Queen; offset++; break;
+        case 'K':   movedPiece = Piece::King; offset++; break;
+        }
+
+        if (str.length() >= offset + 5 && isalpha(str[offset]) && isdigit(str[offset + 1]) && str[offset + 2] == 'x' && isalpha(str[offset + 3]) && isdigit(str[offset + 4]))
+        {
+            fromFile = str[offset + 0] - 'a';
+            fromRank = str[offset + 1] - '1';
+            toFile = str[offset + 3] - 'a';
+            toRank = str[offset + 4] - '1';
+            isCapture = true;
+            offset += 5;
+        }
+        else if (str.length() >= offset + 4 && isalpha(str[offset]) && isdigit(str[offset + 1]) && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        {
+            fromFile = str[offset + 0] - 'a';
+            fromRank = str[offset + 1] - '1';
+            toFile = str[offset + 2] - 'a';
+            toRank = str[offset + 3] - '1';
+            offset += 4;
+        }
+        else if (str.length() >= offset + 4 && isalpha(str[offset]) && str[offset + 1] == 'x' && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        {
+            fromFile = str[offset + 0] - 'a';
+            toFile = str[offset + 2] - 'a';
+            toRank = str[offset + 3] - '1';
+            isCapture = true;
+            offset += 4;
+        }
+        else if (str.length() >= offset + 3 && isalpha(str[offset]) && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        {
+            fromFile = str[offset + 0] - 'a';
+            toFile = str[offset + 1] - 'a';
+            toRank = str[offset + 2] - '1';
+            offset += 3;
+        }
+        else if (str.length() >= offset + 4 && isdigit(str[offset]) && str[offset + 1] == 'x' && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        {
+            fromRank = str[offset + 0] - '1';
+            toFile = str[offset + 2] - 'a';
+            toRank = str[offset + 3] - '1';
+            isCapture = true;
+            offset += 4;
+        }
+        else if (str.length() >= offset + 3 && isdigit(str[offset]) && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        {
+            fromRank = str[offset + 0] - '1';
+            toFile = str[offset + 1] - 'a';
+            toRank = str[offset + 2] - '1';
+            offset += 3;
+        }
+        else if (str.length() >= offset + 3 && str[offset] == 'x' && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        {
+            toFile = str[offset + 1] - 'a';
+            toRank = str[offset + 2] - '1';
+            isCapture = true;
+            offset += 3;
+        }
+        else if (str.length() >= offset + 2 && isalpha(str[offset]) && isdigit(str[offset + 1]))
+        {
+            toFile = str[offset + 0] - 'a';
+            toRank = str[offset + 1] - '1';
+            offset += 2;
+        }
+        else
+        {
+            fprintf(stderr, "MoveFromString: Failed to parse move\n");
+            return {};
+        }
+
+        if (toFile < 0 || toFile >= 8)
+        {
+            fprintf(stderr, "MoveFromString: Invalid target square\n");
+            return {};
+        }
+        if (toRank < 0 || toRank >= 8)
+        {
+            fprintf(stderr, "MoveFromString: Invalid target square\n");
+            return {};
+        }
+
+        if (movedPiece == Piece::Pawn && ((mSideToMove == Color::White && toRank == 7) || (mSideToMove == Color::Black && toRank == 0)))
+        {
+            if (str.length() >= offset + 2 && str[offset] == '=' && CharToPiece(str[offset + 1], promoteTo))
+            {
+                offset += 2;
+            }
+            else
+            {
+                fprintf(stderr, "MoveFromString: Missing promotion\n");
+                return {};
+            }
+        }
+
+        const Square toSquare((uint8_t)toFile, (uint8_t)toRank);
+
+        MoveList moves;
+        GenerateMoveList(moves);
+
+        for (uint32_t i = 0; i < moves.numMoves; ++i)
+        {
+            const Move& move = moves[i].move;
+            if (movedPiece == move.GetPiece() &&
+                toSquare == move.ToSquare() &&
+                move.GetPromoteTo() == promoteTo &&
+                (fromFile == -1 || fromFile == move.FromSquare().File()) &&
+                (fromRank == -1 || fromRank == move.FromSquare().Rank()) &&
+                IsMoveLegal(move))
+            {
+                return move;
+            }
+        }
+    }
+    else
+    {
+        DEBUG_BREAK();
     }
 
-    return Move::Make(fromSquare, toSquare, movedPiece, promoteTo, isCapture, isEnPassant, isCastling);
+    return {};
 }
 
 bool Position::IsMoveValid(const Move& move) const

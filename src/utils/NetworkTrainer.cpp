@@ -67,9 +67,6 @@ bool TrainNetwork()
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    nn::NeuralNetwork checkpointNetwork;
-    checkpointNetwork.Load("eval_fullSymmetrical.nn");
-
     const uint32_t numNetworks = 8;
 
     std::vector<PerThreadData> networksData;
@@ -78,6 +75,7 @@ bool TrainNetwork()
     for (uint32_t i = 0; i < numNetworks; ++i)
     {
         networksData[i].network.Init(cNumNetworkInputs, { 256, 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
+        //networksData[i].network.Load("checkpoint.nn");
         networksData[i].runCtx.Init(networksData[i].network);
     }
 
@@ -202,7 +200,7 @@ bool TrainNetwork()
 
             const float expectedValue = validationSet[i].trainingVector.output[0];
             const float nnValue = networkOutput[0];
-            const float nnPackedValue = nn::Sigmoid((float)packedNetworkOutputs[i] / (float)nn::OutputScale);
+            const float nnPackedValue = PawnToWinProbability((float)packedNetworkOutputs[i] / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f);
             const float evalValue = PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
@@ -211,10 +209,10 @@ bool TrainNetwork()
             {
                 std::cout
                     << validationSet[i].pos.ToFEN() << std::endl << validationSet[i].pos.Print() << std::endl
-                    << "True Score:     " << expectedValue << std::endl
+                    << "True Score:     " << expectedValue << " (" << WinProbabilityToCentiPawns(expectedValue) << ")" << std::endl
                     << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
                     << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
-                    << "Static eval:    " << evalValue << std::endl
+                    << "Static eval:    " << evalValue << " (" << WinProbabilityToCentiPawns(evalValue) << ")" << std::endl
                     << std::endl;
             }
 

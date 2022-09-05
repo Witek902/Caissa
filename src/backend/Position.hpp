@@ -126,7 +126,7 @@ public:
     std::string MoveToString(const Move& move, MoveNotation notation = MoveNotation::SAN) const;
 
     // parse move from string
-    Move MoveFromString(const std::string& str) const;
+    Move MoveFromString(const std::string& str, MoveNotation notation = MoveNotation::LAN) const;
 
     // parse move from packed move
     Move MoveFromPacked(const PackedMove& packedMove) const;
