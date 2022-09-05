@@ -126,7 +126,7 @@ NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const Search
     if (!ctx.searchParam.isPonder)
     {
         if (ctx.searchParam.limits.maxNodes < UINT64_MAX &&
-            ctx.stats.nodes >= ctx.searchParam.limits.maxNodes)
+            ctx.stats.nodes > ctx.searchParam.limits.maxNodes)
         {
             // nodes limit exceeded
             mStopSearch = true;

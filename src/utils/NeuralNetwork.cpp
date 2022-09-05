@@ -573,14 +573,12 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
     const size_t numAllWeights = (numInputs + 1) * numOutputs;
     ASSERT(gradients.values.size() == numAllWeights);
 
-    const float cDecay = 0.5e-6f;
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-7f;
 
     size_t i = 0;
 
 #ifdef USE_AVX
-    const __m256 cDecayVec = _mm256_set1_ps(cDecay);
     const __m256 cOneMinusRhoVec = _mm256_set1_ps(1.0f - cRho);
     const __m256 cRhoVec = _mm256_set1_ps(cRho);
     const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
@@ -601,7 +599,6 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
         __m256 w = _mm256_load_ps(wPtr);
         m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
         __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
-        delta = _mm256_fmadd_ps(cDecayVec, w, delta);
         v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
         w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
 
@@ -626,7 +623,7 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
         m = cRho * m + (1.0f - cRho) * g * g;
         float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
         v = cRho * v + (1.0f - cRho) * delta * delta;
-        w -= (delta * learningRate + w * cDecay);
+        w -= delta * learningRate;
 
         ASSERT(!std::isnan(m));
         ASSERT(!std::isnan(v));
@@ -636,8 +633,7 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
 
 void NeuralNetwork::ClampLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
 {
-    biasRange *= 0.98f;
-    weightRange *= 0.98f;
+    const float cDecay = 1.0e-7f;
 
     Layer& layer = layers[layerIndex];
 
@@ -648,6 +644,8 @@ void NeuralNetwork::ClampLayerWeights(size_t layerIndex, float weightRange, floa
         for (uint32_t i = 0; i < layer.numOutputs; i++)
         {
             float& w = layer.weights[j * layer.numOutputs + i];
+
+            w *= 1.0f - cDecay;
 
             if (isBiasWeight)
             {

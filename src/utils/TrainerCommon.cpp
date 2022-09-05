@@ -54,24 +54,12 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
             //const ScoreType moveScore = game.GetMoveScores()[i];
             const MaterialKey matKey = pos.GetMaterialKey();
 
-            // skip positions that will be using simplified evaluation at the runtime
-            const int32_t staticEval = Evaluate(pos, nullptr, false);
-            const bool simplifiedEvaluation = std::abs(staticEval) > 2 * c_nnTresholdMax;
-
-            // skip recognized endgame positions
-            int32_t endgameScore;
-            const bool knownEndgamePosition = EvaluateEndgame(pos, endgameScore);
-
             const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
             const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
 
-            if (i >= 2 &&
-                !simplifiedEvaluation &&
-                !knownEndgamePosition &&
-                (!move.IsCapture() && !move.IsPromotion()) &&
-                (!nextMove.IsValid() || (!nextMove.IsCapture() && !nextMove.IsPromotion())) &&
+            if (move.IsQuiet() &&
                 pos.GetNumPieces() >= 6 &&
-                pos.GetHalfMoveCount() < 60 &&
+                pos.GetHalfMoveCount() < 80 &&
                 whitePawnsMoved && blackPawnsMoved &&
                 !pos.IsInCheck() && pos.GetNumLegalMoves())
             {
@@ -89,11 +77,11 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     // blend in future scores into current move score
                     float scoreSum = 0.0f;
                     float weightSum = 0.0f;
-                    const size_t maxLookahead = 8;
+                    const size_t maxLookahead = 16;
                     for (size_t j = 0; j < maxLookahead; ++j)
                     {
                         if (i + j >= game.GetMoves().size()) break;
-                        const float weight = expf(-(float)j);
+                        const float weight = expf(-(float)j * 0.25f);
                         scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
                         weightSum += weight;
                     }
@@ -107,11 +95,8 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     }
 
                     // blend between eval score and actual game score
-                    const float lambda = std::lerp(0.9f, 0.9f, gamePhase);
+                    const float lambda = std::lerp(0.8f, 0.6f, gamePhase);
                     entry.score = std::lerp(score, scoreSum, lambda);
-
-                    const float offset = 0.00001f;
-                    entry.score = offset + entry.score * (1.0f - 2.0f * offset);
                 }
 
                 Position normalizedPos = pos;
