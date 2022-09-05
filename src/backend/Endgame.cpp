@@ -391,6 +391,37 @@ static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore)
     return false;
 }
 
+// bishop(s) vs. bishop(s)
+static bool EvaluateEndgame_KBvKB(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops != 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops != 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    const int32_t whiteLightSquaresBishops = (pos.Whites().bishops & Bitboard::LightSquares()).Count();
+    const int32_t whiteDarkSquaresBishops = (pos.Whites().bishops & ~Bitboard::LightSquares()).Count();
+
+    const int32_t blackLightSquaresBishops = (pos.Blacks().bishops & Bitboard::LightSquares()).Count();
+    const int32_t blackDarkSquaresBishops = (pos.Blacks().bishops & ~Bitboard::LightSquares()).Count();
+
+    const int32_t whiteBishops = whiteLightSquaresBishops + whiteDarkSquaresBishops;
+    const int32_t blackBishops = blackLightSquaresBishops + blackDarkSquaresBishops;
+
+    if (whiteBishops <= 1 && blackBishops <= 1)
+    {
+        outScore = 0;
+        return true;
+    }
+
+    if ((whiteLightSquaresBishops == 0 || whiteDarkSquaresBishops == 0) &&
+        (blackLightSquaresBishops == 0 || blackDarkSquaresBishops == 0))
+    {
+        outScore = 0;
+        return true;
+    }
+
+    return false;
+}
+
 // knight + bishop vs. lone king
 static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore)
 {
@@ -440,7 +471,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
 
     Square strongKingSq = strongKing;
     Square weakKingSq = weakKing;
-    Square pawnSquare = FirstBitSet(pos.Whites().pawns);
+    Square pawnSquare = LastBitSet(pos.Whites().pawns);
 
     if (numPawns == 1)
     {
@@ -510,6 +541,34 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
             outScore += 8 * pawnSquare.Rank();
             outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
             outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
+            return true;
+        }
+    }
+
+    // if all pawns are on A/H file, then it's a draw
+    // if the weak king is already blocking promotion or will reach promotion square faster than a pawn or oponent's king
+    {
+        const Square promotionSquare(pawnSquare.File(), 7);
+
+        const uint32_t weakKingDistance = Square::Distance(weakKing, promotionSquare);
+        const uint32_t strongKingDistance = Square::Distance(strongKing, promotionSquare);
+        const uint32_t pawnDistance = Square::Distance(pawnSquare, promotionSquare);
+
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<0>()) == 0) &&
+            ((Square::Distance(weakKing, Square_a8) <= 1) ||
+             (weakKingDistance < pawnDistance + blackToMove &&
+              weakKingDistance + 1 < strongKingDistance + blackToMove)))
+        {
+            outScore = 0;
+            return true;
+        }
+
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<7>()) == 0) &&
+            ((Square::Distance(weakKing, Square_h8) <= 1) ||
+             (weakKingDistance < pawnDistance + blackToMove &&
+              weakKingDistance + 1 < strongKingDistance + blackToMove)))
+        {
+            outScore = 0;
             return true;
         }
     }
@@ -676,18 +735,33 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
     const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
 
+    const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
+
     // if all pawns are on A/H file and we have a wrong bishop, then it's a draw
+    // if the weak king is already blocking promotion or will reach promotion square faster than a pawn or oponent's king
     {
+        const Square pawnSquare(LastBitSet(pos.Whites().pawns));
+        const Square promotionSquare(pawnSquare.File(), 7);
+
+        const uint32_t weakKingDistance = Square::Distance(weakKing, promotionSquare);
+        const uint32_t strongKingDistance = Square::Distance(strongKing, promotionSquare);
+        const uint32_t pawnDistance = Square::Distance(pawnSquare, promotionSquare);
+
         if (((pos.Whites().pawns & ~Bitboard::FileBitboard<0>()) == 0) &&
             ((pos.Whites().bishops & Bitboard::LightSquares()) == 0) &&
-            (Square::Distance(weakKing, Square_a8) <= 1))
+            ((Square::Distance(weakKing, Square_a8) <= 1) ||
+             (weakKingDistance < pawnDistance + blackToMove &&
+              weakKingDistance + 1 < strongKingDistance + blackToMove)))
         {
             outScore = 0;
             return true;
         }
+
         if (((pos.Whites().pawns & ~Bitboard::FileBitboard<7>()) == 0) &&
             ((pos.Whites().bishops & Bitboard::DarkSquares()) == 0) &&
-            (Square::Distance(weakKing, Square_h8) <= 1))
+            ((Square::Distance(weakKing, Square_h8) <= 1) ||
+             (weakKingDistance < pawnDistance + blackToMove &&
+              weakKingDistance + 1 < strongKingDistance + blackToMove)))
         {
             outScore = 0;
             return true;
@@ -698,13 +772,12 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
     if (pos.Whites().pawns.Count() == 1)
     {
         const Square pawnSquare(FirstBitSet(pos.Whites().pawns));
-        const Square bishopSquare(FirstBitSet(pos.Whites().bishops));
         const Square promotionSquare(pawnSquare.File(), 7);
+
+        const Square bishopSquare(FirstBitSet(pos.Whites().bishops));
 
         const bool bishopOnLightSquare = pos.Whites().bishops & Bitboard::LightSquares();
         const bool promotionOnLightSquare = promotionSquare.GetBitboard() & Bitboard::LightSquares();
-
-        const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
 
         if (bishopOnLightSquare == promotionOnLightSquare &&
             Square::Distance(weakKing, pawnSquare) > 2 + blackToMove &&
@@ -1111,6 +1184,7 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhitePawn|MaterialMask_BlackPawn, EvaluateEndgame_KPvKP);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackPawn, EvaluateEndgame_KQvKP);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackPawn, EvaluateEndgame_KRvKP);
+    RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_BlackBishop, EvaluateEndgame_KBvKB);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackKnight, EvaluateEndgame_KRvKN);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackBishop, EvaluateEndgame_KRvKB);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackRook, EvaluateEndgame_KQvKR);
