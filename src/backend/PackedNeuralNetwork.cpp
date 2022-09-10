@@ -158,9 +158,9 @@ void Accumulator::Refresh(
 
 #else // no SIMD support
 
-    int16_t regs[FirstLayerSize];
+    int16_t regs[FirstLayerMaxSize];
 
-    for (uint32_t i = 0; i < FirstLayerSize; ++i)
+    for (uint32_t i = 0; i < numOutputs; ++i)
     {
         regs[i] = biases[i];
     }
@@ -170,7 +170,7 @@ void Accumulator::Refresh(
         ASSERT(activeFeatures[j] < numInputs);
         const uint32_t weightsDataOffset = activeFeatures[j] * numOutputs;
 
-        for (uint32_t i = 0; i < FirstLayerSize; ++i)
+        for (uint32_t i = 0; i < numOutputs; ++i)
         {
             ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) <= std::numeric_limits<AccumulatorType>::max());
             ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) >= std::numeric_limits<AccumulatorType>::min());
@@ -179,7 +179,7 @@ void Accumulator::Refresh(
         }
     }
 
-    for (uint32_t i = 0; i < FirstLayerSize; ++i)
+    for (uint32_t i = 0; i < numOutputs; ++i)
     {
         values[i] = static_cast<AccumulatorType>(regs[i]);
     }
@@ -312,7 +312,7 @@ void Accumulator::Update(
         }
     }
 #else // no SIMD support
-    for (uint32_t i = 0; i < FirstLayerSize; ++i)
+    for (uint32_t i = 0; i < numOutputs; ++i)
     {
         values[i] = source.values[i];
     }
@@ -321,7 +321,7 @@ void Accumulator::Update(
         ASSERT(removedFeatures[j] < numInputs);
         const uint32_t weightsDataOffset = removedFeatures[j] * numOutputs;
 
-        for (uint32_t i = 0; i < FirstLayerSize; ++i)
+        for (uint32_t i = 0; i < numOutputs; ++i)
         {
             values[i] -= weights[weightsDataOffset + i];
         }
@@ -331,7 +331,7 @@ void Accumulator::Update(
         ASSERT(addedFeatures[j] < numInputs);
         const uint32_t weightsDataOffset = addedFeatures[j] * numOutputs;
 
-        for (uint32_t i = 0; i < FirstLayerSize; ++i)
+        for (uint32_t i = 0; i < numOutputs; ++i)
         {
             values[i] += weights[weightsDataOffset + i];
         }
