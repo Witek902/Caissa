@@ -3,11 +3,9 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 
 ### Playing strength
 
-Estimated score of the newest version: **~3290 Elo**
+CCRL 40/15 Score: **3293** (#44) (version 0.9.0)
 
-CCRL 40/15 Score: **3218** (#45) (version 0.8.0)
-
-CCRL 2+1 Score: **3191** (#62) (version 0.7.0)
+CCRL 2+1 Score: **3222** (#46) (version 0.8.0)
 
 ### Supported UCI options
 
