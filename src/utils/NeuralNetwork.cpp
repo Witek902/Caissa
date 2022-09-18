@@ -633,11 +633,11 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
 
 void NeuralNetwork::ClampLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
 {
-    const float cDecay = 1.0e-7f;
+    const float cDecay = 0.5e-6f;
 
     Layer& layer = layers[layerIndex];
 
-    for (uint32_t j = 0; j < layer.numInputs; j++)
+    for (uint32_t j = 0; j <= layer.numInputs; j++)
     {
         const bool isBiasWeight = (j == layer.numInputs);
 
@@ -649,11 +649,11 @@ void NeuralNetwork::ClampLayerWeights(size_t layerIndex, float weightRange, floa
 
             if (isBiasWeight)
             {
-                w = std::clamp(w * biasQuantizationScale, -biasRange, biasRange) / biasQuantizationScale;
+                w = std::clamp(w, -biasRange / biasQuantizationScale, biasRange / biasQuantizationScale) ;
             }
             else
             {
-                w = std::clamp(w * weightQuantizationScale, -weightRange, weightRange) / weightQuantizationScale;
+                w = std::clamp(w, -weightRange / weightQuantizationScale, weightRange / weightQuantizationScale) ;
             }
         }
     }
@@ -731,7 +731,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                     for (size_t i = 0; i < ctx.tempValues.size(); i++)
                     {
                         // gradient of RMS loss function
-                        ctx.tempValues[i] = ctx.tempValues[i] - vec.output[i];
+                        ctx.tempValues[i] = /* 2.0f * */ (ctx.tempValues[i] - vec.output[i]);
 
                         // gradient of cross-entropy loss function
                         //const float target = vec.output[i];

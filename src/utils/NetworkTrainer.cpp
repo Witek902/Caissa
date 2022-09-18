@@ -79,6 +79,8 @@ bool TrainNetwork()
         networksData[i].runCtx.Init(networksData[i].network);
     }
 
+    std::ofstream trainingLog("training.log");
+
     std::vector<PositionEntry> entries;
     LoadAllPositions(entries);
 
@@ -278,6 +280,8 @@ bool TrainNetwork()
                 networksData[i].packedNet.Save((name + ".pnn").c_str());
                 networksData[i].packedNet.SaveAsImage((name + ".raw").c_str());
             }
+
+            trainingLog << iteration << "\t" << nnErrorSum << "\t" << nnPackedErrorSum << std::endl;
         }
     }
 

@@ -59,7 +59,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
 
             if (move.IsQuiet() &&
                 pos.GetNumPieces() >= 6 &&
-                pos.GetHalfMoveCount() < 80 &&
+                pos.GetHalfMoveCount() < 60 &&
                 whitePawnsMoved && blackPawnsMoved &&
                 !pos.IsInCheck() && pos.GetNumLegalMoves())
             {
@@ -77,7 +77,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     // blend in future scores into current move score
                     float scoreSum = 0.0f;
                     float weightSum = 0.0f;
-                    const size_t maxLookahead = 16;
+                    const size_t maxLookahead = 12;
                     for (size_t j = 0; j < maxLookahead; ++j)
                     {
                         if (i + j >= game.GetMoves().size()) break;
@@ -98,6 +98,9 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     const float lambda = std::lerp(0.8f, 0.6f, gamePhase);
                     entry.score = std::lerp(score, scoreSum, lambda);
                 }
+
+                const float offset = 0.00001f;
+                entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
                 if (pos.GetSideToMove() == Color::Black)
