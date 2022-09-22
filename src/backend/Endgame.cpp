@@ -305,17 +305,41 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
         }
     }
 
-    outScore = KnownWinValue;
-    outScore += c_queenValue.eg * pos.Whites().queens.Count();
-    outScore += c_rookValue.eg * pos.Whites().rooks.Count();
-    outScore += c_bishopValue.eg * pos.Whites().bishops.Count();
-    outScore += c_knightValue.eg * pos.Whites().knights.Count();
-    outScore += c_pawnValue.eg * pos.Whites().pawns.Count();
-    outScore += 8 * (3 - weakKing.EdgeDistance()); // push king to edge
-    outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
-    outScore = std::clamp(outScore, -TablebaseWinValue + 1, TablebaseWinValue - 1);
+    const Bitboard occupied = pos.Whites().Occupied();
 
-    // TODO put rook on a rank/file that limits king movement
+    int32_t materialScore = 
+        c_queenValue.eg * pos.Whites().queens.Count() +
+        c_rookValue.eg * pos.Whites().rooks.Count() +
+        c_bishopValue.eg * pos.Whites().bishops.Count() +
+        c_knightValue.eg * pos.Whites().knights.Count() +
+        c_pawnValue.eg * pos.Whites().pawns.Count();
+
+    if (materialScore > 4000) materialScore = 4000 + (materialScore - 4000) / 16;
+
+    outScore = KnownWinValue + materialScore;
+    outScore -= 8 * weakKing.EdgeDistance();
+    outScore -= Square::Distance(weakKing, strongKing); // push kings close
+
+    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        // penalty for lack of mobility
+        const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~occupied;
+        const uint32_t mobility = attacks.Count();
+        outScore += std::min(4u, mobility);
+
+        outScore -= Square::Distance(weakKing, Square(square)); // push knight towards weak king
+    });
+
+    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+    {
+        // penalty for lack of mobility
+        const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), occupied) & ~occupied;
+        const uint32_t mobility = attacks.Count();
+        if (mobility == 0) outScore -= 512;
+        outScore += std::min(8u, mobility);
+    });
+
+    outScore = std::clamp(outScore, 0, TablebaseWinValue - 1);
 
     return true;
 }

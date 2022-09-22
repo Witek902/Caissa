@@ -412,17 +412,19 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
     const Square kingSquare(kingSquareIndex);
     const Square opponentKingSquare(FirstBitSet(opponentSide.king));
 
+    const Bitboard occupiedBySideToMove = currentSide.Occupied();
+    const Bitboard occupiedByOponent = opponentSide.Occupied();
+
     Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
-    attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
+    attackBitboard &= ~occupiedBySideToMove; // can't capture own piece
     attackBitboard &= ~Bitboard::GetKingAttacks(opponentKingSquare); // can't move to piece controlled by opponent's king
-    if ((flags & MOVE_GEN_MASK_QUIET) == 0) attackBitboard &= opponentSide.OccupiedExcludingKing();
-    if ((flags & MOVE_GEN_MASK_CAPTURES) == 0) attackBitboard &= ~opponentSide.Occupied();
+    if ((flags & MOVE_GEN_MASK_QUIET) == 0) attackBitboard &= occupiedByOponent;
+    if ((flags & MOVE_GEN_MASK_CAPTURES) == 0) attackBitboard &= ~occupiedByOponent;
 
     attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
     {
         const Square targetSquare(toIndex);
-        const bool isCapture = opponentSide.Occupied() & targetSquare.GetBitboard();
-
+        const bool isCapture = occupiedByOponent & targetSquare.GetBitboard();
         outMoveList.Push(Move::Make(kingSquare, targetSquare, Piece::King, Piece::None, isCapture));
     });
 
@@ -439,7 +441,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         // king can't be in check
         if ((currentSide.king & opponentAttacks) == 0u)
         {
-            const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+            const Bitboard occupiedSquares = occupiedBySideToMove | occupiedByOponent;
 
             if ((currentSideCastlingRights & CastlingRights_LongCastleAllowed) &&
                 ((occupiedSquares & longCastleCrossedSquares) == 0u) &&
