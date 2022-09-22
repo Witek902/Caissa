@@ -773,6 +773,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 #endif // COLLECT_SEARCH_STATS
         }
 
+        ASSERT(staticEval != InvalidValue);
+
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
         {
@@ -1093,9 +1095,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (staticEval == InvalidValue)
         {
-            // singular search can't evaluate because of NN context overlap
-            ASSERT(!node.isSingularSearch);
-
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
 
@@ -1107,6 +1106,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
             wasPositionEvaluated = false;
         }
+
+        ASSERT(staticEval != InvalidValue);
 
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
@@ -1150,7 +1151,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (!isPvNode &&
         !node.isInCheck &&
         node.depth <= BetaPruningDepth &&
-        std::abs(staticEval) <= KnownWinValue &&
+        staticEval <= KnownWinValue &&
         staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
     {
         return staticEval;
@@ -1229,6 +1230,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (!isImproving) globalDepthReduction++;
 
         if (tbHit) globalDepthReduction++;
+
+        // reduce more if entered a winning endgame
+        if (node.previousMove.IsCapture() && staticEval >= KnownWinValue) globalDepthReduction++;
     }
 
     NodeInfo childNode;
@@ -1335,7 +1339,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 quietMoveIndex > 1 &&
                 !node.isPvNode &&
                 node.depth > 1 && node.depth < 9 &&
-                std::abs(staticEval) <= KnownWinValue &&
+                staticEval >= -KnownWinValue && staticEval <= KnownWinValue &&
                 staticEval + 32 * node.depth * node.depth < alpha)
             {
                 continue;
@@ -1459,8 +1463,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (childNode.isInCheck) depthReduction--;
 
             if (node.isCutNode) depthReduction++;
-
-            if (node.previousMove.IsCapture() && std::abs(staticEval) >= KnownWinValue) depthReduction++;
         }
 
         // limit reduction, don't drop into QS
