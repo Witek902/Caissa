@@ -1237,19 +1237,13 @@ static void RunPositionTests()
     {
         const Position pos("k7/5pP1/1P2P3/pP6/P7/3pP3/1P2p1Pp/K7 w - - 0 1");
 
-        TEST_EXPECT(!IsPassedPawn(Square_a4, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b2, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b5, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_b6, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e3, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e6, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_g7, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_g2, Color::White, pos.Whites().pawns, pos.Blacks().pawns));
-
-        TEST_EXPECT(!IsPassedPawn(Square_a5, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_d3, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_f7, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_h2, Color::Black, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_a4, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_b2, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_b5, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(IsPassedPawn(Square_b6, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_e3, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_e6, pos.Whites().pawns, pos.Blacks().pawns));
+        TEST_EXPECT(!IsPassedPawn(Square_g2, pos.Whites().pawns, pos.Blacks().pawns));
     }
 }
 

@@ -375,7 +375,7 @@ static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
         // push knights towards king
         pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            outScore -= Square::Distance(Square(square), weakKing);
+            outScore -= Square::Distance(weakKing, Square(square));
         });
     }
 

@@ -9,11 +9,35 @@
 extern const char* c_DefaultEvalFile;
 extern const char* c_DefaultEndgameEvalFile;
 
-struct PieceScore
+template<typename T>
+struct TPieceScore
 {
-    int16_t mg;
-    int16_t eg;
+    T mg;
+    T eg;
+
+    template<typename T2>
+    TPieceScore& operator += (const TPieceScore<T2>& rhs)
+    {
+        mg += rhs.mg;
+        eg += rhs.eg;
+        return *this;
+    }
+
+    template<typename T2>
+    TPieceScore& operator -= (const TPieceScore<T2>& rhs)
+    {
+        mg -= rhs.mg;
+        eg -= rhs.eg;
+        return *this;
+    }
+
+    TPieceScore<int32_t> operator * (const int32_t rhs) const
+    {
+        return { mg * rhs, eg * rhs };
+    }
 };
+
+using PieceScore = TPieceScore<int16_t>;
 
 extern const PieceScore PSQT[6][Square::NumSquares];
 

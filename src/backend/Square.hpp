@@ -22,6 +22,8 @@ class Square
 public:
     static constexpr uint32_t NumSquares = 64;
 
+    static void Init();
+
     INLINE static const Square Invalid()
     {
         Square square;
@@ -154,7 +156,12 @@ public:
         return std::min(std::min(a1, a8), std::min(h1, h8));
     }
 
-    static uint32_t Distance(const Square a, const Square b)
+    INLINE static uint32_t Distance(const Square a, const Square b)
+    {
+        return sDistances[64u * a.mIndex + b.mIndex];
+    }
+
+    static uint32_t ComputeDistance(const Square a, const Square b)
     {
         ASSERT(a.IsValid());
         ASSERT(b.IsValid());
@@ -173,4 +180,6 @@ public:
     }
 
     uint8_t mIndex;
+
+    alignas(CACHELINE_SIZE) static uint8_t sDistances[NumSquares * NumSquares];
 };
