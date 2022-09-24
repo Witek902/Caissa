@@ -19,24 +19,41 @@ const char* c_DefaultEndgameEvalFile = "endgame.pnn";
 
 static constexpr int32_t c_evalSaturationTreshold   = 4000;
 
-static constexpr int32_t c_castlingRightsBonus  = 20;
-static constexpr PieceScore c_tempoBonus = S(10, 1);
+static constexpr PieceScore c_tempoBonus = S(10, 5);
 
-static constexpr int32_t c_ourPawnDistanceBonus         = -3;
-static constexpr int32_t c_ourKnightDistanceBonus       = -1;
-static constexpr int32_t c_ourBishopDistanceBonus       =  1;
-static constexpr int32_t c_ourRookDistanceBonus         =  3;
-static constexpr int32_t c_ourQueenDistanceBonus        =  5;
+static constexpr PieceScore c_ourPawnDistanceBonus[8]       = { S(0,0), S(16,8),   S(7,5),     S(0,0),     S(-7,-6), S(-10,-2), S(-12,-4), S(-16,-4)};
+static constexpr PieceScore c_ourKnightDistanceBonus[8]     = { S(0,0), S(4,22),   S(1,15),    S(-3,11),   S(-4,-1), S(-2,-7),  S(-1,-16), S(3,-24) };
+static constexpr PieceScore c_ourBishopDistanceBonus[8]     = { S(0,0), S(2,6),    S(-3,4),    S(-4,5),    S(-4,-2), S(-3,-3),  S(1,-1),   S(11,-6) };
+static constexpr PieceScore c_ourRookDistanceBonus[8]       = { S(0,0), S(-10,1),  S(-6,4),    S(-4,0),    S(3,-1),  S(2,-2),   S(6,2),    S(7,-4)  };
+static constexpr PieceScore c_ourQueenDistanceBonus[8]      = { S(0,0), S(2,-8),   S(-12,1),   S(-11,-4),  S(-7,-5), S(1,-3),   S(10,4),   S(24,5)  };
 
-static constexpr int32_t c_theirPawnDistanceBonus       = -1;
-static constexpr int32_t c_theirKnightDistanceBonus     =  5;
-static constexpr int32_t c_theirBishopDistanceBonus     = -1;
-static constexpr int32_t c_theirRookDistanceBonus       =  2;
-static constexpr int32_t c_theirQueenDistanceBonus      =  8;
+static constexpr PieceScore c_theirPawnDistanceBonus[8]     = { S(0,0), S(30,39),  S(-11,10),  S(-8,-3),   S(-7,-6), S(-3,-7),  S(3,-9),   S(-1,-15) };
+static constexpr PieceScore c_theirKnightDistanceBonus[8]   = { S(0,0), S(-17,0),  S(-13,-2),  S(-7,-8),   S(1,-5),  S(5,-2),   S(12,3),   S(16,16)  };
+static constexpr PieceScore c_theirBishopDistanceBonus[8]   = { S(0,0), S(5,11),   S(-15,0),   S(-2,-2),   S(2,4),   S(2,-2),   S(3,-2),   S(7,-1)   };
+static constexpr PieceScore c_theirRookDistanceBonus[8]     = { S(0,0), S(-7,2),   S(-4,1),    S(-1,1),    S(0,1),   S(1,-4),   S(4,-1),   S(7,-3)   };
+static constexpr PieceScore c_theirQueenDistanceBonus[8]    = { S(0,0), S(-99,-99),S(-45,-29), S(-18,-16), S(1,-5),  S(13,6),   S(22,16),  S(30,28)  };
 
-static constexpr int32_t c_bishopMobilityBonus          =  5;
-static constexpr int32_t c_rookMobilityBonus            =  4;
-static constexpr int32_t c_queenMobilityBonus           =  3;
+static constexpr PieceScore c_knightMobilityBonus[9] =
+    { S(-35,-62), S(-14,-24), S(-3,-3), S(3,6), S(10,11), S(16,16), S(23,19), S(27,21), S(29,23) };
+
+static constexpr PieceScore c_bishopMobilityBonus[14] =
+    { S(-25,-41), S(-15, -4), S(-3, 7),  S(7, 19), S(14, 27), S(20, 34),
+      S( 24, 38), S( 26, 40), S(29, 42), S(31,44), S(33, 45), S(35, 46),
+      S( 36, 47), S( 37, 48) };
+
+static constexpr PieceScore c_rookMobilityBonus[15] =
+    { S(-10,-38), S(-6,-7), S(-3, 14), S(1, 26), S(5, 36), S(12,40),
+      S( 16, 43), S(20,45), S(25, 48), S(29,51), S(33,53), S(37,55),
+      S( 40, 57), S(42,60), S(43, 63) };
+
+static constexpr PieceScore c_queenMobilityBonus[28] =
+    { S(-22,-65), S(-17,-37), S(-10, -1), S( -5, 35), S( 0, 50), S( 4, 62),
+      S( 6,  74), S( 10, 84), S( 16, 87), S( 19, 95), S(21,102), S(22,105),
+      S( 24,108), S( 26,113), S( 28,115), S( 30,117), S(33,119), S(37,121),
+      S( 39,123), S( 42,125), S( 45,127), S( 47,129), S(49,131), S(51,133),
+      S( 53,136), S( 55,139), S( 57,142), S( 60,144) };
+
+static constexpr PieceScore c_passedPawnBonus[8]            = { S(0,0), S(0,5), S(-5,6), S(1,20), S(22,40), S(52,70), S(0,0), S(0,0) };
 
 alignas(CACHELINE_SIZE)
 const PieceScore PSQT[6][Square::NumSquares] =
@@ -224,7 +241,7 @@ bool TryLoadingDefaultEndgameEvalFile()
     return false;
 }
 
-static int32_t InterpolateScore(const int32_t phase, int32_t mgScore, int32_t egScore)
+static int32_t InterpolateScore(const int32_t phase, const TPieceScore<int32_t>& score)
 {
     // 32 at the beginning, 0 at the end
     const int32_t mgPhase = std::min(64, phase);
@@ -233,44 +250,44 @@ static int32_t InterpolateScore(const int32_t phase, int32_t mgScore, int32_t eg
     ASSERT(mgPhase >= 0 && mgPhase <= 64);
     ASSERT(egPhase >= 0 && egPhase <= 64);
 
-    return (mgScore * mgPhase + egScore * egPhase) / 64;
+    return (score.mg * mgPhase + score.eg * egPhase) / 64;
 }
 
-bool CheckInsufficientMaterial(const Position& position)
+bool CheckInsufficientMaterial(const Position& pos)
 {
     const Bitboard queensRooksPawns =
-        position.Whites().queens | position.Whites().rooks | position.Whites().pawns |
-        position.Blacks().queens | position.Blacks().rooks | position.Blacks().pawns;
+        pos.Whites().queens | pos.Whites().rooks | pos.Whites().pawns |
+        pos.Blacks().queens | pos.Blacks().rooks | pos.Blacks().pawns;
 
     if (queensRooksPawns != 0)
     {
         return false;
     }
 
-    if (position.Whites().knights == 0 && position.Blacks().knights == 0)
+    if (pos.Whites().knights == 0 && pos.Blacks().knights == 0)
     {
         // king and bishop vs. king
-        if ((position.Whites().bishops == 0 && position.Blacks().bishops.Count() <= 1) ||
-            (position.Whites().bishops.Count() <= 1 && position.Blacks().bishops == 0))
+        if ((pos.Whites().bishops == 0 && pos.Blacks().bishops.Count() <= 1) ||
+            (pos.Whites().bishops.Count() <= 1 && pos.Blacks().bishops == 0))
         {
             return true;
         }
 
         // king and bishop vs. king and bishop (bishops on the same color squares)
-        if (position.Whites().bishops.Count() == 1 && position.Blacks().bishops.Count() == 1)
+        if (pos.Whites().bishops.Count() == 1 && pos.Blacks().bishops.Count() == 1)
         {
-            const bool whiteBishopOnLightSquare = (position.Whites().bishops & Bitboard::LightSquares()) != 0;
-            const bool blackBishopOnLightSquare = (position.Blacks().bishops & Bitboard::LightSquares()) != 0;
+            const bool whiteBishopOnLightSquare = (pos.Whites().bishops & Bitboard::LightSquares()) != 0;
+            const bool blackBishopOnLightSquare = (pos.Blacks().bishops & Bitboard::LightSquares()) != 0;
             return whiteBishopOnLightSquare == blackBishopOnLightSquare;
         }
     }
 
 
     // king and knight vs. king
-    if (position.Whites().bishops == 0 && position.Blacks().bishops == 0)
+    if (pos.Whites().bishops == 0 && pos.Blacks().bishops == 0)
     {
-        if ((position.Whites().knights == 0 && position.Blacks().knights.Count() <= 1) ||
-            (position.Whites().knights.Count() <= 1 && position.Blacks().knights == 0))
+        if ((pos.Whites().knights == 0 && pos.Blacks().knights.Count() <= 1) ||
+            (pos.Whites().knights.Count() <= 1 && pos.Blacks().knights == 0))
         {
             return true;
         }
@@ -279,31 +296,71 @@ bool CheckInsufficientMaterial(const Position& position)
     return false;
 }
 
-ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
+static TPieceScore<int32_t> EvaluatePassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
 {
-    const MaterialKey materialKey = position.GetMaterialKey();
-    const uint32_t numPieces = position.GetNumPieces();
+    TPieceScore<int32_t> score = { 0, 0 };
+
+    ourPawns.Iterate([&](uint32_t square)
+    {
+        const uint32_t rank = square / 8;
+        const uint32_t file = square % 8;
+
+        if (rank < 6)
+        {
+            constexpr const Bitboard fileMask = Bitboard::FileBitboard<0>();
+
+            Bitboard passedPawnMask = fileMask << (square + 8);
+
+            // blocked pawn
+            if (ourPawns & passedPawnMask)
+            {
+                return;
+            }
+
+            if (file > 0) passedPawnMask |= fileMask << (square + 7);
+            if (file < 7) passedPawnMask |= fileMask << (square + 9);
+
+            if (theirPawns & passedPawnMask)
+            {
+                return;
+            }
+
+            score += c_passedPawnBonus[rank];
+        }
+    });
+
+    return score;
+}
+
+ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
+{
+    const MaterialKey materialKey = pos.GetMaterialKey();
+    const uint32_t numPieces = pos.GetNumPieces();
 
     // check endgame evaluation first
     {
         int32_t endgameScore;
-        if (EvaluateEndgame(position, endgameScore))
+        if (EvaluateEndgame(pos, endgameScore))
         {
             ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
             return (ScoreType)endgameScore;
         }
     }
 
-    const Square whiteKingSq(FirstBitSet(position.Whites().king));
-    const Square blackKingSq(FirstBitSet(position.Blacks().king));
+    const Square whiteKingSq(FirstBitSet(pos.Whites().king));
+    const Square blackKingSq(FirstBitSet(pos.Blacks().king));
 
-    const Bitboard whitesOccupied = position.Whites().Occupied();
-    const Bitboard blacksOccupied = position.Blacks().Occupied();
+    const Bitboard whitesOccupied = pos.Whites().Occupied();
+    const Bitboard blacksOccupied = pos.Blacks().Occupied();
     const Bitboard allOccupied = whitesOccupied | blacksOccupied;
 
-    int32_t value = 0;
-    int32_t valueMG = 0;
-    int32_t valueEG = 0;
+    const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
+    const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
+
+    const Bitboard whitesMobilityArea = ~whitesOccupied & ~blackPawnsAttacks;
+    const Bitboard blacksMobilityArea = ~blacksOccupied & ~whitePawnsAttacks;
+
+    TPieceScore<int32_t> value = { 0, 0 };
 
     const int32_t whiteQueens   = materialKey.numWhiteQueens;
     const int32_t whiteRooks    = materialKey.numWhiteRooks;
@@ -332,103 +389,102 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
     int32_t pawnsDiff = whitePawns - blackPawns;
 
     // piece square tables
-    valueMG += position.GetPieceSquareValueMG();
-    valueEG += position.GetPieceSquareValueEG();
+    value.mg += pos.GetPieceSquareValueMG();
+    value.eg += pos.GetPieceSquareValueEG();
 
-    valueMG += c_queenValue.mg * queensDiff;
-    valueMG += c_rookValue.mg * rooksDiff;
-    valueMG += c_bishopValue.mg * bishopsDiff;
-    valueMG += c_knightValue.mg * knightsDiff;
-    valueMG += c_pawnValue.mg * pawnsDiff;
+    value += c_queenValue * queensDiff;
+    value += c_rookValue * rooksDiff;
+    value += c_bishopValue * bishopsDiff;
+    value += c_knightValue * knightsDiff;
+    value += c_pawnValue * pawnsDiff;
 
-    valueEG += c_queenValue.eg * queensDiff;
-    valueEG += c_rookValue.eg * rooksDiff;
-    valueEG += c_bishopValue.eg * bishopsDiff;
-    valueEG += c_knightValue.eg * knightsDiff;
-    valueEG += c_pawnValue.eg * pawnsDiff;
-
-    value += c_castlingRightsBonus * ((int32_t)PopCount(position.GetWhitesCastlingRights()) - (int32_t)PopCount(position.GetBlacksCastlingRights()));
-
+    // TODO for some reason this makes engine weaker...
     /*
+    // passed pawns
+    {
+        value += EvaluatePassedPawns(pos.Whites().pawns, pos.Blacks().pawns);
+        value -= EvaluatePassedPawns(pos.Blacks().pawns.MirroredVertically(), pos.Whites().pawns.MirroredVertically());
+    }
+    */
+
     // white pieces
     {
-        position.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value += c_ourPawnDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_theirPawnDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_ourPawnDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_theirPawnDistanceBonus[Square::Distance(blackKingSq, Square(square))];
         });
-        position.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value += c_ourKnightDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_theirKnightDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
+            value += c_ourKnightDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_theirKnightDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_knightMobilityBonus[(Bitboard::GetKnightAttacks(Square(square)) & whitesMobilityArea).Count()];
         });
-        position.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value += c_ourBishopDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_theirBishopDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_bishopMobilityBonus * (Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+            value += c_ourBishopDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_theirBishopDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_bishopMobilityBonus[(Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
         });
-        position.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value += c_ourRookDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_theirRookDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_rookMobilityBonus * (Bitboard::GenerateRookAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+            value += c_ourRookDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_theirRookDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_rookMobilityBonus[(Bitboard::GenerateRookAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
         });
-        position.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value += c_ourQueenDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_theirQueenDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_queenMobilityBonus * (Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & ~whitesOccupied).Count();
+            value += c_ourQueenDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_theirQueenDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_queenMobilityBonus[(Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
         });
     }
 
     // black pieces
     {
-        position.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value -= c_ourPawnDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_theirPawnDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_ourPawnDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_theirPawnDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
         });
-        position.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value -= c_ourKnightDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_theirKnightDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
+            value -= c_ourKnightDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_theirKnightDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_knightMobilityBonus[(Bitboard::GetKnightAttacks(Square(square)) & blacksMobilityArea).Count()];
         });
-        position.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value -= c_ourBishopDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_theirBishopDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_bishopMobilityBonus * (Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+            value -= c_ourBishopDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_theirBishopDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_bishopMobilityBonus[(Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
         });
-        position.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value -= c_ourRookDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_theirRookDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_rookMobilityBonus * (Bitboard::GenerateRookAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+            value -= c_ourRookDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_theirRookDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_rookMobilityBonus[(Bitboard::GenerateRookAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
         });
-        position.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            value -= c_ourQueenDistanceBonus * (Square::Distance(blackKingSq, Square(square)));
-            value += c_theirQueenDistanceBonus * (Square::Distance(whiteKingSq, Square(square)));
-            value -= c_queenMobilityBonus * (Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & ~blacksOccupied).Count();
+            value -= c_ourQueenDistanceBonus[Square::Distance(blackKingSq, Square(square))];
+            value += c_theirQueenDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
+            value -= c_queenMobilityBonus[(Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
         });
     }
-    */
 
     // tempo bonus
-    if (position.GetSideToMove() == Color::White)
+    if (pos.GetSideToMove() == Color::White)
     {
-        valueMG += c_tempoBonus.mg;
-        valueEG += c_tempoBonus.eg;
+        value += c_tempoBonus;
     }
     else
     {
-        valueMG -= c_tempoBonus.mg;
-        valueEG -= c_tempoBonus.eg;
+        value -= c_tempoBonus;
     }
 
     // accumulate middle/end game scores
-    value += InterpolateScore(gamePhase, valueMG, valueEG);
+    int32_t finalValue = InterpolateScore(gamePhase, value);
 
     if (useNN)
     {
@@ -445,37 +501,37 @@ ScoreType Evaluate(const Position& position, NodeInfo* nodeInfo, bool useNN)
         }
 
         // use neural network for balanced positions
-        if (networkToUse && std::abs(value) < c_nnTresholdMax)
+        if (networkToUse && std::abs(finalValue) < c_nnTresholdMax)
         {
             int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
                 NNEvaluator::Evaluate(*networkToUse, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
-                NNEvaluator::Evaluate(*networkToUse, position, NetworkInputMapping::Full_Symmetrical);
+                NNEvaluator::Evaluate(*networkToUse, pos, NetworkInputMapping::Full_Symmetrical);
 
             // convert to centipawn range
             nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
 
             // NN output is side-to-move relative
-            if (position.GetSideToMove() == Color::Black) nnValue = -nnValue;
+            if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
             constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
-            const int32_t nnFactor = std::max(0, std::abs(value) - c_nnTresholdMin);
+            const int32_t nnFactor = std::max(0, std::abs(finalValue) - c_nnTresholdMin);
             ASSERT(nnFactor <= nnBlendRange);
-            value = (nnFactor * value + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
+            finalValue = (nnFactor * finalValue + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
         }
     }
 
     // saturate eval value so it doesn't exceed KnownWinValue
-    if (value > c_evalSaturationTreshold)
+    if (finalValue > c_evalSaturationTreshold)
     {
-        value = c_evalSaturationTreshold + (value - c_evalSaturationTreshold) / 4;
+        finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 4;
     }
 
-    ASSERT(value > -KnownWinValue && value < KnownWinValue);
+    ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
     // scale down when approaching 50-move draw
-    value = value * (128 - std::max(0, (int32_t)position.GetHalfMoveCount() - 4)) / 128;
+    finalValue = finalValue * (128 - std::max(0, (int32_t)pos.GetHalfMoveCount() - 4)) / 128;
 
-    ASSERT(value > -KnownWinValue && value < KnownWinValue);
+    ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
-    return (ScoreType)value;
+    return (ScoreType)finalValue;
 }

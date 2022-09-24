@@ -3,29 +3,16 @@
 #include "Common.hpp"
 
 
-inline bool IsPassedPawn(Square pawnSquare, const Color sideToMove, Bitboard whitePawns, Bitboard blackPawns)
+inline bool IsPassedPawn(Square pawnSquare, Bitboard ourPawns, Bitboard theirPawns)
 {
-    if (sideToMove != Color::White)
-    {
-        pawnSquare = pawnSquare.FlippedRank();
-        std::swap(whitePawns, blackPawns);
-        whitePawns = whitePawns.MirroredVertically();
-        blackPawns = blackPawns.MirroredVertically();
-    }
-
-    if (pawnSquare.Rank() >= 6)
-    {
-        // pawn is ready to promotion - consider is as passed
-        return true;
-    }
-    else
+    if (pawnSquare.Rank() < 6)
     {
         constexpr const Bitboard fileMask = Bitboard::FileBitboard<0>();
 
         Bitboard passedPawnMask = fileMask << (pawnSquare.Index() + 8u);
 
         // blocked pawn
-        if ((whitePawns & passedPawnMask) != 0)
+        if ((ourPawns & passedPawnMask) != 0)
         {
             return false;
         }
@@ -33,7 +20,7 @@ inline bool IsPassedPawn(Square pawnSquare, const Color sideToMove, Bitboard whi
         if (pawnSquare.File() > 0u) passedPawnMask |= fileMask << (pawnSquare.Index() + 7u);
         if (pawnSquare.File() < 7u) passedPawnMask |= fileMask << (pawnSquare.Index() + 9u);
 
-        if ((blackPawns & passedPawnMask) == 0)
+        if ((theirPawns & passedPawnMask) == 0)
         {
             return true;
         }

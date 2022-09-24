@@ -21,6 +21,7 @@ void InitEngine()
 #endif // USE_SSE
 
     EnableLargePagesSupport();
+    Square::Init();
     InitBitboards();
     InitZobristHash();
     InitEndgame();

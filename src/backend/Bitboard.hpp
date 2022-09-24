@@ -88,6 +88,26 @@ struct Bitboard
         return x;
     }
 
+    INLINE constexpr Bitboard North() const
+    {
+        return value << 8u;
+    }
+
+    INLINE constexpr Bitboard South() const
+    {
+        return value >> 8u;
+    }
+
+    INLINE constexpr Bitboard East() const
+    {
+        return (value << 1u) & (~FileBitboard<0>());
+    }
+
+    INLINE constexpr Bitboard West() const
+    {
+        return (value >> 1u) & (~FileBitboard<7>());
+    }
+
     INLINE static constexpr Bitboard Full()
     {
         return 0xFFFFFFFFFFFFFFFFull;

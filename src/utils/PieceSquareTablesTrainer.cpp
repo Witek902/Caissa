@@ -11,6 +11,7 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Material.hpp"
 #include "../backend/Endgame.hpp"
+#include "../backend/Pawns.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
@@ -28,7 +29,12 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 100000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
 static const uint32_t cBatchSize = 128;
-static const uint32_t cNumNetworkInputs = 5 * 64 + 48 + 4 + 2 * 5;
+static const uint32_t cNumNetworkInputs =
+    5 * 64 + 48 +       // PSQT
+    9 + 14 + 15 + 28 +  // mobility
+    2 * 5 * 7 +         // king tropism: [white/black] x [5 pieces] x [7 possible distances]
+    5                   // passed pawn bonus
+    ;
 
 static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -105,83 +111,113 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     outVector.inputs[offset + FirstBitSet(pos.Blacks().king.MirroredVertically())] += -1.0f;
     offset += 64;
 
-    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Whites().Occupied();
-        outVector.inputs[offset] += attacks.Count();
-    });
-    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Blacks().Occupied();
-        outVector.inputs[offset] -= attacks.Count();
-    });
-    offset++;
+    const Bitboard blockers = pos.Occupied();
+    const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
+    const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
 
-    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+    // mobility
     {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
-        outVector.inputs[offset] += attacks.Count();
-    });
-    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
-        outVector.inputs[offset] -= attacks.Count();
-    });
-    offset++;
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] += 1.0f;
+        });
+        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] -= 1.0f;
+        });
+        offset += 9;
 
-    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
-        outVector.inputs[offset] += attacks.Count();
-    });
-    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
-        outVector.inputs[offset] -= attacks.Count();
-    });
-    offset++;
+        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] += 1.0f;
+        });
+        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] -= 1.0f;
+        });
+        offset += 14;
 
-    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Whites().Occupied();
-        outVector.inputs[offset] += attacks.Count();
-    });
-    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
-    {
-        const Bitboard blockers = pos.Occupied();
-        const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Blacks().Occupied();
-        outVector.inputs[offset] -= attacks.Count();
-    });
-    offset++;
+        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] += 1.0f;
+        });
+        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] -= 1.0f;
+        });
+        offset += 15;
 
-    pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] += 1.0f;
+        });
+        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
+            outVector.inputs[offset + attacks.Count()] -= 1.0f;
+        });
+        offset += 28;
+    }
 
-    pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
-    pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] += Square::Distance(whiteKingSq, Square(square)); });
-    pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA { outVector.inputs[offset] -= Square::Distance(blackKingSq, Square(square)); }); offset++;
+    // king tropism
+    {
+        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; });
+        pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; }); offset += 7;
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; });
+        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; }); offset += 7;
+        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; });
+        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; }); offset += 7;
+        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; });
+        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; }); offset += 7;
+        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA {    outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; });
+        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA {    outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; }); offset += 7;
+
+        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; });
+        pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; }); offset += 7;
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; });
+        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; }); offset += 7;
+        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; });
+        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA {   outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; }); offset += 7;
+        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; });
+        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA {     outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; }); offset += 7;
+        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA {    outVector.inputs[offset + Square::Distance(blackKingSq, Square(square)) - 1] -= 1.0f; });
+        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA {    outVector.inputs[offset + Square::Distance(whiteKingSq, Square(square)) - 1] += 1.0f; }); offset += 7;
+    }
+
+    // passed pawns
+    {
+        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            if (IsPassedPawn(Square(square), pos.Whites().pawns, pos.Blacks().pawns))
+            {
+                const uint32_t rank = Square(square).Rank();
+                ASSERT(rank > 0 && rank < 6);
+                outVector.inputs[offset + rank - 1] += 1.0f;
+            }
+        });
+
+        const Bitboard whitesFlipped = pos.Whites().pawns.MirroredVertically();
+        const Bitboard blacksFlipped = pos.Blacks().pawns.MirroredVertically();
+
+        blacksFlipped.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            if (IsPassedPawn(Square(square), blacksFlipped, whitesFlipped))
+            {
+                const uint32_t rank = Square(square).Rank();
+                ASSERT(rank > 0 && rank < 6);
+                outVector.inputs[offset + rank - 1] -= 1.0f;
+            }
+        });
+
+        offset += 5;
+    }
 
     ASSERT(offset == cNumNetworkInputs);
 }
@@ -273,24 +309,28 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     printPieceWeights("Queen");
     printPieceWeights("King");
 
-    std::cout << "Knight mobility bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Bishop mobility bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Rook mobility bonus:   " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Queen mobility bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Knight mobility bonus: "; for (uint32_t i = 0; i < 9; ++i)   std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Bishop mobility bonus: "; for (uint32_t i = 0; i < 14; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Rook mobility bonus:   "; for (uint32_t i = 0; i < 15; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Queen mobility bonus:  "; for (uint32_t i = 0; i < 28; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
     std::cout << std::endl;
 
-    std::cout << "Pawn vs. King (same color) distance bonus:       " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Knight vs. King (same color) distance bonus:     " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Bishop vs. King (same color) distance bonus:     " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Rook vs. King (same color) distance bonus:       " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Queen vs. King (same color) distance bonus:      " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Pawn vs. King (same color) distance bonus:       "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Knight vs. King (same color) distance bonus:     "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Bishop vs. King (same color) distance bonus:     "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Rook vs. King (same color) distance bonus:       "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Queen vs. King (same color) distance bonus:      "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
     std::cout << std::endl;
 
-    std::cout << "Pawn vs. King (opposite color)  distance bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Knight vs. King (opposite color) distance bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Bishop vs. King (opposite color) distance bonus: " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Rook vs. King (opposite color distance bonus:    " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
-    std::cout << "Queen vs. King (opposite color) distance bonus:  " << (c_nnOutputToCentiPawns * weights[offset++]) << std::endl;
+    std::cout << "Pawn vs. King (opposite color)  distance bonus:  "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Knight vs. King (opposite color) distance bonus: "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Bishop vs. King (opposite color) distance bonus: "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Rook vs. King (opposite color distance bonus:    "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << "Queen vs. King (opposite color) distance bonus:  "; for (uint32_t i = 0; i < 7; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Passed pawns bonus:                              ";
+    for (uint32_t i = 0; i < 5; ++i)  std::cout << (int32_t)(c_nnOutputToCentiPawns * weights[offset++]) << '\t'; std::cout << std::endl;
     std::cout << std::endl;
 
     std::cout << "Tempo bonus:           " << int32_t(c_nnOutputToCentiPawns * weights[offset]) << std::endl;
