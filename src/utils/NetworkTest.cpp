@@ -33,20 +33,24 @@ bool TestNetwork()
     uint32_t numTrainingVectorsPassed = 0;
 
     {
-        trainingSet[0].features = {};
+        trainingSet[0].inputMode = nn::InputMode::SparseBinary;
+        trainingSet[0].sparseBinaryInputs = {};
         trainingSet[0].output.resize(1);
         trainingSet[0].output[0] = 0.0f;
 
+        trainingSet[1].inputMode = nn::InputMode::SparseBinary;
         trainingSet[1].output.resize(1);
-        trainingSet[1].features = { 0 };
+        trainingSet[1].sparseBinaryInputs = { 0 };
         trainingSet[1].output[0] = 1.0f;
 
+        trainingSet[2].inputMode = nn::InputMode::SparseBinary;
         trainingSet[2].output.resize(1);
-        trainingSet[2].features = { 1 };
+        trainingSet[2].sparseBinaryInputs = { 1 };
         trainingSet[2].output[0] = 0.0f;
 
+        trainingSet[3].inputMode = nn::InputMode::SparseBinary;
         trainingSet[3].output.resize(1);
-        trainingSet[3].features = { 0, 1 };
+        trainingSet[3].sparseBinaryInputs = { 0, 1 };
         trainingSet[3].output[0] = 0.0f;
     }
 
@@ -87,7 +91,7 @@ bool TestNetwork()
                 featureIndices[1] = 1;
             }
 
-            const auto& networkOutput = network.Run(featureIndices, numFeatures, networkRunCtx);
+            const auto& networkOutput = network.Run(numFeatures, featureIndices, networkRunCtx);
             int32_t packedNetworkOutput = packedNetwork.Run(featureIndices, numFeatures);
 
             const float expectedValue = trainingSet[i].output[0];

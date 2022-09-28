@@ -12,6 +12,55 @@
 
 namespace nn {
 
+void TrainingVector::CombineSparseInputs()
+{
+    std::sort(sparseInputs.begin(), sparseInputs.end(),
+              [](const ActiveFeature& a, const ActiveFeature& b) { return a.index < b.index; });
+
+    // TODO this is O(N^2)
+    for (size_t i = 0; ; )
+    {
+        if (i + 1 >= sparseInputs.size()) break;
+
+        if (sparseInputs[i].index == sparseInputs[i + 1].index)
+        {
+            // combine with next and erase
+            sparseInputs[i].value += sparseInputs[i + 1].value;
+            sparseInputs.erase(sparseInputs.begin() + i + 1);
+        }
+        else if (std::abs(sparseInputs[i].value) < 1.0e-7f)
+        {
+            // remove zero inputs
+            sparseInputs.erase(sparseInputs.begin() + i);
+        }
+        else
+        {
+            i++;
+        }
+    }
+}
+
+void TrainingVector::Validate() const
+{
+    if (inputMode == InputMode::Full)
+    {
+    }
+    else if (inputMode == InputMode::SparseBinary)
+    {
+        std::vector<uint16_t> sortedInputs = sparseBinaryInputs;
+        std::sort(sortedInputs.begin(), sortedInputs.end());
+        ASSERT(std::adjacent_find(sortedInputs.begin(), sortedInputs.end()) == sortedInputs.end());
+    }
+    else if (inputMode == InputMode::Sparse)
+    {
+
+    }
+    else
+    {
+        DEBUG_BREAK();
+    }
+}
+
 void LayerRunContext::Init(const Layer& layer)
 {
     linearValue.resize(layer.numOutputs);
@@ -129,37 +178,61 @@ void Layer::Run(const Values& in, LayerRunContext& ctx) const
 {
     ASSERT(in.size() == numInputs);
 
-    ctx.input = in;
-    ctx.useActiveFeaturesList = false;
+    ctx.inputs = in;
+    ctx.inputMode = InputMode::Full;
 
     // apply biases
     memcpy(ctx.linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
 
-    // accumulate weights
-    for (uint32_t j = 0; j < numInputs; j++)
+    if (numOutputs == 1)
     {
-        const float inputValue = in[j];
-
-        if (std::abs(inputValue) > 1.0e-7f)
-        {
-            uint32_t i = 0;
-
+        size_t i = 0;
 #ifdef USE_AVX
-            const float* weightsPtr = weights.data() + j * numOutputs;
-            float* valuesPtr = ctx.linearValue.data();
-            const __m256 vInputValue = _mm256_set1_ps(inputValue);
-            for (; i + 8 <= numOutputs; i += 8)
-            {
-                _mm256_store_ps(valuesPtr + i,
-                                _mm256_fmadd_ps(vInputValue,
-                                                _mm256_load_ps(weightsPtr + i),
-                                                _mm256_load_ps(valuesPtr + i)));
-            }
+        const float* weightsPtr = weights.data();
+        const float* inputsPtr = in.data();
+        __m256 sum = _mm256_setzero_ps();
+        for (; i + 8 <= numInputs; i += 8)
+        {
+            sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i),
+                                  _mm256_load_ps(inputsPtr + i),
+                                  sum);
+        }
+        ctx.linearValue[0] += m256_hadd(sum);
 #endif // USE_AVX
 
-            for (; i < numOutputs; i++)
+        for (; i < numInputs; i++)
+        {
+            ctx.linearValue[0] += weights[i] * ctx.inputs[i];
+        }
+    }
+    else
+    {
+        // accumulate weights
+        for (uint32_t j = 0; j < numInputs; j++)
+        {
+            const float inputValue = in[j];
+
+            if (std::abs(inputValue) > 1.0e-7f)
             {
-                ctx.linearValue[i] += weights[j * numOutputs + i] * ctx.input[j];
+                uint32_t i = 0;
+
+#ifdef USE_AVX
+                const float* weightsPtr = weights.data() + j * numOutputs;
+                float* valuesPtr = ctx.linearValue.data();
+                const __m256 vInputValue = _mm256_set1_ps(inputValue);
+                for (; i + 8 <= numOutputs; i += 8)
+                {
+                    _mm256_store_ps(valuesPtr + i,
+                                    _mm256_fmadd_ps(vInputValue,
+                                                    _mm256_load_ps(weightsPtr + i),
+                                                    _mm256_load_ps(valuesPtr + i)));
+                }
+#endif // USE_AVX
+
+                for (; i < numOutputs; i++)
+                {
+                    ctx.linearValue[i] += weights[j * numOutputs + i] * ctx.inputs[j];
+                }
             }
         }
     }
@@ -167,16 +240,16 @@ void Layer::Run(const Values& in, LayerRunContext& ctx) const
     ctx.ComputeOutput(activationFunction);
 }
 
-void Layer::Run(const uint16_t* featureIndices, uint32_t numFeatures, LayerRunContext& ctx) const
+void Layer::Run(uint32_t numFeatures, const uint16_t* featureIndices, LayerRunContext& ctx) const
 {
-    ctx.activeFeatures.resize(numFeatures);
-    ctx.useActiveFeaturesList = true;
+    ctx.sparseBinaryInputs.resize(numFeatures);
+    ctx.inputMode = InputMode::SparseBinary;
 
     for (uint32_t i = 0; i < numFeatures; ++i)
     {
         const uint16_t idx = featureIndices[i];
         ASSERT(idx < numInputs);
-        ctx.activeFeatures[i] = idx;
+        ctx.sparseBinaryInputs[i] = idx;
     }
 
     // apply biases
@@ -206,6 +279,53 @@ void Layer::Run(const uint16_t* featureIndices, uint32_t numFeatures, LayerRunCo
         for (; i < numOutputs; i++)
         {
             ctx.linearValue[i] += weights[idx * numOutputs + i];
+        }
+    }
+
+    ctx.ComputeOutput(activationFunction);
+}
+
+void Layer::Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const
+{
+    ctx.sparseInputs.resize(numFeatures);
+    ctx.inputMode = InputMode::Sparse;
+
+    for (uint32_t i = 0; i < numFeatures; ++i)
+    {
+        const ActiveFeature& feature = features[i];
+        ASSERT(feature.index < numInputs);
+        ctx.sparseInputs[i] = feature;
+    }
+
+    // apply biases
+    for (uint32_t i = 0; i < numOutputs; i++)
+    {
+        ctx.linearValue[i] = weights[numOutputs * numInputs + i];
+    }
+
+    // accumulate active feature weights
+    for (uint32_t j = 0; j < numFeatures; ++j)
+    {
+        const uint32_t idx = features[j].index;
+
+        size_t i = 0;
+
+#ifdef USE_AVX
+        const __m256 vInputValue = _mm256_set1_ps(features[j].value);
+        const float* weightsPtr = weights.data() + idx * numOutputs;
+        float* valuesPtr = ctx.linearValue.data();
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            _mm256_store_ps(valuesPtr + i,
+                            _mm256_fmadd_ps(vInputValue,
+                                            _mm256_load_ps(weightsPtr + i),
+                                            _mm256_load_ps(valuesPtr + i)));
+        }
+#endif // USE_AVX
+
+        for (; i < numOutputs; i++)
+        {
+            ctx.linearValue[i] += weights[idx * numOutputs + i] * features[j].value;
         }
     }
 
@@ -270,12 +390,12 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
         }
     }
 
-    if (ctx.useActiveFeaturesList)
+    if (ctx.inputMode == InputMode::SparseBinary)
     {
-        // for first layer, use active feature indices and don't compute nextError (there's no more layers before to backpropagate)
+        // 'SparseBinary' mode is used only for first layer, so don't compute nextError (there's no more layers before it to backpropagate)
 
         // update gradient of active features
-        for (const uint16_t j : ctx.activeFeatures)
+        for (const uint16_t& j : ctx.sparseBinaryInputs)
         {
             size_t i = 0;
 #ifdef USE_AVX
@@ -288,19 +408,44 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
 #endif // USE_AVX
             for (; i < numOutputs; i++)
             {
-                // not multiplying by input value, because it's equal to 1.0 in case of first layer
+                // not multiplying by input value, because it's equal to 1.0
                 gradients.values[j * numOutputs + i] += activationGradients[i];
             }
             gradients.dirty[j] = true;
         }
     }
-    else
+    else if (ctx.inputMode == InputMode::Sparse)
+    {
+        // 'Sparse' mode is used only for first layer, so don't compute nextError (there's no more layers before it to backpropagate)
+        // TODO use Sparse mode for next layers?
+
+        // update gradient of active features
+        for (const ActiveFeature& feature : ctx.sparseInputs)
+        {
+            size_t i = 0;
+#ifdef USE_AVX
+            float* gradientPtr = gradients.values.data() + feature.index * numOutputs;
+            const __m256 vInputValue = _mm256_set1_ps(feature.value);
+            for (; i + 8 <= numOutputs; i += 8)
+            {
+                _mm256_store_ps(gradientPtr + i,
+                                _mm256_fmadd_ps(vInputValue, _mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
+            }
+#endif // USE_AVX
+            for (; i < numOutputs; i++)
+            {
+                gradients.values[feature.index * numOutputs + i] += feature.value * activationGradients[i];
+            }
+            gradients.dirty[feature.index] = true;
+        }
+    }
+    else if (ctx.inputMode == InputMode::Full)
     {
         // for later layers, use exact input values and compute nextError (for back propagation)
 
-        // compute input values gradient
         for (size_t j = 0; j < numInputs; j++)
         {
+            // compute input gradient
             float errorSum = 0.0f;
             {
                 size_t i = 0;
@@ -309,25 +454,19 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
                 __m256 sum = _mm256_setzero_ps();
                 for (; i + 8 <= numOutputs; i += 8)
                 {
-                    sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i),
-                                          _mm256_load_ps(activationGradients + i),
-                                          sum);
+                    sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i), _mm256_load_ps(activationGradients + i), sum);
                 }
                 errorSum = m256_hadd(sum);
 #endif // USE_AVX
-
                 for (; i < numOutputs; i++)
                 {
                     errorSum += weights[j * numOutputs + i] * activationGradients[i];
                 }
             }
             ctx.inputGradient[j] = errorSum;
-        }
 
-        // compute weights gradient
-        for (size_t j = 0; j < numInputs; j++)
-        {
-            const float inputValue = ctx.input[j];
+            // compute weights gradient
+            const float inputValue = ctx.inputs[j];
             if (std::abs(inputValue) > 1.0e-7f)
             {
                 size_t i = 0;
@@ -337,18 +476,20 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
                 for (; i + 8 <= numOutputs; i += 8)
                 {
                     _mm256_store_ps(gradientPtr + i,
-                                    _mm256_fmadd_ps(vInputValue,
-                                                    _mm256_load_ps(activationGradients + i),
-                                                    _mm256_load_ps(gradientPtr + i)));
+                                    _mm256_fmadd_ps(vInputValue, _mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
                 }
 #endif // USE_AVX
                 for (; i < numOutputs; i++)
                 {
-                    gradients.values[j * numOutputs + i] += ctx.input[j] * activationGradients[i];
+                    gradients.values[j * numOutputs + i] += inputValue * activationGradients[i];
                 }
                 gradients.dirty[j] = true;
             }
         }
+    }
+    else
+    {
+        DEBUG_BREAK();
     }
 
     // compute biases gradient
@@ -527,11 +668,26 @@ const Values& NeuralNetwork::Run(const Values& input, NeuralNetworkRunContext& c
     return ctx.layers.back().output;
 }
 
-const Values& NeuralNetwork::Run(const uint16_t* featureIndices, uint32_t numFeatures, NeuralNetworkRunContext& ctx) const
+const Values& NeuralNetwork::Run(uint32_t numFeatures, const uint16_t* features, NeuralNetworkRunContext& ctx) const
 {
     ASSERT(layers.size() == ctx.layers.size());
 
-    layers.front().Run(featureIndices, numFeatures, ctx.layers.front());
+    layers.front().Run(numFeatures, features, ctx.layers.front());
+
+    for (size_t i = 1; i < layers.size(); i++)
+    {
+        const Values& prevOutput = ctx.layers[i - 1].output;
+        layers[i].Run(prevOutput, ctx.layers[i]);
+    }
+
+    return ctx.layers.back().output;
+}
+
+const Values& NeuralNetwork::Run(uint32_t numFeatures, const ActiveFeature* features, NeuralNetworkRunContext& ctx) const
+{
+    ASSERT(layers.size() == ctx.layers.size());
+
+    layers.front().Run(numFeatures, features, ctx.layers.front());
 
     for (size_t i = 1; i < layers.size(); i++)
     {
@@ -717,13 +873,19 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             {
                 const TrainingVector& vec = trainingSet[vecIndex];
 
-                if (!vec.inputs.empty())
+                switch (vec.inputMode)
                 {
+                case InputMode::Full:
                     ctx.tempValues = network.Run(vec.inputs, ctx);
-                }
-                else
-                {
-                    ctx.tempValues = network.Run(vec.features.data(), (uint32_t)vec.features.size(), ctx);
+                    break;
+                case InputMode::Sparse:
+                    ctx.tempValues = network.Run((uint32_t)vec.sparseInputs.size(), vec.sparseInputs.data(), ctx);
+                    break;
+                case InputMode::SparseBinary:
+                    ctx.tempValues = network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), ctx);
+                    break;
+                default:
+                    DEBUG_BREAK();
                 }
 
                 // train last layers
@@ -731,7 +893,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                     for (size_t i = 0; i < ctx.tempValues.size(); i++)
                     {
                         // gradient of RMS loss function
-                        ctx.tempValues[i] = /* 2.0f * */ (ctx.tempValues[i] - vec.output[i]);
+                        ctx.tempValues[i] = 2.0f * (ctx.tempValues[i] - vec.output[i]);
 
                         // gradient of cross-entropy loss function
                         //const float target = vec.output[i];
