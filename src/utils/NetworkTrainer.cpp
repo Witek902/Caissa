@@ -42,12 +42,13 @@ static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outV
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
-    outVector.features.clear();
-    outVector.features.reserve(numFeatures);
+    outVector.inputMode = nn::InputMode::SparseBinary;
+    outVector.sparseBinaryInputs.clear();
+    outVector.sparseBinaryInputs.reserve(numFeatures);
 
     for (uint32_t i = 0; i < numFeatures; ++i)
     {
-        outVector.features.push_back(features[i]);
+        outVector.sparseBinaryInputs.push_back(features[i]);
     }
 }
 
@@ -188,7 +189,7 @@ bool TrainNetwork()
             TimePoint startTime = TimePoint::GetCurrent();
             for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
             {
-                const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
+                const std::vector<uint16_t>& features = validationSet[i].trainingVector.sparseBinaryInputs;
                 packedNetworkOutputs[i] = netData.packedNet.Run(features.data(), (uint32_t)features.size());
             }
             packedNetworkRunTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
@@ -197,8 +198,8 @@ bool TrainNetwork()
         // TODO: parallel
         for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
         {
-            const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
-            const nn::Values& networkOutput = netData.network.Run(features.data(), (uint32_t)features.size(), netData.runCtx);
+            const std::vector<uint16_t>& features = validationSet[i].trainingVector.sparseBinaryInputs;
+            const nn::Values& networkOutput = netData.network.Run((uint32_t)features.size(), features.data(), netData.runCtx);
 
             const float expectedValue = validationSet[i].trainingVector.output[0];
             const float nnValue = networkOutput[0];
@@ -248,7 +249,7 @@ bool TrainNetwork()
             Position pos(Position::InitPositionFEN);
             nn::TrainingVector vec;
             PositionToSparseVector(pos, vec);
-            startPosEvaluation = netData.network.Run(vec.features.data(), (uint32_t)vec.features.size(), netData.runCtx)[0];
+            startPosEvaluation = netData.network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), netData.runCtx)[0];
         }
 
         nnErrorSum = sqrtf(nnErrorSum / cNumValidationVectorsPerIteration);

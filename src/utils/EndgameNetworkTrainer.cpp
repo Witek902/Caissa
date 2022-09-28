@@ -39,12 +39,13 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
     ASSERT(numFeatures <= maxFeatures);
 
     outVector.output.resize(1);
-    outVector.features.clear();
-    outVector.features.reserve(numFeatures);
+    outVector.inputMode = nn::InputMode::SparseBinary;
+    outVector.sparseBinaryInputs.clear();
+    outVector.sparseBinaryInputs.reserve(numFeatures);
 
     for (uint32_t i = 0; i < numFeatures; ++i)
     {
-        outVector.features.push_back(features[i]);
+        outVector.sparseBinaryInputs.emplace_back(features[i]);
     }
 }
 
@@ -242,7 +243,7 @@ bool TrainEndgame()
             TimePoint startTime = TimePoint::GetCurrent();
             for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
             {
-                const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
+                const std::vector<uint16_t>& features = validationSet[i].trainingVector.sparseBinaryInputs;
                 packedNetworkOutputs[i] = packedNetwork.Run(features.data(), (uint32_t)features.size());
             }
             packedNetworkRunTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
@@ -250,8 +251,8 @@ bool TrainEndgame()
 
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
-            const std::vector<uint16_t>& features = validationSet[i].trainingVector.features;
-            const nn::Values& networkOutput = network.Run(features.data(), (uint32_t)features.size(), networkRunCtx);
+            const std::vector<uint16_t>& features = validationSet[i].trainingVector.sparseBinaryInputs;
+            const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
             const int32_t packedNetworkOutput = packedNetworkOutputs[i];
 
             const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.output[0]);

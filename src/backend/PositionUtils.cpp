@@ -841,16 +841,38 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
         case Piece::King:
         {
             // TODO generate king move directly
+
+            Square fromSquare = packedMove.FromSquare();
+            Square toSquare = packedMove.ToSquare();
+
+            const uint8_t currentSideCastlingRights = mSideToMove == Color::White ? mWhitesCastlingRights : mBlacksCastlingRights;
+            const Square longCastleRookSquare = GetLongCastleRookSquare(fromSquare, currentSideCastlingRights);
+            const Square shortCastleRookSquare = GetShortCastleRookSquare(fromSquare, currentSideCastlingRights);
+
+            if ((toSquare == longCastleRookSquare) ||
+                (fromSquare == Square_e1 && toSquare == Square_c1 && longCastleRookSquare == Square_a1) ||
+                (fromSquare == Square_e8 && toSquare == Square_c8 && longCastleRookSquare == Square_a8))
+            {
+                toSquare = longCastleRookSquare;
+            }
+            else if ((toSquare == shortCastleRookSquare) ||
+                        (fromSquare == Square_e1 && toSquare == Square_g1 && shortCastleRookSquare == Square_h1) ||
+                        (fromSquare == Square_e8 && toSquare == Square_g8 && shortCastleRookSquare == Square_h8))
+            {
+                toSquare = shortCastleRookSquare;
+            }
+
             MoveList moves;
             GenerateKingMoveList(moves);
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
-                if (moves[i].move == packedMove)
+                if (moves[i].move.FromSquare() == fromSquare && moves[i].move.ToSquare() == toSquare)
                 {
                     return moves[i].move;
                 }
             }
+
             break;
         }
     }
@@ -1433,6 +1455,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const MaterialKey& ma
 
 void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position& outPosition)
 {
+    /*
     std::vector<Piece> pieces = { Piece::Rook, Piece::Knight, Piece::Bishop, Piece::Queen, Piece::King, Piece::Bishop, Piece::Knight, Piece::Rook };
 
     const auto randomizePieces = [&]()
@@ -1463,18 +1486,23 @@ void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position
     outPosition = Position();
 
     randomizePieces();
+    */
+
+    std::uniform_int_distribution<uint32_t> pieceDistr((uint32_t)Piece::Knight, (uint32_t)Piece::Queen);
 
     for (uint8_t i = 0; i < 8; ++i)
     {
-        outPosition.SetPiece(Square(i, 0), pieces[i], Color::White);
+        const Piece piece = i == 4 ? Piece::King : (Piece)(pieceDistr(randomGenerator));
+        outPosition.SetPiece(Square(i, 0), piece, Color::White);
         outPosition.SetPiece(Square(i, 1), Piece::Pawn, Color::White);
     }
 
-    randomizePieces();
+    //randomizePieces();
 
     for (uint8_t i = 0; i < 8; ++i)
     {
-        outPosition.SetPiece(Square(i, 7), pieces[i], Color::Black);
+        const Piece piece = i == 4 ? Piece::King : (Piece)(pieceDistr(randomGenerator));
+        outPosition.SetPiece(Square(i, 7), piece, Color::Black);
         outPosition.SetPiece(Square(i, 6), Piece::Pawn, Color::Black);
     }
 }

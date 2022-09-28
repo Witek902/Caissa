@@ -58,7 +58,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
             const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
 
             if (move.IsQuiet() &&
-                pos.GetNumPieces() >= 6 &&
+                pos.GetNumPieces() >= 4 &&
                 pos.GetHalfMoveCount() < 60 &&
                 whitePawnsMoved && blackPawnsMoved &&
                 !pos.IsInCheck() && pos.GetNumLegalMoves())
@@ -95,11 +95,11 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     }
 
                     // blend between eval score and actual game score
-                    const float lambda = std::lerp(0.8f, 0.6f, gamePhase);
+                    const float lambda = std::lerp(0.9f, 0.6f, gamePhase);
                     entry.score = std::lerp(score, scoreSum, lambda);
                 }
 
-                const float offset = 0.00001f;
+                const float offset = 0.0f;
                 entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
@@ -132,28 +132,28 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
 void LoadAllPositions(std::vector<PositionEntry>& outEntries)
 {
     std::mutex mutex;
-    std::vector<std::string> paths;
 
     const std::string gamesPath = "../../data/selfplayGames";
-    for (const auto& path : std::filesystem::directory_iterator(gamesPath))
-    {
-        std::cout << "Loading " << path.path().string() << "..." << std::endl;
-        paths.push_back(path.path().string());
-    }
 
     Waitable waitable;
     {
         TaskBuilder taskBuilder(waitable);
-        taskBuilder.ParallelFor("LoadPositions", uint32_t(paths.size()), [&](const TaskContext&, uint32_t i)
-        {
-            std::vector<PositionEntry> tempEntries;
-            LoadPositions(paths[i].c_str(), tempEntries);
 
+        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        {
+            std::cout << "Loading " << path.path().string() << "..." << std::endl;
+
+            taskBuilder.Task("LoadPositions", [path, &mutex, &outEntries](const TaskContext&)
             {
-                std::unique_lock<std::mutex> lock(mutex);
-                outEntries.insert(outEntries.end(), tempEntries.begin(), tempEntries.end());
-            }
-        });
+                std::vector<PositionEntry> tempEntries;
+                LoadPositions(path.path().string().c_str(), tempEntries);
+
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    outEntries.insert(outEntries.end(), tempEntries.begin(), tempEntries.end());
+                }
+            });
+        }
     }
 
     waitable.Wait();

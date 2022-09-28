@@ -31,6 +31,11 @@ struct TPieceScore
         return *this;
     }
 
+    TPieceScore<int32_t> operator - (const TPieceScore rhs) const
+    {
+        return { mg - rhs.mg, eg - rhs.eg };
+    }
+
     TPieceScore<int32_t> operator * (const int32_t rhs) const
     {
         return { mg * rhs, eg * rhs };
@@ -41,11 +46,22 @@ using PieceScore = TPieceScore<int16_t>;
 
 extern const PieceScore PSQT[6][Square::NumSquares];
 
-static constexpr PieceScore c_pawnValue     = { 127,    184 };
-static constexpr PieceScore c_knightValue   = { 344,    474 };
-static constexpr PieceScore c_bishopValue   = { 374,    508 };
-static constexpr PieceScore c_rookValue     = { 548,    808 };
-static constexpr PieceScore c_queenValue    = { 1064,   1513 };
+extern const PieceScore c_ourPawnDistanceBonus[8];
+extern const PieceScore c_ourKnightDistanceBonus[8];
+extern const PieceScore c_ourBishopDistanceBonus[8];
+extern const PieceScore c_ourRookDistanceBonus[8];
+extern const PieceScore c_ourQueenDistanceBonus[8];
+extern const PieceScore c_theirPawnDistanceBonus[8];
+extern const PieceScore c_theirKnightDistanceBonus[8];
+extern const PieceScore c_theirBishopDistanceBonus[8];
+extern const PieceScore c_theirRookDistanceBonus[8];
+extern const PieceScore c_theirQueenDistanceBonus[8];
+
+static constexpr PieceScore c_pawnValue     = {   95, 161};
+static constexpr PieceScore c_knightValue   = {  427, 312};
+static constexpr PieceScore c_bishopValue   = {  420, 358};
+static constexpr PieceScore c_rookValue     = {  572, 621};
+static constexpr PieceScore c_queenValue    = { 1326,1059 };
 static constexpr PieceScore c_kingValue     = { std::numeric_limits<int16_t>::max(), std::numeric_limits<int16_t>::max() };
 
 static constexpr PieceScore c_pieceValues[] =
@@ -62,7 +78,7 @@ static constexpr PieceScore c_pieceValues[] =
 // if abs(simpleEval) > nnTresholdMax, then we don't use NN at all
 // if abs(simpleEval) < nnTresholdMin, then we use NN purely
 // between the two values, the NN eval and simple eval are blended smoothly
-static constexpr int32_t c_nnTresholdMin = 256;
+static constexpr int32_t c_nnTresholdMin = 512;
 static constexpr int32_t c_nnTresholdMax = 1024;
 
 bool TryLoadingDefaultEvalFile();

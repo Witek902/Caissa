@@ -13,13 +13,32 @@ class PackedNeuralNetwork;
 
 using Values = std::vector<float, AlignmentAllocator<float, 32>>;
 
+enum class InputMode
+{
+    Unknown,
+    Full,           // full list of inputs as floats
+    Sparse,         // list of sparse inputs (as floats)
+    SparseBinary,   // list of sparse binary inputs (active feature is always 1)
+};
+
+struct ActiveFeature
+{
+    uint32_t index;
+    float value;
+};
+
 struct TrainingVector
 {
-    // intput as float values or active features list
+    InputMode inputMode = InputMode::Unknown;
+
     Values inputs;
-    std::vector<uint16_t> features;
+    std::vector<uint16_t> sparseBinaryInputs;
+    std::vector<ActiveFeature> sparseInputs;
 
     Values output;
+
+    void CombineSparseInputs();
+    void Validate() const;
 };
 
 using TrainingSet = std::vector<TrainingVector>;
@@ -77,9 +96,11 @@ enum class ActivationFunction
 class LayerRunContext
 {
 public:
-    std::vector<uint16_t> activeFeatures;
-    Values input;
-    bool useActiveFeaturesList{ false };
+    InputMode inputMode;
+
+    Values inputs;
+    std::vector<uint16_t> sparseBinaryInputs;
+    std::vector<ActiveFeature> sparseInputs;
 
     Values linearValue;
     Values output;
@@ -104,7 +125,8 @@ public:
 
     void InitWeights();
     void Run(const Values& in, LayerRunContext& ctx) const;
-    void Run(const uint16_t* featureIndices, uint32_t numFeatures, LayerRunContext& ctx) const;
+    void Run(uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
+    void Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
     void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
     void UpdateWeights_SGD(float learningRate, const Gradients& gradients);
     void UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients, const float gradientScale);
@@ -155,7 +177,10 @@ public:
     const Values& Run(const Values& input, NeuralNetworkRunContext& ctx) const;
 
     // Calculate neural network output based on ssparse input (list of active features)
-    const Values& Run(const uint16_t* featureIndices, uint32_t numFeatures, NeuralNetworkRunContext& ctx) const;
+    const Values& Run(uint32_t numFeatures, const ActiveFeature* features, NeuralNetworkRunContext& ctx) const;
+
+    // Calculate neural network output based on ssparse input (list of active binary features)
+    const Values& Run(uint32_t numFeatures, const uint16_t* features, NeuralNetworkRunContext& ctx) const;
 
     void PrintStats() const;
 
