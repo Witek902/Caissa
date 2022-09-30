@@ -1,11 +1,15 @@
-# Caissa Chess Engine
+
+![ArtImage](https://user-images.githubusercontent.com/5882734/193368109-abce432b-85e9-4f11-bb3c-57fd3d27db22.jpg?raw=true)
+
 UCI command-line chess engine written in C++ from scratch. In development since beginning of 2021.
+
 
 ### Playing strength
 
-CCRL 40/15 Score: **3293** (#44) (version 0.9.0)
+* CCRL 40/15 Score: **3240** (#44) (version 0.9)
+* CCRL 2+1 Score: **3293** (#44) (version 0.9)
+* CEGT 40/4 Score: **3211** (#34) (version 0.9)
 
-CCRL 2+1 Score: **3222** (#46) (version 0.8.0)
 
 ### Supported UCI options
 
@@ -93,6 +97,5 @@ The projects comprises folowing modules:
   * Better neural network architecture
   * Better classic evaluation (king safety, mobility, pawns, etc.)
   * Search tuning and improvement
-  * Move generation improvement (e.g. staged move generation)
   * Chess960 support
   * More platforms support
