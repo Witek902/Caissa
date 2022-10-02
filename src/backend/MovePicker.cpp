@@ -34,7 +34,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 return true;
             }
 
-            // (fallthrough)
+            [[fallthrough]];
         }
 
         case Stage::TTMove:
@@ -62,7 +62,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
 
             moveOrderer.ScoreMoves(node, game, moves);
 
-            // (fallthrough)
+            [[fallthrough]];
         }
 
         case Stage::Captures:
@@ -97,7 +97,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 moveOrderer.ScoreMoves(node, game, moves);
             }
 
-            // (fallthrough)
+            [[fallthrough]];
         }
 
         case Stage::Quiet:

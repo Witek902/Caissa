@@ -4,8 +4,8 @@ int main(int argc, const char* argv[])
 {
     InitEngine();
 
-    UniversalChessInterface uci(argc, argv);
-    uci.Loop();
+    UniversalChessInterface uci;
+    uci.Loop(argc, argv);
 
     return 0;
 }

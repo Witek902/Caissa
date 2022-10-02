@@ -32,10 +32,10 @@ struct SearchTaskContext
 class UniversalChessInterface
 {
 public:
-    UniversalChessInterface(int argc, const char* argv[]);
+    UniversalChessInterface();
     ~UniversalChessInterface();
 
-    void Loop();
+    void Loop(int argc, const char* argv[]);
     bool ExecuteCommand(const std::string& commandString);
 
 private:
