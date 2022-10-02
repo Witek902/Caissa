@@ -36,7 +36,7 @@ static const uint32_t c_MaxNumThreads = 64;
 
 using UniqueLock = std::unique_lock<std::mutex>;
 
-UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
+UniversalChessInterface::UniversalChessInterface()
 {
     mSearchThread = std::thread(&UniversalChessInterface::SearchThreadEntryFunc, this);
 
@@ -51,14 +51,7 @@ UniversalChessInterface::UniversalChessInterface(int argc, const char* argv[])
     // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
     SetGaviotaCacheSize(1024 * 1024 * c_DefaultGaviotaTbCacheInMB);
 
-    for (int i = 1; i < argc; ++i)
-    {
-        if (argv[i])
-        {
-            std::cout << "CommandLine: " << argv[i] << std::endl;
-            ExecuteCommand(argv[i]);
-        }
-    }
+
 }
 
 UniversalChessInterface::~UniversalChessInterface()
@@ -66,8 +59,20 @@ UniversalChessInterface::~UniversalChessInterface()
     StopSearchThread();
 }
 
-void UniversalChessInterface::Loop()
+void UniversalChessInterface::Loop(int argc, const char* argv[])
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (argv[i])
+        {
+            std::cout << "CommandLine: " << argv[i] << std::endl;
+            if (!ExecuteCommand(argv[i]))
+            {
+                return;
+            }
+        }
+    }
+
     std::string str;
 
     while (std::getline(std::cin, str))

@@ -442,6 +442,11 @@ bool ProbeSyzygy_WDL(const Position&, int32_t*)
     return false;
 }
 
+bool ProbeGaviota_Root(const Position&, Move&, uint32_t*, int32_t*)
+{
+    return false;
+}
+
 bool ProbeGaviota(const Position&, uint32_t*, int32_t*)
 {
     return false;
