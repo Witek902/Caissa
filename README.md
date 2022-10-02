@@ -1,9 +1,12 @@
 # Caissa Chess Engine
 
+[![LinuxBuildStatus](https://github.com/Witek902/Caissa/workflows/Linux/badge.svg)](https://github.com/Witek902/Caissa/actions/workflows/linux.yml)
+
 ![ArtImage](https://user-images.githubusercontent.com/5882734/193368109-abce432b-85e9-4f11-bb3c-57fd3d27db22.jpg?raw=true)
 
-UCI command-line chess engine written in C++ from scratch. In development since beginning of 2021.
+## Overview
 
+UCI command-line chess engine written in C++ from scratch. In development since beginning of 2021.
 
 ### Playing strength
 
