@@ -331,6 +331,7 @@ bool Position::FromFEN(const std::string& fenString)
     }
 
     // castling rights
+    if (Whites().king && Blacks().king)
     {
         const Square whiteKingSq(FirstBitSet(Whites().king));
         const Square blackKingSq(FirstBitSet(Blacks().king));
