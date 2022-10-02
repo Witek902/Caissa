@@ -41,6 +41,7 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 * UCI protocol
 * Neural network evaluation
 * Syzygy and Gaviota endgame tablebases support
+* Chess960 (Fischer Random) support
 
 #### Search Algorithm
 * Negamax with alpha-beta pruning
@@ -98,5 +99,4 @@ The projects comprises folowing modules:
   * Better neural network architecture
   * Better classic evaluation (king safety, mobility, pawns, etc.)
   * Search tuning and improvement
-  * Chess960 support
   * More platforms support

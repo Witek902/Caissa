@@ -114,28 +114,35 @@ bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDistanceT
         return false;
     }
 
-    std::unique_lock lock(g_syzygyMutex);
+    // Chess960 castling rights are not handled by Syzygy
+    if (pos.GetWhitesCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
+    if (pos.GetBlacksCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
 
     uint32_t castlingRights = 0;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_K;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_Q;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_k;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_q;
+    if (pos.GetWhitesCastlingRights() & c_shortCastleMask)    castlingRights |= TB_CASTLING_K;
+    if (pos.GetWhitesCastlingRights() & c_longCastleMask)     castlingRights |= TB_CASTLING_Q;
+    if (pos.GetBlacksCastlingRights() & c_shortCastleMask)    castlingRights |= TB_CASTLING_k;
+    if (pos.GetBlacksCastlingRights() & c_longCastleMask)     castlingRights |= TB_CASTLING_q;
 
-    const uint32_t probeResult = tb_probe_root(
-        pos.Whites().Occupied(),
-        pos.Blacks().Occupied(),
-        pos.Whites().king | pos.Blacks().king,
-        pos.Whites().queens | pos.Blacks().queens,
-        pos.Whites().rooks | pos.Blacks().rooks,
-        pos.Whites().bishops | pos.Blacks().bishops,
-        pos.Whites().knights | pos.Blacks().knights,
-        pos.Whites().pawns | pos.Blacks().pawns,
-        pos.GetHalfMoveCount(),
-        castlingRights,
-        pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
-        pos.GetSideToMove() == Color::White,
-        nullptr);
+    uint32_t probeResult = TB_RESULT_FAILED;
+    {
+        std::unique_lock lock(g_syzygyMutex);
+
+        probeResult = tb_probe_root(
+            pos.Whites().Occupied(),
+            pos.Blacks().Occupied(),
+            pos.Whites().king | pos.Blacks().king,
+            pos.Whites().queens | pos.Blacks().queens,
+            pos.Whites().rooks | pos.Blacks().rooks,
+            pos.Whites().bishops | pos.Blacks().bishops,
+            pos.Whites().knights | pos.Blacks().knights,
+            pos.Whites().pawns | pos.Blacks().pawns,
+            pos.GetHalfMoveCount(),
+            castlingRights,
+            pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
+            pos.GetSideToMove() == Color::White,
+            nullptr);
+    }
 
     if (probeResult == TB_RESULT_FAILED)
     {
@@ -179,11 +186,15 @@ bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL)
         return false;
     }
 
+    // Chess960 castling rights are not handled by Syzygy
+    if (pos.GetWhitesCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
+    if (pos.GetBlacksCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
+
     uint32_t castlingRights = 0;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_K;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_Q;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= TB_CASTLING_k;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= TB_CASTLING_q;
+    if (pos.GetWhitesCastlingRights() & c_shortCastleMask)    castlingRights |= TB_CASTLING_K;
+    if (pos.GetWhitesCastlingRights() & c_longCastleMask)     castlingRights |= TB_CASTLING_Q;
+    if (pos.GetBlacksCastlingRights() & c_shortCastleMask)    castlingRights |= TB_CASTLING_k;
+    if (pos.GetBlacksCastlingRights() & c_longCastleMask)     castlingRights |= TB_CASTLING_q;
 
     // TODO skip if too many pieces, obvious wins, etc.
     const uint32_t probeResult = tb_probe_wdl(
@@ -266,11 +277,15 @@ bool ProbeGaviota(const Position& pos, uint32_t* outDTM, int32_t* outWDL)
     uint32_t stm = pos.GetSideToMove() == Color::White ? tb_WHITE_TO_MOVE : tb_BLACK_TO_MOVE;
     uint32_t epsquare = SquareToGaviota(pos.GetEnPassantSquare());
 
-    uint32_t castlingRights = tb_NOCASTLE;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= tb_WOO;
-    if (pos.GetWhitesCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= tb_WOOO;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_ShortCastleAllowed)  castlingRights |= tb_BOO;
-    if (pos.GetBlacksCastlingRights() & CastlingRights_LongCastleAllowed)   castlingRights |= tb_BOOO;
+    // Chess960 castling rights are not handled by Syzygy
+    if (pos.GetWhitesCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
+    if (pos.GetBlacksCastlingRights() & ~(c_shortCastleMask | c_longCastleMask))   return false;
+
+    uint32_t castlingRights = 0;
+    if (pos.GetWhitesCastlingRights() & c_shortCastleMask)    castlingRights |= tb_WOO;
+    if (pos.GetWhitesCastlingRights() & c_longCastleMask)     castlingRights |= tb_WOOO;
+    if (pos.GetBlacksCastlingRights() & c_shortCastleMask)    castlingRights |= tb_BOO;
+    if (pos.GetBlacksCastlingRights() & c_longCastleMask)     castlingRights |= tb_BOOO;
 
     uint32_t    ws[17];     // list of squares for white
     uint32_t    bs[17];     // list of squares for black

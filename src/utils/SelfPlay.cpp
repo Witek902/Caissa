@@ -216,7 +216,7 @@ void SelfPlay(const std::vector<std::string>& args)
             //openingPos.SetPiece(whiteKingSquare, Piece::King, Color::White);
             openingPos.SetPiece(blackKingSquare, Piece::King, Color::Black);
             //openingPos.SetWhitesCastlingRights(CastlingRights_None);
-            openingPos.SetBlacksCastlingRights(CastlingRights_None);
+            openingPos.SetBlacksCastlingRights(0);
 
             if (!openingPos.IsValid())
             {

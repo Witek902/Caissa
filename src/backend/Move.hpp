@@ -66,19 +66,22 @@ struct Move
     INLINE Piece GetPiece() const               { return (Piece)((value >> 16) & 0b1111); }
     INLINE constexpr bool IsCapture() const     { return (value >> 20) & 1; }
     INLINE constexpr bool IsEnPassant() const   { return (value >> 21) & 1; }
-    INLINE constexpr bool IsCastling() const    { return (value >> 22) & 1; }
+    INLINE constexpr bool IsLongCastle() const  { return (value >> 22) & 1; }
+    INLINE constexpr bool IsShortCastle() const { return (value >> 23) & 1; }
+    INLINE constexpr bool IsCastling() const    { return (value >> 22) & 3; }
 
     // data layout is following:
     //
-    // [type]   [property]  [bits]
+    // [type]   [property]      [bits]
     // 
-    // Square   fromSquare  : 6
-    // Square   toSquare    : 6
-    // Piece    promoteTo   : 4     target piece after promotion (only valid is piece is pawn)
-    // Piece    piece       : 4
-    // bool     isCapture   : 1
-    // bool     isEnPassant : 1     (is en passant capture)
-    // bool     isCastling  : 1     (only valid if piece is king)
+    // Square   fromSquare      : 6
+    // Square   toSquare        : 6
+    // Piece    promoteTo       : 4     target piece after promotion (only valid is piece is pawn)
+    // Piece    piece           : 4
+    // bool     isCapture       : 1
+    // bool     isEnPassant     : 1     (is en passant capture)
+    // bool     isLongCastle    : 1     (only valid if piece is king)
+    // bool     isShortCastle   : 1     (only valid if piece is king)
     //
     uint32_t value;
 
@@ -86,7 +89,7 @@ struct Move
 
     INLINE static constexpr Move Make(
         Square fromSquare, Square toSquare, Piece piece, Piece promoteTo = Piece::None,
-        bool isCapture = false, bool isEnPassant = false, bool isCastling = false)
+        bool isCapture = false, bool isEnPassant = false, bool isLongCastle = false, bool isShortCastle = false)
     {
         return
         {
@@ -96,7 +99,8 @@ struct Move
             ((uint32_t)piece << 16) |
             ((uint32_t)isCapture << 20) |
             ((uint32_t)isEnPassant << 21) |
-            ((uint32_t)isCastling << 22)
+            ((uint32_t)isLongCastle << 22) |
+            ((uint32_t)isShortCastle << 23)
         };
     }
 

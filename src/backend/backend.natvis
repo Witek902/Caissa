@@ -9,7 +9,8 @@
             <Item Name="Promote To">(Piece)((value &gt;&gt; 12) &amp; 0b1111)</Item>
             <Item Name="Is Capture">((value &gt;&gt; 20) &amp; 1)</Item>
             <Item Name="Is En Passant">((value &gt;&gt; 21) &amp; 1)</Item>
-            <Item Name="Is Castling">((value &gt;&gt; 22) &amp; 1)</Item>
+            <Item Name="Is Long Castle">((value &gt;&gt; 22) &amp; 1)</Item>
+			<Item Name="Is Short Castle">((value &gt;&gt; 23) &amp; 1)</Item>
 		</Expand>
     </Type>
 

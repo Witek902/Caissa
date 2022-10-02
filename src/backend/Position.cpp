@@ -10,6 +10,8 @@
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+bool Position::s_enableChess960 = false;
+
 uint64_t Position::ComputeHash() const
 {
     uint64_t hash = mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu;
@@ -27,12 +29,22 @@ uint64_t Position::ComputeHash() const
         pos.king.Iterate([&](uint32_t square)    INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::King, square); });
     }
 
-    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= GetCastlingRightsZobristHash(Color::White, 0);
-    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= GetCastlingRightsZobristHash(Color::White, 1);
-    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)  hash ^= GetCastlingRightsZobristHash(Color::Black, 0);
-    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)   hash ^= GetCastlingRightsZobristHash(Color::Black, 1);
+    if (mEnPassantSquare.IsValid())
+    {
+        hash ^= GetEnPassantFileZobristHash(mEnPassantSquare.File());
+    }
 
-    if (mEnPassantSquare.IsValid()) hash ^= GetEnPassantFileZobristHash(mEnPassantSquare.File());
+    for (uint32_t i = 0; i < 8; ++i)
+    {
+        if (mWhitesCastlingRights & (1 << i))
+        {
+            hash ^= GetCastlingRightsZobristHash(Color::White, i);
+        }
+        if (mBlacksCastlingRights & (1 << i))
+        {
+            hash ^= GetCastlingRightsZobristHash(Color::Black, i);
+        }
+    }
 
     return hash;
 }
@@ -60,8 +72,8 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 Position::Position()
     : mSideToMove(Color::White)
     , mEnPassantSquare(Square::Invalid())
-    , mWhitesCastlingRights(CastlingRights(0))
-    , mBlacksCastlingRights(CastlingRights(0))
+    , mWhitesCastlingRights(0)
+    , mBlacksCastlingRights(0)
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
     , mPieceSquareValueMG(0)
@@ -139,29 +151,39 @@ void Position::SetSideToMove(Color color)
     }
 }
 
-void Position::SetWhitesCastlingRights(CastlingRights rights)
+void Position::SetWhitesCastlingRights(uint8_t rightsMask)
 {
-    ASSERT((rights & ~CastlingRights_All) == 0);
+    ASSERT(PopCount(rightsMask) <= 2);
 
-    if (const uint8_t difference = mWhitesCastlingRights ^ rights)
+    if (const uint8_t difference = mWhitesCastlingRights ^ rightsMask)
     {
-        if (difference & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(Color::White, 0);
-        if (difference & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(Color::White, 1);
+        for (uint32_t i = 0; i < 8; ++i)
+        {
+            if (difference & (1 << i))
+            {
+                mHash ^= GetCastlingRightsZobristHash(Color::White, i);
+            }
+        }
 
-        mWhitesCastlingRights = rights;
+        mWhitesCastlingRights = rightsMask;
     }
 }
 
-void Position::SetBlacksCastlingRights(CastlingRights rights)
+void Position::SetBlacksCastlingRights(uint8_t rightsMask)
 {
-    ASSERT((rights & ~CastlingRights_All) == 0);
+    ASSERT(PopCount(rightsMask) <= 2);
 
-    if (const uint8_t difference = mBlacksCastlingRights ^ rights)
+    if (const uint8_t difference = mBlacksCastlingRights ^ rightsMask)
     {
-        if (difference & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(Color::Black, 0);
-        if (difference & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(Color::Black, 1);
+        for (uint32_t i = 0; i < 8; ++i)
+        {
+            if (difference & (1 << i))
+            {
+                mHash ^= GetCastlingRightsZobristHash(Color::Black, i);
+            }
+        }
 
-        mBlacksCastlingRights = rights;
+        mBlacksCastlingRights = rightsMask;
     }
 }
 
@@ -401,9 +423,39 @@ void Position::GenerateMoveList(MoveList& outMoveList, uint32_t flags) const
     GenerateKingMoveList(outMoveList, flags);
 }
 
+Square Position::GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights)
+{
+    constexpr uint8_t mask[] = { 0b00000000, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111 };
+    const uint32_t longCastleMask = castlingRights & mask[kingSquare.File()];
+    const uint8_t longCastleBitIndex = (uint8_t)FirstBitSet(longCastleMask);
+
+    if (longCastleMask)
+    {
+        ASSERT(PopCount(longCastleMask) == 1);
+        return Square(longCastleBitIndex, kingSquare.Rank());
+    }
+
+    return Square::Invalid();
+}
+
+Square Position::GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights)
+{
+    constexpr uint8_t mask[] = { 0b11111110, 0b11111100, 0b11111000, 0b11110000, 0b11100000, 0b11000000, 0b10000000, 0b00000000 };
+    const uint32_t shortCastleMask = castlingRights & mask[kingSquare.File()];
+    const uint8_t shortCastleBitIndex = (uint8_t)FirstBitSet(shortCastleMask);
+
+    if (shortCastleMask)
+    {
+        ASSERT(PopCount(shortCastleMask) == 1);
+        return Square(shortCastleBitIndex, kingSquare.Rank());
+    }
+
+    return Square::Invalid();
+}
+
 void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 {
-    const CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+    const uint8_t currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
@@ -428,10 +480,66 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
         outMoveList.Push(Move::Make(kingSquare, targetSquare, Piece::King, Piece::None, isCapture));
     });
 
-    if ((flags & MOVE_GEN_MASK_QUIET) && (currentSideCastlingRights & CastlingRights_All))
+    if ((flags & MOVE_GEN_MASK_QUIET) && currentSideCastlingRights)
     {
+        // TODO this is expensive
         const Bitboard opponentAttacks = GetAttackedSquares(GetOppositeColor(mSideToMove));
 
+        // king can't be in check
+        if ((currentSide.king & opponentAttacks) == 0u)
+        {
+            const Square longCastleRookSquare = GetLongCastleRookSquare(kingSquare, currentSideCastlingRights);
+            const Square shortCastleRookSquare = GetShortCastleRookSquare(kingSquare, currentSideCastlingRights);
+
+            if (longCastleRookSquare.IsValid() && shortCastleRookSquare.IsValid())
+            {
+                ASSERT(longCastleRookSquare.File() < shortCastleRookSquare.File());
+            }
+
+            // "long" castle
+            if (longCastleRookSquare.IsValid())
+            {
+                ASSERT(longCastleRookSquare.File() < kingSquare.File());
+                ASSERT(currentSide.rooks & longCastleRookSquare.GetBitboard());
+
+                const Square targetKingSquare(2u, kingSquare.Rank());
+                const Square targetRookSquare(3u, kingSquare.Rank());
+
+                const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
+                const Bitboard rookCrossedSquares = Bitboard::GetBetween(longCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
+                const Bitboard occupiedSquares = (occupiedBySideToMove | occupiedByOponent) & ~longCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
+
+                if (0u == (opponentAttacks & kingCrossedSquares) &&
+                    0u == (kingCrossedSquares & occupiedSquares) &&
+                    0u == (rookCrossedSquares & occupiedSquares))
+                {
+                    outMoveList.Push(Move::Make(kingSquare, longCastleRookSquare, Piece::King, Piece::None, false, false, true, false));
+                }
+            }
+
+            if (shortCastleRookSquare.IsValid())
+            {
+                ASSERT(kingSquare.File() < shortCastleRookSquare.File());
+                ASSERT(currentSide.rooks & shortCastleRookSquare.GetBitboard());
+
+                const Square targetKingSquare(6u, kingSquare.Rank());
+                const Square targetRookSquare(5u, kingSquare.Rank());
+
+                const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
+                const Bitboard rookCrossedSquares = Bitboard::GetBetween(shortCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
+                const Bitboard occupiedSquares = (occupiedBySideToMove | occupiedByOponent) & ~shortCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
+
+                if (0u == (opponentAttacks & kingCrossedSquares) &&
+                    0u == (kingCrossedSquares & occupiedSquares) &&
+                    0u == (rookCrossedSquares & occupiedSquares))
+                {
+                    outMoveList.Push(Move::Make(kingSquare, shortCastleRookSquare, Piece::King, Piece::None, false, false, false, true));
+                }
+            }
+        }
+
+
+/*
         // TODO simplify this
         const Bitboard longCastleKingCrossedSquares = (1ull << (kingSquareIndex - 1)) | (1ull << (kingSquareIndex - 2));
         const Bitboard shortCastleKingCrossedSquares = (1ull << (kingSquareIndex + 1)) | (1ull << (kingSquareIndex + 2));
@@ -459,6 +567,7 @@ void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
                 outMoveList.Push(Move::Make(kingSquare, Square(6u, kingSquare.Rank()), Piece::King, Piece::None, false, false, true));
             }
         }
+*/
     }
 }
 
@@ -622,25 +731,22 @@ Square Position::ExtractEnPassantSquareFromMove(const Move& move) const
 
 void Position::ClearRookCastlingRights(const Square affectedSquare)
 {
-    switch (affectedSquare.mIndex)
+    if (affectedSquare.Rank() == 0)
     {
-    case Square_h1:
-        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::White, 0);
-        mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_ShortCastleAllowed);
-        break;
-    case Square_a1:
-        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::White, 1);
-        mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights & ~CastlingRights_LongCastleAllowed);
-        break;
-    case Square_h8:
-        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::Black, 0);
-        mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_ShortCastleAllowed);
-        break;
-    case Square_a8:
-        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) mHash ^= GetCastlingRightsZobristHash(Color::Black, 1);
-        mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights & ~CastlingRights_LongCastleAllowed);
-        break;
-    };
+        if (mWhitesCastlingRights & (1 << affectedSquare.File()))
+        {
+            mHash ^= GetCastlingRightsZobristHash(Color::White, affectedSquare.File());
+            mWhitesCastlingRights &= ~(1 << affectedSquare.File());
+        }
+    }
+    else if (affectedSquare.Rank() == 7)
+    {
+        if (mBlacksCastlingRights & (1 << affectedSquare.File()))
+        {
+            mHash ^= GetCastlingRightsZobristHash(Color::Black, affectedSquare.File());
+            mBlacksCastlingRights &= ~(1 << affectedSquare.File());
+        }
+    }
 }
 
 bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
@@ -682,6 +788,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
     }
 
     // put moved piece
+    if (!move.IsCastling())
     {
         const bool isPromotion = move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None;
         const Piece targetPiece = isPromotion ? move.GetPromoteTo() : move.GetPiece();
@@ -715,22 +822,26 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
     {
         if (move.IsCastling())
         {
+            const uint8_t currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+
+            ASSERT(currentSideCastlingRights != 0);
             ASSERT(move.FromSquare().Rank() == 0 || move.FromSquare().Rank() == 7);
             ASSERT(move.FromSquare().Rank() == move.ToSquare().Rank());
 
-            Square oldRookSquare, newRookSquare;
+            const Square oldKingSquare = move.FromSquare();
+            Square oldRookSquare, newRookSquare, newKingSquare;
 
-            // short castle
-            if (move.FromSquare().File() == 4u && move.ToSquare().File() == 6u)
+            if (move.IsShortCastle())
             {
-                oldRookSquare = Square(7u, move.FromSquare().Rank());
+                oldRookSquare = GetShortCastleRookSquare(oldKingSquare, currentSideCastlingRights);
                 newRookSquare = Square(5u, move.FromSquare().Rank());
+                newKingSquare = Square(6u, move.FromSquare().Rank());
             }
-            // long castle
-            else if (move.FromSquare().File() == 4u && move.ToSquare().File() == 2u)
+            else if (move.IsLongCastle())
             {
-                oldRookSquare = Square(0u, move.FromSquare().Rank());
+                oldRookSquare = GetLongCastleRookSquare(oldKingSquare, currentSideCastlingRights);
                 newRookSquare = Square(3u, move.FromSquare().Rank());
+                newKingSquare = Square(2u, move.FromSquare().Rank());
             }
             else // invalid castle
             {
@@ -738,22 +849,25 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
             }
 
             RemovePiece(oldRookSquare, Piece::Rook, mSideToMove);
+            SetPiece(newKingSquare, Piece::King, mSideToMove);
             SetPiece(newRookSquare, Piece::Rook, mSideToMove);
 
             if (nnContext)
             {
                 nnContext->removedPieces[nnContext->numRemovedPieces++] = { Piece::Rook, mSideToMove, oldRookSquare };
+                nnContext->addedPieces[nnContext->numAddedPieces++] = { Piece::King, mSideToMove, newKingSquare };
                 nnContext->addedPieces[nnContext->numAddedPieces++] = { Piece::Rook, mSideToMove, newRookSquare };
             }
         }
 
         // clear all castling rights after moving a king
-        CastlingRights& currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
-        if (currentSideCastlingRights)
+        if (mSideToMove == Color::White)
         {
-            if (currentSideCastlingRights & CastlingRights_ShortCastleAllowed)  mHash ^= GetCastlingRightsZobristHash(mSideToMove, 0);
-            if (currentSideCastlingRights & CastlingRights_LongCastleAllowed)   mHash ^= GetCastlingRightsZobristHash(mSideToMove, 1);
-            currentSideCastlingRights = CastlingRights(0);
+            SetWhitesCastlingRights(0);
+        }
+        else
+        {
+            SetBlacksCastlingRights(0);
         }
     }
 
@@ -862,8 +976,8 @@ void Position::MirrorVertically()
     mColors[1].knights  = mColors[1].knights.MirroredVertically();
     mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
 
-    mWhitesCastlingRights = CastlingRights_None;
-    mBlacksCastlingRights = CastlingRights_None;
+    mWhitesCastlingRights = 0;
+    mBlacksCastlingRights = 0;
 
     mHash = ComputeHash();
 }
@@ -884,8 +998,8 @@ void Position::MirrorHorizontally()
     mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
     mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
 
-    mWhitesCastlingRights = CastlingRights_None;
-    mBlacksCastlingRights = CastlingRights_None;
+    mWhitesCastlingRights = ReverseBits(mWhitesCastlingRights);
+    mBlacksCastlingRights = ReverseBits(mBlacksCastlingRights);
 
     mHash = ComputeHash();
 }
