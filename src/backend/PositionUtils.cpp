@@ -15,8 +15,14 @@ bool PackPosition(const Position& inPos, PackedPosition& outPos)
     outPos.moveCount = inPos.GetMoveCount();
     outPos.sideToMove = inPos.GetSideToMove() == Color::White ? 0 : 1;
     outPos.halfMoveCount = inPos.GetHalfMoveCount();
-    outPos.castlingRights = (uint8_t)inPos.GetWhitesCastlingRights() | ((uint8_t)inPos.GetBlacksCastlingRights() << 2);
     outPos.enPassantFile = inPos.GetEnPassantSquare().IsValid() ? inPos.GetEnPassantSquare().File() : 0xF;
+
+    outPos.castlingRights = 0;
+    if (inPos.GetWhitesCastlingRights() & c_shortCastleMask)    outPos.castlingRights |= (1 << 0);
+    if (inPos.GetWhitesCastlingRights() & c_longCastleMask)     outPos.castlingRights |= (1 << 1);
+    if (inPos.GetBlacksCastlingRights() & c_shortCastleMask)    outPos.castlingRights |= (1 << 2);
+    if (inPos.GetBlacksCastlingRights() & c_longCastleMask)     outPos.castlingRights |= (1 << 3);
+
     memset(outPos.piecesData, 0, sizeof(outPos.piecesData));
 
     if (outPos.occupied.Count() > 32)
@@ -91,8 +97,18 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos)
     outPos.SetSideToMove((Color)inPos.sideToMove);
     outPos.SetMoveCount(inPos.moveCount);
     outPos.SetHalfMoveCount(inPos.halfMoveCount);
-    outPos.SetWhitesCastlingRights(CastlingRights(inPos.castlingRights & 0b11));
-    outPos.SetBlacksCastlingRights(CastlingRights((inPos.castlingRights >> 2) & 0b11));
+
+    {
+        uint8_t whiteCastlingRights = 0;
+        uint8_t blackCastlingRights = 0;
+        if (inPos.castlingRights & 0b0001)  whiteCastlingRights |= c_shortCastleMask;
+        if (inPos.castlingRights & 0b0010)  whiteCastlingRights |= c_longCastleMask;
+        if (inPos.castlingRights & 0b0100)  blackCastlingRights |= c_shortCastleMask;
+        if (inPos.castlingRights & 0b1000)  blackCastlingRights |= c_longCastleMask;
+
+        outPos.SetWhitesCastlingRights(whiteCastlingRights);
+        outPos.SetBlacksCastlingRights(blackCastlingRights);
+    }
 
     if (inPos.enPassantFile < 8)
     {
@@ -173,6 +189,14 @@ bool Position::IsValid(bool strict) const
         }
     }
 
+    if ((((uint64_t)Whites().rooks & mWhitesCastlingRights) != mWhitesCastlingRights) ||
+        ((((uint64_t)Blacks().rooks >> (7 * 8)) & mBlacksCastlingRights) != mBlacksCastlingRights))
+    {
+        return false;
+    }
+
+    // TODO 960
+    /*
     if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)
     {
         if (((Whites().king & Bitboard(1ull << Square_e1)) == 0) ||
@@ -206,6 +230,7 @@ bool Position::IsValid(bool strict) const
             return false;
         }
     }
+    */
 
     return true;
 }
@@ -307,36 +332,67 @@ bool Position::FromFEN(const std::string& fenString)
 
     // castling rights
     {
-        mWhitesCastlingRights = (CastlingRights)0;
-        mBlacksCastlingRights = (CastlingRights)0;
+        const Square whiteKingSq(FirstBitSet(Whites().king));
+        const Square blackKingSq(FirstBitSet(Blacks().king));
 
+        mWhitesCastlingRights = 0;
+        mBlacksCastlingRights = 0;
         for (loc += 2; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            switch (fenString[loc])
+            constexpr uint8_t longCastleMask[] =    { 0b00000000, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111 };
+            constexpr uint8_t shortCastleMask[] =   { 0b11111110, 0b11111100, 0b11111000, 0b11110000, 0b11100000, 0b11000000, 0b10000000, 0b00000000 };
+
+            const char c = fenString[loc];
+            if (c >= 'A' && c <= 'H')
             {
-            case 'A':
-            case 'K':
-                mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_ShortCastleAllowed);
-                break;
-            case 'H':
-            case 'Q':
-                mWhitesCastlingRights = CastlingRights(mWhitesCastlingRights | CastlingRights_LongCastleAllowed);
-                break;
-            case 'a':
-            case 'k':
-                mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_ShortCastleAllowed);
-                break;
-            case 'h':
-            case 'q':
-                mBlacksCastlingRights = CastlingRights(mBlacksCastlingRights | CastlingRights_LongCastleAllowed);
-                break;
-            case '-':
-                break;
-            default:
+                mWhitesCastlingRights = mWhitesCastlingRights | (1 << (c - 'A'));
+            }
+            else if (c >= 'a' && c <= 'h')
+            {
+                mBlacksCastlingRights = mBlacksCastlingRights | (1 << (c - 'a'));
+            }
+            else if (c == 'K')
+            {
+                uint8_t mask = shortCastleMask[whiteKingSq.File()] & (uint8_t)(uint64_t)Whites().rooks;
+                if (PopCount(mask) > 1) mask = 0; // ambiguous short castle
+                mWhitesCastlingRights = mWhitesCastlingRights | mask;
+            }
+            else if (c == 'Q')
+            {
+                uint8_t mask = longCastleMask[whiteKingSq.File()] & (uint8_t)(uint64_t)Whites().rooks;
+                if (PopCount(mask) > 1) mask = 0; // ambiguous long castle
+                mWhitesCastlingRights = mWhitesCastlingRights | mask;
+            }
+            else if (c == 'k')
+            {
+                uint8_t mask = shortCastleMask[blackKingSq.File()] & (uint8_t)(uint64_t)((uint64_t)Blacks().rooks >> (7 * 8));
+                if (PopCount(mask) > 1) mask = 0; // ambiguous short castle
+                mBlacksCastlingRights = mBlacksCastlingRights | mask;
+            }
+            else if (c == 'q')
+            {
+                uint8_t mask = longCastleMask[blackKingSq.File()] & (uint8_t)(uint64_t)((uint64_t)Blacks().rooks >> (7 * 8));
+                if (PopCount(mask) > 1) mask = 0; // ambiguous long castle
+                mBlacksCastlingRights = mBlacksCastlingRights | mask;
+            }
+            else if (c == '-')
+            {
+                continue;
+            }
+            else
+            {
                 fprintf(stderr, "Invalid FEN: invalid castling rights\n");
                 return false;
             }
         }
+
+        // clear up castling rights if rook is not present on the square
+        mWhitesCastlingRights &= (uint8_t)(uint64_t)Whites().rooks;
+        mBlacksCastlingRights &= (uint8_t)(uint64_t)((uint64_t)Blacks().rooks >> (7 * 8));
+
+        // clear up castling rights if king is in wrong place
+        if (whiteKingSq.Rank() > 0 || whiteKingSq.File() == 0 || whiteKingSq.File() == 7) mWhitesCastlingRights = 0;
+        if (blackKingSq.Rank() < 7 || blackKingSq.File() == 0 || blackKingSq.File() == 7) mBlacksCastlingRights = 0;
     }
 
     std::string enPassantSquare;
@@ -499,13 +555,31 @@ std::string Position::ToFEN() const
 
     // castling rights
     {
-        bool anyCastlingRights = false;
         str += ' ';
-        if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed) str += 'K', anyCastlingRights = true;
-        if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed) str += 'Q', anyCastlingRights = true;
-        if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed) str += 'k', anyCastlingRights = true;
-        if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed) str += 'q', anyCastlingRights = true;
-        if (!anyCastlingRights) str += '-';
+
+        const Square whiteKingSq(FirstBitSet(Whites().king));
+        const Square blackKingSq(FirstBitSet(Blacks().king));
+
+        if (!s_enableChess960)
+        {
+            if (GetShortCastleRookSquare(Whites().GetKingSquare(), mWhitesCastlingRights).IsValid())  str += 'K';
+            if (GetLongCastleRookSquare(Whites().GetKingSquare(), mWhitesCastlingRights).IsValid())   str += 'Q';
+            if (GetShortCastleRookSquare(Blacks().GetKingSquare(), mBlacksCastlingRights).IsValid())  str += 'k';
+            if (GetLongCastleRookSquare(Blacks().GetKingSquare(), mBlacksCastlingRights).IsValid())   str += 'q';
+        }
+        else
+        {
+            for (uint8_t i = 0; i < 8; ++i)
+            {
+                if (mWhitesCastlingRights & (1 << i))  str += ('A' + i);
+            }
+            for (uint8_t i = 0; i < 8; ++i)
+            {
+                if (mBlacksCastlingRights & (1 << i))  str += ('a' + i);
+            }
+        }
+
+        if (mWhitesCastlingRights == 0 && mBlacksCastlingRights == 0) str += '-';
     }
 
     // en passant square
@@ -610,20 +684,13 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
         }
         else
         {
-            if (move.GetPiece() == Piece::King && move.IsCastling())
+            if (move.IsShortCastle())
             {
-                if (move.ToSquare().File() == 2u)
-                {
-                    str = "O-O-O";
-                }
-                else if (move.ToSquare().File() == 6u)
-                {
-                    str = "O-O";
-                }
-                else
-                {
-                    str = "?";
-                }
+                str = "O-O";
+            }
+            else if (move.IsLongCastle())
+            {
+                str = "O-O-O";
             }
             else
             {
@@ -695,21 +762,6 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
     }
 
     return str;
-}
-
-static bool IsMoveCastling(const Square& from, const Square& to)
-{
-    if (from == Square_e1)
-    {
-        return to == Square_c1 || to == Square_g1;
-    }
-
-    if (from == Square_e8)
-    {
-        return to == Square_c8 || to == Square_g8;
-    }
-
-    return false;
 }
 
 Move Position::MoveFromPacked(const PackedMove& packedMove) const
@@ -815,8 +867,8 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             return {};
         }
 
-        const Square fromSquare = Square::FromString(str.substr(0, 2));
-        const Square toSquare = Square::FromString(str.substr(2, 2));
+        Square fromSquare = Square::FromString(str.substr(0, 2));
+        Square toSquare = Square::FromString(str.substr(2, 2));
 
         if (!fromSquare.IsValid() || !toSquare.IsValid())
         {
@@ -832,7 +884,46 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
 
         bool isCapture = targetPiece != Piece::None;
         bool isEnPassant = false;
-        bool isCastling = movedPiece == Piece::King && IsMoveCastling(fromSquare, toSquare);
+        bool isLongCastle = false;
+        bool isShortCastle = false;
+
+        if (movedPiece == Piece::King)
+        {
+            const uint8_t currentSideCastlingRights = mSideToMove == Color::White ? mWhitesCastlingRights : mBlacksCastlingRights;
+            const Square longCastleRookSquare = GetLongCastleRookSquare(fromSquare, currentSideCastlingRights);
+            const Square shortCastleRookSquare = GetShortCastleRookSquare(fromSquare, currentSideCastlingRights);
+
+            if ((toSquare == longCastleRookSquare) ||
+                (fromSquare == Square_e1 && toSquare == Square_c1 && longCastleRookSquare == Square_a1) ||
+                (fromSquare == Square_e8 && toSquare == Square_c8 && longCastleRookSquare == Square_a8))
+            {
+                isLongCastle = true;
+                isCapture = false;
+                toSquare = longCastleRookSquare;
+            }
+            else if ((toSquare == shortCastleRookSquare) ||
+                (fromSquare == Square_e1 && toSquare == Square_g1 && shortCastleRookSquare == Square_h1) ||
+                (fromSquare == Square_e8 && toSquare == Square_g8 && shortCastleRookSquare == Square_h8))
+            {
+                isShortCastle = true;
+                isCapture = false;
+                toSquare = shortCastleRookSquare;
+            }
+
+            MoveList moves;
+            GenerateKingMoveList(moves);
+
+            for (uint32_t i = 0; i < moves.Size(); ++i)
+            {
+                if (moves[i].move.FromSquare() == fromSquare && moves[i].move.ToSquare() == toSquare)
+                {
+                    return moves[i].move;
+                }
+            }
+
+            fprintf(stderr, "MoveFromString: Failed to parse king move\n");
+            return {};
+        }
 
         if (movedPiece == Piece::Pawn && toSquare == mEnPassantSquare)
         {
@@ -850,7 +941,7 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             }
         }
 
-        return Move::Make(fromSquare, toSquare, movedPiece, promoteTo, isCapture, isEnPassant, isCastling);
+        return Move::Make(fromSquare, toSquare, movedPiece, promoteTo, isCapture, isEnPassant, isLongCastle, isShortCastle);
     }
     else if (notation == MoveNotation::SAN)
     {
@@ -860,29 +951,34 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             return {};
         }
 
-        // short castle
         if (str == "O-O" || str == "0-0")
         {
             if (mSideToMove == Color::White)
             {
-                return Move::Make(Square_e1, Square_g1, Piece::King, Piece::None, false, false, true);
+                const Square sourceSquare = Whites().GetKingSquare();
+                const Square targetSquare = GetShortCastleRookSquare(sourceSquare, mWhitesCastlingRights);
+                return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, false, true);
             }
             else
             {
-                return Move::Make(Square_e8, Square_g8, Piece::King, Piece::None, false, false, true);
+                const Square sourceSquare = Blacks().GetKingSquare();
+                const Square targetSquare = GetShortCastleRookSquare(sourceSquare, mBlacksCastlingRights);
+                return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, false, true);
             }
         }
-
-        // long castle
-        if (str == "O-O-O" || str == "0-0-0")
+        else if (str == "O-O-O" || str == "0-0-0")
         {
             if (mSideToMove == Color::White)
             {
-                return Move::Make(Square_e1, Square_c1, Piece::King, Piece::None, false, false, true);
+                const Square sourceSquare = Whites().GetKingSquare();
+                const Square targetSquare = GetLongCastleRookSquare(sourceSquare, mWhitesCastlingRights);
+                return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, true, false);
             }
             else
             {
-                return Move::Make(Square_e8, Square_c8, Piece::King, Piece::None, false, false, true);
+                const Square sourceSquare = Blacks().GetKingSquare();
+                const Square targetSquare = GetLongCastleRookSquare(sourceSquare, mBlacksCastlingRights);
+                return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, true, false);
             }
         }
 
@@ -907,7 +1003,9 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
         case 'K':   movedPiece = Piece::King; offset++; break;
         }
 
-        if (str.length() >= offset + 5 && isalpha(str[offset]) && isdigit(str[offset + 1]) && str[offset + 2] == 'x' && isalpha(str[offset + 3]) && isdigit(str[offset + 4]))
+        const auto isFile = [](const char c) { return c >= 'a' && c <= 'h'; };
+
+        if (str.length() >= offset + 5 && isFile(str[offset]) && isdigit(str[offset + 1]) && str[offset + 2] == 'x' && isFile(str[offset + 3]) && isdigit(str[offset + 4]))
         {
             fromFile = str[offset + 0] - 'a';
             fromRank = str[offset + 1] - '1';
@@ -916,7 +1014,7 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             isCapture = true;
             offset += 5;
         }
-        else if (str.length() >= offset + 4 && isalpha(str[offset]) && isdigit(str[offset + 1]) && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.length() >= offset + 4 && isFile(str[offset]) && isdigit(str[offset + 1]) && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromFile = str[offset + 0] - 'a';
             fromRank = str[offset + 1] - '1';
@@ -924,7 +1022,7 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             toRank = str[offset + 3] - '1';
             offset += 4;
         }
-        else if (str.length() >= offset + 4 && isalpha(str[offset]) && str[offset + 1] == 'x' && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.length() >= offset + 4 && isFile(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromFile = str[offset + 0] - 'a';
             toFile = str[offset + 2] - 'a';
@@ -932,14 +1030,14 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             isCapture = true;
             offset += 4;
         }
-        else if (str.length() >= offset + 3 && isalpha(str[offset]) && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.length() >= offset + 3 && isFile(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             fromFile = str[offset + 0] - 'a';
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             offset += 3;
         }
-        else if (str.length() >= offset + 4 && isdigit(str[offset]) && str[offset + 1] == 'x' && isalpha(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.length() >= offset + 4 && isdigit(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromRank = str[offset + 0] - '1';
             toFile = str[offset + 2] - 'a';
@@ -947,21 +1045,21 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             isCapture = true;
             offset += 4;
         }
-        else if (str.length() >= offset + 3 && isdigit(str[offset]) && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.length() >= offset + 3 && isdigit(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             fromRank = str[offset + 0] - '1';
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             offset += 3;
         }
-        else if (str.length() >= offset + 3 && str[offset] == 'x' && isalpha(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.length() >= offset + 3 && str[offset] == 'x' && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             isCapture = true;
             offset += 3;
         }
-        else if (str.length() >= offset + 2 && isalpha(str[offset]) && isdigit(str[offset + 1]))
+        else if (str.length() >= offset + 2 && isFile(str[offset]) && isdigit(str[offset + 1]))
         {
             toFile = str[offset + 0] - 'a';
             toRank = str[offset + 1] - '1';
@@ -1045,6 +1143,7 @@ bool Position::IsMoveValid(const Move& move) const
 
     const Piece movedPiece = currentSide.GetPieceAtSquare(move.FromSquare());
     const Piece targetPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
+    const Piece capturedOwnPiece = currentSide.GetPieceAtSquare(move.ToSquare());
 
     if (movedPiece == Piece::None)
     {
@@ -1057,8 +1156,7 @@ bool Position::IsMoveValid(const Move& move) const
         fprintf(stderr, "IsMoveValid: Cannot move opponent's piece\n");
         return false;
     }
-
-    if (currentSide.GetPieceAtSquare(move.ToSquare()) != Piece::None)
+    if (capturedOwnPiece != Piece::None && !(move.IsCastling() && capturedOwnPiece == Piece::Rook))
     {
         fprintf(stderr, "IsMoveValid: Cannot capture own piece\n");
         return false;
@@ -1131,12 +1229,13 @@ bool Position::IsMoveValid_Fast(const PackedMove& move) const
 
 uint64_t Position::Perft(uint32_t depth, bool print) const
 {
+    TimePoint startTime;
+
     if (print)
     {
         std::cout << "Running Perft... depth=" << depth << std::endl;
+        startTime = TimePoint::GetCurrent();
     }
-
-    const TimePoint startTime = TimePoint::GetCurrent();
 
     MoveList moveList;
     GenerateMoveList(moveList);

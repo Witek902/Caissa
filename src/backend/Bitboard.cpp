@@ -610,20 +610,23 @@ static void InitBetweenBitboards()
 
     for (uint32_t squareA = 0; squareA < 64; ++squareA)
     {
-        for (uint32_t squareB = squareA + 1; squareB < 64; ++squareB)
+        for (uint32_t squareB = 0; squareB < 64; ++squareB)
         {
-            if (Bitboard::GetRookAttacks(squareA) & Square(squareB).GetBitboard())
+            if (squareA != squareB)
             {
-                gBetweenBitboards[squareA][squareB] |=
-                    Bitboard::GenerateRookAttacks(squareA, Square(squareB).GetBitboard()) &
-                    Bitboard::GenerateRookAttacks(squareB, Square(squareA).GetBitboard());
-            }
+                if (Bitboard::GetRookAttacks(squareA) & Square(squareB).GetBitboard())
+                {
+                    gBetweenBitboards[squareA][squareB] |=
+                        Bitboard::GenerateRookAttacks(squareA, Square(squareB).GetBitboard()) &
+                        Bitboard::GenerateRookAttacks(squareB, Square(squareA).GetBitboard());
+                }
 
-            if (Bitboard::GetBishopAttacks(squareA) & Square(squareB).GetBitboard())
-            {
-                gBetweenBitboards[squareB][squareB] |=
-                    Bitboard::GenerateBishopAttacks(squareA, Square(squareB).GetBitboard()) &
-                    Bitboard::GenerateBishopAttacks(squareB, Square(squareA).GetBitboard());
+                if (Bitboard::GetBishopAttacks(squareA) & Square(squareB).GetBitboard())
+                {
+                    gBetweenBitboards[squareA][squareB] |=
+                        Bitboard::GenerateBishopAttacks(squareA, Square(squareB).GetBitboard()) &
+                        Bitboard::GenerateBishopAttacks(squareB, Square(squareA).GetBitboard());
+                }
             }
         }
     }

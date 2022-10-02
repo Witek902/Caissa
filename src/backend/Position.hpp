@@ -9,15 +9,6 @@
 #include <string>
 #include <vector>
 
-enum CastlingRights : uint8_t
-{
-    CastlingRights_None = 0,
-    CastlingRights_ShortCastleAllowed = 1 << 0,
-    CastlingRights_LongCastleAllowed = 1 << 1,
-
-    CastlingRights_All = CastlingRights_ShortCastleAllowed | CastlingRights_LongCastleAllowed
-};
-
 // class representing one side's pieces state
 struct SidePosition
 {
@@ -104,6 +95,8 @@ class Position
 {
 public:
     static const char* InitPositionFEN;
+
+    static bool s_enableChess960;
 
     Position();
     Position(const Position&) = default;
@@ -218,8 +211,8 @@ public:
     INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
-    INLINE CastlingRights GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
-    INLINE CastlingRights GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
+    INLINE uint8_t GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
+    INLINE uint8_t GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
 
     INLINE uint32_t GetNumPiecesExcludingKing() const
     {
@@ -249,8 +242,8 @@ public:
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
 
     void SetSideToMove(Color color);
-    void SetWhitesCastlingRights(CastlingRights rights);
-    void SetBlacksCastlingRights(CastlingRights rights);
+    void SetWhitesCastlingRights(uint8_t rightsMask);
+    void SetBlacksCastlingRights(uint8_t rightsMask);
     INLINE void SetHalfMoveCount(uint16_t halfMoveCount) { mHalfMoveCount = halfMoveCount; }
     INLINE void SetMoveCount(uint16_t moveCount) { mMoveCount = moveCount; }
 
@@ -266,6 +259,9 @@ public:
 
     void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
     void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
+
+    static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
+    static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
 
 private:
 
@@ -294,8 +290,8 @@ private:
     // en passant target square
     Square mEnPassantSquare;
 
-    CastlingRights mWhitesCastlingRights;
-    CastlingRights mBlacksCastlingRights;
+    uint8_t mWhitesCastlingRights;
+    uint8_t mBlacksCastlingRights;
 
     uint16_t mHalfMoveCount;
     uint16_t mMoveCount;
@@ -309,3 +305,6 @@ private:
 };
 
 static_assert(sizeof(Position) <= 128, "Invalid position size");
+
+static constexpr uint8_t c_shortCastleMask = (1 << 7);
+static constexpr uint8_t c_longCastleMask = (1 << 0);

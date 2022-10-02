@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.0.1"
+#define VersionNumber "1.1"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -142,6 +142,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
         std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
         std::cout << "option name UCI_AnalyseMode type check default false\n";
+        std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
         std::cout << "uciok" << std::endl;
@@ -740,6 +741,14 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "uci_analysemode" || lowerCaseName == "uci_analyzemode" || lowerCaseName == "analysis" || lowerCaseName == "analysismode")
     {
         if (!ParseBool(lowerCaseValue, mOptions.analysisMode))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
+    }
+    else if (lowerCaseName == "uci_chess960")
+    {
+        if (!ParseBool(lowerCaseValue, Position::s_enableChess960))
         {
             std::cout << "Invalid value" << std::endl;
             return false;
