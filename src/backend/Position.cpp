@@ -89,18 +89,20 @@ void Position::UpdatePieceSquareValue(Square square, const Piece piece, const Co
         remove = !remove;
     }
 
-    const PieceScore pieceScore = PSQT[(uint32_t)piece - (uint32_t)Piece::Pawn][square.mIndex];
+    (void)piece;
 
-    if (remove)
-    {
-        mPieceSquareValueMG -= pieceScore.mg;
-        mPieceSquareValueEG -= pieceScore.eg;
-    }
-    else
-    {
-        mPieceSquareValueMG += pieceScore.mg;
-        mPieceSquareValueEG += pieceScore.eg;
-    }
+    //const PieceScore pieceScore = PSQT[(uint32_t)piece - (uint32_t)Piece::Pawn][square.mIndex];
+
+    //if (remove)
+    //{
+    //    mPieceSquareValueMG -= pieceScore.mg;
+    //    mPieceSquareValueEG -= pieceScore.eg;
+    //}
+    //else
+    //{
+    //    mPieceSquareValueMG += pieceScore.mg;
+    //    mPieceSquareValueEG += pieceScore.eg;
+    //}
 }
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)

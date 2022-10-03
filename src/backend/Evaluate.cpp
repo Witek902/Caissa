@@ -17,87 +17,13 @@ const char* c_DefaultEndgameEvalFile = "endgame.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
+namespace {
+
 static constexpr int32_t c_evalSaturationTreshold   = 4000;
 
-alignas(CACHELINE_SIZE)
-const PieceScore PSQT[6][Square::NumSquares] =
-{
-    {
-        S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0),
-        S( -35, -23), S(  -8,  -9), S( -19,  -9), S( -36, -13), S( -37, -15), S(  -8, -16), S(   2, -15), S( -33, -29),
-        S( -29, -36), S(  -1, -26), S( -17, -34), S( -31, -33), S( -30, -33), S( -18, -33), S(   4, -31), S( -23, -38),
-        S( -22, -26), S(  10, -25), S(  -1, -45), S(   3, -52), S(   2, -53), S(  -5, -41), S(  12, -31), S( -19, -33),
-        S(  -4, -13), S(  17, -19), S(  16, -36), S(  44, -50), S(  38, -49), S(  29, -35), S(  25, -25), S(  -3, -24),
-        S(   9,  21), S(  52,  26), S(  77,   1), S(  97, -12), S(  98, -10), S(  83,  -9), S(  61,  19), S(   5,  18),
-        S( 157,  42), S( 138,  62), S( 171,  40), S( 189,  11), S( 193,  15), S( 171,  36), S( 130,  63), S( 154,  46),
-        S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0), S(   0,   0),
-    },
-    {
-        S( -44, -77), S( -37, -54), S( -38, -19), S( -35, -16), S( -28, -21), S( -40, -20), S( -34, -57), S( -51, -80),
-        S( -32, -36), S( -38,   2), S( -26,   2), S( -20,   9), S( -19,  10), S( -23,   0), S( -32,  -2), S( -29, -36),
-        S( -36,  -4), S( -20,  13), S(  -2,  23), S(   5,  40), S(   6,  37), S(  -8,  26), S( -15,  14), S( -33,  -6),
-        S(  -3,  18), S(   8,  30), S(  19,  48), S(  13,  46), S(  11,  42), S(  10,  53), S(  11,  25), S( -11,  10),
-        S(  20,  10), S(  17,  47), S(  42,  55), S(  46,  52), S(  37,  55), S(  49,  44), S(  13,  40), S(  17,  12),
-        S(  18,  11), S(  57,  15), S(  85,  24), S(  93,  22), S( 100,  25), S(  93,  24), S(  65,  16), S(  22,  10),
-        S(   3,  -9), S(  14,  15), S(  71,  17), S(  82,  18), S(  82,  23), S(  69,  11), S(  18,  17), S(  14,  -1),
-        S( -81, -27), S(  -2,   6), S(   6,  13), S(  30,  12), S(  27,  15), S(   0,   9), S(  -6,   6), S( -66, -30),
-    },
-    {
-        S( -23, -50), S( -16, -25), S( -35, -18), S( -38,  -5), S( -32,  -7), S( -38, -16), S( -24, -25), S( -19, -50),
-        S(   3, -30), S(  -9, -11), S(  -1,  -5), S( -21,   3), S( -21,   1), S(  -4,  -7), S( -11, -17), S(   8, -33),
-        S( -13, -12), S(   4,   6), S(  -8,  15), S(   3,  18), S(   3,  12), S(  -5,  15), S(   3,   6), S( -15,  -8),
-        S(  -2,   1), S(  -3,  14), S(   3,  26), S(  17,  16), S(  22,   9), S(   4,  23), S(   4,  13), S(  -6,   3),
-        S( -11,   0), S(   2,  28), S(  43,   7), S(  56,  12), S(  50,  17), S(  39,   9), S(  -1,  29), S(  -7,   0),
-        S(  22,  -2), S(  50,   8), S(  52,  15), S(  67,   5), S(  62,   8), S(  56,  11), S(  52,   9), S(  22,  -3),
-        S(  -4,  -4), S(  12,  13), S(  18,  12), S(  23,  20), S(  23,  21), S(  30,  14), S(   6,  15), S(  -2,  -4),
-        S( -22,   0), S( -16,  12), S( -20,  14), S( -21,  26), S( -18,  22), S( -19,  14), S( -12,   8), S( -17,  -1),
-    },
-    {
-        S( -40, -16), S( -31,  -7), S( -22,  -5), S(  -9,  -6), S(  -7, -15), S( -31,   1), S( -29,  -8), S( -38, -22),
-        S( -41, -15), S( -33,  -6), S( -28,   1), S( -17,  -2), S( -17,   0), S( -25,  -4), S( -27,  -6), S( -44, -11),
-        S( -41,   3), S( -24,  10), S( -36,  17), S( -21,  15), S( -18,  12), S( -30,  16), S( -21,   4), S( -41,   0),
-        S( -36,  17), S( -13,  22), S( -23,  32), S(  -5,  25), S(  -7,  22), S( -18,  32), S( -13,  20), S( -33,  18),
-        S(   3,  19), S(  22,  23), S(  21,  29), S(  42,  22), S(  37,  25), S(  27,  26), S(  19,  25), S(   7,  18),
-        S(  33,  19), S(  61,  11), S(  70,  12), S(  87,   5), S(  93,   6), S(  68,  15), S(  65,  12), S(  29,  23),
-        S(  60,  20), S(  50,  20), S(  90,  17), S( 107,   6), S( 100,   7), S(  98,  16), S(  56,  20), S(  51,  16),
-        S(  78,   6), S(  74,   6), S(  72,  15), S(  87,   9), S(  83,   6), S(  78,   9), S(  79,   7), S(  80,   1),
-    },
-    {
-        S( -51, -14), S( -33, -50), S( -29, -59), S( -27, -57), S( -22, -56), S( -27, -54), S( -32, -55), S( -50, -22),
-        S( -14, -45), S(  -9, -55), S( -13, -60), S( -13, -45), S( -15, -39), S(  -3, -56), S( -11, -56), S( -15, -40),
-        S(  -6, -36), S( -13, -16), S( -15,  -4), S( -23,   2), S( -18,   1), S( -13,  -8), S(  -1, -34), S( -10, -40),
-        S( -19,  11), S(  -9,  11), S( -11,  26), S( -20,  39), S( -15,  32), S( -15,  24), S( -12,   3), S( -15,  -2),
-        S(   2,   3), S( -11,  41), S(   0,  52), S(   8,  47), S(   9,  50), S(   8,  44), S(  -8,  34), S(  -4,   4),
-        S(  18,   7), S(  24,  26), S(  19,  43), S(  31,  47), S(  38,  41), S(  25,  32), S(  31,  26), S(  16,   2),
-        S(   8,   3), S( -17,  39), S(  22,  38), S(  24,  42), S(  23,  46), S(  22,  35), S(  -5,  23), S(  18, -10),
-        S(  24,  -7), S(  31,   3), S(  38,  18), S(  26,  31), S(  28,  33), S(  25,  31), S(  17,  12), S(  29,  -4),
-    },
-    {
-        S(  20, -82), S(  12, -57), S( -36, -46), S( -91, -32), S( -42, -61), S( -40, -41), S(   0, -50), S(  20, -82),
-        S(   3, -40), S( -11, -19), S( -47,  -9), S( -78,  -8), S( -79,  -4), S( -52, -12), S( -20, -21), S(  -2, -36),
-        S( -49, -10), S( -47,   3), S( -77,  18), S( -73,  23), S( -73,  22), S( -77,  18), S( -46,  -1), S( -49, -11),
-        S( -81,  11), S( -52,  20), S( -38,  22), S( -35,  31), S( -33,  30), S( -31,  25), S( -56,  20), S( -82,   8),
-        S( -63,  17), S(  17,  21), S(  26,  29), S(  56,  22), S(  57,  21), S(  29,  23), S(  22,  16), S( -61,  15),
-        S(  28,   4), S(  90,  13), S( 100,  12), S(  94,  14), S(  96,  13), S(  97,  18), S(  89,  12), S(  26,   2),
-        S(  30, -10), S(  67,  17), S(  73,  11), S(  60,   8), S(  62,   7), S(  74,  10), S(  66,  19), S(  32, -12),
-        S(  -9, -37), S(  19,  11), S(  40,  -1), S(  57, -16), S(  51, -21), S(  54,  -9), S(  40,   7), S(  10, -46),
-    }
-};
-
-static constexpr PieceScore c_tempoBonus = S(4, 4);
-
-static constexpr PieceScore c_bishopPairBonus = S(28, 52);
-
-const PieceScore c_ourPawnDistanceBonus[8]       = { S(  25,  11), S(  14,  18), S(   3,  11), S( -13,  14), S( -24,  16), S( -26,  16), S( -10,  16) };
-const PieceScore c_ourKnightDistanceBonus[8]     = { S(  10,  19), S(  10,  20), S(   9,  13), S(   3,  11), S(   3,  -2), S(   0, -20), S(   6, -33) };
-const PieceScore c_ourBishopDistanceBonus[8]     = { S(  13,   9), S(   8,   6), S(   9,   3), S(   7,  -1), S(   7,  -7), S(   7,  -9), S(  13, -17) };
-const PieceScore c_ourRookDistanceBonus[8]       = { S( -30,  -3), S( -24,   0), S( -21, -12), S( -11, -17), S( -14, -21), S( -18, -17), S( -15, -25) };
-const PieceScore c_ourQueenDistanceBonus[8]      = { S(   4,   1), S(  -1,   6), S(  -3,   2), S(  -4,  -3), S(  -3,  -5), S(   5,  -8), S(  17, -24) };
-const PieceScore c_theirPawnDistanceBonus[8]     = { S(  37,  59), S( -12,  20), S(   0,  12), S(   6,  10), S(   8,   1), S(  17,  -7), S(  17, -14) };
-const PieceScore c_theirKnightDistanceBonus[8]   = { S( -52,   6), S( -28,  -1), S( -10, -17), S(   3, -22), S(   5, -13), S(   8,  -6), S(  16,  11) };
-const PieceScore c_theirBishopDistanceBonus[8]   = { S( -27,  21), S( -37,   6), S(   0,   0), S(   6,  -7), S(   5,  -8), S(   3,  -2), S(   1,   1) };
-const PieceScore c_theirRookDistanceBonus[8]     = { S( -44,  27), S( -24,  20), S(  -1,  13), S(  13,  -2), S(  20,  -4), S(  27, -14), S(  30, -17) };
-const PieceScore c_theirQueenDistanceBonus[8]    = { S(-120,   0), S( -60,   2), S( -10,  -9), S(  13, -13), S(  27,  -5), S(  29,  16), S(  33,  26) };
+static constexpr PieceScore c_tempoBonus            = S(4, 4);
+static constexpr PieceScore c_castlingRightsBonus   = S(39, 9);
+static constexpr PieceScore c_bishopPairBonus       = S(34, 49);
 
 static constexpr PieceScore c_knightMobilityBonus[9] =
     { S(-28,-112), S(-14, -39), S(-8,  -5), S(-2,  12), S(3,  22), S(5,  34), S(14,  32), S(21,  28), S(27,  17) };
@@ -116,11 +42,14 @@ static constexpr PieceScore c_queenMobilityBonus[28] =
       S(   2,  40), S(   5,  38), S(   4,  33), S(   8,  34), S(  19,  35), S(  28,  32), S(  34,  16),
       S(  45,  11), S(  40,  17), S(  34,  10), S(  17,   9), S(  15,   3), S(   6,   6), S(   3,   1) };
 
-static constexpr PieceScore c_passedPawnBonus[8]            = { S(0,0), S(-7,7), S(-17,10), S(-15,30), S(6,49), S(41,70), S(0,0), S(0,0) };
+static constexpr PieceScore c_passedPawnBonus[8] = { S(0,0), S(-7,7), S(-17,10), S(-15,30), S(6,49), S(41,70), S(0,0), S(0,0) };
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 static PackedNeuralNetworkPtr g_mainNeuralNetwork;
 static PackedNeuralNetworkPtr g_endgameNeuralNetwork;
+
+} // namespace
+
 
 bool LoadMainNeuralNetwork(const char* path)
 {
@@ -385,9 +314,52 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     int32_t knightsDiff = whiteKnights - blackKnights;
     int32_t pawnsDiff = whitePawns - blackPawns;
 
-    // piece square tables
-    value.mg += pos.GetPieceSquareValueMG();
-    value.eg += pos.GetPieceSquareValueEG();
+    // piece square tables probing
+    {
+        const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
+        const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
+
+        const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
+        const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
+
+        const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
+        const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
+
+        const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
+        const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
+
+        pos.Whites().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[0][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[1][2 * (square ^ blackSqMask)]); });
+        pos.Whites().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[2][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[3][2 * (square ^ blackSqMask)]); });
+        pos.Whites().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[4][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[5][2 * (square ^ blackSqMask)]); });
+        pos.Whites().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[6][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[7][2 * (square ^ blackSqMask)]); });
+        pos.Whites().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[8][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[9][2 * (square ^ blackSqMask)]); });
+        
+        pos.Blacks().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[1][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[0][2 * (square ^ blackSqMask)]); });
+        pos.Blacks().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[3][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[2][2 * (square ^ blackSqMask)]); });
+        pos.Blacks().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[5][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[4][2 * (square ^ blackSqMask)]); });
+        pos.Blacks().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[7][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[6][2 * (square ^ blackSqMask)]); });
+        pos.Blacks().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA {
+            value += PieceScore(&whitesPSQT[9][2 * (square ^ whiteSqMask)]);
+            value -= PieceScore(&blacksPSQT[8][2 * (square ^ blackSqMask)]); });
+    }
 
     value += c_queenValue * queensDiff;
     value += c_rookValue * rooksDiff;
@@ -406,84 +378,12 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     }
 
     // bishop pair
-    {
-        if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) value += c_bishopPairBonus;
-        if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) value -= c_bishopPairBonus;
-    }
+    if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) value += c_bishopPairBonus;
+    if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) value -= c_bishopPairBonus;
 
-    //// passed pawns
-    //{
-    //    value += EvaluatePassedPawns(pos.Whites().pawns, pos.Blacks().pawns);
-    //    value -= EvaluatePassedPawns(pos.Blacks().pawns.MirroredVertically(), pos.Whites().pawns.MirroredVertically());
-    //}
+    // castling rights
+    value += c_castlingRightsBonus * ((int8_t)PopCount(pos.GetWhitesCastlingRights()) - (int8_t)PopCount(pos.GetBlacksCastlingRights()));
 
-    /*
-    // white pieces
-    {
-        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value += c_ourPawnDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_theirPawnDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-        });
-        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value += c_ourKnightDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_theirKnightDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_knightMobilityBonus[(Bitboard::GetKnightAttacks(Square(square)) & whitesMobilityArea).Count()];
-        });
-        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value += c_ourBishopDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_theirBishopDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_bishopMobilityBonus[(Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
-        });
-        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value += c_ourRookDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_theirRookDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_rookMobilityBonus[(Bitboard::GenerateRookAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
-        });
-        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value += c_ourQueenDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_theirQueenDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_queenMobilityBonus[(Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & whitesMobilityArea).Count()];
-        });
-    }
-
-    // black pieces
-    {
-        pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value -= c_ourPawnDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_theirPawnDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-        });
-        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value -= c_ourKnightDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_theirKnightDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_knightMobilityBonus[(Bitboard::GetKnightAttacks(Square(square)) & blacksMobilityArea).Count()];
-        });
-        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value -= c_ourBishopDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_theirBishopDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_bishopMobilityBonus[(Bitboard::GenerateBishopAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
-        });
-        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value -= c_ourRookDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_theirRookDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_rookMobilityBonus[(Bitboard::GenerateRookAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
-        });
-        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            value -= c_ourQueenDistanceBonus[Square::Distance(blackKingSq, Square(square))];
-            value += c_theirQueenDistanceBonus[Square::Distance(whiteKingSq, Square(square))];
-            value -= c_queenMobilityBonus[(Bitboard::GenerateQueenAttacks(Square(square), allOccupied) & blacksMobilityArea).Count()];
-        });
-    }
-    */
 
     // accumulate middle/end game scores
     int32_t finalValue = InterpolateScore(gamePhase, value);
