@@ -68,9 +68,9 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                 int32_t wdl = 0;
                 if (ProbeSyzygy_WDL(pos, &wdl))
                 {
-                    if (wdl > 0)        entry.score = 1.0f;
-                    else if (wdl < 0)   entry.score = 0.0f;
-                    else                entry.score = 0.5f;
+                    if (wdl > 0)        entry.score = std::lerp(entry.score, 1.0f, 0.8f);
+                    else if (wdl < 0)   entry.score = std::lerp(entry.score, 0.0f, 0.8f);
+                    else                entry.score = std::lerp(entry.score, 0.5f, 0.8f);
                 }
                 else
                 {

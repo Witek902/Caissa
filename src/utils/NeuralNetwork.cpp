@@ -766,6 +766,8 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
 
     for (; i < numAllWeights; ++i)
     {
+        //if (i < numWeights && !gradients.dirty[i]) continue;
+
         float& m = gradientMean[i];
         float& v = gradientMoment[i];
         float& w = weights[i];
@@ -779,7 +781,7 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
         m = cRho * m + (1.0f - cRho) * g * g;
         float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
         v = cRho * v + (1.0f - cRho) * delta * delta;
-        w -= delta * learningRate;
+        w -= learningRate * delta;
 
         ASSERT(!std::isnan(m));
         ASSERT(!std::isnan(v));
@@ -843,9 +845,9 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                     std::fill(layerZeroGradients.values.begin() + i * layerZero.numOutputs,
                               layerZeroGradients.values.begin() + (i + 1) * layerZero.numOutputs,
                               0.0f);
-                    layerZeroGradients.dirty[i] = false;
                 }
             }
+            std::fill(layerZeroGradients.dirty.begin(), layerZeroGradients.dirty.end(), false);
 
             // clear griadients of the bias (it's always changing)
             std::fill(layerZeroGradients.values.begin() + layerZero.numInputs * layerZero.numOutputs,

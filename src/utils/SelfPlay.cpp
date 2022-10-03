@@ -22,7 +22,7 @@
 #include <string>
 #include <limits.h>
 
-static const bool probePositions = true;
+static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const bool outputLabeledPositions = false;
 
@@ -41,7 +41,7 @@ uint32_t XorShift32(uint32_t state)
 class EvalProbing : public EvalProbingInterface
 {
 public:
-    static constexpr uint32_t ProbingFrequency = 1 << 16;
+    static constexpr uint32_t ProbingFrequency = 1 << 10;
 
     EvalProbing(std::ofstream& outputFile, uint32_t seed)
         : probedPositionsFile(outputFile)
@@ -50,11 +50,22 @@ public:
 
     virtual void ReportPosition(const Position& pos, ScoreType eval) override
     {
-        (void)eval;
+        if (!(pos.Whites().GetKingSquare() == Square_a8 || pos.Whites().GetKingSquare() == Square_h8 ||
+              pos.Blacks().GetKingSquare() == Square_a1 || pos.Blacks().GetKingSquare() == Square_h1)) return;
+
+        if (std::abs(eval) >= 200) return;
+
+        uint32_t numPieces = pos.GetNumPieces();
+
+        if (numPieces < 6) return;
 
         randomSeed = XorShift32(randomSeed);
 
-        if (rand() % ProbingFrequency) return;
+        if (numPieces < 16)
+        {
+            if (rand() % (1 << (10 - numPieces / 4))) return;
+        }
+
         if (!pos.IsQuiet()) return;
 
         PackedPosition packedPos;
@@ -68,9 +79,12 @@ public:
         {
             Position pos;
             UnpackPosition(pp, pos);
-
             probedPositionsFile << pos.ToFEN() << '\n';
         }
+
+        positions.clear();
+
+        probedPositionsFile.flush();
     }
 
 private:
@@ -248,7 +262,7 @@ void SelfPlay(const std::vector<std::string>& args)
         search.Clear();
         game.Reset(openingPos);
 
-        int32_t scoreDiffTreshold = 10;
+        int32_t scoreDiffTreshold = 20;
 
         uint32_t halfMoveNumber = 0;
         uint32_t drawScoreCounter = 0;
@@ -258,9 +272,10 @@ void SelfPlay(const std::vector<std::string>& args)
 
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
+            searchParam.useRootTablebase = false;
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
-            searchParam.limits.maxDepth = 20;
-            searchParam.limits.maxNodes = 300000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.limits.maxDepth = 40;
+            searchParam.limits.maxNodes = 500000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
             searchParam.numPvLines = 1; // halfMoveNumber < 10 ? 2 : 1;
             //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
             //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
@@ -292,8 +307,8 @@ void SelfPlay(const std::vector<std::string>& args)
             for (size_t i = 1; i < searchResult.size(); ++i)
             {
                 ASSERT(searchResult[i].score <= searchResult[0].score);
-                int32_t diff = searchResult[i].score - searchResult[0].score;
-                if (diff > scoreDiffTreshold || diff < -scoreDiffTreshold)
+                const int32_t diff = std::abs((int32_t)searchResult[i].score - (int32_t)searchResult[0].score);
+                if (diff > scoreDiffTreshold)
                 {
                     searchResult.erase(searchResult.begin() + i, searchResult.end());
                     break;
@@ -337,7 +352,7 @@ void SelfPlay(const std::vector<std::string>& args)
             }
 
             // adjucate draw if eval is zero
-            if (std::abs(moveScore) > 1)
+            if (std::abs(moveScore) >= 5)
             {
                 drawScoreCounter = 0;
             }
@@ -345,7 +360,7 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 drawScoreCounter++;
 
-                if (drawScoreCounter >= 10 && halfMoveNumber >= 40 && game.GetPosition().GetHalfMoveCount() > 20)
+                if (drawScoreCounter >= 12 && halfMoveNumber >= 40 && game.GetPosition().GetHalfMoveCount() > 20)
                 {
                     game.SetScore(Game::Score::Draw);
                     break;

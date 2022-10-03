@@ -36,6 +36,7 @@ int main(int argc, const char* argv[])
 
     InitEngine();
     TryLoadingDefaultEvalFile();
+    TryLoadingDefaultEndgameEvalFile();
 
     LoadSyzygyTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
     LoadGaviotaTablebase("C:\\Program Files (x86)\\gaviota\\");
