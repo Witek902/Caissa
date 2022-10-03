@@ -89,10 +89,10 @@ void Search::BuildMoveReductionTable()
     {
         for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
         {
-            const int32_t reduction = int32_t(0.5f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
+            const int32_t reduction = int32_t(-1.25f + 0.8f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
 
             ASSERT(reduction <= 64);
-            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::min<int32_t>(reduction, UINT8_MAX);
+            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, UINT8_MAX);
         }
     }
 }
