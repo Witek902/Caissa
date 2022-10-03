@@ -1756,17 +1756,6 @@ void RunSearchTests()
     param.debugLog = false;
     param.numPvLines = UINT32_MAX;
 
-    // zero depth search should return zero result
-    {
-        param.limits.maxDepth = 0;
-        param.numPvLines = UINT32_MAX;
-
-        game.Reset(Position(Position::InitPositionFEN));
-        search.DoSearch(game, param, result);
-
-        TEST_EXPECT(result.size() == 0);
-    }
-
     // incufficient material draw
     {
         param.limits.maxDepth = 4;
