@@ -216,7 +216,7 @@ private:
         SearchContext& searchContext;
         const Move* moveFilter = nullptr;
         uint8_t moveFilterCount = 0;
-        ScoreType previousScore;                  // score in previous ID iteration
+        ScoreType previousScore = 0;                  // score in previous ID iteration
         uint32_t threadID = 0;
     };
 

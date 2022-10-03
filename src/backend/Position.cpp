@@ -1343,16 +1343,16 @@ int32_t Position::BestPossibleMoveValue() const
     const SidePosition& side = GetOpponentSide();
 
     // can capture most valuable piece
-         if (side.queens)   value = queenValue;
-    else if (side.rooks)    value = rookValue;
-    else if (side.knights)  value = knightValue;
-    else if (side.bishops)  value = bishopValue;
-    else if (side.pawns)    value = pawnValue;
+         if (side.queens)   value = c_queenValue.eg;
+    else if (side.rooks)    value = c_rookValue.eg;
+    else if (side.knights)  value = c_knightValue.eg;
+    else if (side.bishops)  value = c_bishopValue.eg;
+    else if (side.pawns)    value = c_pawnValue.eg;
 
     // can promote to queen
     if (GetCurrentSide().pawns & (mSideToMove == Color::White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
     {
-        value += queenValue - pawnValue;
+        value += c_queenValue.eg - c_pawnValue.eg;
     }
 
     return value;
