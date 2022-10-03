@@ -153,7 +153,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 {
     outResult.clear();
 
-    if (param.limits.maxDepth == 0 || !game.GetPosition().IsValid())
+    if (!game.GetPosition().IsValid())
     {
         return;
     }
@@ -223,6 +223,41 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
 
     mThreadData.resize(param.numThreads);
     mThreadData[0].isMainThread = true;
+
+    // Quiescence search debugging 
+    if (param.limits.maxDepth == 0)
+    {
+        ThreadData& threadData = mThreadData[0];
+
+        NodeInfo rootNode;
+        rootNode.position = game.GetPosition();
+        rootNode.isInCheck = game.GetPosition().IsInCheck();
+        rootNode.isPvNode = true;
+        rootNode.isPvNodeFromPrevIteration = true;
+        rootNode.alpha = -InfValue;
+        rootNode.beta = InfValue;
+        rootNode.nnContext = &threadData.nnContextStack[0];
+        rootNode.nnContext->MarkAsDirty();
+
+        SearchContext searchContext{ game, param, globalStats, param.limits.idealTime };
+        outResult.resize(1);
+        outResult.front().score = QuiescenceNegaMax(threadData, rootNode, searchContext);
+        SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
+
+        // flush pending stats
+        searchContext.stats.Append(threadData.stats, true);
+
+        const AspirationWindowSearchParam aspirationWindowSearchParam =
+        {
+            game.GetPosition(),
+            param,
+            0,
+            0,
+            searchContext,
+        };
+
+        ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
+    }
 
     if (param.numThreads > 1)
     {
@@ -619,7 +654,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
 
         // flush pending per-thread stats
-        param.searchContext.stats.Append(thread.stats);
+        param.searchContext.stats.Append(thread.stats, true);
 
         // increase window, fallback to full window after some treshold
         window = 2 * window + 5;
@@ -704,7 +739,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
     ASSERT(node.moveFilterCount == 0);
-    ASSERT(node.height > 0);
 
     // clear PV line
     node.pvLength = 0;
@@ -1001,7 +1035,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             CheckInsufficientMaterial(node.position) ||
             SearchUtils::IsRepetition(node, ctx.game))
         {
-            return true;
+            return 0;
         }
     }
 
