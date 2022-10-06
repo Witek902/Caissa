@@ -195,43 +195,6 @@ bool Position::IsValid(bool strict) const
         return false;
     }
 
-    // TODO 960
-    /*
-    if (mWhitesCastlingRights & CastlingRights_ShortCastleAllowed)
-    {
-        if (((Whites().king & Bitboard(1ull << Square_e1)) == 0) ||
-            ((Whites().rooks & Bitboard(1ull << Square_h1)) == 0))
-        {
-            return false;
-        }
-    }
-    if (mWhitesCastlingRights & CastlingRights_LongCastleAllowed)
-    {
-        if (((Whites().king & Bitboard(1ull << Square_e1)) == 0) ||
-            ((Whites().rooks & Bitboard(1ull << Square_a1)) == 0))
-        {
-            return false;
-        }
-    }
-
-    if (mBlacksCastlingRights & CastlingRights_ShortCastleAllowed)
-    {
-        if (((Blacks().king & Bitboard(1ull << Square_e8)) == 0) ||
-            ((Blacks().rooks & Bitboard(1ull << Square_h8)) == 0))
-        {
-            return false;
-        }
-    }
-    if (mBlacksCastlingRights & CastlingRights_LongCastleAllowed)
-    {
-        if (((Blacks().king & Bitboard(1ull << Square_e8)) == 0) ||
-            ((Blacks().rooks & Bitboard(1ull << Square_a8)) == 0))
-        {
-            return false;
-        }
-    }
-    */
-
     return true;
 }
 

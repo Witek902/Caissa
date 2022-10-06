@@ -1,4 +1,5 @@
 #include "Move.hpp"
+#include "Position.hpp"
 
 std::string PackedMove::ToString() const
 {
@@ -30,8 +31,18 @@ std::string Move::ToString() const
 
     std::string str;
 
+    Square toSquare = ToSquare();
+
+    if (!Position::s_enableChess960)
+    {
+        if (IsShortCastle() && toSquare == Square_h1)   toSquare = Square_g1;
+        if (IsShortCastle() && toSquare == Square_h8)   toSquare = Square_g8;
+        if (IsLongCastle() && toSquare == Square_a1)    toSquare = Square_c1;
+        if (IsLongCastle() && toSquare == Square_a8)    toSquare = Square_c8;
+    }
+
     str += FromSquare().ToString();
-    str += ToSquare().ToString();
+    str += toSquare.ToString();
 
     if (GetPromoteTo() != Piece::None)
     {
