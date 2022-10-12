@@ -25,7 +25,7 @@
 #include <limits.h>
 
 #define USE_CASTLING_RIGHTS
-//#define USE_MOBILITY
+#define USE_MOBILITY
 //#define USE_PASSED_PAWNS
 
 using namespace threadpool;
@@ -432,20 +432,6 @@ bool TrainPieceSquareTables()
         weights[7] = (float)c_rookValue.eg / c_nnOutputToCentiPawns;
         weights[8] = (float)c_queenValue.mg / c_nnOutputToCentiPawns;
         weights[9] = (float)c_queenValue.eg / c_nnOutputToCentiPawns;
-
-        for (uint32_t basePiece = 0; basePiece < 10; ++basePiece)
-        {
-            float* weightDst = network.layers[0].weights.data() + 10 + basePiece * 32 * 64 * 2;
-
-            for (uint8_t kingSq = 0; kingSq < 32; ++kingSq)
-            {
-                for (uint8_t pieceSq = 0; pieceSq < 64; ++pieceSq)
-                {
-                    weightDst[2 * (64 * kingSq + pieceSq) + 0] = (float)c_pawnValue.mg / c_nnOutputToCentiPawns;
-                    weightDst[2 * (64 * kingSq + pieceSq) + 1] = (float)c_pawnValue.mg / c_nnOutputToCentiPawns;
-                }
-            }
-        }
     }
 
     std::random_device rd;
@@ -504,7 +490,9 @@ bool TrainPieceSquareTables()
     {
         TimePoint startTime = TimePoint::GetCurrent();
 
-        const float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.0001f * iteration));
+        const float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.001f * iteration));
+
+        /*
         const float bluringStrength = 1.0f / (1.0f + 0.5f * iteration);
 
         // blur weights
@@ -552,25 +540,23 @@ bool TrainPieceSquareTables()
                             }
                         }
 
-                        /*
-                        // blur with neighboring piece locations
-                        for (int8_t pieceRankOffset = -1; pieceRankOffset <= 1; pieceRankOffset++)
-                        {
-                            if (pieceRank + pieceRankOffset >= 8 || pieceRank + pieceRankOffset < 0) continue;
+                        //// blur with neighboring piece locations
+                        //for (int8_t pieceRankOffset = -1; pieceRankOffset <= 1; pieceRankOffset++)
+                        //{
+                        //    if (pieceRank + pieceRankOffset >= 8 || pieceRank + pieceRankOffset < 0) continue;
 
-                            for (int8_t pieceFileOffset = -1; pieceFileOffset <= 1; pieceFileOffset++)
-                            {
-                                if (pieceFile + pieceFileOffset >= 8 || pieceFile + pieceFileOffset < 0) continue;
-                                if (pieceFileOffset == 0 && pieceRankOffset == 0) continue;
+                        //    for (int8_t pieceFileOffset = -1; pieceFileOffset <= 1; pieceFileOffset++)
+                        //    {
+                        //        if (pieceFile + pieceFileOffset >= 8 || pieceFile + pieceFileOffset < 0) continue;
+                        //        if (pieceFileOffset == 0 && pieceRankOffset == 0) continue;
 
-                                const uint32_t pieceIndex = 8 * (pieceRank + pieceRankOffset) + (pieceFile + pieceFileOffset);
+                        //        const uint32_t pieceIndex = 8 * (pieceRank + pieceRankOffset) + (pieceFile + pieceFileOffset);
 
-                                sumMG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 0];
-                                sumEG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 1];
-                                weightSum += bluringStrength;
-                            }
-                        }
-                        */
+                        //        sumMG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 0];
+                        //        sumEG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 1];
+                        //        weightSum += bluringStrength;
+                        //    }
+                        //}
 
                         sumMG /= weightSum;
                         sumEG /= weightSum;
@@ -587,9 +573,15 @@ bool TrainPieceSquareTables()
                     }
                 }
             }
-        }
+        }*/
 
         float trainingTime = 0.0f;
+
+        // use validation set from previous iteration as training set in the current one
+        for (size_t i = 0; i < trainingBatch.size(); ++i)
+        {
+            trainingBatch[i] = validationSet[i].trainingVector;
+        }
 
         // validation vectors generation can be done in parallel with training
         Waitable waitable;
@@ -599,12 +591,6 @@ bool TrainPieceSquareTables()
             {
                 generateTrainingEntry(validationSet[i]);
             });
-
-            // use validation set from previous iteration as training set in the current one
-            for (size_t i = 0; i < trainingBatch.size(); ++i)
-            {
-                trainingBatch[i] = validationSet[i].trainingVector;
-            }
 
             taskBuilder.Task("Train", [&](const TaskContext&)
             {

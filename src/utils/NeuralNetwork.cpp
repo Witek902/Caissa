@@ -294,6 +294,7 @@ void Layer::Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunCon
     {
         const ActiveFeature& feature = features[i];
         ASSERT(feature.index < numInputs);
+        ASSERT(!std::isnan(feature.value));
         ctx.sparseInputs[i] = feature;
     }
 
