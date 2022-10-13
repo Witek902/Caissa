@@ -652,7 +652,7 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
     MoveList moves;
     GenerateMoveList(moves);
 
-    if (moves.numMoves == 0)
+    if (moves.Size() == 0)
     {
         return 0;
     }
@@ -660,7 +660,7 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
     uint32_t numLegalMoves = 0u;
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves[i].move;
+        const Move move = moves.GetMove(i);
         ASSERT(move.IsValid());
 
         Position childPosition = *this;

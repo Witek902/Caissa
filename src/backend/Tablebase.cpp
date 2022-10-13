@@ -388,7 +388,7 @@ bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM, int
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves[i].move;
+        const Move move = moves.GetMove(i);
         ASSERT(move.IsValid());
 
         Position childPosition = pos;

@@ -21,9 +21,9 @@ uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
 
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            if (moves[i].move == ttEntry.moves[j])
+            if (moves[i] == ttEntry.moves[j])
             {
-                moves[i].score = MoveOrderer::TTMoveValue - j;
+                scores[i] = MoveOrderer::TTMoveValue - j;
                 numAssignedMoves++;
                 break;
             }
@@ -31,6 +31,28 @@ uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
     }
 
     return numAssignedMoves;
+}
+
+void MoveList::Sort()
+{
+    uint8_t indices[MaxMoves];
+    Move movesCopy[MaxMoves];
+    int32_t scoresCopy[MaxMoves];
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        indices[i] = static_cast<uint8_t>(i);
+        movesCopy[i] = moves[i];
+        scoresCopy[i] = scores[i];
+    }
+
+    std::sort(indices, indices + numMoves, [this](const uint8_t a, const uint8_t b) { return scores[a] > scores[b]; });
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        moves[i] = movesCopy[indices[i]];
+        scores[i] = scoresCopy[indices[i]];
+    }
 }
 
 void MoveList::Shuffle()
@@ -43,15 +65,15 @@ void MoveList::Print(const Position& pos) const
 {
     for (uint32_t i = 0; i < numMoves; ++i)
     {
-        const Move move = moves[i].move;
+        const Move move = moves[i];
 
         if (!pos.IsMoveLegal(move)) continue;
 
         std::cout
             << std::right << std::setw(3) << (i + 1) << ". "
             << move.ToString() << "\t("
-            << pos.MoveToString(moves[i].move, MoveNotation::SAN) << ")\t"
-            << moves[i].score;
+            << pos.MoveToString(move, MoveNotation::SAN) << ")\t"
+            << scores[i];
 
         if (!pos.StaticExchangeEvaluation(move))
         {

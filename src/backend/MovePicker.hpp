@@ -18,7 +18,7 @@ public:
 
 private:
 
-    enum class Stage
+    enum class Stage : uint8_t
     {
         PVMove,
         TTMove,
@@ -33,8 +33,8 @@ private:
     const uint32_t moveGenFlags;
 
     const MoveOrderer& moveOrderer;
-    Stage stage = Stage::PVMove;
     uint32_t moveIndex = 0;
+    Stage stage = Stage::PVMove;
     bool shuffleEnabled = false;
     MoveList moves;
 };
