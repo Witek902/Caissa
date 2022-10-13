@@ -70,8 +70,8 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             if (moves.Size() > 0)
             {
                 const uint32_t index = moves.BestMoveIndex();
-                outMove = moves[index].move;
-                outScore = moves[index].score;
+                outMove = moves.GetMove(index);
+                outScore = moves.GetScore(index);
 
                 ASSERT(outMove.IsValid());
                 ASSERT(outScore > INT32_MIN);
@@ -102,12 +102,16 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
 
         case Stage::Quiet:
         {
-            if (moveIndex < moves.Size())
+            if (moves.Size() > 0)
             {
-                outMove = moves.PickBestMove(moveIndex++, outScore);
+                const uint32_t index = moves.BestMoveIndex();
+                outMove = moves.GetMove(index);
+                outScore = moves.GetScore(index);
 
                 ASSERT(outMove.IsValid());
                 ASSERT(outScore > INT32_MIN);
+
+                moves.RemoveByIndex(index);
 
                 return true;
             }

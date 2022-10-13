@@ -6,25 +6,17 @@
 
 class MoveList
 {
-    friend class Position;
     friend class Search;
     friend class MovePicker;
+    friend class MoveOrderer;
 
 public:
 
-    struct MoveEntry
-    {
-        Move move;
-        int32_t score;
-    };
-
-    static constexpr uint32_t MaxMoves = 255;
+    static constexpr uint32_t MaxMoves = 240;
 
     INLINE uint32_t Size() const { return numMoves; }
-    INLINE const Move& GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index].move; }
-
-    INLINE const MoveEntry& operator [] (uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
-    INLINE MoveEntry& operator [] (uint32_t index) { ASSERT(index < numMoves); return moves[index]; }
+    INLINE const Move GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
+    INLINE int32_t GetScore(uint32_t index) const { ASSERT(index < numMoves); return scores[index]; }
 
     template<typename MoveType>
     void RemoveMove(const MoveType move)
@@ -35,9 +27,10 @@ public:
 
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            if (moves[i].move == move)
+            if (moves[i] == move)
             {
                 std::swap(moves[i], moves[numMoves - 1]);
+                std::swap(scores[i], scores[numMoves - 1]);
                 numMoves--;
                 i--;
             }
@@ -54,11 +47,12 @@ public:
         ASSERT(numMoves < MaxMoves);
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            ASSERT(move != moves[i].move);
+            ASSERT(move != moves[i]);
         }
 
         uint32_t index = numMoves++;
-        moves[index] = { move, INT32_MIN };
+        moves[index] = move;
+        scores[index] = INT32_MIN;
     }
 
     uint32_t AssignTTScores(const TTEntry& ttEntry);
@@ -67,6 +61,7 @@ public:
     {
         ASSERT(index < numMoves);
         std::swap(moves[numMoves - 1], moves[index]);
+        std::swap(scores[numMoves - 1], scores[index]);
         numMoves--;
     }
 
@@ -74,46 +69,25 @@ public:
     {
         int32_t bestScore = INT32_MIN;
         uint32_t bestMoveIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < numMoves; ++i)
+
+        for (uint32_t j = 0; j < numMoves; ++j)
         {
-            if (moves[i].score > bestScore)
+            const int32_t score = scores[j];
+            if (score > bestScore)
             {
-                bestScore = moves[i].score;
-                bestMoveIndex = i;
+                bestScore = score;
+                bestMoveIndex = j;
             }
         }
+
         return bestMoveIndex;
-    }
-
-    const Move PickBestMove(uint32_t index, int32_t& outMoveScore)
-    {
-        ASSERT(index < numMoves);
-
-        int32_t bestScore = INT32_MIN;
-        uint32_t bestMoveIndex = index;
-        for (uint32_t i = index; i < numMoves; ++i)
-        {
-            if (moves[i].score > bestScore)
-            {
-                bestScore = moves[i].score;
-                bestMoveIndex = i;
-            }
-        }
-
-        if (bestMoveIndex != index)
-        {
-            std::swap(moves[index], moves[bestMoveIndex]);
-        }
-
-        outMoveScore = moves[index].score;
-        return moves[index].move;
     }
 
     bool HasMove(const Move move) const
     {
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            if (moves[i].move == move)
+            if (moves[i] == move)
             {
                 return true;
             }
@@ -126,7 +100,7 @@ public:
     {
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            if (moves[i].move == move)
+            if (moves[i] == move)
             {
                 return true;
             }
@@ -135,13 +109,7 @@ public:
         return false;
     }
 
-    void Sort()
-    {
-        std::stable_sort(moves, moves + numMoves, [](const MoveEntry& a, const MoveEntry& b)
-        {
-            return a.score > b.score;
-        });
-    }
+    void Sort();
 
     void Shuffle();
 
@@ -150,5 +118,6 @@ public:
 private:
 
     uint32_t numMoves = 0;
-    MoveEntry moves[MaxMoves];
+    Move moves[MaxMoves];
+    alignas(32) int32_t scores[MaxMoves];
 };

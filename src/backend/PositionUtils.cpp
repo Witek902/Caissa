@@ -705,9 +705,9 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                         MoveList moves;
                         GenerateMoveList(moves);
 
-                        for (uint32_t i = 0; i < moves.numMoves; ++i)
+                        for (uint32_t i = 0; i < moves.Size(); ++i)
                         {
-                            const Move& refMove = moves[i].move;
+                            const Move& refMove = moves.GetMove(i);
                             
                             if (refMove.GetPiece() == move.GetPiece() &&
                                 refMove.ToSquare() == move.ToSquare() &&
@@ -788,9 +788,10 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
             GeneratePawnMoveList(moves);
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
-                if (moves[i].move == packedMove)
+                const Move move = moves.GetMove(i);
+                if (move == packedMove)
                 {
-                    return moves[i].move;
+                    return move;
                 }
             }
             break;
@@ -867,9 +868,10 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
-                if (moves[i].move.FromSquare() == fromSquare && moves[i].move.ToSquare() == toSquare)
+                const Move move = moves.GetMove(i);
+                if (move.FromSquare() == fromSquare && move.ToSquare() == toSquare)
                 {
-                    return moves[i].move;
+                    return move;
                 }
             }
 
@@ -938,9 +940,10 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
-                if (moves[i].move.FromSquare() == fromSquare && moves[i].move.ToSquare() == toSquare)
+                const Move move = moves.GetMove(i);
+                if (move.FromSquare() == fromSquare && move.ToSquare() == toSquare)
                 {
-                    return moves[i].move;
+                    return move;
                 }
             }
 
@@ -1123,9 +1126,10 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
         MoveList moves;
         GenerateMoveList(moves);
 
-        for (uint32_t i = 0; i < moves.numMoves; ++i)
+        for (uint32_t i = 0; i < moves.Size(); ++i)
         {
-            const Move& move = moves[i].move;
+            const Move move = moves.GetMove(i);
+
             if (movedPiece == move.GetPiece() &&
                 toSquare == move.ToSquare() &&
                 move.GetPromoteTo() == promoteTo &&

@@ -791,17 +791,7 @@
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionHash.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
-    <ClCompile Include="PSQT.cpp">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Final|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Final-BMI2|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug-BMI2|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Final-POPCNT|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug-POPCNT|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release-POPCNT|x64'">MinSpace</Optimization>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release-BMI2|x64'">MinSpace</Optimization>
-    </ClCompile>
+    <ClCompile Include="PSQT.cpp" />
     <ClCompile Include="Search.cpp" />
     <ClCompile Include="SearchUtils.cpp" />
     <ClCompile Include="Square.cpp" />

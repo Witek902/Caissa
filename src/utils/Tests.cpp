@@ -980,9 +980,9 @@ static void RunPositionTests()
             bool found = false;
             for (uint32_t i = 0; i < allMoves.Size(); ++i)
             {
-                if (allMoves[i].move == move)
+                if (allMoves.GetMove(i) == move)
                 {
-                    ASSERT(allMoves[i].score == moveScore);
+                    ASSERT(allMoves.GetScore(i) == moveScore);
                     found = true;
                 }
             }

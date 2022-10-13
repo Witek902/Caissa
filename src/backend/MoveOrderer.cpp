@@ -263,7 +263,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves[i].move;
+        const Move move = moves.GetMove(i);
         ASSERT(move.IsValid());
 
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
@@ -275,7 +275,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         ASSERT(to < 64);
 
         // skip moves that has been scored
-        if (moves[i].score > INT32_MIN) continue;
+        if (moves.scores[i] > INT32_MIN) continue;
 
         int64_t score = 0;
 
@@ -417,6 +417,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
             score += PromotionValue;
         }
 
-        moves[i].score = (int32_t)std::min<int64_t>(score, INT32_MAX);
+        moves.scores[i] = (int32_t)std::min<int64_t>(score, INT32_MAX);
     }
 }
