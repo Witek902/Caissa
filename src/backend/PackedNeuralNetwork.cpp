@@ -465,54 +465,59 @@ INLINE static void LinearLayer(
     uint32_t numInputs, uint32_t numOutputs, int32_t* output, const IntermediateType* input)
 {
 #if defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 256 / 8;
-    const uint32_t numOutChunks = numOutputs / 4u;
-    ASSERT(numInputs % registerWidth == 0);
-    ASSERT(numOutputs % 4u == 0);
-    ASSERT((size_t)weights % 32 == 0);
-    ASSERT((size_t)biases % 32 == 0);
-    ASSERT((size_t)output % 32 == 0);
-    ASSERT((size_t)input % 32 == 0);
-
-    for (uint32_t i = 0; i < numOutChunks; ++i)
+    if (numInputs >= 32)
     {
-        // Prepare weight offsets. One offset for one row of weights.
-        // This is a simple index into a 2d array.
-        const uint32_t offset0 = (i * 4u + 0u) * numInputs;
-        const uint32_t offset1 = (i * 4u + 1u) * numInputs;
-        const uint32_t offset2 = (i * 4u + 2u) * numInputs;
-        const uint32_t offset3 = (i * 4u + 3u) * numInputs;
+        constexpr uint32_t registerWidth = 256 / 8;
+        const uint32_t numOutChunks = numOutputs / 4u;
+        ASSERT(numInputs % registerWidth == 0);
+        ASSERT(numOutputs % 4u == 0);
+        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)biases % 32 == 0);
+        ASSERT((size_t)output % 32 == 0);
+        ASSERT((size_t)input % 32 == 0);
 
-        // Accumulation starts from 0, we add the bias only at the end.
-        __m256i sum0 = _mm256_setzero_si256();
-        __m256i sum1 = _mm256_setzero_si256();
-        __m256i sum2 = _mm256_setzero_si256();
-        __m256i sum3 = _mm256_setzero_si256();
-
-        // Each innermost loop processes a 32x4 chunk of weights, so 128 weights at a time!
-        for (uint32_t j = 0; j < numInputs; j += registerWidth)
+        for (uint32_t i = 0; i < numOutChunks; ++i)
         {
-            // We unroll by 4 so that we can reuse this value, reducing the number of memory operations required.
-            const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
+            // Prepare weight offsets. One offset for one row of weights.
+            // This is a simple index into a 2d array.
+            const uint32_t offset0 = (i * 4u + 0u) * numInputs;
+            const uint32_t offset1 = (i * 4u + 1u) * numInputs;
+            const uint32_t offset2 = (i * 4u + 2u) * numInputs;
+            const uint32_t offset3 = (i * 4u + 3u) * numInputs;
 
-            // This function processes a 32x1 chunk of int8 and produces a 8x1 chunk of int32.
-            const HiddenLayerWeightType* weightsBase = weights + j;
-            m256_add_dpbusd_epi32(sum0, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset0)));
-            m256_add_dpbusd_epi32(sum1, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset1)));
-            m256_add_dpbusd_epi32(sum2, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset2)));
-            m256_add_dpbusd_epi32(sum3, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset3)));
+            // Accumulation starts from 0, we add the bias only at the end.
+            __m256i sum0 = _mm256_setzero_si256();
+            __m256i sum1 = _mm256_setzero_si256();
+            __m256i sum2 = _mm256_setzero_si256();
+            __m256i sum3 = _mm256_setzero_si256();
+
+            // Each innermost loop processes a 32x4 chunk of weights, so 128 weights at a time!
+            for (uint32_t j = 0; j < numInputs; j += registerWidth)
+            {
+                // We unroll by 4 so that we can reuse this value, reducing the number of memory operations required.
+                const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
+
+                // This function processes a 32x1 chunk of int8 and produces a 8x1 chunk of int32.
+                const HiddenLayerWeightType* weightsBase = weights + j;
+                m256_add_dpbusd_epi32(sum0, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset0)));
+                m256_add_dpbusd_epi32(sum1, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset1)));
+                m256_add_dpbusd_epi32(sum2, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset2)));
+                m256_add_dpbusd_epi32(sum3, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsBase + offset3)));
+            }
+
+            const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(&biases[i * 4u]));
+            // This function adds horizontally 8 values from each sum together, producing 4 int32 values.
+            __m128i outVal = m256_haddx4(sum0, sum1, sum2, sum3);
+            outVal = _mm_add_epi32(outVal, _mm_set1_epi32(WeightScale / 2)); // divide with rounding to nearest
+            outVal = _mm_add_epi32(outVal, bias);
+            outVal = _mm_srai_epi32(outVal, WeightScaleShift);
+            _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
         }
-
-        const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(&biases[i * 4u]));
-        // This function adds horizontally 8 values from each sum together, producing 4 int32 values.
-        __m128i outVal = m256_haddx4(sum0, sum1, sum2, sum3);
-        outVal = _mm_add_epi32(outVal, _mm_set1_epi32(WeightScale / 2)); // divide with rounding to nearest
-        outVal = _mm_add_epi32(outVal, bias);
-        outVal = _mm_srai_epi32(outVal, WeightScaleShift);
-        _mm_store_si128(reinterpret_cast<__m128i*>(&output[i * 4]), outVal);
+        return;
     }
+#endif // NN_USE_AVX2
 
-#elif defined(NN_USE_SSE4)
+#if defined(NN_USE_SSE4)
     constexpr uint32_t registerWidth = 128 / 8;
     const uint32_t numOutChunks = numOutputs / 4u;
     ASSERT(numInputs % registerWidth == 0);
@@ -576,38 +581,43 @@ INLINE static void LinearLayer(
 INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const int32_t* input)
 {
 #if defined(NN_USE_AVX2)
-    constexpr uint32_t inRegisterWidth = 256 / 32;
-    constexpr uint32_t outRegisterWidth = 256 / 8;
-    ASSERT(size % outRegisterWidth == 0);
-    const uint32_t numOutChunks = size / outRegisterWidth;
-    ASSERT((size_t)output % 32 == 0);
-    ASSERT((size_t)input % 32 == 0);
-
-    for (uint32_t i = 0; i < numOutChunks; ++i)
+    if (size >= 32)
     {
-        __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
-        __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
-        __m256i in2 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
-        __m256i in3 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+        constexpr uint32_t inRegisterWidth = 256 / 32;
+        constexpr uint32_t outRegisterWidth = 256 / 8;
+        ASSERT(size % outRegisterWidth == 0);
+        const uint32_t numOutChunks = size / outRegisterWidth;
+        ASSERT((size_t)output % 32 == 0);
+        ASSERT((size_t)input % 32 == 0);
 
-        in0 = _mm256_packs_epi32(in0, in1);
-        in1 = _mm256_packs_epi32(in2, in3);
+        for (uint32_t i = 0; i < numOutChunks; ++i)
+        {
+            __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+            __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+            __m256i in2 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
+            __m256i in3 = _mm256_load_si256(reinterpret_cast<const __m256i*>(input)); input += inRegisterWidth;
 
-        const __m256i result =
-            _mm256_permutevar8x32_epi32(
-                // packs saturates to 127, so we only need to clamp from below
-                _mm256_max_epi8(
-                    _mm256_packs_epi16(in0, in1),
-                    _mm256_setzero_si256()
-                ),
-                _mm256_set_epi32(7, 3, 6, 2, 5, 1, 4, 0)
-            );
+            in0 = _mm256_packs_epi32(in0, in1);
+            in1 = _mm256_packs_epi32(in2, in3);
 
-        _mm256_store_si256(reinterpret_cast<__m256i*>(output), result);
-        output += outRegisterWidth;
+            const __m256i result =
+                _mm256_permutevar8x32_epi32(
+                    // packs saturates to 127, so we only need to clamp from below
+                    _mm256_max_epi8(
+                        _mm256_packs_epi16(in0, in1),
+                        _mm256_setzero_si256()
+                    ),
+                    _mm256_set_epi32(7, 3, 6, 2, 5, 1, 4, 0)
+                );
+
+            _mm256_store_si256(reinterpret_cast<__m256i*>(output), result);
+            output += outRegisterWidth;
+        }
+        return;
     }
+#endif
 
-#elif defined(NN_USE_SSE4)
+#if defined(NN_USE_SSE4)
     constexpr uint32_t inRegisterWidth = 128 / 32;
     constexpr uint32_t outRegisterWidth = 128 / 8;
     ASSERT(size % outRegisterWidth == 0);
