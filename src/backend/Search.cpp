@@ -49,6 +49,10 @@ static const int32_t BetaPruningDepth = 7;
 static const int32_t BetaMarginMultiplier = 128;
 static const int32_t BetaMarginBias = 5;
 
+static const int32_t AlphaPruningDepth = 5;
+static const int32_t AlphaMarginMultiplier = 256;
+static const int32_t AlphaMarginBias = 2000;
+
 static const int32_t HistoryPruningScoreBase = 0;
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
@@ -1181,67 +1185,74 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
     const bool isImproving = evalImprovement >= -5; // leave some small marigin
 
-    // Futility/Beta Pruning
-    if (!isPvNode &&
-        !node.isInCheck &&
-        node.depth <= BetaPruningDepth &&
-        staticEval <= KnownWinValue &&
-        staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
+    
+    if (!isPvNode && !hasMoveFilter && !node.isInCheck)
     {
-        return staticEval;
-    }
-
-    // Null Move Reductions
-    if (!isRootNode &&
-        !isPvNode &&
-        !node.isInCheck &&
-        !hasMoveFilter &&
-        staticEval >= beta &&
-        node.depth >= NullMoveReductionsStartDepth &&
-        (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
-        position.HasNonPawnMaterial(position.GetSideToMove()))
-    {
-        // don't allow null move if parent or grandparent node was null move
-        bool doNullMove = !node.isNullMove;
-        if (node.parentNode && node.parentNode->isNullMove) doNullMove = false;
-
-        if (doNullMove)
+        // Futility/Beta Pruning
+        if (node.depth <= BetaPruningDepth &&
+            staticEval <= KnownWinValue &&
+            staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
         {
-            const int32_t depthReduction =
-                NullMoveReductions_NullMoveDepthReduction +
-                node.depth / 4 +
-                std::min(3, int32_t(staticEval - beta) / 256);
+            return staticEval;
+        }
 
-            NodeInfo childNode;
-            childNode.parentNode = &node;
-            childNode.pvIndex = node.pvIndex;
-            childNode.position = position;
-            childNode.alpha = -beta;
-            childNode.beta = -beta + 1;
-            childNode.isNullMove = true;
-            childNode.height = node.height + 1;
-            childNode.depth = node.depth - depthReduction;
-            childNode.isCutNode = !node.isCutNode;
-            childNode.nnContext = &thread.nnContextStack[childNode.height];
-            childNode.nnContext->MarkAsDirty();
+        // Alpha Pruning
+        if (node.depth <= AlphaPruningDepth &&
+            alpha < KnownWinValue &&
+            staticEval > -KnownWinValue &&
+            staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
+        {
+            return staticEval;
+        }
 
-            childNode.position.DoNullMove();
+        // Null Move Reductions
+        if (staticEval >= beta &&
+            node.depth >= NullMoveReductionsStartDepth &&
+            (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
+            position.HasNonPawnMaterial(position.GetSideToMove()))
+        {
+            // don't allow null move if parent or grandparent node was null move
+            bool doNullMove = !node.isNullMove;
+            if (node.parentNode && node.parentNode->isNullMove) doNullMove = false;
 
-            ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
-
-            if (nullMoveScore >= beta)
+            if (doNullMove)
             {
-                if (nullMoveScore >= TablebaseWinValue)
-                    nullMoveScore = beta;
+                const int32_t depthReduction =
+                    NullMoveReductions_NullMoveDepthReduction +
+                    node.depth / 4 +
+                    std::min(3, int32_t(staticEval - beta) / 256);
 
-                if (std::abs(beta) < KnownWinValue && node.depth < 10)
-                    return nullMoveScore;
+                NodeInfo childNode;
+                childNode.parentNode = &node;
+                childNode.pvIndex = node.pvIndex;
+                childNode.position = position;
+                childNode.alpha = -beta;
+                childNode.beta = -beta + 1;
+                childNode.isNullMove = true;
+                childNode.height = node.height + 1;
+                childNode.depth = node.depth - depthReduction;
+                childNode.isCutNode = !node.isCutNode;
+                childNode.nnContext = &thread.nnContextStack[childNode.height];
+                childNode.nnContext->MarkAsDirty();
 
-                node.depth -= NullMoveReductions_ReSearchDepthReduction;
+                childNode.position.DoNullMove();
 
-                if (node.depth <= 0)
+                ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
+
+                if (nullMoveScore >= beta)
                 {
-                    return QuiescenceNegaMax(thread, node, ctx);
+                    if (nullMoveScore >= TablebaseWinValue)
+                        nullMoveScore = beta;
+
+                    if (std::abs(beta) < KnownWinValue && node.depth < 10)
+                        return nullMoveScore;
+
+                    node.depth -= NullMoveReductions_ReSearchDepthReduction;
+
+                    if (node.depth <= 0)
+                    {
+                        return QuiescenceNegaMax(thread, node, ctx);
+                    }
                 }
             }
         }
