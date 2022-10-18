@@ -227,7 +227,10 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
 
-    const Square oponentKingSq(FirstBitSet(pos.GetOpponentSide().king));
+    const Square whiteKingSq = pos.Whites().GetKingSquare();
+    const Square blackKingSq = pos.Blacks().GetKingSquare();
+    const Square oponentKingSq = pos.GetOpponentSide().GetKingSquare();
+
     const Bitboard oponentPawnAttacks = (pos.GetSideToMove() == Color::White) ?
         Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
         Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
@@ -364,14 +367,14 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     score += 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_knightValue.mg);
                 }
 
-                // penalty moving a piece under pawn attack
+                // penalty for moving a piece under pawn attack
                 if (move.GetPiece() != Piece::Pawn &&
                     (oponentPawnAttacks & move.ToSquare().GetBitboard()))
                 {
                     score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_pawnValue.mg);
                 }
 
-                // penalty moving a piece under knight
+                // penalty for moving a piece under knight attack
                 if (move.GetPiece() != Piece::Pawn && move.GetPiece() != Piece::Knight &&
                     (oponentKnightAttacks & move.ToSquare().GetBitboard()))
                 {
@@ -384,31 +387,19 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     score += 32 * int32_t(move.ToSquare().RelativeRank(pos.GetSideToMove()));
                 }
 
-                /*
-                // eval-derived score
-                {
-                    const uint32_t pieceIndex = (uint32_t)move.GetPiece() - (uint32_t)Piece::Pawn;
-
-                    const PieceScore oldPieceScore = PSQT[pieceIndex][move.FromSquare().Index()];
-                    const PieceScore newPieceScore = PSQT[pieceIndex][move.ToSquare().Index()];
-
-                    TPieceScore<int32_t> evalDiff = newPieceScore - oldPieceScore;
-
-                    const uint32_t oldDistance = Square::Distance(oponentKingSq, move.FromSquare());
-                    const uint32_t newDistance = Square::Distance(oponentKingSq, move.ToSquare());
-
-                    switch (move.GetPiece())
-                    {
-                    case Piece::Knight: evalDiff += c_theirKnightDistanceBonus[oldDistance] - c_theirKnightDistanceBonus[newDistance]; break;
-                    case Piece::Bishop: evalDiff += c_theirBishopDistanceBonus[oldDistance] - c_theirBishopDistanceBonus[newDistance]; break;
-                    case Piece::Rook:   evalDiff += c_theirRookDistanceBonus[oldDistance] - c_theirRookDistanceBonus[newDistance]; break;
-                    case Piece::Queen:  evalDiff += c_theirQueenDistanceBonus[oldDistance] - c_theirQueenDistanceBonus[newDistance]; break;
-                    }
-
-                    // TODO proper gamephase scaling?
-                    score += 16 * (evalDiff.mg + evalDiff.eg) / 2;
-                }
-                */
+                //// penalty for moving uncastled king
+                //if (move.GetPiece() == Piece::King)
+                //{
+                //    const uint8_t castlingRights = pos.GetSideToMove() == Color::White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
+                //    if (castlingRights && !move.IsCastling())
+                //    {
+                //        score -= 4000;
+                //    }
+                //    else if (move.IsCastling())
+                //    {
+                //        score += 2000;
+                //    }
+                //}
             }
         }
 
