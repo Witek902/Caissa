@@ -26,8 +26,8 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 10000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
 static const uint32_t cBatchSize = 64;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
@@ -75,7 +75,7 @@ bool TrainNetwork()
 
     for (uint32_t i = 0; i < numNetworks; ++i)
     {
-        networksData[i].network.Init(cNumNetworkInputs, { 256, 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
+        networksData[i].network.Init(cNumNetworkInputs, { 512, 16, 32, 1 }, nn::ActivationFunction::Sigmoid);
         //networksData[i].network.Load("checkpoint.nn");
         networksData[i].runCtx.Init(networksData[i].network);
     }
