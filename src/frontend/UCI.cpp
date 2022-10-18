@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.1.8"
+#define VersionNumber "1.1.9"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
