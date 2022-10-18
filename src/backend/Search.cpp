@@ -1409,13 +1409,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // Static Exchange Evaluation pruning
             // skip all moves that are bad according to SEE
             // the higher depth is, the less agressing pruning is
-            if (move.IsCapture() || childNode.isInCheck)
+            if (move.IsCapture())
             {
-                if (!position.StaticExchangeEvaluation(move, -256 * node.depth)) continue;
+                if (node.depth <= 4 &&
+                    moveScore < MoveOrderer::GoodCaptureValue &&
+                    !position.StaticExchangeEvaluation(move, -120 * node.depth)) continue;
             }
             else
             {
-                if (!position.StaticExchangeEvaluation(move, -16 * node.depth * node.depth)) continue;
+                if (node.depth <= 8 &&
+                    !position.StaticExchangeEvaluation(move, -64 * node.depth)) continue;
             }
         }
 
