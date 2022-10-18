@@ -19,7 +19,7 @@ const char* c_DefaultEndgameEvalFile = "endgame.pnn";
 
 namespace {
 
-static constexpr int32_t c_evalSaturationTreshold   = 4000;
+static constexpr int32_t c_evalSaturationTreshold   = 10000;
 
 static constexpr PieceScore c_tempoBonus            = S(4, 4);
 static constexpr PieceScore c_castlingRightsBonus   = S(39, 9);
@@ -425,7 +425,7 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     // saturate eval value so it doesn't exceed KnownWinValue
     if (finalValue > c_evalSaturationTreshold)
     {
-        finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 4;
+        finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 8;
     }
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
