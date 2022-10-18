@@ -53,6 +53,10 @@ static const int32_t AlphaPruningDepth = 5;
 static const int32_t AlphaMarginMultiplier = 256;
 static const int32_t AlphaMarginBias = 2000;
 
+static const int32_t RazoringStartDepth = 3;
+static const int32_t RazoringMarginMultiplier = 128;
+static const int32_t RazoringMarginBias = 20;
+
 static const int32_t HistoryPruningScoreBase = 0;
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
@@ -739,7 +743,6 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
-    ASSERT(node.depth <= 0);
     ASSERT(node.alpha <= node.beta);
     ASSERT(node.isPvNode || node.alpha == node.beta - 1);
     ASSERT(node.moveFilterCount == 0);
@@ -1203,6 +1206,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
         {
             return staticEval;
+        }
+
+        // Razoring
+        // prune if quiescence search on current position can't beat beta
+        if (node.depth <= RazoringStartDepth &&
+            beta < KnownWinValue &&
+            staticEval + RazoringMarginBias + RazoringMarginMultiplier * node.depth < beta)
+        {
+            const ScoreType qScore = QuiescenceNegaMax(thread, node, ctx);
+            if (qScore < beta)
+            {
+                return qScore;
+            }
         }
 
         // Null Move Reductions
