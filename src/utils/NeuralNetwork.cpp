@@ -727,66 +727,71 @@ void Layer::UpdateWeights_SGD(float learningRate, const Gradients& gradients)
 
 void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients, const float gradientScale)
 {
-    const size_t numAllWeights = (numInputs + 1) * numOutputs;
-    ASSERT(gradients.values.size() == numAllWeights);
+    ASSERT(gradients.values.size() == (numInputs + 1) * numOutputs);
 
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-7f;
-
-    size_t i = 0;
 
 #ifdef USE_AVX
     const __m256 cOneMinusRhoVec = _mm256_set1_ps(1.0f - cRho);
     const __m256 cRhoVec = _mm256_set1_ps(cRho);
     const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
     const __m256 gradientScaleVec = _mm256_set1_ps(gradientScale);
+#endif
 
-    for (; i + 8 <= numAllWeights; i += 8)
+    for (size_t j = 0; j <= numInputs; j++)
     {
-        float* mPtr = gradientMean.data() + i;
-        float* vPtr = gradientMoment.data() + i;
-        float* wPtr = weights.data() + i;
-        const float* gPtr = gradients.values.data() + i;
+        // process only touched inputs
+        if (j < numInputs && !gradients.dirty[j]) continue;
 
-        const __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
-        __m256 v = _mm256_load_ps(vPtr);
-        __m256 m = _mm256_load_ps(mPtr);
+        size_t i = 0;
 
-        // ADADELTA algorithm
-        __m256 w = _mm256_load_ps(wPtr);
-        m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
-        __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
-        v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
-        w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
+#ifdef USE_AVX
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            float* mPtr = gradientMean.data() + j * numOutputs + i;
+            float* vPtr = gradientMoment.data() + j * numOutputs + i;
+            float* wPtr = weights.data() + j * numOutputs + i;
+            const float* gPtr = gradients.values.data() + j * numOutputs + i;
 
-        _mm256_store_ps(vPtr, v);
-        _mm256_store_ps(mPtr, m);
-        _mm256_store_ps(wPtr, w);
-    }
+            const __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
+            __m256 v = _mm256_load_ps(vPtr);
+            __m256 m = _mm256_load_ps(mPtr);
+
+            // ADADELTA algorithm
+            __m256 w = _mm256_load_ps(wPtr);
+            m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
+            __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
+            v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
+            w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
+
+            _mm256_store_ps(vPtr, v);
+            _mm256_store_ps(mPtr, m);
+            _mm256_store_ps(wPtr, w);
+        }
 #endif // USE_AVX
 
-    for (; i < numAllWeights; ++i)
-    {
-        //if (i < numWeights && !gradients.dirty[i]) continue;
+        for (; i < numOutputs; ++i)
+        {
+            float& m = gradientMean[j * numOutputs + i];
+            float& v = gradientMoment[j * numOutputs + i];
+            float& w = weights[j * numOutputs + i];
+            const float g = gradientScale * gradients.values[j * numOutputs + i];
 
-        float& m = gradientMean[i];
-        float& v = gradientMoment[i];
-        float& w = weights[i];
-        const float g = gradientScale * gradients.values[i];
+            ASSERT(!std::isnan(g));
+            ASSERT(v >= 0.0f);
+            ASSERT(m >= 0.0f);
 
-        ASSERT(!std::isnan(g));
-        ASSERT(v >= 0.0f);
-        ASSERT(m >= 0.0f);
+            // ADADELTA algorithm
+            m = cRho * m + (1.0f - cRho) * g * g;
+            float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
+            v = cRho * v + (1.0f - cRho) * delta * delta;
+            w -= learningRate * delta;
 
-        // ADADELTA algorithm
-        m = cRho * m + (1.0f - cRho) * g * g;
-        float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
-        v = cRho * v + (1.0f - cRho) * delta * delta;
-        w -= learningRate * delta;
-
-        ASSERT(!std::isnan(m));
-        ASSERT(!std::isnan(v));
-        ASSERT(!std::isnan(w));
+            ASSERT(!std::isnan(m));
+            ASSERT(!std::isnan(v));
+            ASSERT(!std::isnan(w));
+        }
     }
 }
 
