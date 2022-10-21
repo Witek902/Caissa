@@ -12,6 +12,8 @@
 	#include <Windows.h>
 #endif
 
+int32_t g_TunedParameter = 0;
+
 void InitEngine()
 {
     // force rounding denormals to zero

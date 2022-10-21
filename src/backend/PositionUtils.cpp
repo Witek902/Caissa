@@ -17,6 +17,8 @@ bool PackPosition(const Position& inPos, PackedPosition& outPos)
     outPos.halfMoveCount = inPos.GetHalfMoveCount();
     outPos.enPassantFile = inPos.GetEnPassantSquare().IsValid() ? inPos.GetEnPassantSquare().File() : 0xF;
 
+    ASSERT(outPos.occupied.Count() <= 32);
+
     outPos.castlingRights = 0;
     if (inPos.GetWhitesCastlingRights() & c_shortCastleMask)    outPos.castlingRights |= (1 << 0);
     if (inPos.GetWhitesCastlingRights() & c_longCastleMask)     outPos.castlingRights |= (1 << 1);
@@ -1455,11 +1457,17 @@ void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position
     randomizePieces();
     */
 
+    outPosition = Position();
+
     std::uniform_int_distribution<uint32_t> pieceDistr((uint32_t)Piece::Knight, (uint32_t)Piece::Queen);
+    std::uniform_int_distribution<uint32_t> kingPosDistr(0, 7);
+
+    const uint32_t whiteKingRank = kingPosDistr(randomGenerator);
+    const uint32_t blackKingRank = kingPosDistr(randomGenerator);
 
     for (uint8_t i = 0; i < 8; ++i)
     {
-        const Piece piece = i == 4 ? Piece::King : (Piece)(pieceDistr(randomGenerator));
+        const Piece piece = i == whiteKingRank ? Piece::King : (Piece)(pieceDistr(randomGenerator));
         outPosition.SetPiece(Square(i, 0), piece, Color::White);
         outPosition.SetPiece(Square(i, 1), Piece::Pawn, Color::White);
     }
@@ -1468,8 +1476,11 @@ void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position
 
     for (uint8_t i = 0; i < 8; ++i)
     {
-        const Piece piece = i == 4 ? Piece::King : (Piece)(pieceDistr(randomGenerator));
+        const Piece piece = i == blackKingRank ? Piece::King : (Piece)(pieceDistr(randomGenerator));
         outPosition.SetPiece(Square(i, 7), piece, Color::Black);
         outPosition.SetPiece(Square(i, 6), Piece::Pawn, Color::Black);
     }
+
+    outPosition.SetWhitesCastlingRights(0);
+    outPosition.SetBlacksCastlingRights(0);
 }
