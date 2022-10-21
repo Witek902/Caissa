@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.1.10"
+#define VersionNumber "1.1.13"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -150,6 +150,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
+        std::cout << "option name TunedParam type spin default 0 min -1000000 max 1000000\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -793,6 +794,10 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
             std::cout << "Invalid value" << std::endl;
             return false;
         }
+    }
+    else if (lowerCaseName == "tunedparam")
+    {
+        g_TunedParameter = atoi(value.c_str());
     }
     else
     {

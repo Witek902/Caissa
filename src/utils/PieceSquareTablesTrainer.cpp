@@ -25,7 +25,9 @@
 #include <limits.h>
 
 #define USE_CASTLING_RIGHTS
-#define USE_MOBILITY
+//#define USE_IMBALANCE
+//#define USE_MOBILITY
+#define USE_PAWN_STRUCTURE
 //#define USE_PASSED_PAWNS
 
 using namespace threadpool;
@@ -38,11 +40,17 @@ static const uint32_t cNumNetworkInputs =
     2 * 5 +                     // piece values
     2 * 32 * 64 * 10 +          // king-relative PSQT
     2                           // bishop pair
+#ifdef USE_IMBALANCE
+    + 2 * 55
+#endif
 #ifdef USE_CASTLING_RIGHTS
     + 2
 #endif
 #ifdef USE_MOBILITY
     + 2 * (9 + 14 + 15 + 28)
+#endif
+#ifdef USE_PAWN_STRUCTURE
+    + 2 * 48 * 48 * 2
 #endif
 #ifdef USE_PASSED_PAWNS
     + 2 * 5                     // passed pawn bonus (ranks 1 - 5)
@@ -79,6 +87,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     const Square blackKingSq(FirstBitSet(pos.Blacks().king));
     const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
     const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
+    const Bitboard whitePawnsFlipped = pos.Whites().pawns.MirroredVertically();
+    const Bitboard blackPawnsFlipped = pos.Blacks().pawns.MirroredVertically();
 
     const int32_t wp = pos.Whites().pawns.Count();
     const int32_t wn = pos.Whites().knights.Count();
@@ -178,6 +188,23 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         offset += 2;
     }
 
+#ifdef USE_IMBALANCE
+    {
+        const int32_t matCount[] = { wp, wn, wb, wr, wq, bp, bn, bb, br, bq };
+        for (uint32_t i = 0; i < 10; ++i)
+        {
+            for (uint32_t j = 0; j < i; ++j)
+            {
+                inputs.emplace_back(offset++, mg * matCount[i] * matCount[j]);
+                inputs.emplace_back(offset++, eg * matCount[i] * matCount[j]);
+            }
+
+            inputs.emplace_back(offset++, mg * matCount[i] * matCount[i]);
+            inputs.emplace_back(offset++, eg * matCount[i] * matCount[i]);
+        }
+    }
+#endif // USE_IMBALANCE
+
 #ifdef USE_CASTLING_RIGHTS
     {
         const int32_t numCastlingRights = (int32_t)PopCount(pos.GetWhitesCastlingRights()) - (int32_t)PopCount(pos.GetBlacksCastlingRights());
@@ -256,8 +283,69 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     }
 #endif // USE_MOBILITY
 
+#ifdef USE_PAWN_STRUCTURE
+    {
+        // white pawns vs. white pawns
+        pos.Whites().pawns.Iterate([&](uint32_t squareA) INLINE_LAMBDA
+        {
+            const uint32_t pawnOffsetA = 8 * ((squareA / 8) - 1) + (squareA % 8);
+            ASSERT(pawnOffsetA < 48);
+
+            pos.Whites().pawns.Iterate([&](uint32_t squareB) INLINE_LAMBDA
+            {
+                const uint32_t pawnOffsetB = 8 * ((squareB / 8) - 1) + (squareB % 8);
+                ASSERT(pawnOffsetB < 48);
+
+                if (pawnOffsetA < pawnOffsetB)
+                {
+                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg);
+                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg);
+                }
+            });
+        });
+
+        // black pawns vs. black pawns
+        blackPawnsFlipped.Iterate([&](uint32_t squareA) INLINE_LAMBDA
+        {
+            const uint32_t pawnOffsetA = 8 * ((squareA / 8) - 1) + (squareA % 8); ASSERT(pawnOffsetA < 48);
+
+            blackPawnsFlipped.Iterate([&](uint32_t squareB) INLINE_LAMBDA
+            {
+                const uint32_t pawnOffsetB = 8 * ((squareB / 8) - 1) + (squareB % 8);
+                ASSERT(pawnOffsetB < 48);
+
+                if (pawnOffsetA < pawnOffsetB)
+                {
+                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, -mg);
+                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, -eg);
+                }
+            });
+        });
+
+        offset += 2 * 48 * 48;
+
+        // white pawns vs. black pawns
+        pos.Whites().pawns.Iterate([&](uint32_t squareA) INLINE_LAMBDA
+        {
+            const uint32_t pawnOffsetA = 8 * ((squareA / 8) - 1) + (squareA % 8);
+            ASSERT(pawnOffsetA < 48);
+
+            pos.Blacks().pawns.Iterate([&](uint32_t squareB) INLINE_LAMBDA
+            {
+                const uint32_t pawnOffsetB = 8 * ((squareB / 8) - 1) + (squareB % 8);
+                ASSERT(pawnOffsetB < 48);
+
+                inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg);
+                inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg);
+            });
+        });
+
+        offset += 2 * 48 * 48;
+    }
+
+#endif // USE_PAWN_STRUCTURE
+
 #ifdef USE_PASSED_PAWNS
-    // passed pawns
     {
         pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
@@ -300,6 +388,7 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     uint32_t offset = 0;
 
     std::ofstream psqtFile("generatedPSQT.hpp");
+    std::ofstream pawnStructureTableFile("generatedPawnStructureTable.hpp");
 
     const auto printValue = [&]()
     {
@@ -368,6 +457,20 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 
     std::cout << "Bishop Pair:           "; printValue(); std::cout << std::endl;
 
+#ifdef USE_IMBALANCE
+    {
+        std::cout << "Imbalance table:" << std::endl;
+        for (uint32_t i = 0; i < 10; ++i)
+        {
+            for (uint32_t j = 0; j <= i; ++j)
+            {
+                printValue();
+            }
+            std::cout << std::endl;
+        }
+    }
+#endif // USE_IMBALANCE
+
 #ifdef USE_CASTLING_RIGHTS
     std::cout << "Castling Rights:       "; printValue(); std::cout << std::endl;
 #endif // USE_CASTLING_RIGHTS
@@ -379,6 +482,48 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     std::cout << "Queen mobility bonus:  "; for (uint32_t i = 0; i < 28; ++i)  printValue(); std::cout << std::endl;
     std::cout << std::endl;
 #endif // USE_MOBILITY
+
+#ifdef USE_PAWN_STRUCTURE
+    {
+        const auto printPawnWeights = [&]()
+        {
+            pawnStructureTableFile << "\t{" << std::endl;
+
+            for (uint32_t rank = 0; rank < 6; ++rank)
+            {
+                pawnStructureTableFile << "\t\t";
+                for (uint32_t file = 0; file < 8; file++)
+                {
+                    const float weightMG = std::round(c_nnOutputToCentiPawns * (weights[offset + 2 * (8 * rank + file) + 0]));
+                    const float weightEG = std::round(c_nnOutputToCentiPawns * (weights[offset + 2 * (8 * rank + file) + 1]));
+                    // << std::fixed << std::setw(4)
+                    pawnStructureTableFile << std::right << std::fixed << std::setw(4) << int32_t(weightMG) << "," << std::fixed << std::setw(4) << int32_t(weightEG) << ", ";
+                }
+                pawnStructureTableFile << std::endl;
+            }
+
+            pawnStructureTableFile << "\t}," << std::endl;
+        };
+
+        for (uint8_t pawnIndex = 0; pawnIndex < 48; ++pawnIndex)
+        {
+            const uint8_t pawnRank = 1 + pawnIndex / 8;
+            const uint8_t pawnFile = pawnIndex % 8;
+            pawnStructureTableFile << "// white pawn on " << Square(pawnFile, pawnRank).ToString() << std::endl;
+            printPawnWeights();
+            offset += 2 * 48;
+        }
+
+        for (uint8_t pawnIndex = 0; pawnIndex < 48; ++pawnIndex)
+        {
+            const uint8_t pawnRank = 1 + pawnIndex / 8;
+            const uint8_t pawnFile = pawnIndex % 8;
+            pawnStructureTableFile << "// white pawn on " << Square(pawnFile, pawnRank).ToString() << std::endl;
+            printPawnWeights();
+            offset += 2 * 48;
+        }
+    }
+#endif // USE_PAWN_STRUCTURE
 
 #ifdef USE_PASSED_PAWNS
     std::cout << "Passed pawns bonus:                              ";

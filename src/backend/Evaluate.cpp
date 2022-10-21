@@ -42,7 +42,7 @@ static constexpr PieceScore c_queenMobilityBonus[28] =
       S(   2,  40), S(   5,  38), S(   4,  33), S(   8,  34), S(  19,  35), S(  28,  32), S(  34,  16),
       S(  45,  11), S(  40,  17), S(  34,  10), S(  17,   9), S(  15,   3), S(   6,   6), S(   3,   1) };
 
-static constexpr PieceScore c_passedPawnBonus[8] = { S(0,0), S(-7,7), S(-17,10), S(-15,30), S(6,49), S(41,70), S(0,0), S(0,0) };
+static constexpr PieceScore c_passedPawnBonus[8] = { S(0,0), S(-4,11), S(-16,9), S(-10,29), S(13,49), S(41,78), S(0,0), S(0,0) };
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 static PackedNeuralNetworkPtr g_mainNeuralNetwork;
@@ -53,6 +53,13 @@ static PackedNeuralNetworkPtr g_endgameNeuralNetwork;
 
 bool LoadMainNeuralNetwork(const char* path)
 {
+    if (strcmp(path, "") == 0)
+    {
+        std::cout << "info string disabled neural network evaluation" << std::endl;
+        g_mainNeuralNetwork.reset();
+        return true;
+    }
+
     PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
     if (network->Load(path))
     {
@@ -67,6 +74,13 @@ bool LoadMainNeuralNetwork(const char* path)
 
 bool LoadEndgameNeuralNetwork(const char* path)
 {
+    if (strcmp(path, "") == 0)
+    {
+        std::cout << "info string disabled neural network endgame evaluation" << std::endl;
+        g_endgameNeuralNetwork.reset();
+        return true;
+    }
+
     PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
     if (network->Load(path))
     {
@@ -300,20 +314,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     const int32_t blackKnights  = materialKey.numBlackKnights;
     const int32_t blackPawns    = materialKey.numBlackPawns;
 
-    // 0 - endgame, 64 - opening
-    const int32_t gamePhase =
-        1 * (whitePawns + blackPawns) +
-        2 * (whiteKnights + blackKnights) +
-        2 * (whiteBishops + blackBishops) +
-        4 * (whiteRooks + blackRooks) +
-        8 * (whiteQueens + blackQueens);
-
-    int32_t queensDiff = whiteQueens - blackQueens;
-    int32_t rooksDiff = whiteRooks - blackRooks;
-    int32_t bishopsDiff = whiteBishops - blackBishops;
-    int32_t knightsDiff = whiteKnights - blackKnights;
-    int32_t pawnsDiff = whitePawns - blackPawns;
-
     // piece square tables probing
     {
         const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
@@ -361,11 +361,11 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
             value -= PieceScore(&blacksPSQT[8][2 * (square ^ blackSqMask)]); });
     }
 
-    value += c_queenValue * queensDiff;
-    value += c_rookValue * rooksDiff;
-    value += c_bishopValue * bishopsDiff;
-    value += c_knightValue * knightsDiff;
-    value += c_pawnValue * pawnsDiff;
+    value += c_queenValue * (whiteQueens - blackQueens);
+    value += c_rookValue * (whiteRooks - blackRooks);
+    value += c_bishopValue * (whiteBishops - blackBishops);
+    value += c_knightValue * (whiteKnights - blackKnights);
+    value += c_pawnValue * (whitePawns - blackPawns);
 
     // tempo bonus
     if (pos.GetSideToMove() == Color::White)
@@ -384,6 +384,13 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     // castling rights
     value += c_castlingRightsBonus * ((int8_t)PopCount(pos.GetWhitesCastlingRights()) - (int8_t)PopCount(pos.GetBlacksCastlingRights()));
 
+    // 0 - endgame, 64 - opening
+    const int32_t gamePhase =
+        1 * (whitePawns + blackPawns) +
+        2 * (whiteKnights + blackKnights) +
+        2 * (whiteBishops + blackBishops) +
+        4 * (whiteRooks + blackRooks) +
+        8 * (whiteQueens + blackQueens);
 
     // accumulate middle/end game scores
     int32_t finalValue = InterpolateScore(gamePhase, value);
@@ -415,7 +422,7 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
             // NN output is side-to-move relative
             if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
-            constexpr int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
+            const int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
             const int32_t nnFactor = std::max(0, std::abs(finalValue) - c_nnTresholdMin);
             ASSERT(nnFactor <= nnBlendRange);
             finalValue = (nnFactor * finalValue + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;

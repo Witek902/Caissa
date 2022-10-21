@@ -95,7 +95,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     }
 
                     // blend between eval score and actual game score
-                    const float lambda = std::lerp(0.9f, 0.6f, gamePhase);
+                    const float lambda = std::lerp(0.95f, 0.6f, gamePhase);
                     entry.score = std::lerp(score, scoreSum, lambda);
                 }
 

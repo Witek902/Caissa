@@ -43,10 +43,10 @@ static const int32_t AspirationWindowStart = 40;
 static const int32_t AspirationWindowEnd = 20;
 static const int32_t AspirationWindowStep = 4;
 
-static const int32_t SingularExtensionScoreMarigin = 10;
+static const int32_t SingularExtensionScoreMarigin = 5;
 
 static const int32_t BetaPruningDepth = 7;
-static const int32_t BetaMarginMultiplier = 128;
+static const int32_t BetaMarginMultiplier = 135;
 static const int32_t BetaMarginBias = 5;
 
 static const int32_t AlphaPruningDepth = 5;

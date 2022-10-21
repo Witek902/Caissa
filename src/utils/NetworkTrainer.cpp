@@ -28,7 +28,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cBatchSize = 64;
+static const uint32_t cBatchSize = 128;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
 
@@ -68,7 +68,7 @@ bool TrainNetwork()
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    const uint32_t numNetworks = 8;
+    const uint32_t numNetworks = 1;
 
     std::vector<PerThreadData> networksData;
     networksData.resize(numNetworks);
@@ -76,7 +76,7 @@ bool TrainNetwork()
     for (uint32_t i = 0; i < numNetworks; ++i)
     {
         networksData[i].network.Init(cNumNetworkInputs, { 512, 16, 32, 1 }, nn::ActivationFunction::Sigmoid);
-        //networksData[i].network.Load("checkpoint.nn");
+        networksData[i].network.Load("checkpoint.nn");
         networksData[i].runCtx.Init(networksData[i].network);
     }
 
