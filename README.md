@@ -10,10 +10,11 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 
 ### Playing strength
 
-* CCRL 40/15 Score: **3240** (#44) (version 0.9)
-* CCRL 2+1 Score: **3293** (#44) (version 0.9)
+* CCRL 40/15 Score: **3288** (#38) (version 1.1)
+* CCRL 2+1 Score: **3352** (#42) (version 1.0)
+* CCRL FRC 40/2 Score: **3414** (#17) (version 1.1)
 * CEGT 40/4 Score: **3211** (#34) (version 0.9)
-
+* CEGT 40/20 Score: **3245** (#40) (version 1.0)
 
 ### Supported UCI options
 
@@ -58,7 +59,7 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 
 #### Evaluation
 * Custom neural network
-  * 704&rarr;256&rarr;32&rarr;32&rarr;1 layers architecture
+  * 704&rarr;512&rarr;16&rarr;32&rarr;1 layers architecture
   * effectively updated first layer, AVX2/SSE accelerated
   * clipped-ReLU activation function
   * absolute piece coordinates with horizontal symmetry, no king-relative features
