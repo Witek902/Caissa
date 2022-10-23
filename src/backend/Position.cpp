@@ -647,6 +647,54 @@ bool Position::IsInCheck(Color color) const
     return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(color));
 }
 
+bool Position::GivesCheck_Approx(const Move move) const
+{
+    ASSERT(move.IsValid());
+
+    const Bitboard kingBitboard = GetOpponentSide().king;
+    const Square kingSq(FirstBitSet(kingBitboard));
+
+    if ((move.GetPiece() == Piece::Knight) &&
+        (Bitboard::GetKnightAttacks(move.ToSquare()) & kingBitboard))
+    {
+        return true;
+    }
+
+    if ((move.GetPiece() == Piece::Pawn) &&
+        (Bitboard::GetPawnAttacks(move.ToSquare(), mSideToMove) & kingBitboard))
+    {
+        return true;
+    }
+
+    if (move.GetPiece() == Piece::Rook || move.GetPiece() == Piece::Queen)
+    {
+        if (move.ToSquare().File() == kingSq.File() ||
+            move.ToSquare().Rank() == kingSq.Rank())
+        {
+            if ((Bitboard::GetBetween(kingSq, move.ToSquare()) & Occupied()) == 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    if (move.GetPiece() == Piece::Bishop || move.GetPiece() == Piece::Queen)
+    {
+        if (move.ToSquare().Diagonal() == kingSq.Diagonal() ||
+            move.ToSquare().AntiDiagonal() == kingSq.AntiDiagonal())
+        {
+            if ((Bitboard::GetBetween(kingSq, move.ToSquare()) & Occupied()) == 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    // TODO discovered attacks
+
+    return false;
+}
+
 uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 {
     MoveList moves;

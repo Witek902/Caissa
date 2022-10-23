@@ -80,6 +80,16 @@ public:
         return mIndex % 8u;
     }
 
+    INLINE uint8_t Diagonal() const
+    {
+        return Rank() - File() + 7;
+    }
+
+    INLINE uint8_t AntiDiagonal() const
+    {
+        return Rank() + File();
+    }
+
     INLINE uint8_t RelativeRank(const Color color) const
     {
         const uint8_t rank = mIndex / 8u;

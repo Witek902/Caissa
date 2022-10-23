@@ -1245,6 +1245,80 @@ static void RunPositionTests()
         TEST_EXPECT(!IsPassedPawn(Square_e6, pos.Whites().pawns, pos.Blacks().pawns));
         TEST_EXPECT(!IsPassedPawn(Square_g2, pos.Whites().pawns, pos.Blacks().pawns));
     }
+
+    // GivesCheck
+    {
+        {
+            Position pos("3n4/3n4/pppk2pp/8/5R2/3n4/3n4/3n3K w - - 0 1");
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f4d4")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f4f6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f4a4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f4b4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f4c4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f4e4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f4h4")));
+        }
+
+        {
+            Position pos("5n2/5n2/3R4/8/ppp2kpp/5n2/5n2/5n1K w - - 0 1");
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("d6d4")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("d6f6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("d6a6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("d6b6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("d6c6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("d6e6")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("d6h6")));
+        }
+
+        {
+            Position pos("8/1R6/6n1/8/8/5bk1/8/7K w - - 0 1");
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("b7g7")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("b7b3")));
+        }
+
+        {
+            Position pos("8/3ppp2/4k3/8/8/1P5P/4B3/7K w - - 0 1");
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("e2g4")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("e2c4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2f3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2h5")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2e2")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2d3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2b5")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2h4")));
+        }
+
+        {
+            Position pos("8/3ppp2/4k3/3n1n2/8/1P5P/4B3/7K w - - 0 1");
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2g4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2c4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2f3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2h5")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2e2")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2d3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2b5")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("e2h4")));
+        }
+
+        {
+            Position pos("8/4k3/6p1/6K1/8/q2b1Q2/8/8 w - - 8 8");
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3b7")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3e4")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3e2")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3f6")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3f7")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3f8")));
+            TEST_EXPECT(true == pos.GivesCheck_Approx(pos.MoveFromString("f3e3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3d3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3h1")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3g2")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3g3")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3g4")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3d5")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3d1")));
+            TEST_EXPECT(false == pos.GivesCheck_Approx(pos.MoveFromString("f3a8")));
+        }
+    }
 }
 
 static void RunMaterialTests()
