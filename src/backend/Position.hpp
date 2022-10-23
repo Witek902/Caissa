@@ -153,6 +153,10 @@ public:
     // check if given side is in check
     bool IsInCheck(Color sideColor) const;
 
+    // check if a move gives check
+    // approximate, does not handle discovered checks, check by castling, etc.
+    bool GivesCheck_Approx(const Move move) const;
+
     // get number of legal moves
     uint32_t GetNumLegalMoves(std::vector<Move>* outMoves = nullptr) const;
 

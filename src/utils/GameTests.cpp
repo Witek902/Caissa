@@ -76,7 +76,7 @@ void RunGameTests()
         SearchParam param{ tt };
         param.debugLog = false;
         param.numPvLines = UINT32_MAX;
-        param.limits.maxDepth = 6;
+        param.limits.maxDepth = 10;
         param.numPvLines = 1;
 
         Game game;
