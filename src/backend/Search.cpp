@@ -768,6 +768,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ScoreType beta = node.beta;
     ScoreType bestValue = -CheckmateValue + (ScoreType)node.height;
     ScoreType staticEval = InvalidValue;
+    ScoreType futilityBase = -InfValue;
 
     // transposition table lookup
     TTEntry ttEntry;
@@ -816,18 +817,18 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ASSERT(staticEval != InvalidValue);
 
-        // try to use TT score for better evaluation estimate
+        bestValue = staticEval;
+
+        // try to use TT score for better score estimate
         if (std::abs(ttScore) < KnownWinValue)
         {
             if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
                 (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval) ||
                 (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
-                staticEval = ttScore;
+                bestValue = ttScore;
             }
         }
-
-        bestValue = staticEval;
 
         if (bestValue >= beta || maxDepthReached)
         {
@@ -842,6 +843,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             alpha = bestValue;
         }
+
+        futilityBase = bestValue + 150;
     }
 
     ScoreType oldAlpha = alpha;
@@ -880,15 +883,19 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             ASSERT(!move.IsQuiet());
 
-            // skip losing captures
-            if (moveScore < MoveOrderer::GoodCaptureValue)
-            {
-                continue;
-            }
-
             // skip underpromotions
-            if (move.IsUnderpromotion())
+            if (move.IsUnderpromotion()) continue;
+
+            // skip losing captures
+            if (moveScore < MoveOrderer::GoodCaptureValue) continue;
+
+            // futility pruning - skip captures that won't beat alpha
+            if (move.IsCapture() &&
+                futilityBase > -KnownWinValue &&
+                futilityBase <= alpha &&
+                !position.StaticExchangeEvaluation(move, 1))
             {
+                bestValue = std::max(bestValue, futilityBase);
                 continue;
             }
         }
@@ -899,17 +906,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             continue;
         }
 
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
+
         // don't try all check evasions
         if (node.isInCheck && move.IsQuiet())
         {
-            if (numBestMoves > 0 && numQuietCheckEvasion > 1)
-            {
-                continue;
-            }
+            if (numBestMoves > 0 && numQuietCheckEvasion > 1) continue;
             numQuietCheckEvasion++;
         }
-
-        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         moveIndex++;
 
@@ -920,7 +925,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
                  if (node.depth < -4 && moveIndex > 1) break;
             else if (node.depth < -2 && moveIndex > 2) break;
-            else if (node.depth <  0 && moveIndex > 4) break;
+            else if (node.depth <  0 && moveIndex > 3) break;
         }
 
         childNode.previousMove = move;
