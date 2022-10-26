@@ -1131,7 +1131,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     // evaluate position if it wasn't evaluated
-    bool wasPositionEvaluated = true;
     if (!node.isInCheck)
     {
         if (staticEval == InvalidValue)
@@ -1145,7 +1144,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
 
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
-            wasPositionEvaluated = false;
         }
 
         ASSERT(staticEval != InvalidValue);

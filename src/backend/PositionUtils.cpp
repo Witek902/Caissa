@@ -975,7 +975,6 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
 
         uint32_t offset = 0;
 
-        bool isCapture = false;
         Piece movedPiece = Piece::Pawn;
         Piece promoteTo = Piece::None;
 
@@ -1002,7 +1001,6 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             fromRank = str[offset + 1] - '1';
             toFile = str[offset + 3] - 'a';
             toRank = str[offset + 4] - '1';
-            isCapture = true;
             offset += 5;
         }
         else if (str.length() >= offset + 4 && isFile(str[offset]) && isdigit(str[offset + 1]) && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
@@ -1018,7 +1016,6 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             fromFile = str[offset + 0] - 'a';
             toFile = str[offset + 2] - 'a';
             toRank = str[offset + 3] - '1';
-            isCapture = true;
             offset += 4;
         }
         else if (str.length() >= offset + 3 && isFile(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
@@ -1033,7 +1030,6 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             fromRank = str[offset + 0] - '1';
             toFile = str[offset + 2] - 'a';
             toRank = str[offset + 3] - '1';
-            isCapture = true;
             offset += 4;
         }
         else if (str.length() >= offset + 3 && isdigit(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
@@ -1047,7 +1043,6 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
         {
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
-            isCapture = true;
             offset += 3;
         }
         else if (str.length() >= offset + 2 && isFile(str[offset]) && isdigit(str[offset + 1]))

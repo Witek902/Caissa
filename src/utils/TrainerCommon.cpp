@@ -50,9 +50,6 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
         {
             const float gamePhase = (float)i / (float)game.GetMoves().size();
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            const Move nextMove = i + 1 < game.GetMoves().size() ? pos.MoveFromPacked(game.GetMoves()[i + 1]) : Move::Invalid();
-            //const ScoreType moveScore = game.GetMoveScores()[i];
-            const MaterialKey matKey = pos.GetMaterialKey();
 
             const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
             const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);

@@ -236,42 +236,6 @@ bool CheckInsufficientMaterial(const Position& pos)
     return false;
 }
 
-static TPieceScore<int32_t> EvaluatePassedPawns(const Bitboard ourPawns, const Bitboard theirPawns)
-{
-    TPieceScore<int32_t> score = { 0, 0 };
-
-    ourPawns.Iterate([&](uint32_t square)
-    {
-        const uint32_t rank = square / 8;
-        const uint32_t file = square % 8;
-
-        if (rank < 6)
-        {
-            constexpr const Bitboard fileMask = Bitboard::FileBitboard<0>();
-
-            Bitboard passedPawnMask = fileMask << (square + 8);
-
-            // blocked pawn
-            if (ourPawns & passedPawnMask)
-            {
-                return;
-            }
-
-            if (file > 0) passedPawnMask |= fileMask << (square + 7);
-            if (file < 7) passedPawnMask |= fileMask << (square + 9);
-
-            if (theirPawns & passedPawnMask)
-            {
-                return;
-            }
-
-            score += c_passedPawnBonus[rank];
-        }
-    });
-
-    return score;
-}
-
 ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 {
     const MaterialKey materialKey = pos.GetMaterialKey();
@@ -289,16 +253,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     const Square whiteKingSq(FirstBitSet(pos.Whites().king));
     const Square blackKingSq(FirstBitSet(pos.Blacks().king));
-
-    const Bitboard whitesOccupied = pos.Whites().Occupied();
-    const Bitboard blacksOccupied = pos.Blacks().Occupied();
-    const Bitboard allOccupied = whitesOccupied | blacksOccupied;
-
-    const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
-    const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
-
-    const Bitboard whitesMobilityArea = ~whitesOccupied & ~blackPawnsAttacks;
-    const Bitboard blacksMobilityArea = ~blacksOccupied & ~whitePawnsAttacks;
 
     TPieceScore<int32_t> value = { 0, 0 };
 
