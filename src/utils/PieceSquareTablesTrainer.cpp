@@ -103,16 +103,16 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
     // piece values
     {
-        inputs.emplace_back(offset++, mg * (wp - bp));
-        inputs.emplace_back(offset++, eg * (wp - bp));
-        inputs.emplace_back(offset++, mg * (wn - bn));
-        inputs.emplace_back(offset++, eg * (wn - bn));
-        inputs.emplace_back(offset++, mg * (wb - bb));
-        inputs.emplace_back(offset++, eg * (wb - bb));
-        inputs.emplace_back(offset++, mg * (wr - br));
-        inputs.emplace_back(offset++, eg * (wr - br));
-        inputs.emplace_back(offset++, mg * (wq - bq));
-        inputs.emplace_back(offset++, eg * (wq - bq));
+        inputs.push_back(nn::ActiveFeature{offset++, mg * (wp - bp)});
+        inputs.push_back(nn::ActiveFeature{offset++, eg * (wp - bp)});
+        inputs.push_back(nn::ActiveFeature{offset++, mg * (wn - bn)});
+        inputs.push_back(nn::ActiveFeature{offset++, eg * (wn - bn)});
+        inputs.push_back(nn::ActiveFeature{offset++, mg * (wb - bb)});
+        inputs.push_back(nn::ActiveFeature{offset++, eg * (wb - bb)});
+        inputs.push_back(nn::ActiveFeature{offset++, mg * (wr - br)});
+        inputs.push_back(nn::ActiveFeature{offset++, eg * (wr - br)});
+        inputs.push_back(nn::ActiveFeature{offset++, mg * (wq - bq)});
+        inputs.push_back(nn::ActiveFeature{offset++, eg * (wq - bq)});
     }
 
     // piece-square tables
@@ -135,8 +135,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
                         (whiteKingSq.File() >= 4 ? square.FlippedFile().Index() : square.Index());
 
                     ASSERT(featureIndex < 32 * 64 * 2);
-                    inputs.emplace_back(offset + 2 * featureIndex + 0, mg);
-                    inputs.emplace_back(offset + 2 * featureIndex + 1, eg);
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * featureIndex + 0, mg});
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * featureIndex + 1, eg});
                 }
 
                 // relative to their king
@@ -148,8 +148,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
                         (blackKingSq.File() >= 4 ? square.FlippedRank().FlippedFile().Index() : square.FlippedRank().Index());
 
                     ASSERT(featureIndex < 32 * 64 * 2);
-                    inputs.emplace_back(offset + 2 * featureIndex + 0, -mg);
-                    inputs.emplace_back(offset + 2 * featureIndex + 1, -eg);
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * featureIndex + 0, -mg});
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * featureIndex + 1, -eg});
                 }
             });
         };
@@ -182,8 +182,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) bishopPair -= 1;
         if (bishopPair)
         {
-            inputs.emplace_back(offset + 0, (float)bishopPair * mg);
-            inputs.emplace_back(offset + 1, (float)bishopPair * eg);
+            inputs.push_back(nn::ActiveFeature{offset + 0, (float)bishopPair * mg});
+            inputs.push_back(nn::ActiveFeature{offset + 1, (float)bishopPair * eg});
         }
         offset += 2;
     }
@@ -195,12 +195,12 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         {
             for (uint32_t j = 0; j < i; ++j)
             {
-                inputs.emplace_back(offset++, mg * matCount[i] * matCount[j]);
-                inputs.emplace_back(offset++, eg * matCount[i] * matCount[j]);
+                inputs.push_back(nn::ActiveFeature{offset++, mg * matCount[i] * matCount[j]});
+                inputs.push_back(nn::ActiveFeature{offset++, eg * matCount[i] * matCount[j]});
             }
 
-            inputs.emplace_back(offset++, mg * matCount[i] * matCount[i]);
-            inputs.emplace_back(offset++, eg * matCount[i] * matCount[i]);
+            inputs.push_back(nn::ActiveFeature{offset++, mg * matCount[i] * matCount[i]});
+            inputs.push_back(nn::ActiveFeature{offset++, eg * matCount[i] * matCount[i]});
         }
     }
 #endif // USE_IMBALANCE
@@ -210,8 +210,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         const int32_t numCastlingRights = (int32_t)PopCount(pos.GetWhitesCastlingRights()) - (int32_t)PopCount(pos.GetBlacksCastlingRights());
         if (numCastlingRights)
         {
-            inputs.emplace_back(offset + 0, (float)numCastlingRights * mg);
-            inputs.emplace_back(offset + 1, (float)numCastlingRights * eg);
+            inputs.push_back(nn::ActiveFeature{offset + 0, (float)numCastlingRights * mg});
+            inputs.push_back(nn::ActiveFeature{offset + 1, (float)numCastlingRights * eg});
         }
         offset += 2;
     }
@@ -228,56 +228,56 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, eg});
         });
         pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, -mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, -eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, -mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, -eg});
         });
         offset += 2 * 9;
 
         pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, eg});
         });
         pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateBishopAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, -mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, -eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, -mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, -eg});
         });
         offset += 2 * 14;
 
         pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, eg});
         });
         pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, -mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, -eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, -mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, -eg});
         });
         offset += 2 * 15;
 
         pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Whites().Occupied() & ~blackPawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, eg});
         });
         pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
             const Bitboard attacks = Bitboard::GenerateQueenAttacks(Square(square), blockers) & ~pos.Blacks().Occupied() & ~whitePawnsAttacks;
-            inputs.emplace_back(offset + 2 * attacks.Count() + 0, -mg);
-            inputs.emplace_back(offset + 2 * attacks.Count() + 1, -eg);
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, -mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, -eg});
         });
         offset += 2 * 28;
     }
@@ -298,8 +298,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
                 if (pawnOffsetA < pawnOffsetB)
                 {
-                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg);
-                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg);
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg});
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg});
                 }
             });
         });
@@ -316,8 +316,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
                 if (pawnOffsetA < pawnOffsetB)
                 {
-                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, -mg);
-                    inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, -eg);
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, -mg});
+                    inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, -eg});
                 }
             });
         });
@@ -335,8 +335,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
                 const uint32_t pawnOffsetB = 8 * ((squareB / 8) - 1) + (squareB % 8);
                 ASSERT(pawnOffsetB < 48);
 
-                inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg);
-                inputs.emplace_back(offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg);
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 0, mg});
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (48 * pawnOffsetA + pawnOffsetB) + 1, eg});
             });
         });
 
@@ -353,8 +353,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
             {
                 const uint32_t rank = Square(square).Rank();
                 ASSERT(rank > 0 && rank < 6);
-                inputs.emplace_back(offset + 2 * (rank - 1) + 0, mg);
-                inputs.emplace_back(offset + 2 * (rank - 1) + 1, eg);
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (rank - 1) + 0, mg});
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (rank - 1) + 1, eg});
             }
         });
 
@@ -367,8 +367,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
             {
                 const uint32_t rank = Square(square).Rank();
                 ASSERT(rank > 0 && rank < 6);
-                inputs.emplace_back(offset + 2 * (rank - 1) + 0, -mg);
-                inputs.emplace_back(offset + 2 * (rank - 1) + 1, -eg);
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (rank - 1) + 0, -mg});
+                inputs.push_back(nn::ActiveFeature{offset + 2 * (rank - 1) + 1, -eg});
             }
         });
 
@@ -393,8 +393,9 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     const auto printValue = [&]()
     {
         std::cout << "S(" << std::right
-            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset++]) << ","
-            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset++]) << "), ";
+            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset]) << ","
+            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset + 1]) << "), ";
+        offset += 2;
     };
 
     // PSQT

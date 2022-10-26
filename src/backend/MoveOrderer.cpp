@@ -227,10 +227,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
 
-    const Square whiteKingSq = pos.Whites().GetKingSquare();
-    const Square blackKingSq = pos.Blacks().GetKingSquare();
-    const Square oponentKingSq = pos.GetOpponentSide().GetKingSquare();
-
     const Bitboard oponentPawnAttacks = (pos.GetSideToMove() == Color::White) ?
         Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
         Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
