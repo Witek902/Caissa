@@ -3,7 +3,6 @@
 #include "Material.hpp"
 #include "Endgame.hpp"
 #include "PackedNeuralNetwork.hpp"
-#include "PieceSquareTables.h"
 #include "NeuralNetworkEvaluator.hpp"
 #include "Pawns.hpp"
 #include "Search.hpp"
