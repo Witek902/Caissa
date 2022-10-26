@@ -787,7 +787,6 @@
     <ClCompile Include="NeuralNetworkEvaluator.cpp" />
     <ClCompile Include="PackedNeuralNetwork.cpp" />
     <ClCompile Include="PGNParser.cpp" />
-    <ClCompile Include="PieceSquareTables.h" />
     <ClCompile Include="Position.cpp" />
     <ClCompile Include="PositionHash.cpp" />
     <ClCompile Include="PositionUtils.cpp" />
