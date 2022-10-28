@@ -366,26 +366,34 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
+        const Stats& stats = param.searchContext.stats;
+
+        {
+            const float sum = float(stats.numPvNodes + stats.numAllNodes + stats.numCutNodes);
+            printf("Num PV-Nodes:  %" PRIu64 " (%.2f%%)\n", stats.numPvNodes, 100.0f * float(stats.numPvNodes) / sum);
+            printf("Num Cut-Nodes: %" PRIu64 " (%.2f%%)\n", stats.numCutNodes, 100.0f * float(stats.numCutNodes) / sum);
+            printf("Num All-Nodes: %" PRIu64 " (%.2f%%)\n", stats.numAllNodes, 100.0f * float(stats.numAllNodes) / sum);
+        }
+
         {
             uint32_t maxMoveIndex = 0;
             uint64_t sum = 0;
             double average = 0.0;
             for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
             {
-                if (param.searchContext.stats.betaCutoffHistogram[i])
+                if (stats.betaCutoffHistogram[i])
                 {
-                    sum += param.searchContext.stats.betaCutoffHistogram[i];
-                    average += (double)i * (double)param.searchContext.stats.betaCutoffHistogram[i];
+                    sum += stats.betaCutoffHistogram[i];
+                    average += (double)i * (double)stats.betaCutoffHistogram[i];
                     maxMoveIndex = std::max(maxMoveIndex, i);
                 }
             }
             average /= sum;
             printf("Average cutoff move index: %.3f\n", average);
-
             printf("Beta cutoff histogram\n");
-            for (uint32_t i = 0; i <= maxMoveIndex; ++i)
+            for (uint32_t i = 0; i < maxMoveIndex; ++i)
             {
-                const uint64_t value = param.searchContext.stats.betaCutoffHistogram[i];
+                const uint64_t value = stats.betaCutoffHistogram[i];
                 printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
             }
         }
@@ -397,7 +405,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             {
                 const int32_t lowEval = -Stats::EvalHistogramMaxValue + i * 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
                 const int32_t highEval = lowEval + 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
-                const uint64_t value = param.searchContext.stats.evalHistogram[i];
+                const uint64_t value = stats.evalHistogram[i];
 
                 printf("    %4d...%4d %" PRIu64 "\n", lowEval, highEval, value);
             }
@@ -1683,6 +1691,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             return bestValue;
         }
     }
+
+#ifdef COLLECT_SEARCH_STATS
+    if (bestValue >= beta)          ctx.stats.numCutNodes++;
+    else if (bestValue > oldAlpha)  ctx.stats.numPvNodes++;
+    else                            ctx.stats.numAllNodes++;
+#endif // COLLECT_SEARCH_STATS
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
 
