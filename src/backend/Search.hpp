@@ -31,7 +31,7 @@ struct SearchLimits
     uint64_t maxNodes = UINT64_MAX;
 
     // maximum allowed base search depth (excluding quisence, extensions, etc.)
-    uint8_t maxDepth = UINT8_MAX;
+    uint16_t maxDepth = UINT16_MAX;
 
     // enable mate search, disables all pruning
     bool mateSearch = false;
@@ -105,10 +105,10 @@ struct NodeInfo
     const Move* moveFilter = nullptr;
 
     // remaining depth
-    int32_t depth = 0;
+    int16_t depth = 0;
 
     // depth in ply (depth counting from root)
-    uint32_t height = 0;
+    uint16_t height = 0;
 
     uint8_t moveFilterCount = 0;
 
@@ -225,7 +225,7 @@ private:
         bool isMainThread = false;
 
         // search depth at the root node in current iterative deepening step
-        uint32_t rootDepth = 0;
+        uint16_t rootDepth = 0;
 
         // principial variation lines from previous iterative deepening search
         SearchResult prevPvLines;
@@ -237,7 +237,12 @@ private:
         MoveOrderer moveOrderer;
 
         // neural network context for each node height
-        std::vector<NNEvaluatorContext, AlignmentAllocator<NNEvaluatorContext, CACHELINE_SIZE>> nnContextStack{ MaxSearchDepth };
+        using NNEvaluatorContextPtr = std::unique_ptr<NNEvaluatorContext>;
+        NNEvaluatorContextPtr nnContextStack[MaxSearchDepth];
+
+        ThreadData();
+
+        NNEvaluatorContext* GetNNEvaluatorContext(uint32_t height);
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;

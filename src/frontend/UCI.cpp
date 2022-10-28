@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.2.1"
+#define VersionNumber "1.2.2"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -31,7 +31,7 @@ static const uint32_t c_DefaultTTSizeInMB = 16;
 #endif
 static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
 static const uint32_t c_DefaultGaviotaTbCacheInMB = 64;
-static const uint32_t c_MaxNumThreads = 64;
+static const uint32_t c_MaxNumThreads = 1024;
 
 
 using UniqueLock = std::unique_lock<std::mutex>;
