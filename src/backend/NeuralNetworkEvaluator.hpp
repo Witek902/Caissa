@@ -52,6 +52,16 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 	uint32_t numAddedPieces;
 	uint32_t numRemovedPieces;
 
+	void* operator new(size_t size)
+	{
+		return AlignedMalloc(size, CACHELINE_SIZE);
+	}
+
+	void operator delete(void* ptr)
+	{
+		AlignedFree(ptr);
+	}
+
 	NNEvaluatorContext()
 	{
 		MarkAsDirty();

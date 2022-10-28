@@ -235,7 +235,7 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
     // Quiescence search debugging 
     if (param.limits.maxDepth == 0)
     {
-        ThreadData& threadData = mThreadData[0];
+        ThreadData& thread = mThreadData[0];
 
         NodeInfo rootNode;
         rootNode.position = game.GetPosition();
@@ -244,16 +244,16 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
-        rootNode.nnContext = &threadData.nnContextStack[0];
+        rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
         SearchContext searchContext{ game, param, globalStats, param.limits.idealTime };
         outResult.resize(1);
-        outResult.front().score = QuiescenceNegaMax(threadData, rootNode, searchContext);
+        outResult.front().score = QuiescenceNegaMax(thread, rootNode, searchContext);
         SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
 
         // flush pending stats
-        searchContext.stats.Append(threadData.stats, true);
+        searchContext.stats.Append(thread.stats, true);
 
         const AspirationWindowSearchParam aspirationWindowSearchParam =
         {
@@ -437,7 +437,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     SearchContext searchContext{ game, param, outStats, param.limits.idealTime };
 
     // main iterative deepening loop
-    for (uint32_t depth = 1; depth <= param.limits.maxDepth; ++depth)
+    for (uint16_t depth = 1; depth <= param.limits.maxDepth; ++depth)
     {
         SearchResult tempResult;
         tempResult.resize(numPvLines);
@@ -567,7 +567,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         if (isMainThread &&
             !param.isPonder && !param.limits.analysisMode &&
             mateCounter >= MateCountStopCondition &&
-            param.limits.maxDepth == UINT8_MAX)
+            param.limits.maxDepth == UINT16_MAX)
         {
             StopSearch();
             break;
@@ -583,7 +583,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         {
             const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
 
-            const uint32_t singularDepth = depth / 2;
+            const uint16_t singularDepth = depth / 2;
             const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
 
             NodeInfo rootNode;
@@ -595,7 +595,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.beta = singularBeta;
             rootNode.moveFilter = &primaryMove;
             rootNode.moveFilterCount = 1;
-            rootNode.nnContext = &thread.nnContextStack[0];
+            rootNode.nnContext = thread.nnContextStack[0].get();
             rootNode.nnContext->MarkAsDirty();
 
             ScoreType score = NegaMax(thread, rootNode, searchContext);
@@ -648,13 +648,13 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.isInCheck = param.position.IsInCheck();
         rootNode.isPvNode = true;
         rootNode.isPvNodeFromPrevIteration = true;
-        rootNode.depth = depth;
+        rootNode.depth = static_cast<int16_t>(depth);
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.moveFilter = param.moveFilter;
         rootNode.moveFilterCount = param.moveFilterCount;
-        rootNode.nnContext = &thread.nnContextStack[0];
+        rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
@@ -719,6 +719,28 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     }
 
     return finalPvLine;
+}
+
+Search::ThreadData::ThreadData()
+{
+    constexpr uint32_t InitialNNEvaluatorStackSize = 32;
+
+    for (uint32_t i = 0; i < InitialNNEvaluatorStackSize; ++i)
+    {
+        GetNNEvaluatorContext(i);
+    }
+}
+
+NNEvaluatorContext* Search::ThreadData::GetNNEvaluatorContext(uint32_t height)
+{
+    ASSERT(height < MaxSearchDepth);
+
+    if (!nnContextStack[height])
+    {
+        nnContextStack[height] = std::make_unique<NNEvaluatorContext>();
+    }
+
+    return nnContextStack[height].get();
 }
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
@@ -855,7 +877,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     childNode.isPvNode = node.isPvNode;
     childNode.depth = node.depth - 1;
     childNode.height = node.height + 1;
-    childNode.nnContext = &thread.nnContextStack[childNode.height];
+    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
     childNode.nnContext->MarkAsDirty();
 
     uint32_t moveGenFlags = MOVE_GEN_MASK_CAPTURES|MOVE_GEN_MASK_PROMOTIONS;
@@ -1249,9 +1271,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 childNode.beta = -beta + 1;
                 childNode.isNullMove = true;
                 childNode.height = node.height + 1;
-                childNode.depth = node.depth - depthReduction;
+                childNode.depth = static_cast<int16_t>(node.depth - depthReduction);
                 childNode.isCutNode = !node.isCutNode;
-                childNode.nnContext = &thread.nnContextStack[childNode.height];
+                childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
                 childNode.nnContext->MarkAsDirty();
 
                 childNode.position.DoNullMove();
@@ -1303,7 +1325,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     childNode.parentNode = &node;
     childNode.height = node.height + 1;
     childNode.pvIndex = node.pvIndex;
-    childNode.nnContext = &thread.nnContextStack[childNode.height];
+    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
     childNode.nnContext->MarkAsDirty();
 
     int32_t extension = 0;
@@ -1542,7 +1564,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // PVS search at reduced depth
         if (depthReduction > 0)
         {
-            childNode.depth = node.depth + moveExtension - 1 - (int32_t)depthReduction;
+            childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1 - depthReduction);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isPvNode = false;
@@ -1558,7 +1580,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // TODO: internal aspiration window?
         if (doFullDepthSearch)
         {
-            childNode.depth = node.depth + moveExtension - 1;
+            childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isPvNode = false;
@@ -1573,7 +1595,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             if (moveIndex == 1 || (score > alpha && score < beta))
             {
-                childNode.depth = node.depth + moveExtension - 1;
+                childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isPvNode = true;
