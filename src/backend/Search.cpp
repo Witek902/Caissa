@@ -1390,20 +1390,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
-        childNode.isInCheck = childNode.position.IsInCheck();
-
         moveIndex++;
         if (move.IsQuiet()) quietMoveIndex++;
-
-        // report current move to UCI
-        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
-        {
-            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
-            if (timeElapsed > CurrentMoveReportDelay)
-            {
-                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
-            }
-        }
 
         if (!node.isInCheck && !isRootNode && bestValue > -KnownWinValue)
         {
@@ -1452,6 +1440,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 if (node.depth <= 8 &&
                     !position.StaticExchangeEvaluation(move, -64 * node.depth)) continue;
+            }
+        }
+
+        childNode.isInCheck = childNode.position.IsInCheck();
+
+        // report current move to UCI
+        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
+        {
+            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
+            if (timeElapsed > CurrentMoveReportDelay)
+            {
+                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
             }
         }
 
