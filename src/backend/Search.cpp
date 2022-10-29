@@ -373,6 +373,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             printf("Num PV-Nodes:  %" PRIu64 " (%.2f%%)\n", stats.numPvNodes, 100.0f * float(stats.numPvNodes) / sum);
             printf("Num Cut-Nodes: %" PRIu64 " (%.2f%%)\n", stats.numCutNodes, 100.0f * float(stats.numCutNodes) / sum);
             printf("Num All-Nodes: %" PRIu64 " (%.2f%%)\n", stats.numAllNodes, 100.0f * float(stats.numAllNodes) / sum);
+
+            printf("Expected Cut-Nodes Hits: %.2f%%\n", 100.0f * float(stats.expectedCutNodesSuccess) / float(stats.expectedCutNodesSuccess + stats.expectedCutNodesFailure));
         }
 
         {
@@ -1572,6 +1574,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // PVS search at reduced depth
         if (depthReduction > 0)
         {
+            ASSERT(moveIndex > 1);
+
             childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1 - depthReduction);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
@@ -1693,9 +1697,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
 #ifdef COLLECT_SEARCH_STATS
-    if (bestValue >= beta)          ctx.stats.numCutNodes++;
-    else if (bestValue > oldAlpha)  ctx.stats.numPvNodes++;
-    else                            ctx.stats.numAllNodes++;
+    {
+        const bool isCutNode = bestValue >= beta;
+
+        if (isCutNode)                      ctx.stats.numCutNodes++;
+        else if (bestValue > oldAlpha)      ctx.stats.numPvNodes++;
+        else                                ctx.stats.numAllNodes++;
+
+        if (node.isCutNode == isCutNode)    ctx.stats.expectedCutNodesSuccess++;
+        else                                ctx.stats.expectedCutNodesFailure++;
+    }
 #endif // COLLECT_SEARCH_STATS
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);

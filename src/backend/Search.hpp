@@ -192,9 +192,14 @@ private:
         uint64_t ttHits = 0;
         uint64_t ttWrites = 0;
         uint64_t tbHits = 0;
+
         uint64_t numPvNodes = 0;
         uint64_t numCutNodes = 0;
         uint64_t numAllNodes = 0;
+
+        uint64_t expectedCutNodesSuccess = 0;
+        uint64_t expectedCutNodesFailure = 0;
+
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
         uint64_t evalHistogram[EvalHistogramBins] = { 0 };
 #endif // COLLECT_SEARCH_STATS
