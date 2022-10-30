@@ -240,7 +240,6 @@ void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& 
         NodeInfo rootNode;
         rootNode.position = game.GetPosition();
         rootNode.isInCheck = game.GetPosition().IsInCheck();
-        rootNode.isPvNode = true;
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
@@ -656,7 +655,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         NodeInfo rootNode;
         rootNode.position = param.position;
         rootNode.isInCheck = param.position.IsInCheck();
-        rootNode.isPvNode = true;
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.depth = static_cast<int16_t>(depth);
         rootNode.pvIndex = param.pvIndex;
@@ -775,9 +773,10 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
-    ASSERT(node.alpha <= node.beta);
-    ASSERT(node.isPvNode || node.alpha == node.beta - 1);
+    ASSERT(node.alpha < node.beta);
     ASSERT(node.moveFilterCount == 0);
+
+    const bool isPvNode = node.beta - node.alpha != 1;
 
     // clear PV line
     node.pvLength = 0;
@@ -884,7 +883,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     NodeInfo childNode;
     childNode.parentNode = &node;
     childNode.pvIndex = node.pvIndex;
-    childNode.isPvNode = node.isPvNode;
     childNode.depth = node.depth - 1;
     childNode.height = node.height + 1;
     childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
@@ -971,7 +969,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         if (score > bestValue) // new best move found
         {
             // update PV line
-            if (node.isPvNode)
+            if (isPvNode)
             {
                 node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
                 node.pvLine[0] = move;
@@ -1039,8 +1037,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
-    ASSERT(node.alpha <= node.beta);
-    ASSERT(node.isPvNode || node.alpha == node.beta - 1);
+    ASSERT(node.alpha < node.beta);
 
     // clear PV line
     node.pvLength = 0;
@@ -1052,7 +1049,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     const Position& position = node.position;
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
-    const bool isPvNode = node.isPvNode;
+    const bool isPvNode = node.beta - node.alpha != 1;
     const bool hasMoveFilter = node.moveFilterCount > 0u;
 
     ScoreType alpha = node.alpha;
@@ -1313,14 +1310,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (node.depth >= 4 && !ttEntry.IsValid())
     {
         node.depth -= 2;
-        if (node.isPvNode) node.depth--;
+        if (isPvNode) node.depth--;
     }
 
     // determine global depth reduction for quiet moves
     int32_t globalDepthReduction = 0;
     {
         // reduce non-PV nodes more
-        if (!node.isPvNode) globalDepthReduction++;
+        if (!isPvNode) globalDepthReduction++;
 
         // reduce more if eval is dropping
         if (!isImproving) globalDepthReduction++;
@@ -1402,7 +1399,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // the higher depth is, the less aggressive pruning is
             if (move.IsQuiet() &&
                 node.depth < 9 &&
-                quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + node.isPvNode)
+                quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
             {
                 continue;
             }
@@ -1421,7 +1418,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // skip quiet move that have low chance to beat alpha
             if (move.IsQuiet() &&
                 quietMoveIndex > 1 &&
-                !node.isPvNode &&
                 node.depth > 1 && node.depth < 9 &&
                 staticEval >= -KnownWinValue && staticEval <= KnownWinValue &&
                 staticEval + 32 * node.depth * node.depth < alpha)
@@ -1485,7 +1481,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - 2 * node.depth);
 
             NodeInfo singularChildNode = node;
-            singularChildNode.isPvNode = false;
             singularChildNode.isPvNodeFromPrevIteration = false;
             singularChildNode.isSingularSearch = true;
             singularChildNode.depth = node.depth / 2;
@@ -1579,7 +1574,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1 - depthReduction);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
-            childNode.isPvNode = false;
             childNode.isCutNode = true;
 
             score = -NegaMax(thread, childNode, ctx);
@@ -1595,7 +1589,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
-            childNode.isPvNode = false;
             childNode.isCutNode = !node.isCutNode;
 
             score = -NegaMax(thread, childNode, ctx);
@@ -1610,7 +1603,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
-                childNode.isPvNode = true;
                 childNode.isCutNode = false;
 
                 score = -NegaMax(thread, childNode, ctx);
