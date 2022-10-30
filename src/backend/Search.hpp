@@ -125,7 +125,6 @@ struct NodeInfo
     PackedMove pvLine[MaxSearchDepth];
 
     bool isPvNodeFromPrevIteration = false;
-    bool isPvNode = false;
     bool isCutNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
