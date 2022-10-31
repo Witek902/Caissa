@@ -1309,8 +1309,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // reduce depth if position was not found in transposition table
     if (node.depth >= 4 && !ttEntry.IsValid())
     {
-        node.depth -= 2;
-        if (isPvNode) node.depth--;
+        node.depth -= 1 + node.depth / 4;
     }
 
     // determine global depth reduction for quiet moves
