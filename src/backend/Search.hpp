@@ -259,8 +259,8 @@ private:
     
     std::vector<ThreadData, Allocator<ThreadData>> mThreadData;
 
-    static constexpr uint32_t MaxReducedMoves = 64;
-    uint8_t mMoveReductionTable[MaxSearchDepth][MaxReducedMoves];
+    static constexpr uint32_t LMRTableSize = 64;
+    uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
 
     void BuildMoveReductionTable();
 

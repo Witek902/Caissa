@@ -93,14 +93,15 @@ Search::~Search()
 
 void Search::BuildMoveReductionTable()
 {
-    for (int32_t depth = 0; depth < MaxSearchDepth; ++depth)
-    {
-        for (uint32_t moveIndex = 0; moveIndex < MaxReducedMoves; ++moveIndex)
-        {
-            const int32_t reduction = int32_t(-1.25f + 0.8f * logf(float(depth + 1)) * logf(float(moveIndex + 1)));
+    memset(mMoveReductionTable, 0, sizeof(mMoveReductionTable));
 
+    for (int32_t depth = 1; depth < LMRTableSize; ++depth)
+    {
+        for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
+        {
+            const int32_t reduction = int32_t(0.25f + 0.5f * logf(float(depth)) * logf(float(moveIndex)));
             ASSERT(reduction <= 64);
-            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, UINT8_MAX);
+            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
     }
 }
@@ -1541,11 +1542,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             depthReduction = globalDepthReduction;
 
             // reduce depth gradually
-            depthReduction += mMoveReductionTable[node.depth][std::min(moveIndex, MaxReducedMoves - 1)];
-
-            // reduce more if TT move is singular move
-            if (move != ttEntry.moves[0] && singularScoreDiff > 100) depthReduction++;
-            if (move != ttEntry.moves[0] && singularScoreDiff > 400) depthReduction++;
+            depthReduction += mMoveReductionTable[std::min(uint32_t(node.depth), LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
 
             // reduce good moves less
             if (moveScore < -8000) depthReduction++;
@@ -1648,6 +1645,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         if (score > alpha)
         {
+            ASSERT(isPvNode);
+
+            // reduce remaining moves more if we managed to find new best move
+            int32_t reducedDepth = node.depth - globalDepthReduction;
+            if (reducedDepth > 1 && reducedDepth < 8 &&
+                beta < KnownWinValue &&
+                alpha > -KnownWinValue)
+            {
+                globalDepthReduction++;
+            }
+
             alpha = score;
         }
 
