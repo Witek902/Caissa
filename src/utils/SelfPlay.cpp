@@ -50,21 +50,16 @@ public:
 
     virtual void ReportPosition(const Position& pos, ScoreType eval) override
     {
-        if (!(pos.Whites().GetKingSquare() == Square_a8 || pos.Whites().GetKingSquare() == Square_h8 ||
-              pos.Blacks().GetKingSquare() == Square_a1 || pos.Blacks().GetKingSquare() == Square_h1)) return;
+        if (!(pos.Whites().GetKingSquare().Rank() == 7 ||
+              pos.Blacks().GetKingSquare().Rank() == 0)) return;
 
         if (std::abs(eval) >= 200) return;
 
         uint32_t numPieces = pos.GetNumPieces();
 
-        if (numPieces < 6) return;
+        if (numPieces < 14) return;
 
         randomSeed = XorShift32(randomSeed);
-
-        if (numPieces < 16)
-        {
-            if (rand() % (1 << (10 - numPieces / 4))) return;
-        }
 
         if (!pos.IsQuiet()) return;
 
@@ -129,6 +124,23 @@ bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& 
     return true;
 }
 
+bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos)
+{
+    std::vector<Move> moves;
+    pos.GetNumLegalMoves(&moves);
+
+    if (moves.empty()) return false;
+
+    Move move = moves.front();
+    if (moves.size() > 1)
+    {
+        std::uniform_int_distribution<size_t> distr(0, moves.size() - 1);
+        move = moves[distr(randomGenerator)];
+    }
+
+    return pos.DoMove(move);
+}
+
 void SelfPlay(const std::vector<std::string>& args)
 {
     FileOutputStream gamesFile("selfplay.dat");
@@ -170,7 +182,7 @@ void SelfPlay(const std::vector<std::string>& args)
     ttArray.resize(numThreads);
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray[i].Resize(16ull * 1024ull * 1024ull);
+        ttArray[i].Resize(64ull * 1024ull * 1024ull);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -199,41 +211,20 @@ void SelfPlay(const std::vector<std::string>& args)
         // generate opening position
         Position openingPos;
 
-        //{
-        //    const uint32_t numPawns = std::uniform_int_distribution<uint32_t>(2, 8)(gen);
-        //    const uint32_t numKnights = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
-        //    const uint32_t numBishops = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
-        //    const uint32_t numRooks = std::uniform_int_distribution<uint32_t>(1, 2)(gen);
-        //    const uint32_t numQueens = std::uniform_int_distribution<uint32_t>(0, 1)(gen);
-        //    const MaterialKey matKey = { numPawns, numKnights, numBishops, numRooks, numQueens, numPawns, numKnights, numBishops, numRooks, numQueens };
-        //    GenerateRandomPosition(gen, matKey, openingPos);
-
-        //    // don't generate position with more than one bishop on same color squares
-        //    if ((openingPos.Whites().bishops & Bitboard::DarkSquares()).Count() > 1 ||
-        //        (openingPos.Whites().bishops & Bitboard::LightSquares()).Count() > 1 ||
-        //        (openingPos.Blacks().bishops & Bitboard::DarkSquares()).Count() > 1 ||
-        //        (openingPos.Blacks().bishops & Bitboard::LightSquares()).Count() > 1)
-        //    {
-        //        return;
-        //    }
-        //}
-
-        GenerateTranscendentalChessPosition(gen, openingPos);
-
         const uint32_t index = gameIndex++;
 
-        //if (!openingPositions.empty())
-        //{
-        //    uint32_t openingIndex = index;
-        //    if (randomizeOrder)
-        //    {
-        //        std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
-        //        openingIndex = uint32_t(distrib(gen));
-        //    }
-        //    UnpackPosition(openingPositions[openingIndex], openingPos);
-        //}
+        if (!openingPositions.empty())
+        {
+            uint32_t openingIndex = index;
+            if (randomizeOrder)
+            {
+                std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
+                openingIndex = uint32_t(distrib(gen));
+            }
+            UnpackPosition(openingPositions[openingIndex], openingPos);
+        }
 
-        if (openingPos.IsInCheck() || openingPos.IsMate() || openingPos.IsStalemate() || !openingPos.IsQuiet())
+        if (openingPos.IsMate() || openingPos.IsStalemate() || !openingPos.IsQuiet())
         {
             return;
         }
@@ -256,9 +247,9 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
-            searchParam.limits.maxDepth = 40;
-            searchParam.limits.maxNodes = 400000 - 1000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
-            searchParam.numPvLines = halfMoveNumber < 10 ? 2 : 1;
+            searchParam.limits.maxDepth = 20;
+            searchParam.limits.maxNodes = 500000 - 2000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
+            searchParam.numPvLines = 1; // halfMoveNumber < 10 ? 2 : 1;
             //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
             //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
             //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
@@ -273,8 +264,8 @@ void SelfPlay(const std::vector<std::string>& args)
                 break;
             }
 
-            // skip game if starting position is  unbalanced
-            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > 200)
+            // skip game if starting position is unbalanced
+            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > 2000)
             {
                 return;
             }
@@ -330,7 +321,6 @@ void SelfPlay(const std::vector<std::string>& args)
                 {
                     game.SetScore(Game::Score::Draw);
                 }
-                break;
             }
 
             // adjucate draw if eval is zero
@@ -342,11 +332,19 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 drawScoreCounter++;
 
-                if (drawScoreCounter >= 12 && halfMoveNumber >= 40 && game.GetPosition().GetHalfMoveCount() > 20)
+                if (game.GetPosition().GetNumPieces() < 20 &&
+                    drawScoreCounter > 10 &&
+                    halfMoveNumber >= 60 &&
+                    game.GetPosition().GetHalfMoveCount() > 20)
                 {
                     game.SetScore(Game::Score::Draw);
-                    break;
                 }
+            }
+
+            if (std::abs(Evaluate(game.GetPosition(), nullptr, false)) < KnownWinValue && IsMate(moveScore))
+            {
+                if (moveScore > KnownWinValue) game.SetScore(Game::Score::WhiteWins);
+                if (moveScore < -KnownWinValue) game.SetScore(Game::Score::BlackWins);
             }
 
             // reduce treshold of picking worse move
