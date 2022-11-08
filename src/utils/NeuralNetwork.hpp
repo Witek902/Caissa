@@ -128,8 +128,7 @@ public:
     void Run(uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
     void Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
     void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
-    void UpdateWeights_SGD(float learningRate, const Gradients& gradients);
-    void UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients, const float gradientScale);
+    void UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange);
     void QuantizeWeights(float strength);
 
     uint32_t numInputs;
@@ -198,9 +197,6 @@ public:
     {
         return layers.back().numOutputs;
     }
-
-    void ClampWeights();
-    void ClampLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale);
 
     std::vector<Layer> layers;
 };
