@@ -22,11 +22,13 @@
 #include <fstream>
 #include <limits.h>
 
+// #define USE_DTZ
+
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 10000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 4 * 1024;
-static const uint32_t cBatchSize = 128;
+static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
+static const uint32_t cBatchSize = 64;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -69,33 +71,55 @@ bool TrainEndgame()
             const uint32_t longestDTM = 253; // for 5 pieces
 
             std::random_device randomDevice;
-            std::mt19937 randomGenerator(randomDevice());
+            std::mt19937 gen(randomDevice());
             std::uniform_int_distribution<uint32_t> pieceIndexDistr(0, 9);
             std::uniform_int_distribution<uint32_t> scoreDistr(0, 18);
-            std::uniform_int_distribution<uint32_t> numPiecesDistr(0, 63);
+            std::uniform_int_distribution<uint32_t> materialDistr(0, 15);
 
             for (;;)
             {
                 MaterialKey materialKey;
 
-                const uint32_t numPieces = numPiecesDistr(randomGenerator) == 0 ? 4 : 5;
+                uint32_t seed = materialDistr(gen);
 
-                for (uint32_t j = 0; j < numPieces - 2; ++j)
+                     if (seed ==  0) materialKey.FromString("KRPvKRP");
+                else if (seed ==  1) materialKey.FromString("KRPvKR");
+                else if (seed ==  2) materialKey.FromString("KRPPvKR");
+                else if (seed ==  3) materialKey.FromString("KPPvKPP");
+                else if (seed ==  4) materialKey.FromString("KPPPvKP");
+                else if (seed ==  5) materialKey.FromString("KRPvKBP");
+                else if (seed ==  6) materialKey.FromString("KRPvKNP");
+                else if (seed ==  7) materialKey.FromString("KBPvKBP");
+                else if (seed ==  8) materialKey.FromString("KBPvKPP");
+                else if (seed ==  9) materialKey.FromString("KNPPvKN");
+                else if (seed == 10) materialKey.FromString("KQPPvKQ");
+                else if (seed == 11) materialKey.FromString("KQPvKQP");
+                else if (seed == 12) materialKey.FromString("KBPvKNP");
+                else
                 {
-                    const uint32_t pieceIndex = pieceIndexDistr(randomGenerator);
-                    ASSERT(pieceIndex < 10);
-                    switch (pieceIndex)
+                    seed = materialDistr(gen);
+
+                    uint32_t numPieces = 6;
+                    if (seed < 4) numPieces = 5;
+                    if (seed == 0) numPieces = 4;
+
+                    for (uint32_t j = 0; j < numPieces - 2; ++j)
                     {
-                    case 0: materialKey.numWhitePawns++; break;
-                    case 1: materialKey.numWhiteKnights++; break;
-                    case 2: materialKey.numWhiteBishops++; break;
-                    case 3: materialKey.numWhiteRooks++; break;
-                    case 4: materialKey.numWhiteQueens++; break;
-                    case 5: materialKey.numBlackPawns++; break;
-                    case 6: materialKey.numBlackKnights++; break;
-                    case 7: materialKey.numBlackBishops++; break;
-                    case 8: materialKey.numBlackRooks++; break;
-                    case 9: materialKey.numBlackQueens++; break;
+                        const uint32_t pieceIndex = pieceIndexDistr(gen);
+                        ASSERT(pieceIndex < 10);
+                        switch (pieceIndex)
+                        {
+                        case 0: materialKey.numWhitePawns++; break;
+                        case 1: materialKey.numWhiteKnights++; break;
+                        case 2: materialKey.numWhiteBishops++; break;
+                        case 3: materialKey.numWhiteRooks++; break;
+                        case 4: materialKey.numWhiteQueens++; break;
+                        case 5: materialKey.numBlackPawns++; break;
+                        case 6: materialKey.numBlackKnights++; break;
+                        case 7: materialKey.numBlackBishops++; break;
+                        case 8: materialKey.numBlackRooks++; break;
+                        case 9: materialKey.numBlackQueens++; break;
+                        }
                     }
                 }
 
@@ -103,16 +127,21 @@ bool TrainEndgame()
                 const int64_t whitesScore = materialKey.numWhitePawns + 3 * materialKey.numWhiteKnights + 3 * materialKey.numWhiteBishops + 5 * materialKey.numWhiteRooks + 9 * materialKey.numWhiteQueens;
                 const int64_t blacksScore = materialKey.numBlackPawns + 3 * materialKey.numBlackKnights + 3 * materialKey.numBlackBishops + 5 * materialKey.numBlackRooks + 9 * materialKey.numBlackQueens;
                 const int64_t scoreDiff = std::abs(whitesScore - blacksScore);
-                if (scoreDiff > 2)
+                if (whitesScore == 0 || blacksScore == 0) continue;
+                if (scoreDiff > 10) continue;
+                if (scoreDistr(gen) < scoreDiff) continue;
+
+                // randomize side
+                if (std::uniform_int_distribution<>{0, 1}(gen))
                 {
-                    if (scoreDistr(randomGenerator) < scoreDiff) continue;
+                    materialKey = materialKey.SwappedColors();
                 }
 
                 Position pos;
-                GenerateRandomPosition(randomGenerator, materialKey, pos);
+                GenerateRandomPosition(gen, materialKey, pos);
 
                 // generate only quiet position
-                if (!pos.IsQuiet() || pos.GetNumLegalMoves() == 0)
+                if (!pos.IsValid() || !pos.IsQuiet() || pos.GetNumLegalMoves() == 0)
                 {
                     continue;
                 }
@@ -126,6 +155,11 @@ bool TrainEndgame()
                 float score = 0.5f;
                 if (wdl != 0)
                 {
+#ifdef USE_DTZ
+                    Move tempMove;
+                    uint32_t dtz = 0;
+#endif // USE_DTZ
+
                     uint32_t gaviotaDTM = 0;
                     int32_t gaviotaWDL = 0;
 
@@ -141,10 +175,31 @@ bool TrainEndgame()
                         if (wdl < 0) score = offset + scale * powf((float)(gaviotaDTM - 1) / (float)longestDTM, power);
                         if (wdl > 0) score = 1.0f - offset - scale * powf((float)(gaviotaDTM - 1) / (float)longestDTM, power);
                     }
+#ifdef USE_DTZ
+                    else if (ProbeSyzygy_Root(pos, tempMove, &dtz))
+                    {
+                        if (dtz <= 1) continue;
+
+                        const float power = 1.5f;
+                        const float scale = 0.45f;
+                        const float offset = 0.0f;
+
+                        if (wdl < 0) score = offset + scale * powf((float)dtz / 100.0f, power);
+                        if (wdl > 0) score = 1.0f - offset - scale * powf((float)dtz / 100.0f, power);
+                    }
+#endif // USE_DTZ
                     else
                     {
                         if (wdl < 0) score = 0.0f;
                         if (wdl > 0) score = 1.0f;
+                    }
+                }
+                else
+                {
+                    // lower probability for generating drawish position
+                    if (std::uniform_int_distribution<>{0, 3}(gen))
+                    {
+                        continue;
                     }
                 }
 
@@ -161,11 +216,11 @@ bool TrainEndgame()
     //const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
     //const uint32_t numNetworkInputs = 2 * 3 * 32 * 64;
 
-    std::string name = "endgame_5_4";
+    std::string name = "endgame_6";
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { 256, 32, 32, 1 });
-    network.Load((name + ".nn").c_str());
+    network.Init(numNetworkInputs, { 512, 16, 32, 1 });
+    //network.Load((name + ".nn").c_str());
 
     nn::NeuralNetworkRunContext networkRunCtx;
     networkRunCtx.Init(network);
@@ -192,7 +247,7 @@ bool TrainEndgame()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.0002f * iteration));
+        float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.0002f * iteration));
 
         // use validation set from previous iteration as training set in the current one
         trainingSet = validationSet;
