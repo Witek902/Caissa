@@ -93,6 +93,7 @@ union MaterialKey
 
     uint32_t GetNeuralNetworkInputsNumber() const;
 
+    void FromString(const char* str);
     std::string ToString() const;
 };
 
