@@ -699,36 +699,11 @@ const Values& NeuralNetwork::Run(uint32_t numFeatures, const ActiveFeature* feat
     return ctx.layers.back().output;
 }
 
-void Layer::UpdateWeights_SGD(float learningRate, const Gradients& gradients)
-{
-    const size_t numAllWeights = (numInputs + 1) * numOutputs;
-    ASSERT(gradients.values.size() == numAllWeights);
-
-    const float cBeta = 0.9f;
-    const float cAlpha = 0.01f * learningRate;
-
-    size_t i = 0;
-
-    for (; i < numAllWeights; ++i)
-    {
-        float& v = gradientMoment[i];
-        float& w = weights[i];
-        const float g = gradients.values[i];
-
-        ASSERT(!std::isnan(g));
-
-        v = cBeta * v + cAlpha * g;
-        w -= v;
-
-        ASSERT(!std::isnan(v));
-        ASSERT(!std::isnan(w));
-    }
-}
-
-void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradients, const float gradientScale)
+void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange)
 {
     ASSERT(gradients.values.size() == (numInputs + 1) * numOutputs);
 
+    const float cDecay = 2.0e-7f;
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-7f;
 
@@ -737,6 +712,7 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
     const __m256 cRhoVec = _mm256_set1_ps(cRho);
     const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
     const __m256 gradientScaleVec = _mm256_set1_ps(gradientScale);
+    const __m256 signMaskVec = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
 #endif
 
     for (size_t j = 0; j <= numInputs; j++)
@@ -744,9 +720,15 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
         // process only touched inputs
         if (j < numInputs && !gradients.dirty[j]) continue;
 
+        const float maxValue = j < numInputs ? weightsRange : biasRange;
+
         size_t i = 0;
 
 #ifdef USE_AVX
+
+        const __m256 minValueV = _mm256_sub_ps(_mm256_setzero_ps(), _mm256_set1_ps(maxValue));
+        const __m256 maxValueV = _mm256_set1_ps(maxValue);
+
         for (; i + 8 <= numOutputs; i += 8)
         {
             float* mPtr = gradientMean.data() + j * numOutputs + i;
@@ -757,13 +739,18 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
             const __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
             __m256 v = _mm256_load_ps(vPtr);
             __m256 m = _mm256_load_ps(mPtr);
+            __m256 w = _mm256_load_ps(wPtr);
 
             // ADADELTA algorithm
-            __m256 w = _mm256_load_ps(wPtr);
             m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
             __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
             v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
+            delta = _mm256_fmadd_ps(w, _mm256_set1_ps(cDecay), delta);
             w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
+
+            // clamping
+            w = _mm256_min_ps(w, maxValueV);
+            w = _mm256_max_ps(w, minValueV);
 
             _mm256_store_ps(vPtr, v);
             _mm256_store_ps(mPtr, m);
@@ -786,39 +773,15 @@ void Layer::UpdateWeights_AdaDelta(float learningRate, const Gradients& gradient
             m = cRho * m + (1.0f - cRho) * g * g;
             float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
             v = cRho * v + (1.0f - cRho) * delta * delta;
+            delta += w * cDecay;
             w -= learningRate * delta;
+
+            // clamping
+            w = std::clamp(w, -maxValue, maxValue);
 
             ASSERT(!std::isnan(m));
             ASSERT(!std::isnan(v));
             ASSERT(!std::isnan(w));
-        }
-    }
-}
-
-void NeuralNetwork::ClampLayerWeights(size_t layerIndex, float weightRange, float biasRange, float weightQuantizationScale, float biasQuantizationScale)
-{
-    const float cDecay = 0.5e-6f;
-
-    Layer& layer = layers[layerIndex];
-
-    for (uint32_t j = 0; j <= layer.numInputs; j++)
-    {
-        const bool isBiasWeight = (j == layer.numInputs);
-
-        for (uint32_t i = 0; i < layer.numOutputs; i++)
-        {
-            float& w = layer.weights[j * layer.numOutputs + i];
-
-            w *= 1.0f - cDecay;
-
-            if (isBiasWeight)
-            {
-                w = std::clamp(w, -biasRange / biasQuantizationScale, biasRange / biasQuantizationScale) ;
-            }
-            else
-            {
-                w = std::clamp(w, -weightRange / weightQuantizationScale, weightRange / weightQuantizationScale) ;
-            }
         }
     }
 }
@@ -926,46 +889,35 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
         const float gradientScale = 1.0f / (float)batchSize;
         for (size_t i = 0; i < network.layers.size(); ++i)
         {
-            network.layers[i].UpdateWeights_AdaDelta(learningRate, gradients[i], gradientScale);
-        }
-    }
+            float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
+            float weightRange = 0.0f, biasRange = 0.0f;
 
-    if (clampWeights)
-    {
-        network.ClampWeights();
-    }
-}
+            if (i == 0) // input layer
+            {
+                weightQuantizationScale = InputLayerWeightQuantizationScale;
+                biasQuantizationScale = InputLayerBiasQuantizationScale;
+                weightRange = std::numeric_limits<FirstLayerWeightType>::max();
+                biasRange = std::numeric_limits<FirstLayerBiasType>::max();
+            }
+            else if (i + 1 == network.layers.size()) // output layer
+            {
+                weightQuantizationScale = OutputLayerWeightQuantizationScale;
+                biasQuantizationScale = OutputLayerBiasQuantizationScale;
+                weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
+                biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
+            }
+            else // hidden layer
+            {
+                weightQuantizationScale = HiddenLayerWeightQuantizationScale;
+                biasQuantizationScale = HiddenLayerBiasQuantizationScale;
+                weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
+                biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
+            }
 
-void NeuralNetwork::ClampWeights()
-{
-    for (size_t i = layers.size(); i-- > 0; )
-    {
-        float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
-        float weightRange = 0.0f, biasRange = 0.0f;
-
-        if (i == 0) // input layer
-        {
-            weightQuantizationScale = InputLayerWeightQuantizationScale;
-            biasQuantizationScale = InputLayerBiasQuantizationScale;
-            weightRange = std::numeric_limits<FirstLayerWeightType>::max();
-            biasRange = std::numeric_limits<FirstLayerBiasType>::max();
+            network.layers[i].UpdateWeights(learningRate, gradients[i], gradientScale,
+                                            clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f,
+                                            clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f);
         }
-        else if (i + 1 == layers.size()) // output layer
-        {
-            weightQuantizationScale = OutputLayerWeightQuantizationScale;
-            biasQuantizationScale = OutputLayerBiasQuantizationScale;
-            weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
-            biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
-        }
-        else // hidden layer
-        {
-            weightQuantizationScale = HiddenLayerWeightQuantizationScale;
-            biasQuantizationScale = HiddenLayerBiasQuantizationScale;
-            weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
-            biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
-        }
-
-        ClampLayerWeights(i, weightRange, biasRange, weightQuantizationScale, biasQuantizationScale);
     }
 }
 
