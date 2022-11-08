@@ -1,4 +1,5 @@
 #include "Material.hpp"
+#include "Color.hpp"
 
 static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
 
@@ -21,6 +22,46 @@ std::string MaterialKey::ToString() const
 	if (numBlackPawns)		str += std::string(numBlackPawns, 'P');
 
 	return str;
+}
+
+void MaterialKey::FromString(const char* str)
+{
+    value = 0;
+
+    Color side = Color::White;
+
+    for (;;)
+    {
+        const char c = *(str++);
+
+        if (c == 0)
+        {
+            break;
+        }
+
+        if (c == 'v')
+        {
+            side = Color::Black;
+            continue;
+        }
+
+        if (side == Color::White)
+        {
+            if (c == 'P') numWhitePawns++;
+            if (c == 'N') numWhiteKnights++;
+            if (c == 'B') numWhiteBishops++;
+            if (c == 'R') numWhiteRooks++;
+            if (c == 'Q') numWhiteQueens++;
+        }
+        else
+        {
+            if (c == 'P') numBlackPawns++;
+            if (c == 'N') numBlackKnights++;
+            if (c == 'B') numBlackBishops++;
+            if (c == 'R') numBlackRooks++;
+            if (c == 'Q') numBlackQueens++;
+        }
+    }
 }
 
 uint32_t MaterialKey::GetNeuralNetworkInputsNumber() const
