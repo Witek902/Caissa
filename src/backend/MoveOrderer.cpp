@@ -136,14 +136,6 @@ void MoveOrderer::NewSearch()
     {
         reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
     }
-    for (uint32_t i = 0; i < sizeof(quietMoveContinuationHistory) / sizeof(CounterType); ++i)
-    {
-        reinterpret_cast<CounterType*>(quietMoveContinuationHistory)[i] /= scaleDownFactor;
-    }
-    for (uint32_t i = 0; i < sizeof(quietMoveFollowupHistory) / sizeof(CounterType); ++i)
-    {
-        reinterpret_cast<CounterType*>(quietMoveFollowupHistory)[i] /= scaleDownFactor;
-    }
 
     memset(killerMoves, 0, sizeof(killerMoves));
 }
