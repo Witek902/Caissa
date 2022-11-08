@@ -23,26 +23,30 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     {
         float factor = 1.0f;
 
-        // scale based on number of moves (40 moves -> 100%, 80 moves -> 125%, 0 moves -> 75%)
+        if (movesLeft > 1)
         {
-            const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves();
-            const float avgNumMoves = 40.0f;
-            factor *= 0.75f + 0.25f * static_cast<float>(numLegalMoves) / avgNumMoves;
+            // scale based on number of moves (40 moves -> 100%, 80 moves -> 125%, 0 moves -> 75%)
+            {
+                const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves();
+                const float avgNumMoves = 40.0f;
+                factor *= 0.75f + 0.25f * static_cast<float>(numLegalMoves) / avgNumMoves;
+            }
+
+            // decrease search time if in check, because it should have been extended during previous search
+            if (game.GetPosition().IsInCheck())
+            {
+                factor *= 0.75f;
+            }
         }
 
-        // decrease search time if in check, because it should have been extended during previous search
-        if (game.GetPosition().IsInCheck())
-        {
-            factor *= 0.75f;
-        }
+        const float marigin = 0.98f;
+        const float increment = marigin * (float)data.timeIncrement;
 
-        const float increment = 0.9f * (float)data.timeIncrement;
-
-        const float idealTime = std::clamp(factor * (data.remainingTime - moveOverhead) / movesLeft + increment, 0.0f, (float)data.remainingTime);
-        const float maxTime = std::clamp(2.0f * factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment, 0.0f, (float)data.remainingTime);
+        const float idealTime = std::clamp(0.85f * factor * (data.remainingTime - moveOverhead) / movesLeft + increment, 0.0f, marigin * (float)data.remainingTime);
+        const float maxTime = std::clamp(factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment, 0.0f, marigin * (float)data.remainingTime);
 
 #ifndef CONFIGURATION_FINAL
-        std::cout << "info string ideal time " << idealTime << " ms" << std::endl;
+        std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 
         limits.idealTime = limits.startTimePoint + TimePoint::FromSeconds(0.001f * idealTime);
@@ -68,7 +72,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         }
 
 #ifndef CONFIGURATION_FINAL
-        std::cout << "info string max time " << hardLimitMs << " ms" << std::endl;
+        std::cout << "info string hardLimitTime=" << hardLimitMs << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
     }
 }
