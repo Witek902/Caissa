@@ -57,8 +57,6 @@ static const int32_t RazoringStartDepth = 3;
 static const int32_t RazoringMarginMultiplier = 128;
 static const int32_t RazoringMarginBias = 20;
 
-static const int32_t HistoryPruningScoreBase = 0;
-
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 {
     return 3 + depth + depth * depth / 2;
@@ -66,7 +64,7 @@ INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 {
-    return HistoryPruningScoreBase - 256 * depth - 64 * depth * depth;
+    return 0 - 256 * depth - 64 * depth * depth;
 }
 
 void Search::Stats::Append(ThreadStats& threadStats, bool flush)
@@ -1392,37 +1390,40 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         moveIndex++;
         if (move.IsQuiet()) quietMoveIndex++;
 
-        if (!node.isInCheck && !isRootNode && bestValue > -KnownWinValue)
+        if (!node.isInCheck &&
+            !isRootNode &&
+            bestValue > -KnownWinValue &&
+            position.HasNonPawnMaterial(position.GetSideToMove()))
         {
-            // Late Move Pruning
-            // skip quiet moves that are far in the list
-            // the higher depth is, the less aggressive pruning is
-            if (move.IsQuiet() &&
-                node.depth < 9 &&
-                quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
+            if (move.IsQuiet() || move.IsUnderpromotion())
             {
-                continue;
-            }
+                // Late Move Pruning
+                // skip quiet moves that are far in the list
+                // the higher depth is, the less aggressive pruning is
+                if (node.depth < 9 &&
+                    quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
+                {
+                    continue;
+                }
 
-            // History Pruning
-            // if a move score is really bad, do not consider this move at low depth
-            if (move.IsQuiet() &&
-                quietMoveIndex > 1 &&
-                node.depth < 9 &&
-                moveScore < GetHistoryPruningTreshold(node.depth))
-            {
-                continue;
-            }
+                // History Pruning
+                // if a move score is really bad, do not consider this move at low depth
+                if (quietMoveIndex > 1 &&
+                    node.depth < 9 &&
+                    moveScore < GetHistoryPruningTreshold(node.depth))
+                {
+                    continue;
+                }
 
-            // Futility Pruning
-            // skip quiet move that have low chance to beat alpha
-            if (move.IsQuiet() &&
-                quietMoveIndex > 1 &&
-                node.depth > 1 && node.depth < 9 &&
-                staticEval >= -KnownWinValue && staticEval <= KnownWinValue &&
-                staticEval + 32 * node.depth * node.depth < alpha)
-            {
-                continue;
+                // Futility Pruning
+                // skip quiet move that have low chance to beat alpha
+                if (quietMoveIndex > 1 &&
+                    node.depth > 1 && node.depth < 9 &&
+                    staticEval >= -KnownWinValue && staticEval <= KnownWinValue &&
+                    staticEval + 32 * node.depth * node.depth < alpha)
+                {
+                    continue;
+                }
             }
 
             // Static Exchange Evaluation pruning
