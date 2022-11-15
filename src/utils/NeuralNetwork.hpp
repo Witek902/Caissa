@@ -132,8 +132,14 @@ public:
 
 struct Gradients
 {
-    Values values;
-    std::vector<bool> dirty;
+    uint32_t            m_numInputs;
+    uint32_t            m_numOutputs;
+    Values              m_values;
+    std::vector<bool>   m_dirty;
+
+    void Init(uint32_t numInputs, uint32_t numOutputs);
+    void Clear();
+    void Accumulate(Gradients& rhs);
 };
 
 class Layer
