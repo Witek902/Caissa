@@ -10,6 +10,8 @@
 #include <iostream>
 #include <immintrin.h>
 
+using namespace threadpool;
+
 namespace nn {
 
 void TrainingVector::CombineSparseInputs()
@@ -120,8 +122,9 @@ void Layer::InitWeights()
     }
     else
     {
-        // Xavier initialization
-        std::normal_distribution<float> weightDistr(0.0f, sqrtf(2.0f / (float)(numInputs + numOutputs)));
+        // He initialization
+        const float r = sqrtf(6.0f / (float)(numInputs + numOutputs));
+        std::uniform_real_distribution<float> weightDistr(-r, r);
         for (; offs < numOutputs * numInputs; offs++)
         {
             weights[offs] = weightDistr(rd);
@@ -368,7 +371,7 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
 {
     ASSERT(ctx.output.size() == error.size());
     ASSERT(ctx.output.size() <= PackedNeuralNetwork::MaxNeuronsInFirstLayer);
-    alignas(CACHELINE_SIZE) float activationGradients[PackedNeuralNetwork::MaxNeuronsInFirstLayer];
+    alignas(CACHELINE_SIZE) float activationErrors[PackedNeuralNetwork::MaxNeuronsInFirstLayer];
 
     // precompute error gradients
     {
@@ -380,14 +383,14 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
             const float* valuesPtr = ctx.linearValue.data();
             for (; i + 8 <= numOutputs; i += 8)
             {
-                _mm256_store_ps(activationGradients + i,
+                _mm256_store_ps(activationErrors + i,
                                 ClippedReLuDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
             }
         }
 #endif // USE_AVX
         for (; i < numOutputs; i++)
         {
-            activationGradients[i] = error[i] * GetActivationFunctionDerivative(ctx.linearValue[i], activationFunction);
+            activationErrors[i] = error[i] * GetActivationFunctionDerivative(ctx.linearValue[i], activationFunction);
         }
     }
 
@@ -404,13 +407,13 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
             for (; i + 8 <= numOutputs; i += 8)
             {
                 _mm256_store_ps(gradientPtr + i,
-                                _mm256_add_ps(_mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
+                                _mm256_add_ps(_mm256_load_ps(activationErrors + i), _mm256_load_ps(gradientPtr + i)));
             }
 #endif // USE_AVX
             for (; i < numOutputs; i++)
             {
                 // not multiplying by input value, because it's equal to 1.0
-                gradients.values[j * numOutputs + i] += activationGradients[i];
+                gradients.values[j * numOutputs + i] += activationErrors[i];
             }
             gradients.dirty[j] = true;
         }
@@ -430,42 +433,40 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
             for (; i + 8 <= numOutputs; i += 8)
             {
                 _mm256_store_ps(gradientPtr + i,
-                                _mm256_fmadd_ps(vInputValue, _mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
+                                _mm256_fmadd_ps(vInputValue, _mm256_load_ps(activationErrors + i), _mm256_load_ps(gradientPtr + i)));
             }
 #endif // USE_AVX
             for (; i < numOutputs; i++)
             {
-                gradients.values[feature.index * numOutputs + i] += feature.value * activationGradients[i];
+                gradients.values[feature.index * numOutputs + i] += feature.value * activationErrors[i];
             }
             gradients.dirty[feature.index] = true;
         }
     }
     else if (ctx.inputMode == InputMode::Full)
     {
-        // for later layers, use exact input values and compute nextError (for back propagation)
+        // for later layers, use exact input values and compute input error (for back propagation)
+        {
+            for (size_t j = 0; j < numInputs; j++)
+            {
+                ctx.inputGradient[j] = 0.0f;
+            }
+
+            for (size_t i = 0; i < numOutputs; i++)
+            {
+                const float activationError = activationErrors[i];
+                if (std::abs(activationError) > 1.0e-7f)
+                {
+                    for (size_t j = 0; j < numInputs; j++)
+                    {
+                        ctx.inputGradient[j] += weights[j * numOutputs + i] * activationError;
+                    }
+                }
+            }
+        }
 
         for (size_t j = 0; j < numInputs; j++)
         {
-            // compute input gradient
-            float errorSum = 0.0f;
-            {
-                size_t i = 0;
-#ifdef USE_AVX
-                const float* weightsPtr = weights.data() + j * numOutputs;
-                __m256 sum = _mm256_setzero_ps();
-                for (; i + 8 <= numOutputs; i += 8)
-                {
-                    sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i), _mm256_load_ps(activationGradients + i), sum);
-                }
-                errorSum = m256_hadd(sum);
-#endif // USE_AVX
-                for (; i < numOutputs; i++)
-                {
-                    errorSum += weights[j * numOutputs + i] * activationGradients[i];
-                }
-            }
-            ctx.inputGradient[j] = errorSum;
-
             // compute weights gradient
             const float inputValue = ctx.inputs[j];
             if (std::abs(inputValue) > 1.0e-7f)
@@ -473,16 +474,17 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
                 size_t i = 0;
 #ifdef USE_AVX
                 float* gradientPtr = gradients.values.data() + j * numOutputs;
-                const __m256 vInputValue = _mm256_set1_ps(inputValue);
                 for (; i + 8 <= numOutputs; i += 8)
                 {
                     _mm256_store_ps(gradientPtr + i,
-                                    _mm256_fmadd_ps(vInputValue, _mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
+                                    _mm256_fmadd_ps(_mm256_set1_ps(inputValue),
+                                                    _mm256_load_ps(activationErrors + i),
+                                                    _mm256_load_ps(gradientPtr + i)));
                 }
 #endif // USE_AVX
                 for (; i < numOutputs; i++)
                 {
-                    gradients.values[j * numOutputs + i] += inputValue * activationGradients[i];
+                    gradients.values[j * numOutputs + i] += inputValue * activationErrors[i];
                 }
                 gradients.dirty[j] = true;
             }
@@ -501,12 +503,13 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
         for (; i + 8 <= numOutputs; i += 8)
         {
             _mm256_store_ps(gradientPtr + i,
-                            _mm256_add_ps(_mm256_load_ps(activationGradients + i), _mm256_load_ps(gradientPtr + i)));
+                            _mm256_add_ps(_mm256_load_ps(activationErrors + i),
+                                          _mm256_load_ps(gradientPtr + i)));
         }
 #endif // USE_AVX
         for (; i < numOutputs; i++)
         {
-            gradients.values[numInputs * numOutputs + i] += activationGradients[i];
+            gradients.values[numInputs * numOutputs + i] += activationErrors[i];
         }
     }
 }
@@ -699,11 +702,10 @@ const Values& NeuralNetwork::Run(uint32_t numFeatures, const ActiveFeature* feat
     return ctx.layers.back().output;
 }
 
-void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange)
+void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay)
 {
     ASSERT(gradients.values.size() == (numInputs + 1) * numOutputs);
 
-    const float cDecay = 2.0e-7f;
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-7f;
 
@@ -717,18 +719,13 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
 
     for (size_t j = 0; j <= numInputs; j++)
     {
-        // process only touched inputs
-        if (j < numInputs && !gradients.dirty[j]) continue;
-
-        const float maxValue = j < numInputs ? weightsRange : biasRange;
+        const float maxWeightValue = j < numInputs ? weightsRange : biasRange;
 
         size_t i = 0;
 
 #ifdef USE_AVX
-
-        const __m256 minValueV = _mm256_sub_ps(_mm256_setzero_ps(), _mm256_set1_ps(maxValue));
-        const __m256 maxValueV = _mm256_set1_ps(maxValue);
-
+        const __m256 minValueV = _mm256_sub_ps(_mm256_setzero_ps(), _mm256_set1_ps(maxWeightValue));
+        const __m256 maxValueV = _mm256_set1_ps(maxWeightValue);
         for (; i + 8 <= numOutputs; i += 8)
         {
             float* mPtr = gradientMean.data() + j * numOutputs + i;
@@ -736,16 +733,18 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
             float* wPtr = weights.data() + j * numOutputs + i;
             const float* gPtr = gradients.values.data() + j * numOutputs + i;
 
-            const __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
+            __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
             __m256 v = _mm256_load_ps(vPtr);
             __m256 m = _mm256_load_ps(mPtr);
             __m256 w = _mm256_load_ps(wPtr);
+
+            // weight decay
+            g = _mm256_fmadd_ps(w, _mm256_set1_ps(weightDecay), g);
 
             // ADADELTA algorithm
             m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
             __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
             v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
-            delta = _mm256_fmadd_ps(w, _mm256_set1_ps(cDecay), delta);
             w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
 
             // clamping
@@ -763,21 +762,23 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
             float& m = gradientMean[j * numOutputs + i];
             float& v = gradientMoment[j * numOutputs + i];
             float& w = weights[j * numOutputs + i];
-            const float g = gradientScale * gradients.values[j * numOutputs + i];
+            float g = gradientScale * gradients.values[j * numOutputs + i];
 
             ASSERT(!std::isnan(g));
             ASSERT(v >= 0.0f);
             ASSERT(m >= 0.0f);
 
+            // weight decay
+            g += w * weightDecay;
+
             // ADADELTA algorithm
             m = cRho * m + (1.0f - cRho) * g * g;
             float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
             v = cRho * v + (1.0f - cRho) * delta * delta;
-            delta += w * cDecay;
             w -= learningRate * delta;
 
             // clamping
-            w = std::clamp(w, -maxValue, maxValue);
+            w = std::clamp(w, -maxWeightValue, maxWeightValue);
 
             ASSERT(!std::isnan(m));
             ASSERT(!std::isnan(v));
@@ -786,138 +787,189 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
     }
 }
 
-void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, size_t batchSize, float learningRate, bool clampWeights)
+NeuralNetworkTrainer::NeuralNetworkTrainer()
 {
-    perThreadRunContext.resize(1);
-    perThreadRunContext[0].Init(network);
+    m_perThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
+}
 
-    gradients.resize(network.GetLayersNumber());
-    for (size_t i = 0; i < network.layers.size(); ++i)
+#pragma optimize("",off)
+
+void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
+{
+    for (PerThreadData& threadData : m_perThreadData)
     {
-        gradients[i].values.resize(network.layers[i].weights.size(), 0.0f);
-        gradients[i].dirty.resize(network.layers[i].numInputs, false);
+        threadData.runContext.Init(network);
+        threadData.gradients.resize(network.GetLayersNumber());
+        for (size_t i = 0; i < network.layers.size(); ++i)
+        {
+            threadData.gradients[i].values.resize(network.layers[i].weights.size(), 0.0f);
+            threadData.gradients[i].dirty.resize(network.layers[i].numInputs, false);
+        }
     }
 
-    size_t numBatches = (trainingSet.size() + batchSize - 1) / batchSize;
+    const size_t numBatches = (trainingSet.size() + params.batchSize - 1) / params.batchSize;
 
     for (size_t batchIdx = 0; batchIdx < numBatches; ++batchIdx)
     {
-        // at the first layer, clear only dirty gradients (most of them are zero)
+        // clear accumulated gradients
+        taskBuilder->ParallelFor("ClearGradients", (uint32_t)m_perThreadData.size(),
+                                 [this, &network](const TaskContext&, uint32_t threadIdx)
         {
-            Gradients& layerZeroGradients = gradients[0];
-            const Layer& layerZero = network.layers[0];
+            PerThreadData& threadData = m_perThreadData[threadIdx];
 
-            for (size_t i = 0; i < layerZero.numInputs; ++i)
+            /*
+            // at the first layer, clear only dirty gradients (most of them are zero)
             {
-                if (layerZeroGradients.dirty[i])
+                Gradients& layerZeroGradients = threadData.gradients.front();
+                const Layer& layerZero = network.layers.front();
+
+                for (size_t i = 0; i < layerZero.numInputs; ++i)
                 {
-                    std::fill(layerZeroGradients.values.begin() + i * layerZero.numOutputs,
-                              layerZeroGradients.values.begin() + (i + 1) * layerZero.numOutputs,
-                              0.0f);
+                    if (layerZeroGradients.dirty[i])
+                    {
+                        std::fill(layerZeroGradients.values.begin() + i * layerZero.numOutputs,
+                                  layerZeroGradients.values.begin() + (i + 1) * layerZero.numOutputs,
+                                  0.0f);
+                    }
+                }
+                std::fill(layerZeroGradients.dirty.begin(), layerZeroGradients.dirty.end(), false);
+
+                // clear gradients of the bias (it's always changing)
+                std::fill(layerZeroGradients.values.begin() + layerZero.numInputs * layerZero.numOutputs,
+                          layerZeroGradients.values.begin() + (layerZero.numInputs + 1) * layerZero.numOutputs,
+                          0.0f);
+
+                for (size_t i = 0; i < layerZeroGradients.values.size(); ++i)
+                {
+                    ASSERT(layerZeroGradients.values[i] == 0.0f);
                 }
             }
-            std::fill(layerZeroGradients.dirty.begin(), layerZeroGradients.dirty.end(), false);
+            */
 
-            // clear griadients of the bias (it's always changing)
-            std::fill(layerZeroGradients.values.begin() + layerZero.numInputs * layerZero.numOutputs,
-                      layerZeroGradients.values.begin() + (layerZero.numInputs + 1) * layerZero.numOutputs,
-                      0.0f);
-
-            for (size_t i = 0; i < layerZeroGradients.values.size(); ++i)
+            // reset accumulated gradients for remaining layers
+            for (size_t i = 0 /*1*/; i < network.layers.size(); ++i)
             {
-                ASSERT(layerZeroGradients.values[i] == 0.0f);
+                std::fill(threadData.gradients[i].values.begin(), threadData.gradients[i].values.end(), 0.0f);
             }
-        }
+        });
 
-        // reset accumulated gradients
-        for (size_t i = 1; i < network.layers.size(); ++i)
+        taskBuilder->Fence();
+
+        taskBuilder->ParallelFor("Backpropagate", (uint32_t)params.batchSize,
+                                 [this, &network, &trainingSet, batchIdx, params](const TaskContext& taskCtx, uint32_t indexInBatch)
         {
-            std::fill(gradients[i].values.begin(), gradients[i].values.end(), 0.0f);
-        }
+            PerThreadData& perThreadData = m_perThreadData[taskCtx.threadId];
+            NeuralNetworkRunContext& ctx = perThreadData.runContext;
 
-        for (uint32_t indexInBatch = 0; indexInBatch < batchSize; ++indexInBatch)
-        {
-            NeuralNetworkRunContext& ctx = perThreadRunContext.front();
+            const size_t vecIndex = batchIdx * params.batchSize + indexInBatch;
+            if (vecIndex >= trainingSet.size()) return;
 
-            const size_t vecIndex = batchIdx * batchSize + indexInBatch;
-            if (vecIndex < trainingSet.size())
+            const TrainingVector& vec = trainingSet[vecIndex];
+
+            switch (vec.inputMode)
             {
-                const TrainingVector& vec = trainingSet[vecIndex];
+            case InputMode::Full:
+                ctx.tempValues = network.Run(vec.inputs, ctx);
+                break;
+            case InputMode::Sparse:
+                ctx.tempValues = network.Run((uint32_t)vec.sparseInputs.size(), vec.sparseInputs.data(), ctx);
+                break;
+            case InputMode::SparseBinary:
+                ctx.tempValues = network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), ctx);
+                break;
+            default:
+                DEBUG_BREAK();
+            }
 
-                switch (vec.inputMode)
+            // train last layers
+            {
+                // compute gradient (error derivative)
+                if (vec.outputMode == OutputMode::Single)
                 {
-                case InputMode::Full:
-                    ctx.tempValues = network.Run(vec.inputs, ctx);
-                    break;
-                case InputMode::Sparse:
-                    ctx.tempValues = network.Run((uint32_t)vec.sparseInputs.size(), vec.sparseInputs.data(), ctx);
-                    break;
-                case InputMode::SparseBinary:
-                    ctx.tempValues = network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), ctx);
-                    break;
-                default:
-                    DEBUG_BREAK();
+                    ASSERT(ctx.tempValues.size() == 1);
+                    ctx.tempValues[0] = 2.0f * (ctx.tempValues[0] - vec.singleOutput);
                 }
-
-                // train last layers
+                else
                 {
                     for (size_t i = 0; i < ctx.tempValues.size(); i++)
                     {
-                        // gradient of RMS loss function
-                        ctx.tempValues[i] = 2.0f * (ctx.tempValues[i] - vec.output[i]);
-
-                        // gradient of cross-entropy loss function
-                        //const float target = vec.output[i];
-                        //const float output = ctx.tempValues[i];
-                        //ctx.tempValues[i] = (output - target) / std::clamp(1.0e-4f + output * (1.0f - output), -10.0f, 10.0f);
+                        // compute gradient (error derivative)
+                        ctx.tempValues[i] = 2.0f * (ctx.tempValues[i] - vec.outputs[i]);
                     }
-
-                    network.layers.back().Backpropagate(ctx.tempValues, ctx.layers.back(), gradients.back());
                 }
 
-                // train hidden layers
-                if (network.layers.size() > 1)
+                network.layers.back().Backpropagate(ctx.tempValues, ctx.layers.back(), perThreadData.gradients.back());
+            }
+
+            // train hidden layers
+            if (network.layers.size() > 1)
+            {
+                for (size_t i = network.layers.size() - 1; i-- > 0; )
                 {
-                    for (size_t i = network.layers.size() - 1; i-- > 0; )
-                    {
-                        network.layers[i].Backpropagate(ctx.layers[i + 1].inputGradient, ctx.layers[i], gradients[i]);
-                    }
+                    network.layers[i].Backpropagate(ctx.layers[i + 1].inputGradient, ctx.layers[i], perThreadData.gradients[i]);
                 }
             }
-        }
-        
-        const float gradientScale = 1.0f / (float)batchSize;
-        for (size_t i = 0; i < network.layers.size(); ++i)
+        });
+
+        taskBuilder->Fence();
+
+        taskBuilder->Task("UpdateWeights",
+                          [this, &network, params](const TaskContext&)
         {
-            float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
-            float weightRange = 0.0f, biasRange = 0.0f;
+            const float gradientScale = 1.0f / (float)params.batchSize;
+            for (size_t layerIdx = 0; layerIdx < network.layers.size(); ++layerIdx)
+            {
+                float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
+                float weightRange = 0.0f, biasRange = 0.0f;
+                float weightDecay = 0.0f;
 
-            if (i == 0) // input layer
-            {
-                weightQuantizationScale = InputLayerWeightQuantizationScale;
-                biasQuantizationScale = InputLayerBiasQuantizationScale;
-                weightRange = std::numeric_limits<FirstLayerWeightType>::max();
-                biasRange = std::numeric_limits<FirstLayerBiasType>::max();
-            }
-            else if (i + 1 == network.layers.size()) // output layer
-            {
-                weightQuantizationScale = OutputLayerWeightQuantizationScale;
-                biasQuantizationScale = OutputLayerBiasQuantizationScale;
-                weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
-                biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
-            }
-            else // hidden layer
-            {
-                weightQuantizationScale = HiddenLayerWeightQuantizationScale;
-                biasQuantizationScale = HiddenLayerBiasQuantizationScale;
-                weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
-                biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
-            }
+                if (layerIdx == 0) // input layer
+                {
+                    weightQuantizationScale = InputLayerWeightQuantizationScale;
+                    biasQuantizationScale = InputLayerBiasQuantizationScale;
+                    weightRange = std::numeric_limits<FirstLayerWeightType>::max();
+                    biasRange = std::numeric_limits<FirstLayerBiasType>::max();
+                    weightDecay = 2.0e-7f;
+                }
+                else if (layerIdx + 1 == network.layers.size()) // output layer
+                {
+                    weightQuantizationScale = OutputLayerWeightQuantizationScale;
+                    biasQuantizationScale = OutputLayerBiasQuantizationScale;
+                    weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
+                    biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
+                    weightDecay = 1.0e-6f;
+                }
+                else // hidden layer
+                {
+                    weightQuantizationScale = HiddenLayerWeightQuantizationScale;
+                    biasQuantizationScale = HiddenLayerBiasQuantizationScale;
+                    weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
+                    biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
+                    weightDecay = 1.0e-6f;
+                }
 
-            network.layers[i].UpdateWeights(learningRate, gradients[i], gradientScale,
-                                            clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f,
-                                            clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f);
-        }
+                // accumulate gradients from all per-thread gradients
+                for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
+                {
+                    Values& targetGradients = m_perThreadData[0].gradients[layerIdx].values;
+                    const Values& srcGradients = m_perThreadData[threadIdx].gradients[layerIdx].values;
+
+                    const size_t numGradients = targetGradients.size();
+                    ASSERT(srcGradients.size() == numGradients);
+
+                    for (size_t i = 0; i < numGradients; ++i)
+                    {
+                        targetGradients[i] += srcGradients[i];
+                    }
+                }
+
+                network.layers[layerIdx].UpdateWeights(
+                    params.learningRate, m_perThreadData.front().gradients[layerIdx], gradientScale,\
+                    params.clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f,
+                    params.clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f,
+                    weightDecay);
+            }
+        });
     }
 }
 

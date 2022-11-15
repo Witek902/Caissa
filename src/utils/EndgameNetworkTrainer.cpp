@@ -40,7 +40,6 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
     uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
-    outVector.output.resize(1);
     outVector.inputMode = nn::InputMode::SparseBinary;
     outVector.sparseBinaryInputs.clear();
     outVector.sparseBinaryInputs.reserve(numFeatures);
@@ -204,7 +203,7 @@ bool TrainEndgame()
                 }
 
                 PositionToPackedVector(pos, outSet[i].trainingVector);
-                outSet[i].trainingVector.output[0] = score;
+                outSet[i].trainingVector.singleOutput = score;
                 outSet[i].pos = pos;
 
                 break;
@@ -271,8 +270,12 @@ bool TrainEndgame()
                 batch[i] = trainingSet[i].trainingVector;
             }
 
+            nn::TrainParams params;
+            params.batchSize = cBatchSize;
+            params.learningRate = learningRate;
+
             TimePoint startTime = TimePoint::GetCurrent();
-            trainer.Train(network, batch, cBatchSize, learningRate);
+            trainer.Train(network, batch, params);
             trainingTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
 
             network.ToPackedNetwork(packedNetwork);
@@ -310,7 +313,7 @@ bool TrainEndgame()
             const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
             const int32_t packedNetworkOutput = packedNetworkOutputs[i];
 
-            const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.output[0]);
+            const float expectedValue = ScoreFromNN(validationSet[i].trainingVector.singleOutput);
             const float nnValue = ScoreFromNN(networkOutput[0]);
             const float nnPackedValue = ScoreFromNN(nn::Sigmoid((float)packedNetworkOutput / (float)nn::OutputScale));
             const float evalValue = PawnToWinProbability((float)Evaluate(validationSet[i].pos) / 100.0f);

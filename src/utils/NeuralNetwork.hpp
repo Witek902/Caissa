@@ -5,6 +5,14 @@
 #include <cmath>
 #include <mutex>
 
+
+namespace threadpool {
+
+class TaskBuilder;
+
+} // namespace threadpool
+
+
 namespace nn {
 
 class Layer;
@@ -13,12 +21,18 @@ class PackedNeuralNetwork;
 
 using Values = std::vector<float, AlignmentAllocator<float, 32>>;
 
-enum class InputMode
+enum class InputMode : uint8_t
 {
     Unknown,
     Full,           // full list of inputs as floats
     Sparse,         // list of sparse inputs (as floats)
     SparseBinary,   // list of sparse binary inputs (active feature is always 1)
+};
+
+enum class OutputMode : uint8_t
+{
+	Single,
+    Array,
 };
 
 struct ActiveFeature
@@ -30,12 +44,16 @@ struct ActiveFeature
 struct TrainingVector
 {
     InputMode inputMode = InputMode::Unknown;
+    OutputMode outputMode = OutputMode::Single;
 
+    // depends on 'inputMode'
     Values inputs;
     std::vector<uint16_t> sparseBinaryInputs;
     std::vector<ActiveFeature> sparseInputs;
 
-    Values output;
+    // depends on 'outputMode'
+    Values outputs;
+    float singleOutput;
 
     void CombineSparseInputs();
     void Validate() const;
@@ -128,7 +146,7 @@ public:
     void Run(uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
     void Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
     void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
-    void UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange);
+    void UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay);
     void QuantizeWeights(float strength);
 
     uint32_t numInputs;
@@ -201,13 +219,30 @@ public:
     std::vector<Layer> layers;
 };
 
+struct TrainParams
+{
+    size_t batchSize = 32;
+    float learningRate = 0.5f;
+    bool clampWeights = true;
+};
+
 class NeuralNetworkTrainer
 {
 public:
-    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, size_t batchSize, float learningRate = 0.5f, bool clampWeights = true);
 
-    std::deque<Gradients> gradients;
-    std::vector<NeuralNetworkRunContext> perThreadRunContext;
+    NeuralNetworkTrainer();
+
+    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder = nullptr);
+
+private:
+
+    struct PerThreadData
+    {
+        std::deque<Gradients>       gradients;      // per-layer gradients
+        NeuralNetworkRunContext     runContext;
+    };
+
+    std::vector<PerThreadData> m_perThreadData;
 };
 
 } // namespace nn

@@ -73,7 +73,6 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 {
     ASSERT(pos.GetSideToMove() == Color::White);
 
-    outVector.output.resize(1);
     outVector.inputMode = nn::InputMode::Sparse;
     outVector.sparseInputs.clear();
     std::vector<nn::ActiveFeature>& inputs = outVector.sparseInputs;
@@ -618,7 +617,7 @@ bool TrainPieceSquareTables()
         }
 
         PositionToTrainingVector(pos, outEntry.trainingVector);
-        outEntry.trainingVector.output[0] = entry.score;
+        outEntry.trainingVector.singleOutput = entry.score;
         outEntry.pos = pos;
     };
 
@@ -740,8 +739,13 @@ bool TrainPieceSquareTables()
 
             taskBuilder.Task("Train", [&](const TaskContext&)
             {
+				nn::TrainParams params;
+				params.batchSize = cBatchSize;
+				params.learningRate = learningRate;
+                params.clampWeights = false;
+
                 TimePoint trainStartTime = TimePoint::GetCurrent();
-                trainer.Train(network, trainingBatch, cBatchSize, learningRate, false);
+                trainer.Train(network, trainingBatch, params);
                 TimePoint trainEndTime = TimePoint::GetCurrent();
                 trainingTime = (trainEndTime - trainStartTime).ToSeconds();
             });
@@ -758,7 +762,7 @@ bool TrainPieceSquareTables()
             const std::vector<nn::ActiveFeature>& features = validationSet[i].trainingVector.sparseInputs;
             const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
 
-            const float expectedValue = validationSet[i].trainingVector.output[0];
+            const float expectedValue = validationSet[i].trainingVector.singleOutput;
 
             if (i == 0)
             {
