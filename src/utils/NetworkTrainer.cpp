@@ -26,9 +26,9 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
-static const uint32_t cBatchSize = 4096;
+static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
+static const uint32_t cBatchSize = 8192;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
 
@@ -113,7 +113,7 @@ private:
 
     void GenerateTrainingSet(std::vector<TrainingEntry>& outEntries);
 
-    void Validate();
+    void Validate(uint32_t iteration);
 };
 
 
@@ -154,7 +154,7 @@ void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
     }
 };
 
-void NetworkTrainer::Validate()
+void NetworkTrainer::Validate(uint32_t iteration)
 {
     // reset stats
     for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -240,6 +240,7 @@ void NetworkTrainer::Validate()
     {
         const ValidationStats& threadStats = m_validationPerThreadData[i].stats;
 
+        stats.nnPackedQuantizationErrorSum += threadStats.nnPackedQuantizationErrorSum;
         stats.nnErrorSum += threadStats.nnErrorSum;
         stats.nnMinError = std::min(stats.nnMinError, threadStats.nnMinError);
         stats.nnMaxError = std::max(stats.nnMaxError, threadStats.nnMaxError);
@@ -263,6 +264,8 @@ void NetworkTrainer::Validate()
         << "Eval avg/min/max error: " << std::setprecision(5) << stats.evalErrorSum << " " << std::setprecision(4) << stats.evalMinError << " " << std::setprecision(4) << stats.evalMaxError << std::endl
         << "Start pos evaluation:   " << WinProbabilityToCentiPawns(startPosEvaluation) << std::endl;
 
+    m_trainingLog << iteration << "\t" << stats.nnErrorSum << "\t" << stats.nnPackedErrorSum << std::endl;
+
     m_network.PrintStats();
 }
 
@@ -285,7 +288,7 @@ void NetworkTrainer::Train()
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.0001f * iteration));
+        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.00001f * iteration));
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
@@ -328,9 +331,10 @@ void NetworkTrainer::Train()
             << "Num training vectors:   " << m_numTrainingVectorsPassed << std::endl
             << "Learning rate:          " << learningRate << std::endl;
 
-        Validate();
+        Validate(iteration);
 
-        std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << std::endl << std::endl;
+        std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << std::endl;
+        std::cout << "Training rate :   " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl << std::endl;
 
         if (iteration % 10 == 0)
         {
