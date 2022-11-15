@@ -68,7 +68,7 @@ ThreadPool::ThreadPool()
     // TODO make it configurable
     InitTasksTable(TasksCapacity);
 
-    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency() - 2);
+    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency() - 1);
     SpawnWorkerThreads(numThreads);
 }
 
