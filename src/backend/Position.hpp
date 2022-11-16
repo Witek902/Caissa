@@ -175,7 +175,10 @@ public:
     bool IsMoveValid(const Move& move) const;
     bool IsMoveValid_Fast(const PackedMove& move) const;
 
-    // Check if a valid pseudomove is legal. This is a vull validity test, it includes checks/checkmates.
+    // Approximate check if packed move is a capture
+    bool IsCapture(const PackedMove& move) const;
+
+    // Check if a valid pseudomove is legal. This is full validity test, it includes checks/checkmates.
     // NOTE: It's assumed that provided move is a valid move, otherwise the function will assert
     bool IsMoveLegal(const Move& move) const;
 

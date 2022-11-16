@@ -1214,6 +1214,13 @@ bool Position::IsMoveValid_Fast(const PackedMove& move) const
     return true;
 }
 
+bool Position::IsCapture(const PackedMove& move) const
+{
+    return
+        (GetCurrentSide().Occupied() & move.FromSquare().GetBitboard()) &&
+        (GetOpponentSide().Occupied() & move.ToSquare().GetBitboard());
+}
+
 uint64_t Position::Perft(uint32_t depth, bool print) const
 {
     TimePoint startTime;
