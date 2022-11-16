@@ -10,17 +10,20 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.2.9"
+#define VersionNumber "1.3"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
+#define AppNamePostfix ""
 #elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
 #define ArchitectureStr "POPCNT/SSE4"
+#define AppNamePostfix " (" ArchitectureStr ")"
 #else
 #define ArchitectureStr "legacy"
+#define AppNamePostfix " (" ArchitectureStr ")"
 #endif
 
-static const char* c_EngineName = "Caissa " VersionNumber " (" ArchitectureStr ")";
+static const char* c_EngineName = "Caissa " VersionNumber AppNamePostfix;
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
