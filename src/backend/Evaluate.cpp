@@ -11,8 +11,8 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval.pnn";
-const char* c_DefaultEndgameEvalFile = "endgame.pnn";
+const char* c_DefaultEvalFile = "eval-119EA6E0.pnn";
+const char* c_DefaultEndgameEvalFile = "endgame-9AE58CC2.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -352,7 +352,7 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     {
         const nn::PackedNeuralNetwork* networkToUse = nullptr;
         bool useIncrementalUpdate = false;
-        if (numPieces >= 4 && numPieces <= 5)
+        if (numPieces >= 4 && numPieces <= 6)
         {
             networkToUse = g_endgameNeuralNetwork.get();
         }
