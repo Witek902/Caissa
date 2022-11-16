@@ -1217,7 +1217,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             evalImprovement = staticEval - prevNodes[3]->staticEval;
         }
     }
-    const bool isImproving = evalImprovement >= -5; // leave some small marigin
+    const bool isImproving = evalImprovement >= -5; // leave some small margin
 
     
     if (!isPvNode && !hasMoveFilter && !node.isInCheck)
@@ -1311,21 +1311,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         node.depth -= 1 + node.depth / 4;
     }
 
-    // determine global depth reduction for quiet moves
-    int32_t globalDepthReduction = 0;
-    {
-        // reduce non-PV nodes more
-        if (!isPvNode) globalDepthReduction++;
-
-        // reduce more if eval is dropping
-        if (!isImproving) globalDepthReduction++;
-
-        if (tbHit) globalDepthReduction++;
-
-        // reduce more if entered a winning endgame
-        if (node.previousMove.IsCapture() && staticEval >= KnownWinValue) globalDepthReduction++;
-    }
-
     NodeInfo childNode;
     childNode.parentNode = &node;
     childNode.height = node.height + 1;
@@ -1342,6 +1327,25 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     const Move pvMove = thread.GetPvMove(node);
+    const PackedMove ttMove = ttEntry.moves[0];
+
+    // determine global depth reduction for quiet moves
+    int32_t globalDepthReduction = 0;
+    {
+        // reduce non-PV nodes more
+        if (!isPvNode) globalDepthReduction++;
+
+        // reduce more if eval is dropping
+        if (!isImproving) globalDepthReduction++;
+
+        // reduce more if TT move is a capture
+        if (ttMove.IsValid() && position.IsCapture(ttMove)) globalDepthReduction++;
+
+        if (tbHit) globalDepthReduction++;
+
+        // reduce more if entered a winning endgame
+        if (node.previousMove.IsCapture() && staticEval >= KnownWinValue) globalDepthReduction++;
+    }
 
     MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
 
@@ -1362,7 +1366,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     uint32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
-    int32_t singularScoreDiff = 0;
 
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
@@ -1473,7 +1476,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Singular move detection
         if (!isRootNode &&
             !hasMoveFilter &&
-            move == ttEntry.moves[0] &&
+            move == ttMove &&
             node.depth >= SingularitySearchMinDepth &&
             std::abs(ttScore) < KnownWinValue &&
             ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
@@ -1494,8 +1497,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             if (singularScore < singularBeta)
             {
-                singularScoreDiff = singularBeta - singularScore;
-
                 if (node.height < 2 * thread.rootDepth)
                 {
                     moveExtension++;

@@ -945,12 +945,22 @@ static void RunPositionTests()
         Position::s_enableChess960 = false;
     }
 
-    // Move from packed
+    // Position::MoveFromPacked
     {
         const Position pos("k7/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
 
         TEST_EXPECT(Move::Make(Square_h2, Square_h4, Piece::Pawn) == pos.MoveFromPacked(PackedMove(Square_h2, Square_h4)));
         TEST_EXPECT(Move::Make(Square_b1, Square_d3, Piece::Queen, Piece::None, true) == pos.MoveFromPacked(PackedMove(Square_b1, Square_d3)));
+    }
+
+    // Position::IsCapture
+    {
+        const Position pos("k7/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
+
+        TEST_EXPECT(pos.IsCapture(PackedMove(Square_d1, Square_f3)));
+        TEST_EXPECT(!pos.IsCapture(PackedMove(Square_g1, Square_e2)));
+        TEST_EXPECT(!pos.IsCapture(PackedMove(Square_f3, Square_d1)));
+        TEST_EXPECT(!pos.IsCapture(PackedMove(Square_f3, Square_f4)));
     }
 
     // Move picker
@@ -973,7 +983,7 @@ static void RunPositionTests()
         Move move;
         TTEntry ttEntry;
         uint32_t moveIndex = 0;
-        
+
         MovePicker movePicker(pos, moveOrderer, ttEntry, Move::Invalid(), flags);
         while (movePicker.PickMove(node, Game(), move, moveScore))
         {
@@ -1808,6 +1818,21 @@ static void RunEvalTests()
 
     // extreme disbalance
     TEST_EXPECT(Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1")) < KnownWinValue);
+
+    // 50-move rule
+    {
+        const ScoreType eval1 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 0 1"));
+        const ScoreType eval2 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 4 1"));
+        const ScoreType eval3 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 20 1"));
+        const ScoreType eval4 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 50 1"));
+        const ScoreType eval5 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 99 1"));
+
+        TEST_EXPECT(eval1 == eval2);
+        TEST_EXPECT(eval2 > eval3);
+        TEST_EXPECT(eval3 > eval4);
+        TEST_EXPECT(eval4 > eval5);
+        TEST_EXPECT(eval5 > 0);
+    }
 }
 
 // this test suite runs full search on well known/easy positions
