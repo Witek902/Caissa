@@ -34,6 +34,8 @@ static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
 static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
+static const int32_t MaxExtension = 2;
+
 static const int32_t MaxDepthReduction = 8;
 static const int32_t LateMoveReductionStartDepth = 3;
 
@@ -1369,6 +1371,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
+    uint32_t numCaptureMovesTried = 0;
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
@@ -1510,7 +1513,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
             else if (ttScore >= beta)
             {
-                moveExtension = 0;
+                moveExtension--;
             }
 
             // NegaMax can overwrite NN context for child node, so we need to recreate it by doing the move again...
@@ -1521,7 +1524,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // avoid extending search too much (maximum 2x depth at root node)
         if (node.height < 2 * thread.rootDepth)
         {
-            moveExtension = std::clamp(moveExtension, 0, 2);
+            moveExtension = std::clamp(moveExtension, 0, MaxExtension);
         }
         else
         {
@@ -1538,7 +1541,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (node.depth >= LateMoveReductionStartDepth &&
             !node.isInCheck &&
             moveIndex > 1u &&
-            moveScore < MoveOrderer::GoodCaptureValue && // allow reducing bad captures
+            (moveScore < MoveOrderer::GoodCaptureValue || numCaptureMovesTried > 4) && // allow reducing bad captures and any capture if far in the list
             move.GetPromoteTo() != Piece::Queen)
         {
             depthReduction = globalDepthReduction;
@@ -1552,7 +1555,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (moveScore > 8000) depthReduction--;
 
             // reduce less if move gives check
-            if (childNode.isInCheck) depthReduction--;
+            if (childNode.isInCheck) depthReduction -= 2;
 
             if (node.isCutNode) depthReduction++;
         }
@@ -1612,6 +1615,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (move.IsQuiet())
         {
             quietMovesTried[numQuietMovesTried++] = move;
+        }
+        else
+        {
+            numCaptureMovesTried++;
         }
 
         if (score > bestValue) // new best move found
