@@ -8,6 +8,7 @@
 #include "NeuralNetworkEvaluator.hpp"
 
 #include <atomic>
+#include <memory>
 
 #ifndef CONFIGURATION_FINAL
 #define COLLECT_SEARCH_STATS
