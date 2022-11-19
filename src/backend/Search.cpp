@@ -812,11 +812,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
-        {
 #ifdef COLLECT_SEARCH_STATS
-            ctx.stats.ttHits++;
+		ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
+		// don't prune in PV nodes, because TT does not contain path information
+        if (!isPvNode)
+        {
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
             else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
             else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
@@ -1107,10 +1109,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
         // don't prune in PV nodes, because TT does not contain path information
-        if (ttEntry.depth >= node.depth &&
-            (node.depth <= 0 || !isPvNode) &&
+        if (!isPvNode &&
             !hasMoveFilter &&
-            position.GetHalfMoveCount() < 90)
+            ttEntry.depth >= node.depth &&
+            position.GetHalfMoveCount() < 80)
         {
 #ifdef COLLECT_SEARCH_STATS
             ctx.stats.ttHits++;
@@ -1221,7 +1223,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
     const bool isImproving = evalImprovement >= -5; // leave some small margin
 
-    
     if (!isPvNode && !hasMoveFilter && !node.isInCheck)
     {
         // Futility/Beta Pruning
@@ -1323,7 +1324,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t extension = 0;
 
     // check extension
-    if (node.isInCheck && node.depth >= 4)
+    if (node.isInCheck)
     {
         extension++;
     }
@@ -1372,6 +1373,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     Move quietMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
+    uint32_t numChecks = 0;
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
@@ -1396,7 +1398,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         moveIndex++;
         if (move.IsQuiet()) quietMoveIndex++;
 
+        childNode.isInCheck = childNode.position.IsInCheck();
+        const bool isFirstCheckMove = childNode.isInCheck && numChecks == 0;
+        numChecks += childNode.isInCheck;
+
         if (!node.isInCheck &&
+            !childNode.isInCheck &&
             !isRootNode &&
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1447,8 +1454,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     !position.StaticExchangeEvaluation(move, -64 * node.depth)) continue;
             }
         }
-
-        childNode.isInCheck = childNode.position.IsInCheck();
 
         // report current move to UCI
         if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
@@ -1540,6 +1545,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // don't reduce while in check, good captures, promotions, etc.
         if (node.depth >= LateMoveReductionStartDepth &&
             !node.isInCheck &&
+            !isFirstCheckMove &&
             moveIndex > 1u &&
             (moveScore < MoveOrderer::GoodCaptureValue || numCaptureMovesTried > 4) && // allow reducing bad captures and any capture if far in the list
             move.GetPromoteTo() != Piece::Queen)
@@ -1555,7 +1561,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (moveScore > 8000) depthReduction--;
 
             // reduce less if move gives check
-            if (childNode.isInCheck) depthReduction -= 2;
+            if (childNode.isInCheck) depthReduction--;
 
             if (node.isCutNode) depthReduction++;
         }
