@@ -82,6 +82,8 @@ public:
     using TTCluster = InternalEntry[NumEntriesPerCluster];
 
     TranspositionTable(size_t initialSize = 0);
+    TranspositionTable(TranspositionTable&& rhs);
+    TranspositionTable& operator = (TranspositionTable&& rhs);
     ~TranspositionTable();
 
     // should be called before running a new search
@@ -103,16 +105,15 @@ public:
     // compute number of used entries
     size_t GetNumUsedEntries() const;
 
-    uint64_t GetNumCollisions() const { return numCollisions; }
-
 private:
+
+    TranspositionTable(const TranspositionTable&) = delete;
+    TranspositionTable& operator = (const TranspositionTable&) = delete;
 
     mutable TTCluster* clusters;
     size_t numClusters;
     size_t hashMask;
     uint8_t generation;
-
-    uint64_t numCollisions;
 };
 
 INLINE TTEntry::Bounds operator & (const TTEntry::Bounds a, const TTEntry::Bounds b)

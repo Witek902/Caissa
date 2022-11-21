@@ -9,6 +9,14 @@ struct KillerMoves
 {
     Move moves[Size];
 
+    void Clear()
+    {
+        for (uint32_t i = 0; i < Size; ++i)
+        {
+            moves[i] = Move::Invalid();
+        }
+    }
+
     void Push(const Move move)
     {
         for (uint32_t i = 0; i < Size; ++i)
@@ -70,6 +78,7 @@ public:
 
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
 
+    void ClearKillerMoves(uint32_t depth);
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
     // assign scores to move list

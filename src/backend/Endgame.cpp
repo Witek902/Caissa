@@ -310,15 +310,15 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
     int32_t materialScore = 
         c_queenValue.eg * pos.Whites().queens.Count() +
         c_rookValue.eg * pos.Whites().rooks.Count() +
-        c_bishopValue.eg * pos.Whites().bishops.Count() +
+        c_bishopValue.eg * pos.Whites().bishops.Count() / 4 +
         c_knightValue.eg * pos.Whites().knights.Count() +
         c_pawnValue.eg * pos.Whites().pawns.Count();
 
     if (materialScore > 4000) materialScore = 4000 + (materialScore - 4000) / 16;
 
     outScore = KnownWinValue + materialScore;
-    outScore -= 8 * weakKing.EdgeDistance();
-    outScore -= Square::Distance(weakKing, strongKing); // push kings close
+    outScore += 256 * (3 - weakKing.EdgeDistance());
+    outScore -= 8 * Square::Distance(weakKing, strongKing); // push kings close
 
     pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
     {

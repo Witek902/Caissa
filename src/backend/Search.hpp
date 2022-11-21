@@ -74,13 +74,15 @@ struct SearchParam
     // probe tablebases at the root
     bool useRootTablebase = true;
 
+    bool useAspirationWindows = true;
+
     // use colors in console output to make it more readable
     bool colorConsoleOutput = false;
 
     // move notation for PV lines printing
     MoveNotation moveNotation = MoveNotation::LAN;
 
-    // print verbose debug stats (not UCI comaptible)
+    // print verbose debug stats (not UCI compatible)
     bool verboseStats = false;
 
     // optional eval probing interface
