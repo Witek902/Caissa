@@ -28,7 +28,7 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
 static const int32_t WdlTablebaseProbeDepth = 4;
-static const int32_t WdlTablebaseProbeMaxNumPieces = 5;
+static const int32_t WdlTablebaseProbeMaxNumPieces = 6;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -560,7 +560,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             TimeManager::Update(game, data, searchContext.maxTimeSoft);
         }
 
-        // rememeber PV lines so they can be used in next iteration
+        // remember PV lines so they can be used in next iteration
         thread.prevPvLines = std::move(tempResult);
 
         // check soft time limit every depth iteration
@@ -635,7 +635,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     window += std::abs(param.previousScore) / 10;
 
     // start applying aspiration window at given depth
-    if (param.depth >= AspirationWindowDepthStart &&
+    if (param.searchParam.useAspirationWindows &&
+        param.depth >= AspirationWindowDepthStart &&
         param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(thread, param.searchContext, true))
@@ -1349,6 +1350,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // reduce more if entered a winning endgame
         if (node.previousMove.IsCapture() && staticEval >= KnownWinValue) globalDepthReduction++;
     }
+
+    thread.moveOrderer.ClearKillerMoves(node.height + 1);
 
     MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
 

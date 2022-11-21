@@ -58,7 +58,6 @@ TranspositionTable::TranspositionTable(size_t initialSize)
     , numClusters(0)
     , hashMask(0)
     , generation(0)
-    , numCollisions(0)
 {
     Resize(initialSize);
 }
@@ -66,6 +65,38 @@ TranspositionTable::TranspositionTable(size_t initialSize)
 TranspositionTable::~TranspositionTable()
 {
     Free(clusters);
+}
+
+TranspositionTable::TranspositionTable(TranspositionTable&& rhs)
+	: clusters(rhs.clusters)
+	, numClusters(rhs.numClusters)
+	, hashMask(rhs.hashMask)
+	, generation(rhs.generation)
+{
+	rhs.clusters = nullptr;
+	rhs.numClusters = 0;
+	rhs.hashMask = 0;
+	rhs.generation = 0;
+}
+
+TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
+{
+    if (&rhs != this)
+    {
+        Free(clusters);
+
+        clusters = rhs.clusters;
+        numClusters = rhs.numClusters;
+        hashMask = rhs.hashMask;
+        generation = rhs.generation;
+
+        rhs.clusters = nullptr;
+        rhs.numClusters = 0;
+        rhs.hashMask = 0;
+        rhs.generation = 0;
+    }
+
+    return *this;
 }
 
 void TranspositionTable::Clear()

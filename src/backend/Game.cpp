@@ -203,6 +203,11 @@ std::string Game::ToPGN(bool includeScores) const
         else terminationStr = "unknown";
     }
 
+    if (mForcedScore != Score::Unknown)
+    {
+        terminationStr = "adjudication";
+    }
+
     str << "[Round \"1." << mMetadata.roundNumber << "\"]" << std::endl;
     str << "[White \"Caissa\"]" << std::endl;
     str << "[Black \"Caissa\"]" << std::endl;
