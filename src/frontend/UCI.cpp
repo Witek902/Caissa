@@ -9,6 +9,7 @@
 
 #include <math.h>
 #include <random>
+#include <atomic>
 
 #define VersionNumber "1.3.4_ponderfix"
 
@@ -537,7 +538,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 	}
 
     // make sure search thread actually started running before exiting from this function
-    while (!mSearchCtx->searchStarted.load(std::memory_order::memory_order_acquire));
+    while (!mSearchCtx->searchStarted.load(std::memory_order_acquire))
+        ;
 
     if (waitForSearch)
     {
@@ -583,13 +585,14 @@ void UniversalChessInterface::SearchThreadEntryFunc()
 void UniversalChessInterface::DoSearch()
 {
     mSearchCtx->searchParam.stopSearch = false;
-    mSearchCtx->searchStarted.store(true, std::memory_order::memory_order_release);
+    mSearchCtx->searchStarted.store(true, std::memory_order_release);
 
     mTranspositionTable.NextGeneration();
     mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
     // make sure we're not pondering (search was either stopped or 'ponderhit' was called)
-    while (mSearchCtx->searchParam.isPonder.load(std::memory_order::memory_order_acquire));
+    while (mSearchCtx->searchParam.isPonder.load(std::memory_order_acquire))
+        ;
 
     // report best move
     {
@@ -651,7 +654,7 @@ bool UniversalChessInterface::Command_PonderHit()
     if (mSearchCtx)
     {
         mSearchCtx->ponderHit = true;
-        mSearchCtx->searchParam.isPonder.store(false, std::memory_order::memory_order_release);
+        mSearchCtx->searchParam.isPonder.store(false, std::memory_order_release);
     }
 
     return true;

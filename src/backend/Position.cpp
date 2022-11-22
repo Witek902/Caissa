@@ -879,7 +879,9 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
             ASSERT(move.FromSquare().Rank() == move.ToSquare().Rank());
 
             const Square oldKingSquare = move.FromSquare();
-            Square oldRookSquare, newRookSquare, newKingSquare;
+            Square oldRookSquare = Square::Invalid();
+            Square newRookSquare = Square::Invalid();
+            Square newKingSquare = Square::Invalid();
 
             if (move.IsShortCastle())
             {
