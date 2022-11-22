@@ -120,36 +120,33 @@ const MoveOrderer& Search::GetMoveOrderer() const
     return mThreadData.front().moveOrderer;
 }
 
-void Search::StopSearch()
-{
-    mStopSearch = true;
-}
-
 NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const
 {
-    if (mStopSearch.load(std::memory_order_relaxed))
+    SearchParam& param = ctx.searchParam;
+
+    if (param.stopSearch.load(std::memory_order_relaxed))
     {
         return true;
     }
 
-    if (!ctx.searchParam.isPonder)
+    if (!param.isPonder)
     {
-        if (ctx.searchParam.limits.maxNodes < UINT64_MAX &&
-            ctx.stats.nodes > ctx.searchParam.limits.maxNodes)
+        if (param.limits.maxNodes < UINT64_MAX &&
+            ctx.stats.nodes > param.limits.maxNodes)
         {
             // nodes limit exceeded
-            mStopSearch = true;
+            param.stopSearch = true;
             return true;
         }
 
         // check inner nodes periodically
         if (isRootNode || (thread.stats.nodes % 256 == 0))
         {
-            if (ctx.searchParam.limits.maxTime.IsValid() &&
-                TimePoint::GetCurrent() >= ctx.searchParam.limits.maxTime)
+            if (param.limits.maxTime.IsValid() &&
+                TimePoint::GetCurrent() >= param.limits.maxTime)
             {
                 // time limit exceeded
-                mStopSearch = true;
+                param.stopSearch = true;
                 return true;
             }
         }
@@ -158,16 +155,16 @@ NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const Search
     return false;
 }
 
-void Search::DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult)
+void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outResult)
 {
+    ASSERT(!param.stopSearch);
+
     outResult.clear();
 
     if (!game.GetPosition().IsValid())
     {
         return;
     }
-
-    mStopSearch = false;
 
     // clamp number of PV lines (there can't be more than number of max moves)
     static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
@@ -427,7 +424,7 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
         << std::endl;
 }
 
-void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult)
+void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult& outResult)
 {
     const bool isMainThread = threadID == 0;
     ThreadData& thread = mThreadData[threadID];
@@ -544,7 +541,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 }
 
                 // stop other threads
-                StopSearch();
+                param.stopSearch = true;
             }
             break;
         }
@@ -569,7 +566,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.maxTimeSoft.IsValid() &&
             TimePoint::GetCurrent() >= searchContext.maxTimeSoft)
         {
-            StopSearch();
+            param.stopSearch = true;
             break;
         }
 
@@ -579,7 +576,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             mateCounter >= MateCountStopCondition &&
             param.limits.maxDepth == UINT16_MAX)
         {
-            StopSearch();
+            param.stopSearch = true;
             break;
         }
 
@@ -613,7 +610,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
             {
-                StopSearch();
+                param.stopSearch = true;
                 break;
             }
         }
@@ -709,7 +706,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         ASSERT(!pvLine.moves.empty());
         ASSERT(pvLine.moves.front().IsValid());
 
-        if (isMainThread && param.searchParam.debugLog)
+        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch)
         {
             const TimePoint searchTime = TimePoint::GetCurrent() - param.searchParam.limits.startTimePoint;
             ReportPV(param, pvLine, boundsType, searchTime);

@@ -10,7 +10,7 @@
 #include <math.h>
 #include <random>
 
-#define VersionNumber "1.3.3"
+#define VersionNumber "1.3.4_ponderfix"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -53,8 +53,6 @@ UniversalChessInterface::UniversalChessInterface()
 
     // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
     SetGaviotaCacheSize(1024 * 1024 * c_DefaultGaviotaTbCacheInMB);
-
-
 }
 
 UniversalChessInterface::~UniversalChessInterface()
@@ -516,9 +514,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     }
 
     // TODO
-    // Instead of pondering on suggested move, maybe undo last move and ponder on oponent's position instead.
-    // This way we can consider all possible oponent's replies, not just focus on predicted one... UCI is lame...
+    // Instead of pondering on suggested move, maybe undo last move and ponder on opponent's position instead.
+    // This way we can consider all possible opponent's replies, not just focus on predicted one... UCI is lame...
     mSearchCtx->searchParam.isPonder = isPonder;
+    mSearchCtx->startedAsPondering = isPonder;
 
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
@@ -531,7 +530,14 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
     mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
 
-    RunSearchTask();
+	{
+		std::unique_lock<std::mutex> lock(mSearchThreadMutex);
+		mNewSearchContext = mSearchCtx.get();
+		mNewSearchConditionVariable.notify_one();
+	}
+
+    // make sure search thread actually started running before exiting from this function
+    while (!mSearchCtx->searchStarted.load(std::memory_order::memory_order_acquire));
 
     if (waitForSearch)
     {
@@ -544,7 +550,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 void UniversalChessInterface::StopSearchThread()
 {
     {
-        std::unique_lock<std::mutex> lock(mNewSearchMutex);
+        std::unique_lock<std::mutex> lock(mSearchThreadMutex);
         mStopSearchThread = true;
         mNewSearchConditionVariable.notify_one();
     }
@@ -557,7 +563,7 @@ void UniversalChessInterface::SearchThreadEntryFunc()
     {
         {
             // wait for a new search or a request to stop the thread
-            std::unique_lock<std::mutex> lock(mNewSearchMutex);
+            std::unique_lock<std::mutex> lock(mSearchThreadMutex);
             while (!mNewSearchContext && !mStopSearchThread)
             {
                 mNewSearchConditionVariable.wait(lock);
@@ -576,12 +582,16 @@ void UniversalChessInterface::SearchThreadEntryFunc()
 
 void UniversalChessInterface::DoSearch()
 {
-    mTranspositionTable.NextGeneration();
+    mSearchCtx->searchParam.stopSearch = false;
+    mSearchCtx->searchStarted.store(true, std::memory_order::memory_order_release);
 
+    mTranspositionTable.NextGeneration();
     mSearch.DoSearch(mGame, mSearchCtx->searchParam, mSearchCtx->searchResult);
 
-    // only report best move in non-pondering mode or if "stop" was called during ponder search
-    if (!mSearchCtx->searchParam.isPonder || !mSearchCtx->ponderHit)
+    // make sure we're not pondering (search was either stopped or 'ponderhit' was called)
+    while (mSearchCtx->searchParam.isPonder.load(std::memory_order::memory_order_acquire));
+
+    // report best move
     {
         Move bestMove = Move::Invalid();
         if (!mSearchCtx->searchResult.empty())
@@ -621,25 +631,17 @@ void UniversalChessInterface::DoSearch()
     mSearchCtx->waitable.OnFinished();
 }
 
-void UniversalChessInterface::RunSearchTask()
-{
-    {
-        std::unique_lock<std::mutex> lock(mNewSearchMutex);
-        mNewSearchContext = mSearchCtx.get();
-        mNewSearchConditionVariable.notify_one();
-    }
-}
-
 bool UniversalChessInterface::Command_Stop()
 {
     if (mSearchCtx)
     {
         // wait for previous search to complete
-        mSearch.StopSearch();
+        mSearchCtx->searchParam.stopSearch = true;
+        mSearchCtx->searchParam.isPonder = false;
         mSearchCtx->waitable.Wait();
-
-        mSearchCtx.reset();
     }
+
+    mSearchCtx.reset();
 
     return true;
 }
@@ -648,23 +650,8 @@ bool UniversalChessInterface::Command_PonderHit()
 {
     if (mSearchCtx)
     {
-        if (!mSearchCtx->searchParam.isPonder)
-        {
-            std::cout << "Engine is not pondering right now" << std::endl;
-            return false;
-        }
-
         mSearchCtx->ponderHit = true;
-
-        // wait for previous search to complete
-        mSearch.StopSearch();
-        mSearchCtx->waitable.Wait();
-        mSearchCtx->waitable.Reset();
-
-        // start searching again, this time not in pondering mode
-        mSearchCtx->searchParam.isPonder = false;
-
-        RunSearchTask();
+        mSearchCtx->searchParam.isPonder.store(false, std::memory_order::memory_order_release);
     }
 
     return true;
