@@ -145,14 +145,15 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
         std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
+#ifdef USE_TABLE_BASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
         std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
+#endif // USE_TABLE_BASES
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
-        std::cout << "option name TunedParam type spin default 0 min -1000000 max 1000000\n";
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
