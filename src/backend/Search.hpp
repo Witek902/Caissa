@@ -215,7 +215,6 @@ private:
         const Game& game;
         SearchParam& searchParam;
         Stats& stats;
-        TimePoint maxTimeSoft = TimePoint::Invalid();
     };
 
     struct AspirationWindowSearchParam

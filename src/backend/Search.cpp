@@ -129,7 +129,7 @@ NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const Search
         return true;
     }
 
-    if (!param.isPonder)
+    if (!param.isPonder.load(std::memory_order_acquire))
     {
         if (param.limits.maxNodes < UINT64_MAX &&
             ctx.stats.nodes > param.limits.maxNodes)
@@ -143,7 +143,8 @@ NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const Search
         if (isRootNode || (thread.stats.nodes % 256 == 0))
         {
             if (param.limits.maxTime.IsValid() &&
-                TimePoint::GetCurrent() >= param.limits.maxTime)
+                param.limits.startTimePoint.IsValid() &&
+                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.maxTime)
             {
                 // time limit exceeded
                 param.stopSearch = true;
@@ -244,7 +245,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
-        SearchContext searchContext{ game, param, globalStats, param.limits.idealTime };
+        SearchContext searchContext{ game, param, globalStats };
         outResult.resize(1);
         outResult.front().score = QuiescenceNegaMax(thread, rootNode, searchContext);
         SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
@@ -441,7 +442,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     uint32_t mateCounter = 0;
 
-    SearchContext searchContext{ game, param, outStats, param.limits.idealTime };
+    SearchContext searchContext{ game, param, outStats };
 
     // main iterative deepening loop
     for (uint16_t depth = 1; depth <= param.limits.maxDepth; ++depth)
@@ -552,34 +553,35 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
-        if (isMainThread &&
-            !param.isPonder && !param.limits.analysisMode)
+        if (isMainThread && !param.limits.analysisMode)
         {
-            const TimeManagerUpdateData data{ depth, tempResult, thread.prevPvLines, param.limits };
-            TimeManager::Update(game, data, searchContext.maxTimeSoft);
+            const TimeManagerUpdateData data{ depth, tempResult, thread.prevPvLines };
+            TimeManager::Update(game, data, searchContext.searchParam.limits);
         }
 
         // remember PV lines so they can be used in next iteration
         thread.prevPvLines = std::move(tempResult);
 
-        // check soft time limit every depth iteration
         if (isMainThread &&
-            !param.isPonder &&
-            searchContext.maxTimeSoft.IsValid() &&
-            TimePoint::GetCurrent() >= searchContext.maxTimeSoft)
+            !param.isPonder.load(std::memory_order_acquire))
         {
-            param.stopSearch = true;
-            break;
-        }
+            // check soft time limit every depth iteration
+            if (param.limits.idealTime.IsValid() &&
+                param.limits.startTimePoint.IsValid() &&
+                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTime)
+            {
+                param.stopSearch = true;
+                break;
+            }
 
-        // stop the search if found mate in multiple depths in a row
-        if (isMainThread &&
-            !param.isPonder && !param.limits.analysisMode &&
-            mateCounter >= MateCountStopCondition &&
-            param.limits.maxDepth == UINT16_MAX)
-        {
-            param.stopSearch = true;
-            break;
+			// stop the search if found mate in multiple depths in a row
+			if (!param.limits.analysisMode &&
+				mateCounter >= MateCountStopCondition &&
+				param.limits.maxDepth == UINT16_MAX)
+			{
+				param.stopSearch = true;
+				break;
+			}
         }
 
         // check for singular root move
@@ -588,7 +590,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             depth >= SingularitySearchMinDepth &&
             std::abs(primaryMoveScore) < 1000 &&
             param.limits.rootSingularityTime.IsValid() &&
-            TimePoint::GetCurrent() >= param.limits.rootSingularityTime)
+            param.limits.startTimePoint.IsValid() &&
+            TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.rootSingularityTime)
         {
             const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
 

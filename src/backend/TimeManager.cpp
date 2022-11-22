@@ -49,13 +49,13 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 
-        limits.idealTime = limits.startTimePoint + TimePoint::FromSeconds(0.001f * idealTime);
+        limits.idealTime = TimePoint::FromSeconds(0.001f * idealTime);
 
         // abort search if significantly exceeding ideal allocated time
-        limits.maxTime = limits.startTimePoint + TimePoint::FromSeconds(0.001f * maxTime);
+        limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
 
         // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = limits.startTimePoint + TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
+        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
     // hard limit
@@ -63,7 +63,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     if (hardLimitMs != INT32_MAX)
     {
         hardLimitMs = std::max(0, hardLimitMs - moveOverhead);
-        const TimePoint hardLimitTimePoint = limits.startTimePoint + TimePoint::FromSeconds(hardLimitMs * 0.001f);
+        const TimePoint hardLimitTimePoint = TimePoint::FromSeconds(hardLimitMs * 0.001f);
 
         if (!limits.maxTime.IsValid() ||
             limits.maxTime >= hardLimitTimePoint)
@@ -77,14 +77,14 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     }
 }
 
-void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, TimePoint& maxTimeSoft)
+void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, SearchLimits& limits)
 {
     const uint32_t startDepth = 5;
 
     ASSERT(!data.currResult.empty());
     ASSERT(!data.currResult[0].moves.empty());
 
-    if (!maxTimeSoft.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
+    if (!limits.idealTime.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
     {
         return;
     }
@@ -99,7 +99,7 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Ti
     const int32_t currScore = data.currResult[0].score;
     const Move currMove = data.currResult[0].moves[0];
 
-    TimePoint t = maxTimeSoft - data.limits.startTimePoint;
+    TimePoint t = limits.idealTime;
 
     if (data.depth == startDepth)
     {
@@ -141,14 +141,12 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Ti
         }
     }
 
-    const TimePoint newMaxTimeSoft = data.limits.startTimePoint + t;
-
-    if (newMaxTimeSoft != maxTimeSoft)
+    if (t != limits.idealTime)
     {
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string ideal time " << t.ToSeconds() * 1000.0f << " ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 
-        maxTimeSoft = newMaxTimeSoft;
+        limits.idealTime = t;
     }
 }
