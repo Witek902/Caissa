@@ -241,8 +241,6 @@ void SelfPlay(const std::vector<std::string>& args)
         uint32_t drawScoreCounter = 0;
         for (;; ++halfMoveNumber)
         {
-            const TimePoint startTimePoint = TimePoint::GetCurrent();
-
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
@@ -250,9 +248,6 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.limits.maxDepth = 20;
             searchParam.limits.maxNodes = 500000 - 2000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
             searchParam.numPvLines = 1; // halfMoveNumber < 10 ? 2 : 1;
-            //searchParam.limits.maxTime = startTimePoint + TimePoint::FromSeconds(0.2f);
-            //searchParam.limits.idealTime = startTimePoint + TimePoint::FromSeconds(0.06f);
-            //searchParam.limits.rootSingularityTime = startTimePoint + TimePoint::FromSeconds(0.02f);
 
             searchResult.clear();
             tt.NextGeneration();
