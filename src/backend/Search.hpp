@@ -31,7 +31,7 @@ struct SearchLimits
     // maximum allowed searched nodes
     uint64_t maxNodes = UINT64_MAX;
 
-    // maximum allowed base search depth (excluding quisence, extensions, etc.)
+    // maximum allowed base search depth (excluding quiescence, extensions, etc.)
     uint16_t maxDepth = UINT16_MAX;
 
     // enable mate search, disables all pruning
@@ -66,7 +66,10 @@ struct SearchParam
     std::vector<Move> excludedMoves;
 
     // in pondering we don't care about limits
-    bool isPonder = false;
+    std::atomic<bool> isPonder = false;
+
+	// used to stop search
+	std::atomic<bool> stopSearch = false;
 
     // print UCI-style output
     bool debugLog = true;
@@ -158,9 +161,7 @@ public:
 
     void Clear();
 
-    void DoSearch(const Game& game, const SearchParam& param, SearchResult& outResult);
-
-    void StopSearch();
+    void DoSearch(const Game& game, SearchParam& param, SearchResult& outResult);
 
     const MoveOrderer& GetMoveOrderer() const;
 
@@ -212,7 +213,7 @@ private:
     struct SearchContext
     {
         const Game& game;
-        const SearchParam& searchParam;
+        SearchParam& searchParam;
         Stats& stats;
         TimePoint maxTimeSoft = TimePoint::Invalid();
     };
@@ -220,7 +221,7 @@ private:
     struct AspirationWindowSearchParam
     {
         const Position& position;
-        const SearchParam& searchParam;
+        SearchParam& searchParam;
         uint32_t depth;
         uint8_t pvIndex;
         SearchContext& searchContext;
@@ -237,7 +238,7 @@ private:
         // search depth at the root node in current iterative deepening step
         uint16_t rootDepth = 0;
 
-        // principial variation lines from previous iterative deepening search
+        // principal variation lines from previous iterative deepening search
         SearchResult prevPvLines;
 
         // per-thread search stats
@@ -258,8 +259,6 @@ private:
         const Move GetPvMove(const NodeInfo& node) const;
     };
 
-    mutable std::atomic<bool> mStopSearch = false;
-    
     std::vector<ThreadData, Allocator<ThreadData>> mThreadData;
 
     static constexpr uint32_t LMRTableSize = 64;
@@ -270,7 +269,7 @@ private:
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
-    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, const SearchParam& param, Stats& outStats, SearchResult& outResult);
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult& outResult);
 
     bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
 

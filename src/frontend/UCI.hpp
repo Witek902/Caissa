@@ -24,7 +24,9 @@ struct SearchTaskContext
     SearchParam searchParam;
     SearchResult searchResult;
     Waitable waitable;
+    bool startedAsPondering = false;
     std::atomic<bool> ponderHit = false;
+    std::atomic<bool> searchStarted = false;
 
     SearchTaskContext(TranspositionTable& tt) : searchParam{ tt } { }
 };
@@ -50,7 +52,6 @@ private:
     bool Command_ScoreMoves();
 
     void StopSearchThread();
-    void RunSearchTask();
     void DoSearch();
 
     void SearchThreadEntryFunc();
@@ -62,7 +63,7 @@ private:
 
     std::thread mSearchThread;
 
-    std::mutex mNewSearchMutex;
+    std::mutex mSearchThreadMutex;
     std::condition_variable mNewSearchConditionVariable;
     std::atomic<bool> mStopSearchThread = false;
     SearchTaskContext* mNewSearchContext = nullptr;
