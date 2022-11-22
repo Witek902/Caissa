@@ -152,7 +152,7 @@ void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         outEntries[i].trainingVector.singleOutput = entry.score;
         outEntries[i].pos = pos;
     }
-};
+}
 
 void NetworkTrainer::Validate(uint32_t iteration)
 {

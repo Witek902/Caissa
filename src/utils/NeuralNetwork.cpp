@@ -717,7 +717,6 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
     const __m256 cRhoVec = _mm256_set1_ps(cRho);
     const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
     const __m256 gradientScaleVec = _mm256_set1_ps(gradientScale);
-    const __m256 signMaskVec = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
 #endif
 
     for (size_t j = 0; j <= numInputs; j++)

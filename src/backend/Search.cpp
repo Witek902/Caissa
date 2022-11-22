@@ -95,7 +95,7 @@ void Search::BuildMoveReductionTable()
 {
     memset(mMoveReductionTable, 0, sizeof(mMoveReductionTable));
 
-    for (int32_t depth = 1; depth < LMRTableSize; ++depth)
+    for (uint32_t depth = 1; depth < LMRTableSize; ++depth)
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
@@ -520,10 +520,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             }
 
             // store for multi-PV filtering in next iteration
+#ifndef CONFIGURATION_FINAL
             for (const Move prevMove : pvMovesSoFar)
             {
                 ASSERT(prevMove != pvLine.moves.front());
             }
+#endif // CONFIGURATION_FINAL
             pvMovesSoFar.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
