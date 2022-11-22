@@ -55,7 +55,6 @@ namespace GameCollection
 				return false;
 			}
 
-#ifndef CONFIGURATION_FINAL
 			bool moveSucessful;
 			if (header.hasMoveScores)
 			{
@@ -66,7 +65,6 @@ namespace GameCollection
 				moveSucessful = game.DoMove(move);
 			}
 			ASSERT(moveSucessful);
-#endif // CONFIGURATION_FINAL
 		}
 
 		game.SetScore(header.forcedScore);
