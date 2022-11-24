@@ -17,6 +17,8 @@
 #include <thread>
 #include <math.h>
 
+// #define ENABLE_SEARCH_TRACE
+
 static const float CurrentMoveReportDelay = 10.0f;
 
 static const int32_t SingularitySearchMinDepth = 8;
@@ -58,6 +60,74 @@ static const int32_t AlphaMarginBias = 2000;
 static const int32_t RazoringStartDepth = 3;
 static const int32_t RazoringMarginMultiplier = 128;
 static const int32_t RazoringMarginBias = 20;
+
+class SearchTrace
+{
+public:
+    enum class ExitReason
+    {
+        Regular,
+        Draw,
+        GameCycle,
+        MateDistancePruning,
+        TBHit,
+        TTCutoff,
+        BetaPruning,
+        AlphaPruning,
+        Razoring,
+        NullMovePruning,
+        SingularPruning,
+    };
+
+    SearchTrace(const NodeInfo& node) : m_node(node) { }
+
+    void OnNodeExit(ExitReason reason, ScoreType score, Move bestMove = Move::Invalid())
+    {
+		FILE* f = GetOutputFile();
+
+		const char* exitReasonStr = "";
+		switch (reason)
+		{
+		case ExitReason::Draw:                  exitReasonStr = "Draw"; break;
+		case ExitReason::GameCycle:             exitReasonStr = "GameCycle"; break;
+		case ExitReason::MateDistancePruning:   exitReasonStr = "MateDistancePruning"; break;
+		case ExitReason::TBHit:                 exitReasonStr = "TBHit"; break;
+		case ExitReason::TTCutoff:              exitReasonStr = "TTCutoff"; break;
+		case ExitReason::BetaPruning:           exitReasonStr = "BetaPruning"; break;
+		case ExitReason::AlphaPruning:          exitReasonStr = "AlphaPruning"; break;
+		case ExitReason::Razoring:              exitReasonStr = "Razoring"; break;
+		case ExitReason::NullMovePruning:       exitReasonStr = "NullMovePruning"; break;
+		case ExitReason::SingularPruning:       exitReasonStr = "SingularPruning"; break;
+		}
+
+		// write indent
+		char spaceBuffer[MaxSearchDepth];
+		memset(spaceBuffer, '\t', m_node.height);
+		fwrite(spaceBuffer, 1, m_node.height, f);
+
+		fprintf(f, "%s [%s] d=%d, a=%d, b=%d, e=%d | %s score=%d bestMove=%s\n",
+				m_node.previousMove.ToString().c_str(),
+				m_node.position.ToFEN().c_str(),
+				m_node.depth, m_node.alpha, m_node.beta, m_node.staticEval,
+				exitReasonStr, score, bestMove.ToString().c_str());
+    }
+
+    static void OnRootSearchBegin()
+    {
+        FILE* f = GetOutputFile();
+        fprintf(f, "ROOT SEARCH START\n");
+    }
+
+private:
+
+	static FILE* GetOutputFile()
+	{
+		static FILE* f = fopen("searchTrace.txt", "w");
+        return f;
+	}
+
+    const NodeInfo& m_node;
+};
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 {
@@ -120,7 +190,7 @@ const MoveOrderer& Search::GetMoveOrderer() const
     return mThreadData.front().moveOrderer;
 }
 
-NO_INLINE bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const
+bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode)
 {
     SearchParam& param = ctx.searchParam;
 
@@ -669,6 +739,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
+#ifdef ENABLE_SEARCH_TRACE
+        SearchTrace::OnRootSearchBegin();
+#endif
+
         pvLine.score = NegaMax(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
@@ -1045,6 +1119,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 {
     ASSERT(node.alpha < node.beta);
 
+#ifdef ENABLE_SEARCH_TRACE
+    SearchTrace trace(node);
+#endif // ENABLE_SEARCH_TRACE
+
     // clear PV line
     node.pvLength = 0;
 
@@ -1065,7 +1143,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (!isRootNode && alpha < 0 && SearchUtils::CanReachGameCycle(node))
     {
         alpha = 0;
-        if (alpha >= beta) return alpha;
+        if (alpha >= beta)
+        {
+#ifdef ENABLE_SEARCH_TRACE
+			trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
+#endif // ENABLE_SEARCH_TRACE
+            return alpha;
+        }
     }
 
     // maximum search depth reached, enter quiescence search to find final evaluation
@@ -1082,6 +1166,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             CheckInsufficientMaterial(node.position) ||
             SearchUtils::IsRepetition(node, ctx.game))
         {
+#ifdef ENABLE_SEARCH_TRACE
+            trace.OnNodeExit(SearchTrace::ExitReason::Draw, 0);
+#endif // ENABLE_SEARCH_TRACE
             return 0;
         }
     }
@@ -1093,7 +1180,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node.height, alpha);
         beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node.height - 1, beta);
-        if (alpha >= beta) return alpha;
+        if (alpha >= beta)
+        {
+#ifdef ENABLE_SEARCH_TRACE
+			trace.OnNodeExit(SearchTrace::ExitReason::MateDistancePruning, alpha);
+#endif // ENABLE_SEARCH_TRACE
+            return alpha;
+        }
     }
 
     const ScoreType oldAlpha = node.alpha;
@@ -1106,6 +1199,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType ttScore = InvalidValue;
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
+#ifdef COLLECT_SEARCH_STATS
+		ctx.stats.ttHits++;
+#endif // COLLECT_SEARCH_STATS
+
         staticEval = ttEntry.staticEval;
 
         ttScore = ScoreFromTT(ttEntry.score, node.height, position.GetHalfMoveCount());
@@ -1117,13 +1214,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ttEntry.depth >= node.depth &&
             position.GetHalfMoveCount() < 80)
         {
-#ifdef COLLECT_SEARCH_STATS
-            ctx.stats.ttHits++;
-#endif // COLLECT_SEARCH_STATS
+            // transposition table cutoff
+            ScoreType ttCutoffValue = InvalidValue;
+			if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
+			else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = alpha;
+			else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = beta;
 
-            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
+            if (ttCutoffValue != InvalidValue)
+            {
+#ifdef ENABLE_SEARCH_TRACE
+                trace.OnNodeExit(SearchTrace::ExitReason::TTCutoff, ttCutoffValue);
+#endif // ENABLE_SEARCH_TRACE
+                return ttCutoffValue;
+            }
         }
     }
 
@@ -1165,6 +1268,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
 
+#ifdef ENABLE_SEARCH_TRACE
+				trace.OnNodeExit(SearchTrace::ExitReason::TBHit, tbValue);
+#endif // ENABLE_SEARCH_TRACE
                 return tbValue;
             }
         }
@@ -1233,6 +1339,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval <= KnownWinValue &&
             staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
         {
+#ifdef ENABLE_SEARCH_TRACE
+			trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
+#endif // ENABLE_SEARCH_TRACE
             return staticEval;
         }
 
@@ -1242,6 +1351,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             staticEval > -KnownWinValue &&
             staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
         {
+#ifdef ENABLE_SEARCH_TRACE
+			trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
+#endif // ENABLE_SEARCH_TRACE
             return staticEval;
         }
 
@@ -1254,6 +1366,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             const ScoreType qScore = QuiescenceNegaMax(thread, node, ctx);
             if (qScore < beta)
             {
+#ifdef ENABLE_SEARCH_TRACE
+				trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
+#endif // ENABLE_SEARCH_TRACE
                 return qScore;
             }
         }
@@ -1298,7 +1413,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                         nullMoveScore = beta;
 
                     if (std::abs(beta) < KnownWinValue && node.depth < 10)
+                    {
+#ifdef ENABLE_SEARCH_TRACE
+						trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
+#endif // ENABLE_SEARCH_TRACE
                         return nullMoveScore;
+                    }
 
                     node.depth -= NullMoveReductions_ReSearchDepthReduction;
 
@@ -1446,7 +1566,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             // Static Exchange Evaluation pruning
             // skip all moves that are bad according to SEE
-            // the higher depth is, the less agressing pruning is
+            // the higher depth is, the less aggressive pruning is
             if (move.IsCapture())
             {
                 if (node.depth <= 4 &&
@@ -1519,6 +1639,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 // if second best move beats current beta, there most likely would be beta cutoff
                 // when searching it at full depth
+#ifdef ENABLE_SEARCH_TRACE
+				trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
+#endif // ENABLE_SEARCH_TRACE
                 return singularScore;
             }
             else if (ttScore >= beta)
@@ -1702,7 +1825,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         if (filteredSomeMove)
         {
-            return -InfValue;
+            bestValue = -InfValue;
         }
         else
         {
@@ -1710,9 +1833,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             // write TT entry so it will overwrite any incorrect entry coming from QSearch
             ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), bestValue, INT8_MAX, TTEntry::Bounds::Exact);
-
-            return bestValue;
         }
+
+#ifdef ENABLE_SEARCH_TRACE
+		trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue);
+#endif // ENABLE_SEARCH_TRACE
+        return bestValue;
     }
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1768,5 +1894,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
     }
 
+#ifdef ENABLE_SEARCH_TRACE
+	trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue, bestMoves[0]);
+#endif // ENABLE_SEARCH_TRACE
     return bestValue;
 }
