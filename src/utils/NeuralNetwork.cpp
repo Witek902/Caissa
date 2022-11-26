@@ -2,6 +2,7 @@
 #include "ThreadPool.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
+#include "minitrace/minitrace.h"
 
 #include <random>
 #include <cassert>
@@ -707,6 +708,8 @@ const Values& NeuralNetwork::Run(uint32_t numFeatures, const ActiveFeature* feat
 
 void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay)
 {
+    MTR_SCOPE("Layer::UpdateWeights", "UpdateWeights");
+
     ASSERT(gradients.m_values.size() == (numInputs + 1) * numOutputs);
 
     const float cRho = 0.95f;
@@ -829,7 +832,21 @@ void Gradients::Accumulate(Gradients& rhs)
             m_dirty[i] = true;
             rhs.m_dirty[i] = false;
 
-			for (size_t j = i * m_numOutputs; j < (i + 1) * m_numOutputs; ++j)
+            size_t j = i * m_numOutputs;
+            const size_t j_max = (i + 1) * m_numOutputs;
+
+#ifdef USE_AVX
+            float* values = m_values.data();
+            float* rhsValues = rhs.m_values.data();
+            for (; j + 8 <= j_max; j += 8)
+            {
+                _mm256_store_ps(values + j,
+                                _mm256_add_ps(_mm256_load_ps(values + j), _mm256_load_ps(rhsValues + j)));
+                _mm256_store_ps(rhsValues + j, _mm256_setzero_ps());
+            }
+#endif // USE_AVX
+
+			for (; j < j_max; ++j)
 			{
                 m_values[j] += rhs.m_values[j];
                 rhs.m_values[j] = 0.0f;
@@ -859,14 +876,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
     for (size_t batchIdx = 0; batchIdx < numBatches; ++batchIdx)
     {
-        if (batchIdx > 0)
-        {
-            taskBuilder->Fence();
-        }
-
-        // clear accumulated gradients
-        taskBuilder->ParallelFor("ClearGradients", (uint32_t)m_perThreadData.size(),
-                                 [this, &network](const TaskContext&, uint32_t threadIdx)
+        const auto clearGradientsFunc = [this, &network](uint32_t threadIdx) INLINE_LAMBDA
         {
             PerThreadData& threadData = m_perThreadData[threadIdx];
 
@@ -878,14 +888,11 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             {
                 std::fill(threadData.gradients[i].m_values.begin(), threadData.gradients[i].m_values.end(), 0.0f);
             }
-        });
+        };
 
-        taskBuilder->Fence();
-
-        taskBuilder->ParallelFor("Backpropagate", (uint32_t)params.batchSize,
-                                 [this, &network, &trainingSet, batchIdx, params](const TaskContext& taskCtx, uint32_t indexInBatch)
+        const auto backpropagateFunc = [this, &network, &trainingSet, batchIdx, params](uint32_t threadIdx, uint32_t indexInBatch) INLINE_LAMBDA
         {
-            PerThreadData& perThreadData = m_perThreadData[taskCtx.threadId];
+            PerThreadData& perThreadData = m_perThreadData[threadIdx];
             NeuralNetworkRunContext& ctx = perThreadData.runContext;
 
             const size_t vecIndex = batchIdx * params.batchSize + indexInBatch;
@@ -938,14 +945,11 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                     network.layers[i].Backpropagate(ctx.layers[i + 1].inputGradient, ctx.layers[i], perThreadData.gradients[i]);
                 }
             }
-        });
+        };
 
-        taskBuilder->Fence();
-
-        taskBuilder->Task("UpdateWeights",
-                          [this, &network, params](const TaskContext&)
+        const auto updateWeightsFunc = [this, &network, params]() INLINE_LAMBDA
         {
-            const float gradientScale = 1.0f / (float)params.batchSize;
+            const float gradientScale = 1.0f;  // (float)params.batchSize;
             for (size_t layerIdx = 0; layerIdx < network.layers.size(); ++layerIdx)
             {
                 Layer& layer = network.layers[layerIdx];
@@ -980,40 +984,87 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                 }
 
                 // accumulate gradients from all per-thread gradients
-                for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                 {
-                    Gradients& targetGradients = m_perThreadData.front().gradients[layerIdx];
-                    Gradients& srcGradients = m_perThreadData[threadIdx].gradients[layerIdx];
-
-                    const size_t numGradients = targetGradients.m_values.size();
-                    ASSERT(srcGradients.m_values.size() == numGradients);
-
-                    if (layerIdx == 0)
+                    MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
+                    for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                     {
-                        // in case of first layer copy only dirty gradients
-                        targetGradients.Accumulate(srcGradients);
-                    }
-                    else
-                    {
-                        for (size_t i = 0; i <= layer.numInputs; ++i)
+                        Gradients& targetGradients = m_perThreadData.front().gradients[layerIdx];
+                        Gradients& srcGradients = m_perThreadData[threadIdx].gradients[layerIdx];
+
+                        const size_t numGradients = targetGradients.m_values.size();
+                        ASSERT(srcGradients.m_values.size() == numGradients);
+
+                        if (layerIdx == 0)
                         {
-                            targetGradients.m_dirty[i] = true;
+                            // in case of first layer copy only dirty gradients
+                            targetGradients.Accumulate(srcGradients);
                         }
-
-                        for (size_t i = 0; i < numGradients; ++i)
+                        else
                         {
-                            targetGradients.m_values[i] += srcGradients.m_values[i];
+                            for (size_t i = 0; i <= layer.numInputs; ++i)
+                            {
+                                targetGradients.m_dirty[i] = true;
+                            }
+
+                            for (size_t i = 0; i < numGradients; ++i)
+                            {
+                                targetGradients.m_values[i] += srcGradients.m_values[i];
+                            }
                         }
                     }
                 }
 
                 layer.UpdateWeights(
-                    params.learningRate, m_perThreadData.front().gradients[layerIdx], gradientScale,\
+                    params.learningRate, m_perThreadData.front().gradients[layerIdx], gradientScale,
                     params.clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f,
                     params.clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f,
                     weightDecay);
             }
-        });
+        };
+
+        if (taskBuilder) // multi-threaded
+        {
+            if (batchIdx > 0)
+            {
+                taskBuilder->Fence();
+            }
+
+            // clear accumulated gradients
+            taskBuilder->ParallelFor("ClearGradients", (uint32_t)m_perThreadData.size(),
+                                     [this, &network, clearGradientsFunc](const TaskContext&, uint32_t threadIdx)
+            {
+                clearGradientsFunc(threadIdx);
+            });
+
+            taskBuilder->Fence();
+
+            taskBuilder->ParallelFor("Backpropagate", (uint32_t)params.batchSize,
+                                     [this, &network, &trainingSet, backpropagateFunc, batchIdx, params](const TaskContext& taskCtx, uint32_t indexInBatch)
+            {
+                backpropagateFunc(taskCtx.threadId, indexInBatch);
+            });
+
+            taskBuilder->Fence();
+
+            taskBuilder->Task("UpdateWeights",
+                              [this, &network, updateWeightsFunc, params](const TaskContext&)
+            {
+                updateWeightsFunc();
+            });
+        }
+        else // single-threaded
+        {
+            const uint32_t dummyThreadIdx = 0;
+
+            clearGradientsFunc(dummyThreadIdx);
+
+            for (uint32_t indexInBatch = 0; indexInBatch < (uint32_t)params.batchSize; ++indexInBatch)
+            {
+                backpropagateFunc(dummyThreadIdx, indexInBatch);
+            }
+
+            updateWeightsFunc();
+        }
     }
 }
 

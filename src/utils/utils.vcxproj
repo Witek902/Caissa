@@ -45,6 +45,26 @@
     <ClCompile Include="GameCollection.cpp" />
     <ClCompile Include="GameTests.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="minitrace\minitrace.c">
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Final|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Final-BMI2|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug-BMI2|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Final-POPCNT|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug-POPCNT|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release-POPCNT|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release-BMI2|x64'">CompileAsC</CompileAs>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Final|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Final-BMI2|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug-BMI2|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Final-POPCNT|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug-POPCNT|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release-POPCNT|x64'">Level1</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release-BMI2|x64'">Level1</WarningLevel>
+    </ClCompile>
     <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="NetworkTrainer.cpp" />
     <ClCompile Include="NeuralNetwork.cpp" />
@@ -60,6 +80,7 @@
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="GameCollection.hpp" />
+    <ClInclude Include="minitrace\minitrace.h" />
     <ClInclude Include="NeuralNetwork.hpp" />
     <ClInclude Include="Stream.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
