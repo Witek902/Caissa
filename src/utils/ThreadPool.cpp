@@ -1,5 +1,6 @@
 #include "ThreadPool.hpp"
 #include "../backend/Waitable.hpp"
+#include "minitrace/minitrace.h"
 
 #include <assert.h>
 
@@ -65,6 +66,10 @@ ThreadPool& ThreadPool::GetInstance()
 ThreadPool::ThreadPool()
     : mFirstFreeTask(InvalidTaskID)
 {
+	mtr_init("trace.json");
+
+    MTR_META_THREAD_NAME("Main Thread");
+
     // TODO make it configurable
     InitTasksTable(TasksCapacity);
 
@@ -89,6 +94,9 @@ ThreadPool::~ThreadPool()
     {
         thread->mThread.join();
     }
+
+	mtr_flush();
+	mtr_shutdown();
 }
 
 bool ThreadPool::InitTasksTable(uint32_t newSize)
@@ -118,6 +126,10 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
     TaskContext context;
     context.pool = this;
     context.threadId = thread->mId;
+
+    char threadName[16];
+    sprintf(threadName, "Worker %u", thread->mId);
+    MTR_META_THREAD_NAME(threadName);
 
     for (;;)
     {
@@ -169,8 +181,12 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
                 (void)oldState;
             }
 
+            MTR_BEGIN("Task", task->mDebugName);
+
             // execute
             task->mCallback(context);
+
+            MTR_END("Task", task->mDebugName);
 
             // Executing -> Finished
             {

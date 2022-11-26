@@ -9,6 +9,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
+    <Filter Include="minitrace">
+      <UniqueIdentifier>{c0af71b6-e32e-4279-af9d-646488c99e7b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SelfPlay.cpp">
@@ -62,6 +65,9 @@
     <ClCompile Include="TrainerCommon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="minitrace\minitrace.c">
+      <Filter>minitrace</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp">
@@ -81,6 +87,9 @@
     </ClInclude>
     <ClInclude Include="TrainerCommon.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minitrace\minitrace.h">
+      <Filter>minitrace</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
