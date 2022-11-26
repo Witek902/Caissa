@@ -1127,7 +1127,7 @@ uint32_t Position::ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMap
     {
         bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
-            outFeatures[numFeatures++] = (uint16_t)(numInputs + 32u * kingSquareIndex + (square ^ bitFlipMask));
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + 64u * kingSquareIndex + (square ^ bitFlipMask));
         });
         numInputs += 32 * 64;
     };
