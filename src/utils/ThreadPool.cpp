@@ -519,7 +519,7 @@ void TaskBuilder::CustomTask(TaskID customTask)
     mPendingTasks[mNumPendingTasks++] = taskID;
 }
 
-void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const ParallelForTaskFunction& func)
+void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const ParallelForTaskFunction& func, uint32_t maxThread)
 {
     ThreadPool& tp = ThreadPool::GetInstance();
 
@@ -538,6 +538,11 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
 
     const uint32_t numThreads = std::thread::hardware_concurrency();
     uint32_t numTasksToSpawn = std::min(arraySize, numThreads);
+
+    if (maxThread > 1)
+    {
+        numTasksToSpawn = std::min(numThreads, maxThread);
+    }
 
     struct alignas(64) ThreadData
     {

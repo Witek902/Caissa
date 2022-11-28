@@ -229,7 +229,7 @@ public:
     void CustomTask(TaskID customTask);
 
     // push parallel-for task
-    void ParallelFor(const char* debugName, uint32_t arraySize, const ParallelForTaskFunction& func);
+    void ParallelFor(const char* debugName, uint32_t arraySize, const ParallelForTaskFunction& func, uint32_t maxThread = 0);
 
     // Push a sync point
     // All tasks pushed after the fence will start only when all the tasks pushed before the fence finish execution
