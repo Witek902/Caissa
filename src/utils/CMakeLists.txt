@@ -1,4 +1,4 @@
-file(GLOB CHESS_UTILS_SOURCES *.cpp)
+file(GLOB CHESS_UTILS_SOURCES *.cpp minitrace/*.c)
 
 add_executable(utils ${CHESS_UTILS_SOURCES})
 
