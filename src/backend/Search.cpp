@@ -154,11 +154,32 @@ void Search::Stats::Append(ThreadStats& threadStats, bool flush)
 Search::Search()
 {
     BuildMoveReductionTable();
-    mThreadData.resize(1);
+
+    mThreadData.emplace_back(std::make_unique<ThreadData>());
+    mThreadData.front()->isMainThread = true;
 }
 
 Search::~Search()
 {
+    StopWorkerThreads();
+}
+
+void Search::StopWorkerThreads()
+{
+    for (size_t i = 1; i < mThreadData.size(); ++i)
+    {
+        const ThreadDataPtr& threadData = mThreadData[i];
+        std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
+        threadData->stopThread = true;
+        threadData->newTaskCV.notify_one();
+    }
+
+    for (size_t i = 1; i < mThreadData.size(); ++i)
+    {
+        mThreadData[i]->thread.join();
+    }
+
+    mThreadData.erase(mThreadData.begin() + 1, mThreadData.end());
 }
 
 void Search::BuildMoveReductionTable()
@@ -178,16 +199,17 @@ void Search::BuildMoveReductionTable()
 
 void Search::Clear()
 {
-    for (ThreadData& threadData : mThreadData)
+    for (const ThreadDataPtr& threadData : mThreadData)
     {
-        threadData.moveOrderer.Clear();
-        threadData.stats = ThreadStats{};
+        ASSERT(threadData);
+        threadData->moveOrderer.Clear();
+        threadData->stats = ThreadStats{};
     }
 }
 
 const MoveOrderer& Search::GetMoveOrderer() const
 {
-    return mThreadData.front().moveOrderer;
+    return mThreadData.front()->moveOrderer;
 }
 
 bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode)
@@ -298,13 +320,10 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
     Stats globalStats;
 
-    mThreadData.resize(param.numThreads);
-    mThreadData[0].isMainThread = true;
-
     // Quiescence search debugging 
     if (param.limits.maxDepth == 0)
     {
-        ThreadData& thread = mThreadData[0];
+        ThreadData& thread = *mThreadData.front();
 
         NodeInfo rootNode;
         rootNode.position = game.GetPosition();
@@ -335,28 +354,65 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
     }
 
-    if (param.numThreads > 1)
+    // kick off worker threads
+    for (uint32_t i = 1; i < param.numThreads; ++i)
     {
-        std::vector<std::thread> threads;
-        threads.reserve(param.numThreads);
-
-        for (uint32_t i = param.numThreads; i-- > 0; )
+        // spawn missing threads
+        if (mThreadData.size() < param.numThreads)
         {
-            // NOTE: can't capture everything by reference, because lambda is running in a thread
-            threads.emplace_back([this, i, numPvLines, &game, &param, &globalStats, &outResult]() INLINE_LAMBDA
+            mThreadData.emplace_back(std::make_unique<ThreadData>());
+            mThreadData.back()->thread = std::thread(Search::WorkerThreadCallback, mThreadData.back().get());
+        }
+
+        const ThreadDataPtr& threadData = mThreadData[i];
+        {
+            std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
+            ASSERT(!threadData->callback);
+            threadData->callback = [this, i, numPvLines, &game, &param, &globalStats]()
             {
-                Search_Internal(i, numPvLines, game, param, globalStats, outResult);
-            });
+                Search_Internal(i, numPvLines, game, param, globalStats, nullptr);
+            };
+        }
+        threadData->newTaskCV.notify_one();
+    }
+        
+    // do search on main thread
+    Search_Internal(0, numPvLines, game, param, globalStats, &outResult);
+
+    // wait for worker threads
+    for (uint32_t i = 1; i < param.numThreads; ++i)
+    {
+        const ThreadDataPtr& threadData = mThreadData[i];
+        std::unique_lock<std::mutex> lock(threadData->taskFinishedMutex);
+        threadData->taskFinishedCV.wait(lock, [&threadData]() { return threadData->taskFinished; });
+        threadData->taskFinished = false;
+    }
+}
+
+void Search::WorkerThreadCallback(ThreadData* threadData)
+{
+    while (!threadData->stopThread)
+    {
+        {
+            // wait for task
+            std::function<void()> callback;
+            {
+                std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
+                threadData->newTaskCV.wait(lock, [threadData]() { return threadData->callback || threadData->stopThread; });
+                if (threadData->stopThread) break;
+                callback = std::move(threadData->callback);
+            }
+
+            callback();
         }
 
-        for (uint32_t threadID = 0; threadID < param.numThreads; ++threadID)
+        // notify main thread
         {
-            threads[threadID].join();
+            std::unique_lock<std::mutex> lock(threadData->taskFinishedMutex);
+            ASSERT(!threadData->taskFinished);
+            threadData->taskFinished = true;
         }
-    }
-    else
-    {
-        Search_Internal(0, numPvLines, game, param, globalStats, outResult);
+        threadData->taskFinishedCV.notify_one();
     }
 }
 
@@ -495,15 +551,18 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
         << std::endl;
 }
 
-void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult& outResult)
+void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult* outResult)
 {
     const bool isMainThread = threadID == 0;
-    ThreadData& thread = mThreadData[threadID];
+    ThreadData& thread = *(mThreadData[threadID]);
 
     std::vector<Move> pvMovesSoFar;
     pvMovesSoFar.reserve(param.excludedMoves.size() + numPvLines);
 
-    outResult.resize(numPvLines);
+    if (outResult)
+    {
+        outResult->resize(numPvLines);
+    }
 
     thread.stats = ThreadStats{};
     thread.moveOrderer.NewSearch();
@@ -572,9 +631,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ASSERT(!pvLine.moves.empty());
 
             // only main thread writes out final PV line
-            if (isMainThread)
+            if (outResult)
             {
-                outResult[pvIndex] = pvLine;
+                (*outResult)[pvIndex] = pvLine;
             }
 
             // update mate counter
@@ -606,11 +665,14 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         {
             if (isMainThread)
             {
-                // make sure all PV lines are correct
-                for (uint32_t i = 0; i < numPvLines; ++i)
+                if (outResult)
                 {
-                    ASSERT(outResult[i].score > -CheckmateValue && outResult[i].score < CheckmateValue);
-                    ASSERT(!outResult[i].moves.empty());
+                    // make sure all PV lines are correct
+                    for (uint32_t i = 0; i < numPvLines; ++i)
+                    {
+                        ASSERT((*outResult)[i].score > -CheckmateValue && (*outResult)[i].score < CheckmateValue);
+                        ASSERT(!(*outResult)[i].moves.empty());
+                    }
                 }
 
                 // stop other threads

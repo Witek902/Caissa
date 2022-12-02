@@ -11,7 +11,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.4.8"
+#define VersionNumber "1.4.9_mt"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -176,6 +176,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
                 offset++;
             }
 
+            Command_Stop();
             Command_SetOption(args[2], commandString.substr(offset));
         }
         else
@@ -716,8 +717,14 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else if (lowerCaseName == "threads")
     {
-        mOptions.threads = atoi(value.c_str());
-        mOptions.threads = std::max(1u, std::min(c_MaxNumThreads, mOptions.threads));
+        uint32_t newNumThreads = atoi(value.c_str());
+        newNumThreads = std::max(1u, std::min(c_MaxNumThreads, newNumThreads));
+
+        if (mOptions.threads != newNumThreads)
+        {
+            mSearch.StopWorkerThreads();
+            mOptions.threads = newNumThreads;
+        }
     }
     else if (lowerCaseName == "moveoverhead")
     {
