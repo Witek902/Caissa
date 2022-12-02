@@ -9,6 +9,9 @@
 
 #include <atomic>
 #include <memory>
+#include <thread>
+#include <condition_variable>
+#include <functional>
 
 #ifndef CONFIGURATION_FINAL
 #define COLLECT_SEARCH_STATS
@@ -160,6 +163,7 @@ public:
     ~Search();
 
     void Clear();
+    void StopWorkerThreads();
 
     void DoSearch(const Game& game, SearchParam& param, SearchResult& outResult);
 
@@ -232,6 +236,17 @@ private:
 
     struct ThreadData
     {
+        std::atomic<bool> stopThread = false;
+        std::thread thread;
+
+        std::condition_variable taskFinishedCV;
+        std::mutex taskFinishedMutex;
+        bool taskFinished = false;
+
+        std::condition_variable newTaskCV;
+        std::mutex newTaskMutex;
+        std::function<void()> callback;
+
         bool isMainThread = false;
 
         // search depth at the root node in current iterative deepening step
@@ -251,6 +266,8 @@ private:
         NNEvaluatorContextPtr nnContextStack[MaxSearchDepth];
 
         ThreadData();
+        ThreadData(const ThreadData&) = delete;
+        ThreadData(ThreadData&&) = delete;
 
         NNEvaluatorContext* GetNNEvaluatorContext(uint32_t height);
 
@@ -258,17 +275,21 @@ private:
         const Move GetPvMove(const NodeInfo& node) const;
     };
 
-    std::vector<ThreadData, Allocator<ThreadData>> mThreadData;
+    using ThreadDataPtr = std::unique_ptr<ThreadData>;
+
+    std::vector<ThreadDataPtr> mThreadData;
 
     static constexpr uint32_t LMRTableSize = 64;
     uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
 
     void BuildMoveReductionTable();
 
+    static void WorkerThreadCallback(ThreadData* threadData);
+
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
-    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult& outResult);
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult* outResult);
 
     bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
 
