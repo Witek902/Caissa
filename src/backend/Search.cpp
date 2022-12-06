@@ -38,8 +38,8 @@ static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
 
 static const int32_t MaxExtension = 2;
 
-static const int32_t MaxDepthReduction = 8;
-static const int32_t LateMoveReductionStartDepth = 3;
+static const int32_t MaxDepthReduction = 12;
+static const int32_t LateMoveReductionStartDepth = 2;
 
 static const int32_t AspirationWindowDepthStart = 6;
 static const int32_t AspirationWindowMaxSize = 500;
@@ -1695,7 +1695,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // limit reduction, don't drop into QS
-        depthReduction = std::clamp(std::min(depthReduction, MaxDepthReduction), 0, node.depth + moveExtension - 1);
+        depthReduction = std::min(depthReduction, MaxDepthReduction);
+        depthReduction = std::clamp(depthReduction, 0, node.depth + moveExtension - 1);
 
         ScoreType score = InvalidValue;
 
