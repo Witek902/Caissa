@@ -81,6 +81,14 @@ INLINE static void AppendFeatureIndex(uint16_t featureIndex, uint16_t addedFeatu
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, NetworkInputMapping mapping)
 {
     ASSERT(node.nnContext);
+
+#ifndef VALIDATE_NETWORK_OUTPUT
+	if (node.nnContext->nnScore != InvalidValue)
+	{
+		return node.nnContext->nnScore;
+	}
+#endif // VALIDATE_NETWORK_OUTPUT
+
     const uint32_t perspective = (uint32_t)node.position.GetSideToMove();
     nn::Accumulator& accumulator = node.nnContext->accumulator[perspective];
 
@@ -197,10 +205,17 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         const int32_t nnOutputReference = Evaluate(network, node.position, mapping);
         ASSERT(nnOutput == nnOutputReference);
     }
+	if (node.nnContext->nnScore != InvalidValue)
+	{
+        ASSERT(node.nnContext->nnScore == nnOutput);
+	}
 #endif // VALIDATE_NETWORK_OUTPUT
 
     // mark accumulator as computed
     node.nnContext->accumDirty[perspective] = false;
+
+    // cache NN output
+    node.nnContext->nnScore = nnOutput;
 
     return nnOutput;
 }
