@@ -52,6 +52,9 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 	uint32_t numAddedPieces;
 	uint32_t numRemovedPieces;
 
+	// cache NN output
+	int32_t nnScore;
+
 	void* operator new(size_t size)
 	{
 		return AlignedMalloc(size, CACHELINE_SIZE);
@@ -73,6 +76,7 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 		accumDirty[1] = true;
 		numAddedPieces = 0;
 		numRemovedPieces = 0;
+		nnScore = InvalidValue;
 	}
 };
 
