@@ -849,6 +849,21 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
     return pvMove;
 }
 
+static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
+{
+    // TODO analyze history moves, scale down when moving same piece all the time
+
+    int32_t adjustedScore = rawScore;
+    
+    if (std::abs(rawScore) < KnownWinValue)
+    {
+        // scale down when approaching 50-move draw
+        adjustedScore = (int32_t)rawScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
+    }
+
+    return static_cast<ScoreType>(adjustedScore);
+}
+
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.alpha < node.beta);
@@ -928,13 +943,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ASSERT(staticEval != InvalidValue);
 
-        bestValue = staticEval;
+        const ScoreType adjustedEvalScore = AdjustEvalScore(staticEval, node);
+
+        bestValue = adjustedEvalScore;
 
         // try to use TT score for better score estimate
         if (std::abs(ttScore) < KnownWinValue)
         {
-            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval) ||
+            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > adjustedEvalScore) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < adjustedEvalScore) ||
                 (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
                 bestValue = ttScore;
@@ -1294,40 +1311,44 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         ASSERT(staticEval != InvalidValue);
 
+        // adjust static eval based on node path
+        node.staticEval = AdjustEvalScore(staticEval, node);
+
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
         {
-            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > staticEval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < staticEval) ||
+            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > node.staticEval) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < node.staticEval) ||
                 (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
-                staticEval = ttScore;
+                node.staticEval = ttScore;
             }
         }
-
-        node.staticEval = staticEval;
     }
-
-    // TODO use proper stack
-    const NodeInfo* prevNodes[4] = { nullptr };
-    prevNodes[0] = node.parentNode;
-    prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     int32_t evalImprovement = 0;
-    if (prevNodes[1] && prevNodes[1]->staticEval != InvalidValue)
+    if (!node.isInCheck)
     {
-        evalImprovement = staticEval - prevNodes[1]->staticEval;
-    }
-    else
-    {
-        prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
-        prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
+		// TODO use proper stack
+		const NodeInfo* prevNodes[4] = { nullptr };
+		prevNodes[0] = node.parentNode;
+		prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
 
-        if (prevNodes[3] && prevNodes[3]->staticEval != InvalidValue)
+        if (prevNodes[1] && prevNodes[1]->staticEval != InvalidValue)
         {
-            evalImprovement = staticEval - prevNodes[3]->staticEval;
+            evalImprovement = node.staticEval - prevNodes[1]->staticEval;
+        }
+        else
+        {
+            prevNodes[2] = prevNodes[1] ? prevNodes[1]->parentNode : nullptr;
+            prevNodes[3] = prevNodes[2] ? prevNodes[2]->parentNode : nullptr;
+
+            if (prevNodes[3] && prevNodes[3]->staticEval != InvalidValue)
+            {
+                evalImprovement = node.staticEval - prevNodes[3]->staticEval;
+            }
         }
     }
     const bool isImproving = evalImprovement >= -5; // leave some small margin
@@ -1336,32 +1357,32 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     {
         // Futility/Beta Pruning
         if (node.depth <= BetaPruningDepth &&
-            staticEval <= KnownWinValue &&
-            staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
+            node.staticEval <= KnownWinValue &&
+            node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
         {
 #ifdef ENABLE_SEARCH_TRACE
 			trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
-            return staticEval;
+            return node.staticEval;
         }
 
         // Alpha Pruning
         if (node.depth <= AlphaPruningDepth &&
             alpha < KnownWinValue &&
-            staticEval > -KnownWinValue &&
-            staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
+            node.staticEval > -KnownWinValue &&
+            node.staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
         {
 #ifdef ENABLE_SEARCH_TRACE
 			trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
-            return staticEval;
+            return node.staticEval;
         }
 
         // Razoring
         // prune if quiescence search on current position can't beat beta
         if (node.depth <= RazoringStartDepth &&
             beta < KnownWinValue &&
-            staticEval + RazoringMarginBias + RazoringMarginMultiplier * node.depth < beta)
+            node.staticEval + RazoringMarginBias + RazoringMarginMultiplier * node.depth < beta)
         {
             const ScoreType qScore = QuiescenceNegaMax(thread, node, ctx);
             if (qScore < beta)
@@ -1374,7 +1395,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // Null Move Reductions
-        if (staticEval >= beta &&
+        if (node.staticEval >= beta &&
             node.depth >= NullMoveReductionsStartDepth &&
             (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1388,7 +1409,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 const int32_t depthReduction =
                     NullMoveReductions_NullMoveDepthReduction +
                     node.depth / 4 +
-                    std::min(3, int32_t(staticEval - beta) / 256);
+                    std::min(3, int32_t(node.staticEval - beta) / 256);
 
                 NodeInfo childNode;
                 childNode.parentNode = &node;
@@ -1470,7 +1491,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (tbHit) globalDepthReduction++;
 
         // reduce more if entered a winning endgame
-        if (node.previousMove.IsCapture() && staticEval >= KnownWinValue) globalDepthReduction++;
+        if (node.previousMove.IsCapture() && node.staticEval >= KnownWinValue) globalDepthReduction++;
     }
 
     thread.moveOrderer.ClearKillerMoves(node.height + 1);
@@ -1557,8 +1578,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (quietMoveIndex > 1 &&
                     node.depth > 1 && node.depth < 9 &&
-                    staticEval >= -KnownWinValue && staticEval <= KnownWinValue &&
-                    staticEval + 32 * node.depth * node.depth < alpha)
+                    node.staticEval >= -KnownWinValue && node.staticEval <= KnownWinValue &&
+                    node.staticEval + 32 * node.depth * node.depth < alpha)
                 {
                     continue;
                 }

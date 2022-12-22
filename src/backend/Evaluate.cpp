@@ -371,10 +371,5 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
-    // scale down when approaching 50-move draw
-    finalValue = finalValue * (128 - std::max(0, (int32_t)pos.GetHalfMoveCount() - 4)) / 128;
-
-    ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
-
     return (ScoreType)finalValue;
 }
