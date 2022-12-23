@@ -383,7 +383,9 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                 // pawn push bonus
                 if (move.GetPiece() == Piece::Pawn)
                 {
-                    score += 32 * int32_t(move.ToSquare().RelativeRank(pos.GetSideToMove()));
+                    constexpr int32_t bonus[] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
+                    const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
+                    score += bonus[rank];
                 }
 
                 //// penalty for moving uncastled king
