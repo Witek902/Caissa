@@ -20,9 +20,14 @@ namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 10000;
 
-static constexpr PieceScore c_tempoBonus            = S(4, 4);
-static constexpr PieceScore c_castlingRightsBonus   = S(39, 9);
-static constexpr PieceScore c_bishopPairBonus       = S(34, 49);
+static constexpr PieceScore c_tempoBonus            = S(7, 7);
+static constexpr PieceScore c_bishopPairBonus       = S(25, 40);
+static constexpr PieceScore c_castlingRightsBonus   = S(9, 37);
+
+//static constexpr PieceScore c_kingMobilityBonus[] =
+//{
+//    S(33,20), S(26, 3), S(19, 3), S(10, 3), S(0, 0), S(-17, 3), S(-40,7), S(-50,-6), S(-51,-20),
+//};
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 static PackedNeuralNetworkPtr g_mainNeuralNetwork;
@@ -231,6 +236,10 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         }
     }
 
+    const Bitboard occupiedExcludingKing = pos.OccupiedExcludingKing();
+	const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
+	const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
+
     const Square whiteKingSq(FirstBitSet(pos.Whites().king));
     const Square blackKingSq(FirstBitSet(pos.Blacks().king));
 
@@ -317,6 +326,12 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     // castling rights
     value += c_castlingRightsBonus * ((int8_t)PopCount(pos.GetWhitesCastlingRights()) - (int8_t)PopCount(pos.GetBlacksCastlingRights()));
+
+    //{
+    //    value += c_kingMobilityBonus[(Bitboard::GetKingAttacks(pos.Whites().GetKingSquare()) & ~occupiedExcludingKing & ~blackPawnsAttacks).Count()];
+    //    value -= c_kingMobilityBonus[(Bitboard::GetKingAttacks(pos.Blacks().GetKingSquare()) & ~occupiedExcludingKing & ~whitePawnsAttacks).Count()];
+    //}
+
 
     // 0 - endgame, 64 - opening
     const int32_t gamePhase =

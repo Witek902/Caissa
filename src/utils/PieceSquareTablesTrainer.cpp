@@ -24,22 +24,29 @@
 #include <fstream>
 #include <limits.h>
 
-#define USE_CASTLING_RIGHTS
+#define USE_PSQT
+#define USE_BISHOP_PAIR
+//#define USE_CASTLING_RIGHTS
 //#define USE_IMBALANCE
-//#define USE_MOBILITY
-#define USE_PAWN_STRUCTURE
+#define USE_MOBILITY
+//#define USE_PAWN_STRUCTURE
 //#define USE_PASSED_PAWNS
 
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cBatchSize = 128;
+static const uint32_t cNumTrainingVectorsPerIteration = 1024 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
+static const uint32_t cBatchSize = 8192;
 
 static const uint32_t cNumNetworkInputs =
-    2 * 5 +                     // piece values
-    2 * 32 * 64 * 10 +          // king-relative PSQT
-    2                           // bishop pair
+    2 * 5                       // piece values
+#ifdef USE_PSQT
+    + 2 * 32 * 64 * 10 +        // king-relative PSQT
+#endif
+#ifdef USE_BISHOP_PAIR
+    + 2                         // bishop pair
+#endif
 #ifdef USE_IMBALANCE
     + 2 * 55
 #endif
@@ -47,7 +54,7 @@ static const uint32_t cNumNetworkInputs =
     + 2
 #endif
 #ifdef USE_MOBILITY
-    + 2 * (9 + 14 + 15 + 28)
+    + 2 * (9 + 9 + 14 + 15 + 28)
 #endif
 #ifdef USE_PAWN_STRUCTURE
     + 2 * 48 * 48 * 2
@@ -113,6 +120,7 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         inputs.push_back(nn::ActiveFeature{offset++, eg * (wq - bq)});
     }
 
+#ifdef USE_PSQT
     // piece-square tables
     {
         const auto writePieceFeatures = [&](const Bitboard bitboard, const Color color) INLINE_LAMBDA
@@ -172,8 +180,9 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         writePieceFeatures(pos.Blacks().queens, Color::Black);
         offset += 2 * 32 * 64 * 2;
     }
+#endif // USE_PSQT
 
-    // bishop pair
+#ifdef USE_BISHOP_PAIR
     {
         int32_t bishopPair = 0;
         if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) bishopPair += 1;
@@ -185,6 +194,7 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         }
         offset += 2;
     }
+#endif // USE_BISHOP_PAIR
 
 #ifdef USE_IMBALANCE
     {
@@ -222,6 +232,19 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         const Bitboard blockers = pos.Occupied();
         const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
         const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
+
+        // king mobility
+        {
+            const Bitboard attacks = Bitboard::GetKingAttacks(pos.Whites().GetKingSquare()) & ~pos.Occupied() & ~blackPawnsAttacks;
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, eg});
+        }
+        {
+            const Bitboard attacks = Bitboard::GetKingAttacks(pos.Blacks().GetKingSquare()) & ~pos.Occupied() & ~whitePawnsAttacks;
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 0, -mg});
+            inputs.push_back(nn::ActiveFeature{offset + 2 * attacks.Count() + 1, -eg});
+        }
+        offset += 2 * 9;
 
         pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
         {
@@ -396,7 +419,17 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
         offset += 2;
     };
 
-    // PSQT
+    // piece values
+    {
+		std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
+		std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
+		std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
+		std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
+		std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
+		std::cout << std::endl;
+    }
+
+#ifdef USE_PSQT
     {
         const auto printPieceWeights = [&](uint32_t kingSquareIndex, uint32_t pieceType, const char* name)
         {
@@ -422,13 +455,6 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
             psqtFile << "\t}," << std::endl;
         };
 
-        std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
-        std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
-        std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
-        std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
-        std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
-        std::cout << std::endl;
-
         for (uint8_t kingSqIndex = 0; kingSqIndex < 32; ++kingSqIndex)
         {
             const uint8_t kingRank = kingSqIndex / 4;
@@ -453,8 +479,13 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 
         offset += 10 * 32 * 64 * 2;
     }
+#endif // USE_PSQT
 
-    std::cout << "Bishop Pair:           "; printValue(); std::cout << std::endl;
+#ifdef USE_BISHOP_PAIR
+    {
+        std::cout << "Bishop Pair:           "; printValue(); std::cout << std::endl;
+    }
+#endif // USE_BISHOP_PAIR
 
 #ifdef USE_IMBALANCE
     {
@@ -475,6 +506,7 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 #endif // USE_CASTLING_RIGHTS
 
 #ifdef USE_MOBILITY
+    std::cout << "King mobility bonus:   "; for (uint32_t i = 0; i < 9; ++i)   printValue(); std::cout << std::endl;
     std::cout << "Knight mobility bonus: "; for (uint32_t i = 0; i < 9; ++i)   printValue(); std::cout << std::endl;
     std::cout << "Bishop mobility bonus: "; for (uint32_t i = 0; i < 14; ++i)  printValue(); std::cout << std::endl;
     std::cout << "Rook mobility bonus:   "; for (uint32_t i = 0; i < 15; ++i)  printValue(); std::cout << std::endl;
@@ -561,10 +593,9 @@ bool TrainPieceSquareTables()
     nn::NeuralNetworkTrainer trainer;
 
     // reset weights
+    const auto initPieceValueWeights = [&network]()
     {
         float* weights = network.layers[0].weights.data();
-
-        memset(weights, 0, sizeof(float) * (cNumNetworkInputs + 1));
 
         weights[0] = (float)c_pawnValue.mg / c_nnOutputToCentiPawns;
         weights[1] = (float)c_pawnValue.eg / c_nnOutputToCentiPawns;
@@ -576,7 +607,7 @@ bool TrainPieceSquareTables()
         weights[7] = (float)c_rookValue.eg / c_nnOutputToCentiPawns;
         weights[8] = (float)c_queenValue.mg / c_nnOutputToCentiPawns;
         weights[9] = (float)c_queenValue.eg / c_nnOutputToCentiPawns;
-    }
+    };
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -637,89 +668,62 @@ bool TrainPieceSquareTables()
         const float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.001f * iteration));
 
         /*
-        const float bluringStrength = 1.0f / (1.0f + 0.5f * iteration);
-
-        // blur weights
+#ifdef USE_PSQT
         {
-            const nn::Values weightsCopy = network.layers[0].weights;
+            float* psqtWeightsBase = network.layers[0].weights.data() + 10;
 
-            for (uint32_t basePiece = 0; basePiece < 10; ++basePiece)
+            // normalize weights so they don't explode into infinity
+            for (uint32_t pieceIndex = 0; pieceIndex < 5; ++pieceIndex)
             {
-                const float* weightSrc = weightsCopy.data() + 10 + basePiece * 32 * 64 * 2;
-                float* weightDst = network.layers[0].weights.data() + 10 + basePiece * 32 * 64 * 2;
+                float* ourKingWeights = psqtWeightsBase + (2 * pieceIndex + 0) * 32 * 64 * 2;
+                float* theirKingWeights = psqtWeightsBase + (2 * pieceIndex + 1) * 32 * 64 * 2;
 
-                for (uint8_t kingSq = 0; kingSq < 32; ++kingSq)
+                float ourKingWeightsSumMG = 0.0f, ourKingWeightsSumEG = 0.0f;
+                float theirKingWeightsSumMG = 0.0f, theirKingWeightsSumEG = 0.0f;
+
+                for (uint32_t i = 0; i < 32 * 64; ++i)
                 {
-                    const int8_t kingRank = kingSq / 4;
-                    const int8_t kingFile = kingSq % 4;
-
-                    for (uint8_t pieceSq = 0; pieceSq < 64; ++pieceSq)
-                    {
-                        const int8_t pieceRank = pieceSq / 8;
-                        const int8_t pieceFile = pieceSq % 8;
-
-                        if (pieceRank == kingRank && pieceFile == kingFile) continue;
-
-                        // center sample
-                        float sumMG = weightSrc[2 * (64 * kingSq + pieceSq) + 0];
-                        float sumEG = weightSrc[2 * (64 * kingSq + pieceSq) + 1];
-                        float weightSum = 1.0f;
-
-                        // blur with neighboring king locations
-                        for (int8_t kingRankOffset = -1; kingRankOffset <= 1; kingRankOffset++)
-                        {
-                            if (kingRank + kingRankOffset >= 8 || kingRank + kingRankOffset < 0) continue;
-
-                            for (int8_t kingFileOffset = -1; kingFileOffset <= 1; kingFileOffset++)
-                            {
-                                if (kingFile + kingFileOffset >= 4 || kingFile + kingFileOffset < 0) continue;
-                                if (kingFileOffset == 0 && kingRankOffset == 0) continue;
-
-                                const uint32_t kingIndex = 4 * (kingRank + kingRankOffset) + (kingFile + kingFileOffset);
-                                ASSERT(kingIndex < 32);
-
-                                sumMG += bluringStrength * weightSrc[2 * (64 * kingIndex + pieceSq) + 0];
-                                sumEG += bluringStrength * weightSrc[2 * (64 * kingIndex + pieceSq) + 1];
-                                weightSum += bluringStrength;
-                            }
-                        }
-
-                        //// blur with neighboring piece locations
-                        //for (int8_t pieceRankOffset = -1; pieceRankOffset <= 1; pieceRankOffset++)
-                        //{
-                        //    if (pieceRank + pieceRankOffset >= 8 || pieceRank + pieceRankOffset < 0) continue;
-
-                        //    for (int8_t pieceFileOffset = -1; pieceFileOffset <= 1; pieceFileOffset++)
-                        //    {
-                        //        if (pieceFile + pieceFileOffset >= 8 || pieceFile + pieceFileOffset < 0) continue;
-                        //        if (pieceFileOffset == 0 && pieceRankOffset == 0) continue;
-
-                        //        const uint32_t pieceIndex = 8 * (pieceRank + pieceRankOffset) + (pieceFile + pieceFileOffset);
-
-                        //        sumMG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 0];
-                        //        sumEG += bluringStrength * weightSrc[2 * (64 * kingSq + pieceIndex) + 1];
-                        //        weightSum += bluringStrength;
-                        //    }
-                        //}
-
-                        sumMG /= weightSum;
-                        sumEG /= weightSum;
-
-                        // saturate weights so they don't explode to infinite
-                        if (kingRank < 4)
-                        {
-                            if (sumMG > 0.5f) sumMG = 4.0f / (1.0f + expf(-sumMG)) - 2.0f;
-                            if (sumEG > 0.5f) sumEG = 4.0f / (1.0f + expf(-sumEG)) - 2.0f;
-                        }
-
-                        weightDst[2 * (64 * kingSq + pieceSq) + 0] = sumMG;
-                        weightDst[2 * (64 * kingSq + pieceSq) + 1] = sumEG;
-                    }
+                    ourKingWeightsSumMG += ourKingWeights[2 * i + 0];
+                    ourKingWeightsSumEG += ourKingWeights[2 * i + 1];
+                    theirKingWeightsSumMG += theirKingWeights[2 * i + 0];
+                    theirKingWeightsSumEG += theirKingWeights[2 * i + 1];
                 }
-            }
-        }*/
 
-        float trainingTime = 0.0f;
+                //const float offsetMG = (ourKingWeightsSumMG - theirKingWeightsSumMG) / (32 * 64);
+                //const float offsetEG = (ourKingWeightsSumEG - theirKingWeightsSumEG) / (32 * 64);
+
+                const auto saturateWeight = [](float& w) INLINE_LAMBDA
+                {
+                    if (w > 0.5f)
+                    {
+                        w = 1.5f - expf(0.5f - w);
+                    }
+                };
+
+                for (uint32_t i = 0; i < 32 * 64; ++i)
+                {
+                    ourKingWeights[2 * i + 0] -= ourKingWeightsSumMG / (32 * 64);
+                    ourKingWeights[2 * i + 1] -= ourKingWeightsSumEG / (32 * 64);
+                    theirKingWeights[2 * i + 0] -= theirKingWeightsSumMG / (32 * 64);
+                    theirKingWeights[2 * i + 1] -= theirKingWeightsSumEG / (32 * 64);
+
+                    saturateWeight(ourKingWeights[2 * i + 0]);
+                    saturateWeight(ourKingWeights[2 * i + 1]);
+                    saturateWeight(theirKingWeights[2 * i + 0]);
+                    saturateWeight(theirKingWeights[2 * i + 1]);
+                }
+
+                network.layers[0].weights.data()[2 * pieceIndex + 0] += ourKingWeightsSumMG / (32 * 64);
+                network.layers[0].weights.data()[2 * pieceIndex + 0] -= theirKingWeightsSumMG / (32 * 64);
+                network.layers[0].weights.data()[2 * pieceIndex + 1] += ourKingWeightsSumEG / (32 * 64);
+                network.layers[0].weights.data()[2 * pieceIndex + 1] -= theirKingWeightsSumEG / (32 * 64);
+            }
+        }
+#endif // USE_PSQT
+        */
+
+        // force fixed piece values
+        initPieceValueWeights();
 
         // use validation set from previous iteration as training set in the current one
         for (size_t i = 0; i < trainingBatch.size(); ++i)
@@ -736,17 +740,15 @@ bool TrainPieceSquareTables()
                 generateTrainingEntry(validationSet[i]);
             });
 
-            taskBuilder.Task("Train", [&](const TaskContext&)
+            taskBuilder.Task("Train", [&](const TaskContext& ctx)
             {
 				nn::TrainParams params;
 				params.batchSize = cBatchSize;
 				params.learningRate = learningRate;
                 params.clampWeights = false;
 
-                TimePoint trainStartTime = TimePoint::GetCurrent();
-                trainer.Train(network, trainingBatch, params);
-                TimePoint trainEndTime = TimePoint::GetCurrent();
-                trainingTime = (trainEndTime - trainStartTime).ToSeconds();
+				TaskBuilder taskBuilder{ ctx };
+                trainer.Train(network, trainingBatch, params, &taskBuilder);
             });
         }
         waitable.Wait();
@@ -756,7 +758,7 @@ bool TrainPieceSquareTables()
         float minError = std::numeric_limits<float>::max();
         float maxError = -std::numeric_limits<float>::max();
         float errorSum = 0.0f;
-        for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
+        for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
         {
             const std::vector<nn::ActiveFeature>& features = validationSet[i].trainingVector.sparseInputs;
             const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
@@ -777,7 +779,7 @@ bool TrainPieceSquareTables()
             const float sqrError = error * error;
             errorSum += sqrError;
         }
-        errorSum = sqrtf(errorSum / cNumTrainingVectorsPerIteration);
+        errorSum = sqrtf(errorSum / cNumValidationVectorsPerIteration);
 
         float epoch = (float)numTrainingVectorsPassed / (float)entries.size();
         std::cout << std::right << std::fixed << std::setprecision(4) << epoch << " | ";
@@ -787,7 +789,6 @@ bool TrainPieceSquareTables()
         std::cout << std::endl;
 
         const float iterationTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
-        std::cout << "Training  time:    " << (1000000.0f * trainingTime / cNumTrainingVectorsPerIteration) << " us/pos" << std::endl;
         std::cout << "Iteration time:    " << (1000000.0f * iterationTime / cNumTrainingVectorsPerIteration) << " us/pos" << std::endl;
     }
 

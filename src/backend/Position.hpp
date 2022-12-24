@@ -233,8 +233,9 @@ public:
         return 2 + GetNumPiecesExcludingKing();
     }
 
-    // get all occupied pieces bitboard
+    // get occupied squares bitboard
     INLINE Bitboard Occupied() const { return Whites().Occupied() | Blacks().Occupied(); }
+    INLINE Bitboard OccupiedExcludingKing() const { return Whites().OccupiedExcludingKing() | Blacks().OccupiedExcludingKing(); }
 
     // get piece square value
     INLINE int32_t GetPieceSquareValueMG() const { return mPieceSquareValueMG; }

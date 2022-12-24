@@ -53,11 +53,11 @@ using PieceScore = TPieceScore<int16_t>;
 using KingsPerspectivePSQT = int16_t[10][2 * Square::NumSquares];
 extern const KingsPerspectivePSQT PSQT[Square::NumSquares / 2];
 
-static constexpr PieceScore c_pawnValue     = {  100, 125 };
-static constexpr PieceScore c_knightValue   = {  425, 323 };
-static constexpr PieceScore c_bishopValue   = {  421, 373 };
-static constexpr PieceScore c_rookValue     = {  576, 623 };
-static constexpr PieceScore c_queenValue    = { 1380,1086 };
+static constexpr PieceScore c_pawnValue     = {  73,  141 };
+static constexpr PieceScore c_knightValue   = { 291,  380 };
+static constexpr PieceScore c_bishopValue   = { 322,  391 };
+static constexpr PieceScore c_rookValue     = { 397,  639 };
+static constexpr PieceScore c_queenValue    = { 931, 1139 };
 static constexpr PieceScore c_kingValue     = { std::numeric_limits<int16_t>::max(), std::numeric_limits<int16_t>::max() };
 
 static constexpr PieceScore c_pieceValues[] =
