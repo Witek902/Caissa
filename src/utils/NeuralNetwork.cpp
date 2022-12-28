@@ -917,7 +917,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
             // train last layers
             {
-                const float errorScale = 1.0f;
+                const float errorScale = 2.0f;
 
                 // compute gradient (error derivative)
                 if (vec.outputMode == OutputMode::Single)
@@ -962,8 +962,9 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                 {
                     weightQuantizationScale = InputLayerWeightQuantizationScale;
                     biasQuantizationScale = InputLayerBiasQuantizationScale;
-                    weightRange = std::numeric_limits<FirstLayerWeightType>::max();
-                    biasRange = std::numeric_limits<FirstLayerBiasType>::max();
+                    // divide by number of active input features to avoid accumulator overflow
+                    weightRange = (float)std::numeric_limits<FirstLayerWeightType>::max() / 32;
+                    biasRange = (float)std::numeric_limits<FirstLayerBiasType>::max() / 32;
                     weightDecay = 1.0e-7f;
                 }
                 else if (layerIdx + 1 == network.layers.size()) // output layer

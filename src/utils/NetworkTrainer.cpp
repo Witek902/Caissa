@@ -25,10 +25,10 @@
 
 using namespace threadpool;
 
-static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cMaxIterations = 10000000;
+static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cBatchSize = 8192;
+static const uint32_t cBatchSize = 16 * 1024;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
 
@@ -60,7 +60,6 @@ public:
         , m_trainingLog("training.log")
     {
         m_trainingSet.resize(cNumTrainingVectorsPerIteration);
-        m_validationSet.resize(cNumTrainingVectorsPerIteration);
         m_validationPerThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
     }
 
@@ -97,7 +96,6 @@ private:
 
     std::vector<PositionEntry> m_entries;
     std::vector<TrainingEntry> m_trainingSet;
-    std::vector<TrainingEntry> m_validationSet;
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
     alignas(CACHELINE_SIZE)
@@ -120,7 +118,7 @@ private:
 void NetworkTrainer::InitNetwork()
 {
 	m_network.Init(cNumNetworkInputs, { 512, 16, 32, 1 }, nn::ActivationFunction::Sigmoid);
-	m_network.Load("checkpoint.nn");
+	//m_network.Load("checkpoint.nn");
 	m_runCtx.Init(m_network);
 
 	for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -154,6 +152,16 @@ void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
     }
 }
 
+static void ParallelFor(const char* debugName, uint32_t arraySize, const threadpool::ParallelForTaskFunction& func, uint32_t maxThreads = 0)
+{
+	Waitable waitable;
+    {
+        TaskBuilder taskBuilder(waitable);
+        taskBuilder.ParallelFor(debugName, arraySize, func, maxThreads);
+    }
+    waitable.Wait();
+}
+
 void NetworkTrainer::Validate(uint32_t iteration)
 {
     // reset stats
@@ -169,12 +177,12 @@ void NetworkTrainer::Validate(uint32_t iteration)
         {
             ValidationPerThreadData& threadData = m_validationPerThreadData[ctx.threadId];
 
-            const float expectedValue = m_validationSet[i].trainingVector.singleOutput;
+            const float expectedValue = m_trainingSet[i].trainingVector.singleOutput;
 
-            const ScoreType psqtValue = Evaluate(m_validationSet[i].pos, nullptr, false);
-            const ScoreType evalValue = Evaluate(m_validationSet[i].pos);
+            const ScoreType psqtValue = Evaluate(m_trainingSet[i].pos, nullptr, false);
+            const ScoreType evalValue = Evaluate(m_trainingSet[i].pos);
             
-            const std::vector<uint16_t>& features = m_validationSet[i].trainingVector.sparseBinaryInputs;
+            const std::vector<uint16_t>& features = m_trainingSet[i].trainingVector.sparseBinaryInputs;
 
             const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size());
             const float nnPackedValue = PawnToWinProbability(((float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns) / 100.0f);
@@ -185,7 +193,7 @@ void NetworkTrainer::Validate(uint32_t iteration)
             if (i + 1 == cNumValidationVectorsPerIteration)
             {
                 std::cout
-                    << m_validationSet[i].pos.ToFEN() << std::endl << m_validationSet[i].pos.Print() << std::endl
+                    << m_trainingSet[i].pos.ToFEN() << std::endl << m_trainingSet[i].pos.Print() << std::endl
                     << "True Score:     " << expectedValue << " (" << WinProbabilityToCentiPawns(expectedValue) << ")" << std::endl
                     << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
                     << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
@@ -275,19 +283,25 @@ void NetworkTrainer::Train()
 
     LoadAllPositions(m_entries);
 
+    // don't need tablebases after positions are loaded
+    UnloadTablebase();
+
     std::cout << "Training with " << m_entries.size() << " positions" << std::endl;
 
-    std::cout << "Shuffling..." << std::endl;
-    std::shuffle(m_entries.begin(), m_entries.end(), m_randomGenerator);
+    GenerateTrainingSet(m_trainingSet);
 
-    GenerateTrainingSet(m_validationSet);
-
-    std::vector<nn::TrainingVector> batch(m_trainingSet.size());
+    std::vector<nn::TrainingVector> batch(cNumTrainingVectorsPerIteration);
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
+        if ((iteration % 1024) == 0)
+        {
+			std::cout << "Shuffling..." << std::endl;
+			std::shuffle(m_entries.begin(), m_entries.end(), m_randomGenerator);
+        }
+
         float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.00001f * iteration));
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
@@ -295,12 +309,10 @@ void NetworkTrainer::Train()
         prevIterationStartTime = iterationStartTime;
         
         // use validation set from previous iteration as training set in the current one
-        m_trainingSet = m_validationSet;
-
-        for (size_t i = 0; i < m_trainingSet.size(); ++i)
+        ParallelFor("PrepareBatch", cNumTrainingVectorsPerIteration, [&batch, this](const TaskContext&, uint32_t i)
         {
             batch[i] = m_trainingSet[i].trainingVector;
-        }
+        });
 
         // validation vectors generation can be done in parallel with training
         Waitable waitable;
@@ -308,7 +320,7 @@ void NetworkTrainer::Train()
             TaskBuilder taskBuilder{ waitable };
             taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                GenerateTrainingSet(m_validationSet);
+                GenerateTrainingSet(m_trainingSet);
             });
 
             taskBuilder.Task("Train", [this, &batch, &learningRate](const TaskContext& ctx)

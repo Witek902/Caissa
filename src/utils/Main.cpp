@@ -20,15 +20,9 @@ extern void AnalyzeGames();
 
 int main(int argc, const char* argv[])
 {
-    if (argc < 2)
-    {
-        std::cerr << "Missing argument" << std::endl;
-        return 1;
-    }
-
     std::vector<std::string> args;
     {
-        for (int32_t i = 2; i < argc; ++i)
+        for (int32_t i = 1; i < argc; ++i)
         {
             args.push_back(argv[i]);
         }
@@ -38,48 +32,66 @@ int main(int argc, const char* argv[])
     TryLoadingDefaultEvalFile();
     TryLoadingDefaultEndgameEvalFile();
 
-    LoadSyzygyTablebase("C:\\Program Files (x86)\\syzygy\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\wdl\\;D:\\DOWNLOADS\\!TORRENT\\Chess\\dtz\\");
-    LoadGaviotaTablebase("C:\\Program Files (x86)\\gaviota\\");
+    // load optional syzygy
+    for (size_t i = 0; i < args.size(); ++i)
+    {
+        if ((args[i] == "--syzygy") && (i + i < args.size()))
+        {
+            LoadSyzygyTablebase(args[i + 1].c_str());
+            args.erase(args.begin() + i, args.begin() + i + 2);
+        }
+    }
 
-    if (argc > 1 && strcmp(argv[1], "unittest") == 0)
+	if (args.empty())
+	{
+		std::cerr << "Missing argument" << std::endl;
+		return 1;
+	}
+
+    if (args[0] == "unittest")
     {
         RunUnitTests();
     }
-    else if (argc > 2 && strcmp(argv[1], "perftest") == 0)
+    else if (args[0] == "perftest")
     {
         RunPerformanceTests(args);
     }
-    else if (0 == strcmp(argv[1], "selfplay"))
+    else if (args[0] == "selfplay")
     {
         SelfPlay(args);
     }
-    else if (0 == strcmp(argv[1], "testNetwork"))
+    else if (args[0] == "testNetwork")
     {
         TestNetwork();
     }
-    else if (0 == strcmp(argv[1], "trainPieceSquareTables"))
+    else if (args[0] == "trainPieceSquareTables")
     {
         TrainPieceSquareTables();
     }
-    else if (0 == strcmp(argv[1], "trainEndgame"))
+    else if (args[0] == "trainEndgame")
     {
         TrainEndgame();
     }
-    else if (0 == strcmp(argv[1], "generateEndgamePST"))
+    else if (args[0] == "generateEndgamePST")
     {
         GenerateEndgamePieceSquareTables();
     }
-    else if (0 == strcmp(argv[1], "validateEndgame"))
+    else if (args[0] == "validateEndgame")
     {
         ValidateEndgame();
     }
-    else if (0 == strcmp(argv[1], "analyzeGames"))
+    else if (args[0] == "analyzeGames")
     {
         AnalyzeGames();
     }
-    else if (0 == strcmp(argv[1], "trainNetwork"))
+    else if (args[0] == "trainNetwork")
     {
         TrainNetwork();
+    }
+    else
+    {
+		std::cerr << "Unknown option: " << args[0] << std::endl;
+		return 1;
     }
 
     return 0;

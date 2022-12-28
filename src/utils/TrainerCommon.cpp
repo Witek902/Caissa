@@ -52,16 +52,9 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];
 
-            const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
-            const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
-
             if (move.IsQuiet() &&
-                pos.GetNumPieces() < 32 &&
-                pos.GetNumPieces() >= 5 &&
-                pos.GetHalfMoveCount() < 60 &&
-                whitePawnsMoved && blackPawnsMoved &&
-                !pos.IsInCheck() && pos.GetNumLegalMoves() &&
-                std::abs(Evaluate(pos, nullptr, false)) < 1024)
+                pos.GetNumPieces() <= 32 && pos.GetNumPieces() >= 5 &&
+                !pos.IsInCheck())
             {
                 PositionEntry entry{};
 
@@ -77,11 +70,11 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     // blend in future scores into current move score
                     float scoreSum = 0.0f;
                     float weightSum = 0.0f;
-                    const size_t maxLookahead = 10;
+                    const size_t maxLookahead = 6;
                     for (size_t j = 0; j < maxLookahead; ++j)
                     {
                         if (i + j >= game.GetMoves().size()) break;
-                        const float weight = expf(-(float)j * 0.5f);
+                        const float weight = expf(-(float)j * 0.8f);
                         scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
                         weightSum += weight;
                     }
@@ -104,7 +97,7 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     entry.score = std::lerp(score, scoreSum, lambda);
                 }
 
-                const float offset = 0.001f;
+                const float offset = 0.0001f;
                 entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
