@@ -793,3 +793,5 @@ k2N2K1/8/8/8/5R2/3n4/3p4/8 w - - bm Rf7; id "ZPTS.18"; CCC post by Ed Schroeder,
 8/5p2/4b1p1/7R/5K1P/2r3B1/7N/4b1k1 w - - bm Nf3; id "ZPTS.27"; Noam Elkies 1984
 8/8/7p/2R5/4pp1K/8/8/3k2b1 w - - bm Rc4; id "ZPTS.28"; Kricheli 1986
 8/1p5k/1P1p4/3p4/3Pp2p/2K1P2p/7P/8 w - - bm Kb2; id "ZPTS.29"; 1 Kb2! Kg8 2 Ka1!!, draw
+3N4/8/8/7K/5p1n/8/8/3k3n w - - 0 1 bm Nc6;
+2r2rk1/ppR5/1n1n4/3PNP2/3q3p/5Qp1/P5PP/1B3R1K w - - 0 28 bm Rg7+ Rh7;
