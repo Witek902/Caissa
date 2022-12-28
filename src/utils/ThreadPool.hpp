@@ -176,7 +176,7 @@ public:
         DispatchTask(CreateTask(desc));
     }
 
-    size_t GetNumThreads() const { return mThreads.size(); }
+    uint32_t GetNumThreads() const { return static_cast<uint32_t>(mThreads.size()); }
 
 private:
 

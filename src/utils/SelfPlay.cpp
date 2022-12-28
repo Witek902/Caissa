@@ -22,9 +22,18 @@
 #include <string>
 #include <limits.h>
 
+static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
-static const bool outputLabeledPositions = false;
+static const bool printGames = true;
+static const uint32_t c_maxNodes = 75000;
+static const uint32_t c_maxDepth = 15;
+static const int32_t c_maxEval = 2000;
+static const int32_t c_openingMaxEval = 250;
+static const int32_t c_multiPv = 2;
+static const int32_t c_multiPvMaxPly = 40;
+static const int32_t c_multiPvScoreTreshold = 25;
+static const uint32_t c_numRandomMoves = 4;
 
 using namespace threadpool;
 
@@ -162,13 +171,13 @@ void SelfPlay(const std::vector<std::string>& args)
         }
     }
 
-    std::ofstream labeledPositionsFile;
-    if (outputLabeledPositions)
+    std::ofstream quietPositionsFile;
+    if (writeQuietPositions)
     {
-        labeledPositionsFile.open("labeled.epd");
-        if (!labeledPositionsFile.good())
+        quietPositionsFile.open("quietPositions.epd");
+        if (!quietPositionsFile.good())
         {
-            std::cerr << "Failed to open output file (labeled positions)!" << std::endl;
+            std::cerr << "Failed to open quiet positions file!" << std::endl;
             return;
         }
     }
@@ -179,10 +188,9 @@ void SelfPlay(const std::vector<std::string>& args)
     std::vector<TranspositionTable> ttArray;
 
     std::cout << "Allocating transposition table..." << std::endl;
-    ttArray.resize(numThreads);
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray[i].Resize(64ull * 1024ull * 1024ull);
+        ttArray.emplace_back(16ull * 1024ull * 1024ull);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -194,8 +202,9 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Starting games..." << std::endl;
 
-    std::mutex mutex;
-    std::atomic<uint32_t> gameIndex = 0;
+    alignas(CACHELINE_SIZE) std::mutex mutex;
+    alignas(CACHELINE_SIZE) std::atomic<uint32_t> gameIndex = 0;
+    alignas(CACHELINE_SIZE) std::atomic<uint64_t> quietPositionIndex = 0;
 
     const auto gameTask = [&](const TaskContext& context, uint32_t)
     {
@@ -224,7 +233,13 @@ void SelfPlay(const std::vector<std::string>& args)
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
-        if (openingPos.IsMate() || openingPos.IsStalemate() || !openingPos.IsQuiet())
+        for (uint32_t i = 0; i < c_numRandomMoves; ++i)
+        {
+            ApplyRandomMove(gen, openingPos);
+            ApplyRandomMove(gen, openingPos);
+        }
+
+        if (openingPos.IsMate() || openingPos.IsStalemate())
         {
             return;
         }
@@ -235,19 +250,28 @@ void SelfPlay(const std::vector<std::string>& args)
         search.Clear();
         game.Reset(openingPos);
 
-        int32_t scoreDiffTreshold = 20;
-
+        int32_t multiPvScoreTreshold = c_multiPvScoreTreshold;
         uint32_t halfMoveNumber = 0;
         uint32_t drawScoreCounter = 0;
+        uint32_t whiteWinsCounter = 0;
+        uint32_t blackWinsCounter = 0;
+
         for (;; ++halfMoveNumber)
         {
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
+            searchParam.useAspirationWindows = false; // disable aspiration windows so we don't get lower/upper bound scores
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
-            searchParam.limits.maxDepth = 20;
-            searchParam.limits.maxNodes = 500000 - 2000 * std::min(100u, halfMoveNumber) + std::uniform_int_distribution<int32_t>(0, 10000)(gen);
-            searchParam.numPvLines = 1; // halfMoveNumber < 10 ? 2 : 1;
+            searchParam.limits.maxDepth = c_maxDepth;
+            searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 32)(gen);
+            searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
+
+            if (halfMoveNumber == 0)
+            {
+                searchParam.limits.maxDepth *= 2;
+                searchParam.limits.maxNodes *= 2;
+            }
 
             searchResult.clear();
             tt.NextGeneration();
@@ -255,12 +279,11 @@ void SelfPlay(const std::vector<std::string>& args)
 
             if (searchResult.empty())
             {
-                DEBUG_BREAK();
-                break;
+                return;
             }
 
             // skip game if starting position is unbalanced
-            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > 2000)
+            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > c_openingMaxEval)
             {
                 return;
             }
@@ -276,7 +299,7 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 ASSERT(searchResult[i].score <= searchResult[0].score);
                 const int32_t diff = std::abs((int32_t)searchResult[i].score - (int32_t)searchResult[0].score);
-                if (diff > scoreDiffTreshold)
+                if (diff > multiPvScoreTreshold)
                 {
                     searchResult.erase(searchResult.begin() + i, searchResult.end());
                     break;
@@ -291,35 +314,29 @@ void SelfPlay(const std::vector<std::string>& args)
             const Move move = searchResult[moveIndex].moves.front();
 
             ScoreType moveScore = searchResult[moveIndex].score;
-            ScoreType tbScore = searchResult[moveIndex].tbScore;
             if (game.GetSideToMove() == Color::Black)
             {
                 moveScore = -moveScore;
-                if (tbScore != InvalidValue)
-                {
-                    tbScore = -tbScore;
-                }
             }
 
-            // TB adjucation
-            if (tbScore != InvalidValue)
+            if (writeQuietPositions)
             {
-                if (tbScore > 0)
+                if (move.IsQuiet() && game.GetPosition().GetNumPieces() >= 5)
                 {
-                    game.SetScore(Game::Score::WhiteWins);
-                }
-                else if (tbScore < 0)
-                {
-                    game.SetScore(Game::Score::BlackWins);
-                }
-                else
-                {
-                    game.SetScore(Game::Score::Draw);
+                    std::unique_lock<std::mutex> lock(mutex);
+
+                    quietPositionsFile << game.GetPosition().ToFEN() << '\n';
+
+                    quietPositionIndex++;
+                    if (quietPositionIndex % 10000 == 0)
+                    {
+                        std::cout << '\r' << "Generated " << quietPositionIndex << " quiet positions";
+                    }
                 }
             }
 
-            // adjucate draw if eval is zero
-            if (std::abs(moveScore) >= 5)
+            // adjudicate draw if eval is zero
+            if (std::abs(moveScore) >= 2)
             {
                 drawScoreCounter = 0;
             }
@@ -329,22 +346,40 @@ void SelfPlay(const std::vector<std::string>& args)
 
                 if (game.GetPosition().GetNumPieces() < 20 &&
                     drawScoreCounter > 10 &&
-                    halfMoveNumber >= 60 &&
-                    game.GetPosition().GetHalfMoveCount() > 20)
+                    halfMoveNumber >= 40 &&
+                    game.GetPosition().GetHalfMoveCount() > 10)
                 {
                     game.SetScore(Game::Score::Draw);
                 }
             }
 
-            if (std::abs(Evaluate(game.GetPosition(), nullptr, false)) < KnownWinValue && IsMate(moveScore))
+            // adjudicate win
+            if (game.GetPosition().GetNumPieces() < 24 && halfMoveNumber >= 20)
             {
-                if (moveScore > KnownWinValue) game.SetScore(Game::Score::WhiteWins);
-                if (moveScore < -KnownWinValue) game.SetScore(Game::Score::BlackWins);
+                if (moveScore > c_maxEval)
+                {
+                    whiteWinsCounter++;
+                    if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
+                }
+                else
+                {
+                    whiteWinsCounter = 0;
+                }
+
+				if (moveScore < -c_maxEval)
+				{
+					blackWinsCounter++;
+					if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
+				}
+				else
+				{
+                    blackWinsCounter = 0;
+                }
             }
 
-            // reduce treshold of picking worse move
+            // reduce threshold of picking worse move
             // this way the game will be more random at the beginning and there will be less blunders later in the game
-            scoreDiffTreshold = std::max(5, scoreDiffTreshold - 1);
+            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 1);
 
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
@@ -371,47 +406,30 @@ void SelfPlay(const std::vector<std::string>& args)
                 evalProbing.Flush();
             }
 
-            if (outputLabeledPositions)
-            {
-                labeledPositionsFile << openingPos.ToFEN() << " c9 \"";
-                if ((game.GetScore() == Game::Score::WhiteWins && openingPos.GetSideToMove() == Color::White) ||
-                    (game.GetScore() == Game::Score::BlackWins && openingPos.GetSideToMove() == Color::Black))
-                {
-                    labeledPositionsFile << "1-0";
-                }
-                else if ((game.GetScore() == Game::Score::WhiteWins && openingPos.GetSideToMove() == Color::Black) ||
-                         (game.GetScore() == Game::Score::BlackWins && openingPos.GetSideToMove() == Color::White))
-                {
-                    labeledPositionsFile << "0-1";
-                }
-                else
-                {
-                    labeledPositionsFile << "1/2-1/2";
-                }
-                labeledPositionsFile << "\";" << std::endl;
-            }
-
             GameMetadata metadata;
             metadata.roundNumber = index;
             game.SetMetadata(metadata);
 
-            const std::string pgn = game.ToPGN(true);
-
-            std::cout << std::endl << pgn << std::endl;
+            if (printGames)
+            {
+                const std::string pgn = game.ToPGN(true);
+                std::cout << std::endl << pgn << std::endl;
+            }
         }
     };
 
-
-    Waitable waitable;
+    // TODO could just spawn threads instead...
+    for (;;)
     {
-        //const uint32_t numGames = (uint32_t)openingPositions.size();
-        const uint32_t numGames = 100000000;
+        Waitable waitable;
+        {
+            const uint32_t numGamesPerLoop = 4096;
 
-        TaskBuilder taskBuilder(waitable);
-        taskBuilder.ParallelFor("SelfPlay", numGames, gameTask);
+            TaskBuilder taskBuilder(waitable);
+            taskBuilder.ParallelFor("SelfPlay", numGamesPerLoop, gameTask);
+        }
+        waitable.Wait();
     }
-
-    waitable.Wait();
 
 #ifdef COLLECT_ENDGAME_STATISTICS
     PrintEndgameStatistics();
