@@ -30,18 +30,6 @@ using namespace threadpool;
 extern void RunGameTests();
 extern void RunPackedPositionTests();
 
-void RunPerft()
-{
-    const Position pos("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
-
-    auto start = std::chrono::high_resolution_clock::now();
-    //TEST_EXPECT(pos.Perft(4) == 3894594u);
-    TEST_EXPECT(pos.Perft(5) == 164075551u);
-    auto finish = std::chrono::high_resolution_clock::now();
-
-    std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() / 1000000.0 << " s\n";
-}
-
 static void RunBitboardTests()
 {
     // "GetBetween"
@@ -1565,21 +1553,6 @@ static void RunPerftTests()
             TEST_EXPECT(pos.Perft(3) == 134u);
         });
 
-        // Kiwipete
-        taskBuilder.Task("Perft", [](const TaskContext&)
-        {
-            const Position pos("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 0 1");
-            TEST_EXPECT(pos.Perft(1) == 40u);
-        });
-
-        // Kiwipete
-        taskBuilder.Task("Perft", [](const TaskContext&)
-        {
-            const Position pos("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BK2R b KQkq - 0 1");
-            TEST_EXPECT(pos.Perft(1) == 44u);
-            TEST_EXPECT(pos.Perft(2) == 1733u);
-        });
-
         // Position 2 - Kiwipete
         taskBuilder.Task("Perft", [](const TaskContext&)
         {
@@ -1588,6 +1561,7 @@ static void RunPerftTests()
             TEST_EXPECT(pos.Perft(2) == 2039u);
             TEST_EXPECT(pos.Perft(3) == 97862u);
             TEST_EXPECT(pos.Perft(4) == 4085603u);
+            //TEST_EXPECT(pos.Perft(5) == 193690690u);
         });
 
         // Position 3
@@ -1609,7 +1583,7 @@ static void RunPerftTests()
             TEST_EXPECT(pos.Perft(2) == 264u);
             TEST_EXPECT(pos.Perft(3) == 9467u);
             TEST_EXPECT(pos.Perft(4) == 422333u);
-            //TEST_EXPECT(pos.Perft(5) == 15833292u);
+            TEST_EXPECT(pos.Perft(5) == 15833292u);
         });
 
         // Position 5
@@ -1755,9 +1729,10 @@ static void RunEvalTests()
     TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 b - - 0 1")));
 
     // KvPs (white winning)
-    TEST_EXPECT(0 < Evaluate(Position("8/5k1P/7P/8/8/8/8/K7 w - - 0 1")));
-    TEST_EXPECT(0 < Evaluate(Position("7K/8/5k1P/8/8/7P/8/8 w - - 0 1")));
+    TEST_EXPECT(KnownWinValue < Evaluate(Position("8/5k1P/7P/8/8/8/8/K7 w - - 0 1")));
+    TEST_EXPECT(KnownWinValue < Evaluate(Position("7K/8/5k1P/8/8/7P/8/8 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/7P/6KP/7P/7P/7P/8 w - - 0 1")));
+    TEST_EXPECT(KnownWinValue < Evaluate(Position("1k6/1P6/P7/8/8/8/8/K7 w - - 0 1")));
 
     // KvPs (draw)
     TEST_EXPECT(0 == Evaluate(Position("8/8/5k2/7P/1K6/7P/8/8 w - - 0 1")));
@@ -1818,21 +1793,6 @@ static void RunEvalTests()
 
     // extreme disbalance
     TEST_EXPECT(Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1")) < KnownWinValue);
-
-    // 50-move rule
-    {
-        const ScoreType eval1 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 0 1"));
-        const ScoreType eval2 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 4 1"));
-        const ScoreType eval3 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 20 1"));
-        const ScoreType eval4 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 50 1"));
-        const ScoreType eval5 = Evaluate(Position("2k5/4pppp/8/8/8/8/4PPPP/2KQ4 w - - 99 1"));
-
-        TEST_EXPECT(eval1 == eval2);
-        TEST_EXPECT(eval2 > eval3);
-        TEST_EXPECT(eval3 > eval4);
-        TEST_EXPECT(eval4 > eval5);
-        TEST_EXPECT(eval5 > 0);
-    }
 }
 
 // this test suite runs full search on well known/easy positions
@@ -1849,7 +1809,7 @@ void RunSearchTests()
     param.debugLog = false;
     param.numPvLines = UINT32_MAX;
 
-    // incufficient material draw
+    // insufficient material draw
     {
         param.limits.maxDepth = 4;
         param.numPvLines = UINT32_MAX;
@@ -1975,7 +1935,7 @@ void RunSearchTests()
 
     // Lasker-Reichhelm (TT test)
     {
-        param.limits.maxDepth = 32;
+        param.limits.maxDepth = 25;
         param.numPvLines = 1;
 
         game.Reset(Position("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1"));
