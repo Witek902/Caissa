@@ -68,6 +68,13 @@ static_assert(sizeof(KPKPosition) <= 4, "Invalid KPKPosition size");
 
 bool Probe(Square whiteKingSq, Square pawnSq, Square blackKingSq, Color sideToMove)
 {
+	if (pawnSq.File() >= 4)
+	{
+        whiteKingSq = whiteKingSq.FlippedFile();
+        blackKingSq = blackKingSq.FlippedFile();
+        pawnSq = pawnSq.FlippedFile();
+	}
+
     const uint32_t index = EncodeIndex(sideToMove, blackKingSq, whiteKingSq, pawnSq);
     ASSERT(index < MaxIndex);
 
@@ -499,13 +506,6 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
 
     if (numPawns == 1)
     {
-        if (pawnSquare.File() >= 4)
-        {
-            strongKingSq = strongKingSq.FlippedFile();
-            weakKingSq = weakKingSq.FlippedFile();
-            pawnSquare = pawnSquare.FlippedFile();
-        }
-
         if (!KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, pos.GetSideToMove()))
         {
             // bitbase draw
@@ -526,6 +526,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
     else if (numPawns == 2)
     {
         const Square secondPawnSquare = FirstBitSet(pos.Whites().pawns & ~pawnSquare.GetBitboard());
+        ASSERT(secondPawnSquare.Rank() <= pawnSquare.Rank());
 
         bool isWin = false;
 
@@ -559,10 +560,20 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
             isWin = true;
         }
 
+        // bitbase win if weak king is not in front of pawns
+        if (!isWin &&
+            pos.GetSideToMove() == Color::White &&
+            (weakKingSq.Rank() < 7 || weakKingSq.File() != pawnSquare.File()) &&
+            KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, pos.GetSideToMove()))
+        {
+            isWin = true;
+        }
+
         if (isWin)
         {
             outScore = KnownWinValue + 2 * c_pawnValue.eg;
             outScore += 8 * pawnSquare.Rank();
+            outScore += 4 * secondPawnSquare.Rank();
             outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
             outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
             return true;
@@ -644,7 +655,7 @@ static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore)
         }
         ASSERT(whitePawn.File() < 4);
 
-        if (whitePawn.Rank() < 4 || whitePawn.File() == 0)
+        if (whitePawn.Rank() < 4 || whitePawn.File() == 0 || whitePawn.File() == 7)
         {
             if (!KPKEndgame::Probe(whiteKing, whitePawn, blackKing, pos.GetSideToMove()))
             {
