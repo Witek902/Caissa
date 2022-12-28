@@ -1006,7 +1006,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     {
         ASSERT(move.IsValid());
 
-        if (!node.isInCheck)
+        if (!node.isInCheck &&
+            bestValue > -TablebaseWinValue)
         {
             ASSERT(!move.IsQuiet());
 
@@ -1039,7 +1040,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         // don't try all check evasions
         if (node.isInCheck && move.IsQuiet())
         {
-            if (numBestMoves > 0 && numQuietCheckEvasion > 1) continue;
+            if (numBestMoves > 0 &&
+                numQuietCheckEvasion > 1 &&
+                bestValue > -TablebaseWinValue) continue;
+
             numQuietCheckEvasion++;
         }
 
@@ -1048,7 +1052,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (numBestMoves > 0)
+        if (numBestMoves > 0 &&
+            bestValue > -TablebaseWinValue)
         {
                  if (node.depth < -4 && moveIndex > 1) break;
             else if (node.depth < -2 && moveIndex > 2) break;
