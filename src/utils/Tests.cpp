@@ -1792,7 +1792,18 @@ static void RunEvalTests()
     TEST_EXPECT(Evaluate(Position("K7/8/8/3PP3/4k3/8/8/8 w - - 0 1")) >= KnownWinValue);
 
     // extreme disbalance
-    TEST_EXPECT(Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1")) < KnownWinValue);
+    {
+        {
+            const ScoreType score = Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1"));
+            TEST_EXPECT(score > 10000);
+            TEST_EXPECT(score < KnownWinValue);
+        }
+        {
+            const ScoreType score = Evaluate(Position("qqqqkqqq/qqqqqqqq/qqqqqqqq/qqqqqqqq/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
+            TEST_EXPECT(score < -10000);
+            TEST_EXPECT(score > -KnownWinValue);
+        }
+    }
 }
 
 // this test suite runs full search on well known/easy positions
@@ -1967,6 +1978,20 @@ void RunSearchTests(uint32_t numThreads)
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 1);
+    }
+
+    // mate in 1 with huge material disadvantage
+    {
+        param.limits.maxDepth = 5;
+        param.numPvLines = 1;
+
+        game.Reset(Position("qqqqqqqq/qkqqqqqq/qqNqqqqq/qqq1qqqq/qqqq1qqq/qqqqq1qq/qqqqqqBn/qqqqqqnK w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score == CheckmateValue - 1);
+        TEST_EXPECT(result[0].moves.front() == PackedMove(Square_c6, Square_a5) ||
+                    result[0].moves.front() == PackedMove(Square_c6, Square_d8));
     }
 
     ASSERT(param.numThreads == numThreads); // don't modify number of threads!
