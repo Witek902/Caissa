@@ -30,7 +30,7 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 5;
 
 static const int32_t WdlTablebaseProbeDepth = 4;
-static const int32_t WdlTablebaseProbeMaxNumPieces = 6;
+static const int32_t WdlTablebaseProbeMaxNumPieces = 7;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -146,6 +146,7 @@ void Search::Stats::Append(ThreadStats& threadStats, bool flush)
         nodes += threadStats.nodes;
         quiescenceNodes += threadStats.quiescenceNodes;
         AtomicMax(maxDepth, threadStats.maxDepth);
+        tbHits += threadStats.tbHits;
 
         threadStats = ThreadStats{};
     }
@@ -459,12 +460,10 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
     }
 
-#ifdef COLLECT_SEARCH_STATS
     if (param.searchContext.stats.tbHits)
     {
-        ss << " tbhit " << param.searchContext.stats.tbHits;
+        ss << " tbhits " << param.searchContext.stats.tbHits;
     }
-#endif // COLLECT_SEARCH_STATS
 
     ss << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
 
@@ -1276,6 +1275,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     const ScoreType oldAlpha = node.alpha;
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
+    ScoreType maxValue = InfValue; // max value according to tablebases
     bool tbHit = false;
 
     // transposition table lookup
@@ -1323,9 +1323,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
             tbHit = true;
-#ifdef COLLECT_SEARCH_STATS
-            ctx.stats.tbHits++;
-#endif // COLLECT_SEARCH_STATS
+            thread.stats.tbHits++;
 
             // convert the WDL value to a score
             const ScoreType tbValue =
@@ -1339,24 +1337,35 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 wdl > 0 ? TTEntry::Bounds::Lower :
                 TTEntry::Bounds::Exact;
 
-            if (bounds == TTEntry::Bounds::Exact ||
-                (bounds == TTEntry::Bounds::Lower && tbValue >= beta) ||
-                (bounds == TTEntry::Bounds::Upper && tbValue <= alpha))
+            // clamp best score to tablebase score
+            if (bounds == TTEntry::Bounds::Lower)
+            {
+                alpha = std::max(alpha, bestValue);
+            }
+            else
+            {
+                maxValue = tbValue;
+            }
+
+            if (!isPvNode &&
+                (bounds == TTEntry::Bounds::Exact ||
+                 (bounds == TTEntry::Bounds::Lower && tbValue >= beta) ||
+                 (bounds == TTEntry::Bounds::Upper && tbValue <= alpha)))
             {
                 if (!ttEntry.IsValid())
                 {
                     ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node.height), staticEval, node.depth, bounds);
-                }
-
 #ifdef COLLECT_SEARCH_STATS
-                ctx.stats.ttWrites++;
+                    ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
+                }
 
 #ifdef ENABLE_SEARCH_TRACE
 				trace.OnNodeExit(SearchTrace::ExitReason::TBHit, tbValue);
 #endif // ENABLE_SEARCH_TRACE
                 return tbValue;
             }
+
         }
     }
 
@@ -1950,6 +1959,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(numBestMoves > 0);
         ASSERT(!isPvNode || node.pvLength > 0);
         ASSERT(!isPvNode || node.pvLine[0] == bestMoves[0]);
+    }
+
+    if (isPvNode)
+    {
+        bestValue = std::min(bestValue, maxValue);
     }
 
     // update transposition table

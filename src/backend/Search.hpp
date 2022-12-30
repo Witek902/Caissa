@@ -185,6 +185,7 @@ private:
         uint64_t nodes = 0;
         uint64_t quiescenceNodes = 0;
         uint32_t maxDepth = 0;
+        uint64_t tbHits = 0;
     };
 
     struct Stats
@@ -192,13 +193,13 @@ private:
         std::atomic<uint64_t> nodes = 0;
         std::atomic<uint64_t> quiescenceNodes = 0;
         std::atomic<uint32_t> maxDepth = 0;
+        std::atomic<uint64_t> tbHits = 0;
 
 #ifdef COLLECT_SEARCH_STATS
         static const int32_t EvalHistogramMaxValue = 1600;
         static const int32_t EvalHistogramBins = 100;
         uint64_t ttHits = 0;
         uint64_t ttWrites = 0;
-        uint64_t tbHits = 0;
 
         uint64_t numPvNodes = 0;
         uint64_t numCutNodes = 0;
