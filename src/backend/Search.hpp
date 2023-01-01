@@ -250,14 +250,11 @@ private:
 
         bool isMainThread = false;
 
-        // search depth at the root node in current iterative deepening step
-        uint16_t rootDepth = 0;
-
-        // principal variation lines from previous iterative deepening search
-        SearchResult prevPvLines;
-
-        // per-thread search stats
-        ThreadStats stats;
+        uint16_t rootDepth = 0;         // search depth at the root node in current iterative deepening step
+        uint16_t depthCompleted = 0;    // recently completed search depth
+        SearchResult pvLines;           // principal variation lines from recently completed search iteration
+        ThreadStats stats;              // per-thread search stats
+        uint32_t randomSeed;            // seed for random number generator
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
@@ -274,6 +271,8 @@ private:
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
+
+        uint32_t GetRandomUint();
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
@@ -290,7 +289,7 @@ private:
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
-    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult* outResult);
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats);
 
     bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
 
