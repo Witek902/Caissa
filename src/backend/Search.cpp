@@ -83,33 +83,33 @@ public:
 
     void OnNodeExit(ExitReason reason, ScoreType score, Move bestMove = Move::Invalid())
     {
-		FILE* f = GetOutputFile();
+        FILE* f = GetOutputFile();
 
-		const char* exitReasonStr = "";
-		switch (reason)
-		{
-		case ExitReason::Draw:                  exitReasonStr = "Draw"; break;
-		case ExitReason::GameCycle:             exitReasonStr = "GameCycle"; break;
-		case ExitReason::MateDistancePruning:   exitReasonStr = "MateDistancePruning"; break;
-		case ExitReason::TBHit:                 exitReasonStr = "TBHit"; break;
-		case ExitReason::TTCutoff:              exitReasonStr = "TTCutoff"; break;
-		case ExitReason::BetaPruning:           exitReasonStr = "BetaPruning"; break;
-		case ExitReason::AlphaPruning:          exitReasonStr = "AlphaPruning"; break;
-		case ExitReason::Razoring:              exitReasonStr = "Razoring"; break;
-		case ExitReason::NullMovePruning:       exitReasonStr = "NullMovePruning"; break;
-		case ExitReason::SingularPruning:       exitReasonStr = "SingularPruning"; break;
-		}
+        const char* exitReasonStr = "";
+        switch (reason)
+        {
+        case ExitReason::Draw:                  exitReasonStr = "Draw"; break;
+        case ExitReason::GameCycle:             exitReasonStr = "GameCycle"; break;
+        case ExitReason::MateDistancePruning:   exitReasonStr = "MateDistancePruning"; break;
+        case ExitReason::TBHit:                 exitReasonStr = "TBHit"; break;
+        case ExitReason::TTCutoff:              exitReasonStr = "TTCutoff"; break;
+        case ExitReason::BetaPruning:           exitReasonStr = "BetaPruning"; break;
+        case ExitReason::AlphaPruning:          exitReasonStr = "AlphaPruning"; break;
+        case ExitReason::Razoring:              exitReasonStr = "Razoring"; break;
+        case ExitReason::NullMovePruning:       exitReasonStr = "NullMovePruning"; break;
+        case ExitReason::SingularPruning:       exitReasonStr = "SingularPruning"; break;
+        }
 
-		// write indent
-		char spaceBuffer[MaxSearchDepth];
-		memset(spaceBuffer, '\t', m_node.height);
-		fwrite(spaceBuffer, 1, m_node.height, f);
+        // write indent
+        char spaceBuffer[MaxSearchDepth];
+        memset(spaceBuffer, '\t', m_node.height);
+        fwrite(spaceBuffer, 1, m_node.height, f);
 
-		fprintf(f, "%s [%s] d=%d, a=%d, b=%d, e=%d | %s score=%d bestMove=%s\n",
-				m_node.previousMove.ToString().c_str(),
-				m_node.position.ToFEN().c_str(),
-				m_node.depth, m_node.alpha, m_node.beta, m_node.staticEval,
-				exitReasonStr, score, bestMove.ToString().c_str());
+        fprintf(f, "%s [%s] d=%d, a=%d, b=%d, e=%d | %s score=%d bestMove=%s\n",
+                m_node.previousMove.ToString().c_str(),
+                m_node.position.ToFEN().c_str(),
+                m_node.depth, m_node.alpha, m_node.beta, m_node.staticEval,
+                exitReasonStr, score, bestMove.ToString().c_str());
     }
 
     static void OnRootSearchBegin()
@@ -120,11 +120,11 @@ public:
 
 private:
 
-	static FILE* GetOutputFile()
-	{
-		static FILE* f = fopen("searchTrace.txt", "w");
+    static FILE* GetOutputFile()
+    {
+        static FILE* f = fopen("searchTrace.txt", "w");
         return f;
-	}
+    }
 
     const NodeInfo& m_node;
 };
@@ -371,14 +371,14 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             ASSERT(!threadData->callback);
             threadData->callback = [this, i, numPvLines, &game, &param, &globalStats]()
             {
-                Search_Internal(i, numPvLines, game, param, globalStats, nullptr);
+                Search_Internal(i, numPvLines, game, param, globalStats);
             };
         }
         threadData->newTaskCV.notify_one();
     }
         
     // do search on main thread
-    Search_Internal(0, numPvLines, game, param, globalStats, &outResult);
+    Search_Internal(0, numPvLines, game, param, globalStats);
 
     // wait for worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
@@ -387,6 +387,42 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         std::unique_lock<std::mutex> lock(threadData->taskFinishedMutex);
         threadData->taskFinishedCV.wait(lock, [&threadData]() { return threadData->taskFinished; });
         threadData->taskFinished = false;
+    }
+
+    // select best PV line from finished threads
+    {
+        uint32_t bestThreadIndex = 0;
+        uint16_t bestDepth = 0;
+        ScoreType bestScore = -InfValue;
+
+        for (uint32_t i = 0; i < param.numThreads; ++i)
+        {
+            const ThreadDataPtr& threadData = mThreadData[i];
+            ASSERT(!threadData->pvLines.empty());
+            ASSERT(threadData->pvLines.size() == numPvLines);
+
+#ifndef CONFIGURATION_FINAL
+            // make sure all PV lines are correct
+            for (const PvLine& pvLine : threadData->pvLines)
+            {
+                ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
+                ASSERT(!pvLine.moves.empty());
+            }
+#endif // CONFIGURATION_FINAL
+
+            const PvLine& pvLine = threadData->pvLines.front();
+
+            if ((threadData->depthCompleted > bestDepth && pvLine.score > bestScore) ||
+                (threadData->depthCompleted > bestDepth && !IsMate(bestScore)) ||
+                (IsMate(pvLine.score) && pvLine.score > bestScore))
+            {
+                bestDepth = threadData->depthCompleted;
+                bestScore = pvLine.score;
+                bestThreadIndex = i;
+            }
+        }
+
+        outResult = std::move(mThreadData[bestThreadIndex]->pvLines);
     }
 }
 
@@ -543,14 +579,16 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
 {
-    std::cout
-        << "info depth " << depth
-        << " currmove " << move.ToString()
-        << " currmovenumber " << moveNumber
-        << std::endl;
+    std::stringstream ss{ std::ios_base::out };
+
+    ss << "info depth " << depth;
+    ss << " currmove " << move.ToString();
+    ss << " currmovenumber " << moveNumber;
+
+    std::cout << std::move(ss.str()) << std::endl;
 }
 
-void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats, SearchResult* outResult)
+void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats)
 {
     const bool isMainThread = threadID == 0;
     ThreadData& thread = *(mThreadData[threadID]);
@@ -558,15 +596,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     std::vector<Move> pvMovesSoFar;
     pvMovesSoFar.reserve(param.excludedMoves.size() + numPvLines);
 
-    if (outResult)
-    {
-        outResult->resize(numPvLines);
-    }
-
+    // clear per-thread data for new search
     thread.stats = ThreadStats{};
+    thread.depthCompleted = 0;
+    thread.pvLines.clear();
+    thread.pvLines.resize(numPvLines);
     thread.moveOrderer.NewSearch();
-    thread.prevPvLines.clear();
-    thread.prevPvLines.resize(numPvLines);
 
     uint32_t mateCounter = 0;
 
@@ -583,11 +618,11 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         thread.rootDepth = depth;
 
-        bool finishSearchAtDepth = false;
+        bool abortSearch = false;
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
-            PvLine& prevPvLine = thread.prevPvLines[pvIndex];
+            PvLine& prevPvLine = thread.pvLines[pvIndex];
 
             // use previous iteration score as starting aspiration window
             // if it's the first iteration - try score from transposition table
@@ -622,18 +657,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             // stop search only at depth 2 and more
             if (depth > 1 && CheckStopCondition(thread, searchContext, true))
             {
-                finishSearchAtDepth = true;
+                abortSearch = true;
                 break;
             }
 
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
-
-            // only main thread writes out final PV line
-            if (outResult)
-            {
-                (*outResult)[pvIndex] = pvLine;
-            }
 
             // update mate counter
             if (pvIndex == 0)
@@ -660,20 +689,10 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             tempResult[pvIndex] = std::move(pvLine);
         }
 
-        if (finishSearchAtDepth)
+        if (abortSearch)
         {
             if (isMainThread)
             {
-                if (outResult)
-                {
-                    // make sure all PV lines are correct
-                    for (uint32_t i = 0; i < numPvLines; ++i)
-                    {
-                        ASSERT((*outResult)[i].score > -CheckmateValue && (*outResult)[i].score < CheckmateValue);
-                        ASSERT(!(*outResult)[i].moves.empty());
-                    }
-                }
-
                 // stop other threads
                 param.stopSearch = true;
             }
@@ -686,12 +705,13 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
         {
-            const TimeManagerUpdateData data{ depth, tempResult, thread.prevPvLines };
+            const TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
             TimeManager::Update(game, data, searchContext.searchParam.limits);
         }
 
         // remember PV lines so they can be used in next iteration
-        thread.prevPvLines = std::move(tempResult);
+        thread.depthCompleted = depth;
+        thread.pvLines = std::move(tempResult);
 
         if (isMainThread &&
             !param.isPonder.load(std::memory_order_acquire))
@@ -705,14 +725,14 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 break;
             }
 
-			// stop the search if found mate in multiple depths in a row
-			if (!param.limits.analysisMode &&
-				mateCounter >= MateCountStopCondition &&
-				param.limits.maxDepth == UINT16_MAX)
-			{
-				param.stopSearch = true;
-				break;
-			}
+            // stop the search if found mate in multiple depths in a row
+            if (!param.limits.analysisMode &&
+                mateCounter >= MateCountStopCondition &&
+                param.limits.maxDepth == UINT16_MAX)
+            {
+                param.stopSearch = true;
+                break;
+            }
         }
 
         // check for singular root move
@@ -876,6 +896,8 @@ Search::ThreadData::ThreadData()
     {
         GetNNEvaluatorContext(i);
     }
+
+    randomSeed = 0x4abf372b;
 }
 
 NNEvaluatorContext* Search::ThreadData::GetNNEvaluatorContext(uint32_t height)
@@ -892,12 +914,12 @@ NNEvaluatorContext* Search::ThreadData::GetNNEvaluatorContext(uint32_t height)
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
-    if (!node.isPvNodeFromPrevIteration || prevPvLines.empty() || node.isSingularSearch)
+    if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.isSingularSearch)
     {
         return Move::Invalid();
     }
 
-    const std::vector<Move>& pvLine = prevPvLines[node.pvIndex].moves;
+    const std::vector<Move>& pvLine = pvLines[node.pvIndex].moves;
     if (node.height >= pvLine.size())
     {
         return Move::Invalid();
@@ -908,6 +930,15 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
     ASSERT(node.position.IsMoveLegal(pvMove));
 
     return pvMove;
+}
+
+uint32_t Search::ThreadData::GetRandomUint()
+{
+    // Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs"
+    randomSeed ^= randomSeed << 13;
+    randomSeed ^= randomSeed >> 17;
+    randomSeed ^= randomSeed << 5;
+    return randomSeed;
 }
 
 static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
@@ -966,10 +997,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
 #ifdef COLLECT_SEARCH_STATS
-		ctx.stats.ttHits++;
+        ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-		// don't prune in PV nodes, because TT does not contain path information
+        // don't prune in PV nodes, because TT does not contain path information
         if (!isPvNode)
         {
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
@@ -1229,7 +1260,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (alpha >= beta)
         {
 #ifdef ENABLE_SEARCH_TRACE
-			trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
+            trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
 #endif // ENABLE_SEARCH_TRACE
             return alpha;
         }
@@ -1266,7 +1297,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (alpha >= beta)
         {
 #ifdef ENABLE_SEARCH_TRACE
-			trace.OnNodeExit(SearchTrace::ExitReason::MateDistancePruning, alpha);
+            trace.OnNodeExit(SearchTrace::ExitReason::MateDistancePruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
             return alpha;
         }
@@ -1284,7 +1315,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
 #ifdef COLLECT_SEARCH_STATS
-		ctx.stats.ttHits++;
+        ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
         staticEval = ttEntry.staticEval;
@@ -1300,9 +1331,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             // transposition table cutoff
             ScoreType ttCutoffValue = InvalidValue;
-			if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
-			else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = alpha;
-			else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = beta;
+            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = alpha;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = beta;
 
             if (ttCutoffValue != InvalidValue)
             {
@@ -1361,7 +1392,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 }
 
 #ifdef ENABLE_SEARCH_TRACE
-				trace.OnNodeExit(SearchTrace::ExitReason::TBHit, tbValue);
+                trace.OnNodeExit(SearchTrace::ExitReason::TBHit, tbValue);
 #endif // ENABLE_SEARCH_TRACE
                 return tbValue;
             }
@@ -1407,10 +1438,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t evalImprovement = 0;
     if (!node.isInCheck)
     {
-		// TODO use proper stack
-		const NodeInfo* prevNodes[4] = { nullptr };
-		prevNodes[0] = node.parentNode;
-		prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
+        // TODO use proper stack
+        const NodeInfo* prevNodes[4] = { nullptr };
+        prevNodes[0] = node.parentNode;
+        prevNodes[1] = prevNodes[0] ? prevNodes[0]->parentNode : nullptr;
 
         if (prevNodes[1] && prevNodes[1]->staticEval != InvalidValue)
         {
@@ -1437,7 +1468,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
         {
 #ifdef ENABLE_SEARCH_TRACE
-			trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
+            trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
             return node.staticEval;
         }
@@ -1449,7 +1480,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             node.staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
         {
 #ifdef ENABLE_SEARCH_TRACE
-			trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
+            trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
             return node.staticEval;
         }
@@ -1464,7 +1495,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (qScore < beta)
             {
 #ifdef ENABLE_SEARCH_TRACE
-				trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
+                trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
 #endif // ENABLE_SEARCH_TRACE
                 return qScore;
             }
@@ -1512,7 +1543,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     if (std::abs(beta) < KnownWinValue && node.depth < 10)
                     {
 #ifdef ENABLE_SEARCH_TRACE
-						trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
+                        trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
 #endif // ENABLE_SEARCH_TRACE
                         return nullMoveScore;
                     }
@@ -1737,7 +1768,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 // if second best move beats current beta, there most likely would be beta cutoff
                 // when searching it at full depth
 #ifdef ENABLE_SEARCH_TRACE
-				trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
+                trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
 #endif // ENABLE_SEARCH_TRACE
                 return singularScore;
             }
@@ -1789,6 +1820,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (childNode.isInCheck) depthReduction--;
 
             if (node.isCutNode) depthReduction++;
+
+            if (!thread.isMainThread && (thread.GetRandomUint() % 8 == 0)) depthReduction++;
         }
 
         // limit reduction, don't drop into QS
@@ -1934,7 +1967,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
 #ifdef ENABLE_SEARCH_TRACE
-		trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue);
+        trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue);
 #endif // ENABLE_SEARCH_TRACE
         return bestValue;
     }
@@ -1961,10 +1994,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(!isPvNode || node.pvLine[0] == bestMoves[0]);
     }
 
-    if (isPvNode)
-    {
-        bestValue = std::min(bestValue, maxValue);
-    }
+    bestValue = std::min(bestValue, maxValue);
 
     // update transposition table
     // don't write if:
@@ -1998,7 +2028,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
 #ifdef ENABLE_SEARCH_TRACE
-	trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue, bestMoves[0]);
+    trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue, bestMoves[0]);
 #endif // ENABLE_SEARCH_TRACE
     return bestValue;
 }
