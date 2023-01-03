@@ -68,6 +68,9 @@
     <ClCompile Include="minitrace\minitrace.c">
       <Filter>minitrace</Filter>
     </ClCompile>
+    <ClCompile Include="NeuralNetworkLayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp">
@@ -90,6 +93,12 @@
     </ClInclude>
     <ClInclude Include="minitrace\minitrace.h">
       <Filter>minitrace</Filter>
+    </ClInclude>
+    <ClInclude Include="NeuralNetworkLayer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NeuralNetworkCommon.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
