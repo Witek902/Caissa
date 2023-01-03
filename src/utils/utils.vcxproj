@@ -68,6 +68,7 @@
     <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="NetworkTrainer.cpp" />
     <ClCompile Include="NeuralNetwork.cpp" />
+    <ClCompile Include="NeuralNetworkLayer.cpp" />
     <ClCompile Include="PackedPositionTests.cpp" />
     <ClCompile Include="PieceSquareTablesTrainer.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
@@ -82,6 +83,8 @@
     <ClInclude Include="GameCollection.hpp" />
     <ClInclude Include="minitrace\minitrace.h" />
     <ClInclude Include="NeuralNetwork.hpp" />
+    <ClInclude Include="NeuralNetworkCommon.hpp" />
+    <ClInclude Include="NeuralNetworkLayer.hpp" />
     <ClInclude Include="Stream.hpp" />
     <ClInclude Include="ThreadPool.hpp" />
     <ClInclude Include="TrainerCommon.hpp" />
