@@ -58,26 +58,33 @@ struct Gradients
 class Layer
 {
 public:
-    Layer(uint32_t inputSize, uint32_t outputSize);
+    // maximum number of layer outputs
+    static constexpr uint32_t MaxLayerOutputs = 1024;
+
+    Layer(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants = 1);
 
     void InitWeights();
-    void Run(const Values& in, LayerRunContext& ctx) const;
+    void Run(const float* values, LayerRunContext& ctx) const;
     void Run(uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
     void Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
     void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
     void UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay);
-    void QuantizeWeights(float strength);
 
     uint32_t numInputs;
     uint32_t numOutputs;
+    ActivationFunction activationFunc;
 
-    ActivationFunction activationFunction;
+    // weights variant is selected globally for the whole network (it's kind of network input)
+    struct Variant
+    {
+        Values weights;
 
-    Values weights;
+        // used for learning
+        Values gradientMean;
+        Values gradientMoment;
+    };
 
-    // used for learning
-    Values gradientMean;
-    Values gradientMoment;
+    std::vector<Variant> variants;
 };
 
 } // namespace nn

@@ -404,7 +404,7 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
 static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 {
-    const float* weights = nn.layers[0].weights.data();
+    const float* weights = nn.layers[0].variants[0].weights.data();
 
     uint32_t offset = 0;
 
@@ -595,7 +595,7 @@ bool TrainPieceSquareTables()
     // reset weights
     const auto initPieceValueWeights = [&network]()
     {
-        float* weights = network.layers[0].weights.data();
+        float* weights = network.layers[0].variants[0].weights.data();
 
         weights[0] = (float)c_pawnValue.mg / c_nnOutputToCentiPawns;
         weights[1] = (float)c_pawnValue.eg / c_nnOutputToCentiPawns;
@@ -761,7 +761,7 @@ bool TrainPieceSquareTables()
         for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
         {
             const std::vector<nn::ActiveFeature>& features = validationSet[i].trainingVector.sparseInputs;
-            const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
+            const nn::Values& networkOutput = network.Run(nn::NeuralNetwork::InputDesc(features), networkRunCtx);
 
             const float expectedValue = validationSet[i].trainingVector.singleOutput;
 

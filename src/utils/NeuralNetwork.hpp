@@ -34,6 +34,8 @@ struct TrainingVector
     Values outputs;
     float singleOutput;
 
+    uint32_t networkVariant = 0;
+
     void CombineSparseInputs();
     void Validate() const;
 };
@@ -51,14 +53,55 @@ public:
     void Init(const NeuralNetwork& network);
 };
 
+
+
 class NeuralNetwork
 {
     friend class NeuralNetworkTrainer;
 
 public:
 
+	struct InputDesc
+	{
+		InputMode mode = InputMode::Unknown;
+        uint32_t numFeatures = 0;
+
+		union
+		{
+			const float* floatValues;
+			const ActiveFeature* floatFeatures;
+			const uint16_t* binaryFeatures;
+		};
+
+		// used to select weights variant in deeper layers
+		uint32_t variant = 0;
+
+        InputDesc() = default;
+
+		InputDesc(const std::vector<float>& features)
+			: mode(InputMode::Full)
+			, numFeatures(static_cast<uint32_t>(features.size()))
+			, floatValues(features.data())
+		{}
+
+		InputDesc(const std::vector<ActiveFeature>& features)
+			: mode(InputMode::Sparse)
+			, numFeatures(static_cast<uint32_t>(features.size()))
+			, floatFeatures(features.data())
+		{}
+
+        InputDesc(const std::vector<uint16_t>& features)
+            : mode(InputMode::SparseBinary)
+            , numFeatures(static_cast<uint32_t>(features.size()))
+            , binaryFeatures(features.data())
+        {}
+	};
+
     // Create multi-layer neural network
-    void Init(uint32_t inputSize, const std::vector<uint32_t>& layersSizes, ActivationFunction outputLayerActivationFunc = ActivationFunction::Sigmoid);
+    void Init(uint32_t inputSize,
+              const std::vector<uint32_t>& layersSizes,
+              ActivationFunction outputLayerActivationFunc = ActivationFunction::Sigmoid,
+              const std::vector<uint32_t>& layerVariants = std::vector<uint32_t>());
 
     // save to file
     bool Save(const char* filePath) const;
@@ -69,14 +112,8 @@ public:
     // convert to packed (quantized) network
     bool ToPackedNetwork(PackedNeuralNetwork& outNetwork) const;
 
-    // Calculate neural network output based on arbitrary input
-    const Values& Run(const Values& input, NeuralNetworkRunContext& ctx) const;
-
-    // Calculate neural network output based on sparse input (list of active features)
-    const Values& Run(uint32_t numFeatures, const ActiveFeature* features, NeuralNetworkRunContext& ctx) const;
-
-    // Calculate neural network output based on sparse input (list of active binary features)
-    const Values& Run(uint32_t numFeatures, const uint16_t* features, NeuralNetworkRunContext& ctx) const;
+    // Calculate neural network output based on input
+    const Values& Run(const InputDesc& input, NeuralNetworkRunContext& ctx) const;
 
     void PrintStats() const;
 

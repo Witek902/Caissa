@@ -28,9 +28,9 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 10000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 16 * 1024;
-static const uint32_t cBatchSize = 16 * 1024;
+static const uint32_t cBatchSize = 8 * 1024;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -38,6 +38,7 @@ static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outV
 
     uint16_t features[maxFeatures];
     //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
+    //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::KingPiece_Symmetrical);
     uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
@@ -126,7 +127,7 @@ bool TrainEndgame()
                 const int64_t blacksScore = materialKey.numBlackPawns + 3 * materialKey.numBlackKnights + 3 * materialKey.numBlackBishops + 5 * materialKey.numBlackRooks + 9 * materialKey.numBlackQueens;
                 const int64_t scoreDiff = std::abs(whitesScore - blacksScore);
                 if (whitesScore == 0 || blacksScore == 0) continue;
-                if (scoreDiff > 10) continue;
+                if (scoreDiff > 15) continue;
                 if (scoreDistr(gen) < scoreDiff) continue;
 
                 // randomize side
@@ -153,7 +154,7 @@ bool TrainEndgame()
                     continue;
                 }
 
-                const float bias = 0.0001f;
+                const float bias = 0.0f;
 
                 float score = 0.5f;
                 if (wdl < 0) score = 0.0f + bias;
@@ -193,19 +194,6 @@ bool TrainEndgame()
                         if (wdl > 0) score = 1.0f - offset - scale * powf((float)dtz / 100.0f, power);
                     }
 #endif // USE_DTZ
-                    // lower probability for generating winning position
-                    if (std::uniform_int_distribution<>{0, 1}(gen))
-                    {
-                        continue;
-                    }
-                }
-                else
-                {
-                    // lower probability for generating drawish position
-                    if (std::uniform_int_distribution<>{0, 3}(gen))
-                    {
-                        continue;
-                    }
                 }
 
                 PositionToPackedVector(pos, outSet[i].trainingVector);
@@ -221,12 +209,13 @@ bool TrainEndgame()
     const uint32_t numNetworkInputs = 704;
     //const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
     //const uint32_t numNetworkInputs = 2 * 3 * 32 * 64;
+    //const uint32_t numNetworkInputs = 2 * 10 * 32 * 64;
 
     std::string name = "endgame";
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { 512, 16, 32, 1 });
-   // network.Load((name + ".nn").c_str());
+    network.Init(numNetworkInputs, { 1024, 1 });
+    //network.Load("checkpoint.nn");
 
     nn::NeuralNetworkRunContext networkRunCtx;
     networkRunCtx.Init(network);
@@ -313,15 +302,15 @@ bool TrainEndgame()
             for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
             {
                 const std::vector<uint16_t>& features = trainingSet[i].trainingVector.sparseBinaryInputs;
-                packedNetworkOutputs[i] = packedNetwork->Run(features.data(), (uint32_t)features.size());
+                packedNetworkOutputs[i] = packedNetwork->Run(features.data(), (uint32_t)features.size(), 0u);
             }
             packedNetworkRunTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
         }
 
         for (uint32_t i = 0; i < cNumValidationVectorsPerIteration; ++i)
         {
-            const std::vector<uint16_t>& features = trainingSet[i].trainingVector.sparseBinaryInputs;
-            const nn::Values& networkOutput = network.Run((uint32_t)features.size(), features.data(), networkRunCtx);
+            const nn::NeuralNetwork::InputDesc networkInput(trainingSet[i].trainingVector.sparseBinaryInputs);
+            const nn::Values& networkOutput = network.Run(networkInput, networkRunCtx);
             const int32_t packedNetworkOutput = packedNetworkOutputs[i];
 
             const float expectedValue = ScoreFromNN(trainingSet[i].trainingVector.singleOutput);

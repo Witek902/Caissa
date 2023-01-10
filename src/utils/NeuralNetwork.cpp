@@ -85,8 +85,7 @@ bool NeuralNetwork::Save(const char* filePath) const
     const uint32_t numLayers = (uint32_t)layers.size();
     if (1 != fwrite(&numLayers, sizeof(uint32_t), 1, file))
     {
-        fclose(file);
-        return false;
+        goto onError;
     }
 
     if (!layers.empty())
@@ -94,8 +93,7 @@ bool NeuralNetwork::Save(const char* filePath) const
         const uint32_t numLayerInputs = layers.front().numInputs;
         if (1 != fwrite(&numLayerInputs, sizeof(uint32_t), 1, file))
         {
-            fclose(file);
-            return false;
+            goto onError;
         }
     }
 
@@ -104,23 +102,35 @@ bool NeuralNetwork::Save(const char* filePath) const
         const uint32_t numLayerOutputs = layers[i].numOutputs;
         if (1 != fwrite(&numLayerOutputs, sizeof(uint32_t), 1, file))
         {
-            fclose(file);
-            return false;
+            goto onError;
+        }
+
+        const uint32_t numVariants = (uint32_t)layers[i].variants.size();
+        if (1 != fwrite(&numVariants, sizeof(uint32_t), 1, file))
+        {
+            goto onError;
         }
     }
 
     for (uint32_t i = 0; i < numLayers; ++i)
     {
-        const uint32_t numWeights = (uint32_t)layers[i].weights.size();
-        if (numWeights != fwrite(layers[i].weights.data(), sizeof(float), numWeights, file))
+        const Layer& layer = layers[i];
+        for (const Layer::Variant& variant : layer.variants)
         {
-            fclose(file);
-            return false;
+            const size_t numWeights = variant.weights.size();
+            if (numWeights != fwrite(variant.weights.data(), sizeof(float), numWeights, file))
+            {
+                goto onError;
+            }
         }
     }
 
     fclose(file);
     return true;
+
+onError:
+    fclose(file);
+    return false;
 }
 
 bool NeuralNetwork::Load(const char* filePath)
@@ -134,86 +144,107 @@ bool NeuralNetwork::Load(const char* filePath)
     }
 
     uint32_t numLayers = 0;
+    uint32_t numInputs = 0;
+    uint32_t prevLayerSize = 0;
+
     if (1 != fread(&numLayers, sizeof(uint32_t), 1, file))
     {
-        fclose(file);
-        return false;
+        goto onError;
     }
 
     if (numLayers == 0 || numLayers > 10)
     {
         std::cout << "Failed to load neural network. Invalid number of layers" << std::endl;
-        fclose(file);
-        return false;
+        goto onError;
     }
 
-    uint32_t numInputs = 0;
+    
     if (1 != fread(&numInputs, sizeof(uint32_t), 1, file))
     {
-        fclose(file);
-        return false;
+        goto onError;
     }
 
     if (numInputs == 0 || numInputs > 10000)
     {
         std::cout << "Failed to load neural network. Invalid number of first layer inputs" << std::endl;
-        fclose(file);
-        return false;
+        goto onError;
     }
 
     layers.clear();
     layers.reserve(numLayers);
-    uint32_t prevLayerSize = numInputs;
+    prevLayerSize = numInputs;
 
     for (uint32_t i = 0; i < numLayers; i++)
     {
         uint32_t numLayerOutputs = 0;
         if (1 != fread(&numLayerOutputs, sizeof(uint32_t), 1, file))
         {
-            fclose(file);
-            return false;
+            goto onError;
+        }
+
+        uint32_t numLayerVariants = 0;
+        if (1 != fread(&numLayerVariants, sizeof(uint32_t), 1, file))
+        {
+            goto onError;
         }
 
         if (numLayerOutputs == 0 || numInputs > 10000)
         {
             std::cout << "Failed to load neural network. Invalid number of layer outputs" << std::endl;
-            return false;
+            goto onError;
         }
 
-        layers.push_back(Layer(prevLayerSize, numLayerOutputs));
+        if (numLayerVariants == 0 || numLayerVariants > 10000)
+        {
+            std::cout << "Failed to load neural network. Invalid number of layer variants" << std::endl;
+            goto onError;
+        }
+
+        layers.push_back(Layer(prevLayerSize, numLayerOutputs, numLayerVariants));
         layers[i].InitWeights();
         prevLayerSize = numLayerOutputs;
     }
 
-    layers.back().activationFunction = ActivationFunction::Sigmoid;
+    layers.back().activationFunc = ActivationFunction::Sigmoid;
 
     // read weights
     for (uint32_t i = 0; i < numLayers; ++i)
     {
-        const uint32_t numWeights = (uint32_t)layers[i].weights.size();
-        if (numWeights != fread(layers[i].weights.data(), sizeof(float), numWeights, file))
+        Layer& layer = layers[i];
+        for (Layer::Variant& variant : layer.variants)
         {
-            fclose(file);
-            return false;
+            const size_t numWeights = variant.weights.size();
+            if (numWeights != fread(variant.weights.data(), sizeof(float), numWeights, file))
+            {
+                std::cout << "Failed to load neural network weights" << std::endl;
+                goto onError;
+            }
         }
     }
 
     fclose(file);
     return true;
+
+onError:
+    fclose(file);
+    return false;
 }
 
-void NeuralNetwork::Init(uint32_t inputSize, const std::vector<uint32_t>& layersSizes, ActivationFunction outputLayerActivationFunc)
+void NeuralNetwork::Init(uint32_t inputSize, const std::vector<uint32_t>& layersSizes,
+                         ActivationFunction outputLayerActivationFunc,
+                         const std::vector<uint32_t>& layerVariants)
 {
     layers.reserve(layersSizes.size());
     uint32_t prevLayerSize = inputSize;
 
     for (size_t i = 0; i < layersSizes.size(); i++)
     {
-        layers.push_back(Layer(prevLayerSize, layersSizes[i]));
+        const uint32_t numVariants = layerVariants.size() > i ? layerVariants[i] : 1u;
+        layers.push_back(Layer(prevLayerSize, layersSizes[i], numVariants));
         prevLayerSize = layersSizes[i];
     }
 
-    layers.back().activationFunction = outputLayerActivationFunc;
+    layers.back().activationFunc = outputLayerActivationFunc;
 
     for (size_t i = 0; i < layersSizes.size(); i++)
     {
@@ -221,46 +252,27 @@ void NeuralNetwork::Init(uint32_t inputSize, const std::vector<uint32_t>& layers
     }
 }
 
-const Values& NeuralNetwork::Run(const Values& input, NeuralNetworkRunContext& ctx) const
+const Values& NeuralNetwork::Run(const InputDesc& input, NeuralNetworkRunContext& ctx) const
 {
     ASSERT(layers.size() == ctx.layers.size());
 
-    layers.front().Run(input, ctx.layers.front());
-
-    for (size_t i = 1; i < layers.size(); i++)
+    switch (input.mode)
     {
-        const Values& prevOutput = ctx.layers[i - 1].output;
-        layers[i].Run(prevOutput, ctx.layers[i]);
+    case InputMode::Full:
+        layers.front().Run(input.floatValues, ctx.layers.front());
+        break;
+    case InputMode::Sparse:
+        layers.front().Run(input.numFeatures, input.floatFeatures, ctx.layers.front());
+        break;
+    case InputMode::SparseBinary:
+        layers.front().Run(input.numFeatures, input.binaryFeatures, ctx.layers.front());
+        break;
     }
-
-    return ctx.layers.back().output;
-}
-
-const Values& NeuralNetwork::Run(uint32_t numFeatures, const uint16_t* features, NeuralNetworkRunContext& ctx) const
-{
-    ASSERT(layers.size() == ctx.layers.size());
-
-    layers.front().Run(numFeatures, features, ctx.layers.front());
-
+    
     for (size_t i = 1; i < layers.size(); i++)
     {
         const Values& prevOutput = ctx.layers[i - 1].output;
-        layers[i].Run(prevOutput, ctx.layers[i]);
-    }
-
-    return ctx.layers.back().output;
-}
-
-const Values& NeuralNetwork::Run(uint32_t numFeatures, const ActiveFeature* features, NeuralNetworkRunContext& ctx) const
-{
-    ASSERT(layers.size() == ctx.layers.size());
-
-    layers.front().Run(numFeatures, features, ctx.layers.front());
-
-    for (size_t i = 1; i < layers.size(); i++)
-    {
-        const Values& prevOutput = ctx.layers[i - 1].output;
-        layers[i].Run(prevOutput, ctx.layers[i]);
+        layers[i].Run(prevOutput.data(), ctx.layers[i]);
     }
 
     return ctx.layers.back().output;
@@ -311,20 +323,28 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
             const TrainingVector& vec = trainingSet[vecIndex];
 
+            NeuralNetwork::InputDesc inputDesc;
+            inputDesc.mode = vec.inputMode;
+            inputDesc.variant = vec.networkVariant;
+
             switch (vec.inputMode)
             {
             case InputMode::Full:
-                ctx.tempValues = network.Run(vec.inputs, ctx);
+                inputDesc.floatValues = vec.inputs.data();
                 break;
             case InputMode::Sparse:
-                ctx.tempValues = network.Run((uint32_t)vec.sparseInputs.size(), vec.sparseInputs.data(), ctx);
+                inputDesc.numFeatures = (uint32_t)vec.sparseInputs.size();
+                inputDesc.floatFeatures = vec.sparseInputs.data();
                 break;
             case InputMode::SparseBinary:
-                ctx.tempValues = network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), ctx);
+                inputDesc.numFeatures = (uint32_t)vec.sparseBinaryInputs.size();
+                inputDesc.binaryFeatures = vec.sparseBinaryInputs.data(); break;
                 break;
             default:
                 DEBUG_BREAK();
             }
+
+            ctx.tempValues = network.Run(inputDesc, ctx);
 
             // train last layers
             {
@@ -481,14 +501,16 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 }
 
 template<typename WeightType, typename BiasType>
-static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
+static void PackLayerWeights(const Layer& layer, uint32_t variantIdx, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
 {
+    const Layer::Variant& variant = layer.variants[variantIdx];
+
     // weights
     for (uint32_t j = 0; j < layer.numInputs; j++)
     {
         uint32_t i = 0;
 #ifdef USE_AVX2
-        const float* weightsPtr = layer.weights.data() + j * layer.numOutputs;
+        const float* weightsPtr = variant.weights.data() + j * layer.numOutputs;
         for (; i + 8 < layer.numOutputs; i += 8)
         {
             const __m256i quantizedWeights =
@@ -522,7 +544,7 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
 #endif // USE_AVX2
         for (; i < layer.numOutputs; i++)
         {
-            const float weight = layer.weights[j * layer.numOutputs + i];
+            const float weight = variant.weights[j * layer.numOutputs + i];
             const int32_t quantizedWeight = (int32_t)std::round(weight * weightScale);
             ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
             ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
@@ -541,7 +563,7 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
     // biases
     for (uint32_t i = 0; i < layer.numOutputs; i++)
     {
-        const float bias = layer.weights[layer.numInputs * layer.numOutputs + i];
+        const float bias = variant.weights[layer.numInputs * layer.numOutputs + i];
         const int32_t quantizedBias = (int32_t)std::round(bias * biasScale);
         ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
         ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
@@ -551,23 +573,57 @@ static void PackLayerWeights(const Layer& layer, WeightType* outWeights, BiasTyp
 
 bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 {
-    ASSERT(layers.size() == 4);
+    const uint32_t variant = 0; // TODO
+
+    ASSERT(layers.size() <= PackedNeuralNetwork::MaxNumLayers);
     ASSERT(layers[0].numOutputs <= FirstLayerMaxSize);
     ASSERT(layers[1].numInputs <= FirstLayerMaxSize);
-    ASSERT(layers[3].numOutputs == 1);
+    ASSERT(layers.back().numOutputs == 1);
 
-    if (!outNetwork.Resize(layers[0].numInputs,
-                           layers[1].numInputs,
-                           layers[2].numInputs,
-                           layers[3].numInputs))
     {
-        return false;
+        std::vector<uint32_t> layerSizes, layerVariants;
+        for (const Layer& layer : layers)
+        {
+            layerSizes.push_back(layer.numInputs);
+            layerVariants.push_back((uint32_t)layer.variants.size());
+        }
+
+        if (!outNetwork.Resize(layerSizes, layerVariants))
+        {
+            return false;
+        }
     }
 
-    PackLayerWeights(layers[0], (FirstLayerWeightType*)outNetwork.GetAccumulatorWeights(), (FirstLayerBiasType*)outNetwork.GetAccumulatorBiases(), InputLayerWeightQuantizationScale, InputLayerBiasQuantizationScale, true);
-    PackLayerWeights(layers[1], (HiddenLayerWeightType*)outNetwork.GetLayer1Weights(), (HiddenLayerBiasType*)outNetwork.GetLayer1Biases(), HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
-    PackLayerWeights(layers[2], (HiddenLayerWeightType*)outNetwork.GetLayer2Weights(), (HiddenLayerBiasType*)outNetwork.GetLayer2Biases(), HiddenLayerWeightQuantizationScale, HiddenLayerBiasQuantizationScale, false);
-    PackLayerWeights(layers[3], (LastLayerWeightType*)outNetwork.GetLayer3Weights(), (LastLayerBiasType*)outNetwork.GetLayer3Biases(), OutputLayerWeightQuantizationScale, OutputLayerBiasQuantizationScale, false);
+    // first layer
+    PackLayerWeights(layers.front(),
+                     variant,
+                     const_cast<FirstLayerWeightType*>(outNetwork.GetAccumulatorWeights()),
+                     const_cast<FirstLayerBiasType*>(outNetwork.GetAccumulatorBiases()),
+                     InputLayerWeightQuantizationScale,
+                     InputLayerBiasQuantizationScale,
+                     true);
+    
+    // hidden layers
+    for (uint32_t i = 1; i + 1 < layers.size(); ++i)
+    {
+        PackLayerWeights(layers[i],
+                         variant,
+                         const_cast<HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variant)),
+                         const_cast<HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variant)),
+                         HiddenLayerWeightQuantizationScale,
+                         HiddenLayerBiasQuantizationScale,
+                         false);
+    }
+
+    // last layer
+    const uint32_t lastLayerIndex = (uint32_t)layers.size() - 1;
+    PackLayerWeights(layers.back(),
+                     variant,
+                     const_cast<LastLayerWeightType*>(outNetwork.GetLayerWeights<LastLayerWeightType>(lastLayerIndex, variant)),
+                     const_cast<LastLayerBiasType*>(outNetwork.GetLayerBiases<LastLayerBiasType>(lastLayerIndex, variant)),
+                     OutputLayerWeightQuantizationScale,
+                     OutputLayerBiasQuantizationScale,
+                     false);
 
     return true;
 }
@@ -583,18 +639,21 @@ void NeuralNetwork::PrintStats() const
         float minBias = std::numeric_limits<float>::max();
         float maxBias = -std::numeric_limits<float>::max();
 
-        for (uint32_t i = 0; i < layer.numOutputs; i++)
+        for (const Layer::Variant& variant : layer.variants)
         {
-            float bias = layer.weights[layer.numInputs * layer.numOutputs + i];
-            minBias = std::min(minBias, bias);
-            maxBias = std::max(maxBias, bias);
-
-            for (uint32_t j = 0; j < layer.numInputs; j++)
+            for (uint32_t i = 0; i < layer.numOutputs; i++)
             {
-                const float weight = layer.weights[j * layer.numOutputs + i];
+                float bias = variant.weights[layer.numInputs * layer.numOutputs + i];
+                minBias = std::min(minBias, bias);
+                maxBias = std::max(maxBias, bias);
 
-                minWeight = std::min(minWeight, weight);
-                maxWeight = std::max(maxWeight, weight);
+                for (uint32_t j = 0; j < layer.numInputs; j++)
+                {
+                    const float weight = variant.weights[j * layer.numOutputs + i];
+
+                    minWeight = std::min(minWeight, weight);
+                    maxWeight = std::max(maxWeight, weight);
+                }
             }
         }
 

@@ -2,8 +2,8 @@
 
 #include "Common.hpp"
 
-#include <vector>
 #include <cmath>
+#include <vector>
 
 #if defined(PLATFORM_WINDOWS)
     #define WIN32_LEAN_AND_MEAN
@@ -20,7 +20,7 @@ class NeuralNetwork;
 static constexpr uint32_t CurrentVersion = 3;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t FirstLayerMaxSize = 512;
+static constexpr uint32_t FirstLayerMaxSize = 1024;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -71,21 +71,23 @@ class PackedNeuralNetwork
 {
 public:
 
-    struct Header
-    {
-        uint32_t magic = 0;
-        uint32_t version = 0;
-        uint32_t layerSizes[4] = { 0, 0, 0, 0 };
-        uint32_t padding[10];
-    };
-
     friend class NeuralNetwork;
 
     static constexpr uint32_t MaxInputs = 262144;
     static constexpr uint32_t MaxNeuronsInFirstLayer = 1024;
-    static constexpr uint32_t MaxNeuronsInLaterLayers = 128;
-    static constexpr uint32_t MinNeuronsInLaterLayers = 16;
+    static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
+    static constexpr uint32_t MinNeuronsInHiddenLayers = 16;
     static constexpr uint32_t MaxNumLayers = 4;
+    static constexpr uint32_t NumVariants = 8;
+
+    struct Header
+    {
+        uint32_t magic = 0;
+        uint32_t version = 0;
+        uint32_t layerSizes[MaxNumLayers] = { 0, 0, 0, 0 };
+        uint32_t layerVariants[MaxNumLayers] = { 0, 0, 0, 0 };
+        uint32_t padding[6];
+    };
 
     PackedNeuralNetwork();
     ~PackedNeuralNetwork();
@@ -94,7 +96,8 @@ public:
     void Release();
 
     // allocate weights
-    bool Resize(uint32_t numInputs, uint32_t l1size, uint32_t l2size, uint32_t l3size);
+    bool Resize(const std::vector<uint32_t>& layerSizes,
+                const std::vector<uint32_t>& numVariantsPerLayer = std::vector<uint32_t>());
 
     // load from file
     bool Load(const char* filePath);
@@ -105,49 +108,42 @@ public:
     // save to BMP file
     bool SaveAsImage(const char* filePath) const;
 
-    // Calculate neural network output based on incremetally updated accumulator
-    int32_t Run(const Accumulator& accumulator) const;
+    // Calculate neural network output based on incrementally updated accumulator
+    int32_t Run(const Accumulator& accumulator, uint32_t variant) const;
 
     // Calculate neural network output based on input
-    int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs) const;
+    int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs, uint32_t variant) const;
 
     INLINE uint32_t GetNumInputs() const { return header.layerSizes[0]; }
     INLINE uint32_t GetLayerSize(uint32_t i) const { return header.layerSizes[i]; }
 
+    void GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const;
+
     INLINE const FirstLayerWeightType* GetAccumulatorWeights() const
     {
-        return reinterpret_cast<const FirstLayerWeightType*>(weightsBuffer);
+        return reinterpret_cast<const FirstLayerWeightType*>(layerDataPointers[0]);
     }
     INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
     {
-        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + GetNumInputs() * GetLayerSize(1));
+        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + header.layerSizes[0] * header.layerSizes[1]);
     }
 
-    INLINE const HiddenLayerWeightType* GetLayer1Weights() const
+    template<typename T>
+    INLINE const T* GetLayerWeights(uint32_t index, uint32_t variant) const
     {
-        return reinterpret_cast<const HiddenLayerWeightType*>(GetAccumulatorBiases() + GetLayerSize(1));
-    }
-    INLINE const HiddenLayerBiasType* GetLayer1Biases() const
-    {
-        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer1Weights() + GetLayerSize(1) * GetLayerSize(2));
-    }
-
-    INLINE const HiddenLayerWeightType* GetLayer2Weights() const
-    {
-        return reinterpret_cast<const HiddenLayerWeightType*>(GetLayer1Biases() + GetLayerSize(2));
-    }
-    INLINE const HiddenLayerBiasType* GetLayer2Biases() const
-    {
-        return reinterpret_cast<const HiddenLayerBiasType*>(GetLayer2Weights() + GetLayerSize(2) * GetLayerSize(3));
+        const void* weights;
+        const void* biases;
+        GetLayerWeightsAndBiases(index, variant, weights, biases);
+        return reinterpret_cast<const T*>(weights);
     }
 
-    INLINE const LastLayerWeightType* GetLayer3Weights() const
+    template<typename T>
+    INLINE const T* GetLayerBiases(uint32_t index, uint32_t variant) const
     {
-        return reinterpret_cast<const LastLayerWeightType*>(GetLayer2Biases() + GetLayerSize(3));
-    }
-    INLINE const LastLayerBiasType* GetLayer3Biases() const
-    {
-        return reinterpret_cast<const LastLayerBiasType*>(GetLayer3Weights() + GetLayerSize(3) * OutputSize);
+        const void* weights;
+        const void* biases;
+        GetLayerWeightsAndBiases(index, variant, weights, biases);
+        return reinterpret_cast<const T*>(biases);
     }
 
     // calculate size of all weights buffer
@@ -159,7 +155,14 @@ private:
 
     void ReleaseFileMapping();
 
+    void InitLayerDataSizes();
+    void InitLayerDataPointers();
+
     Header header;
+
+    uint32_t numActiveLayers = 0;
+    uint32_t layerDataSizes[MaxNumLayers];  // size of each layer (in bytes)
+    uint8_t* layerDataPointers[MaxNumLayers];  // base pointer to weights of each layer
 
     // file mapping
 #if defined(PLATFORM_WINDOWS)
