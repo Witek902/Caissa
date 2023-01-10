@@ -31,6 +31,7 @@ static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
 static const uint32_t cBatchSize = 16 * 1024;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
+static const uint32_t cNumVariants = 1;
 
 
 static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outVector)
@@ -117,8 +118,18 @@ private:
 
 void NetworkTrainer::InitNetwork()
 {
-	m_network.Init(cNumNetworkInputs, { 512, 16, 32, 1 }, nn::ActivationFunction::Sigmoid);
+	m_network.Init(cNumNetworkInputs,
+                   { 768, 1 },
+                   nn::ActivationFunction::Sigmoid,
+                   { 1, cNumVariants });
+
+	//m_network.Init(cNumNetworkInputs,
+	//			   { 512, 16, 32, 1 },
+	//			   nn::ActivationFunction::Sigmoid,
+	//			   { 1, cNumVariants, cNumVariants, cNumVariants });
+
 	//m_network.Load("checkpoint.nn");
+
 	m_runCtx.Init(m_network);
 
 	for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -148,6 +159,7 @@ void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
 
         PositionToSparseVector(pos, outEntries[i].trainingVector);
         outEntries[i].trainingVector.singleOutput = entry.score;
+        outEntries[i].trainingVector.networkVariant = std::clamp((pos.GetNumPieces() - 1u) / 4u, 0u, cNumVariants - 1);
         outEntries[i].pos = pos;
     }
 }
@@ -183,11 +195,11 @@ void NetworkTrainer::Validate(uint32_t iteration)
             const ScoreType evalValue = Evaluate(m_trainingSet[i].pos);
             
             const std::vector<uint16_t>& features = m_trainingSet[i].trainingVector.sparseBinaryInputs;
-
-            const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size());
+            const uint32_t variant = m_trainingSet[i].trainingVector.networkVariant;
+            const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size(), variant);
             const float nnPackedValue = PawnToWinProbability(((float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns) / 100.0f);
 
-            const nn::Values& networkOutput = m_network.Run((uint32_t)features.size(), features.data(), threadData.networkRunContext);
+            const nn::Values& networkOutput = m_network.Run(nn::NeuralNetwork::InputDesc(features), threadData.networkRunContext);
             const float nnValue = networkOutput[0];
 
             if (i + 1 == cNumValidationVectorsPerIteration)
@@ -237,7 +249,7 @@ void NetworkTrainer::Validate(uint32_t iteration)
         Position pos(Position::InitPositionFEN);
         nn::TrainingVector vec;
         PositionToSparseVector(pos, vec);
-        startPosEvaluation = m_network.Run((uint32_t)vec.sparseBinaryInputs.size(), vec.sparseBinaryInputs.data(), m_runCtx)[0];
+        startPosEvaluation = m_network.Run(nn::NeuralNetwork::InputDesc(vec.sparseBinaryInputs), m_runCtx)[0];
     }
 
     waitable.Wait();

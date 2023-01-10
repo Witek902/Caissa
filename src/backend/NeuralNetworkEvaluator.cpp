@@ -83,7 +83,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     const uint32_t numFeatures = positionCopy.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
     ASSERT(numFeatures <= maxFeatures);
 
-    return network.Run(features, numFeatures);
+    const uint32_t variant = 0;
+    //const uint32_t variant = std::min(7u, (pos.GetNumPieces() - 1u) / 4u);
+
+    return network.Run(features, numFeatures, variant);
 }
 
 INLINE static void AppendFeatureIndex(uint16_t featureIndex, uint16_t addedFeatures[], uint32_t& numAddedFeatures, uint16_t removedFeatures[], uint32_t& numRemovedFeatures)
@@ -344,7 +347,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         UpdateAccumulator(network, prevAccumNode, node, perspective);
     }
 
-    const int32_t nnOutput = network.Run(accumulator);
+    const uint32_t variant = 0;
+    //const uint32_t variant = std::min(7u, (node.position.GetNumPieces() - 1u) / 4u);
+
+    const int32_t nnOutput = network.Run(accumulator, variant);
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {

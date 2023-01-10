@@ -12,7 +12,7 @@
 #include <memory>
 
 const char* c_DefaultEvalFile = "eval-AE45D47A.pnn";
-const char* c_DefaultEndgameEvalFile = "endgame-9AE58CC2.pnn";
+const char* c_DefaultEndgameEvalFile = "endgame-96BE5450.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 

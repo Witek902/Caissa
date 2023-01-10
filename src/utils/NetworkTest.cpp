@@ -70,28 +70,24 @@ bool TestNetwork()
 
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
-            uint32_t numFeatures = 0;
-            uint16_t featureIndices[2] = { 0, 0 };
+            std::vector<uint16_t> features;
 
             if (i == 1)
             {
-                numFeatures = 1;
-                featureIndices[0] = 0;
+                features.push_back(0);
             }
             else if (i == 2)
             {
-                numFeatures = 1;
-                featureIndices[0] = 1;
+                features.push_back(1);
             }
             else if (i == 3)
             {
-                numFeatures = 2;
-                featureIndices[0] = 0;
-                featureIndices[1] = 1;
+                features.push_back(0);
+                features.push_back(1);
             }
 
-            const auto& networkOutput = network.Run(numFeatures, featureIndices, networkRunCtx);
-            int32_t packedNetworkOutput = packedNetwork.Run(featureIndices, numFeatures);
+            const auto& networkOutput = network.Run(nn::NeuralNetwork::InputDesc(features), networkRunCtx);
+            int32_t packedNetworkOutput = packedNetwork.Run(features.data(), (uint32_t)features.size(), 0u);
 
             const float expectedValue = trainingSet[i].singleOutput;
             const float nnValue = networkOutput[0];

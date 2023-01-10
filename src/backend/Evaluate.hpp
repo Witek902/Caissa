@@ -111,7 +111,12 @@ inline float WinProbabilityToPawns(float w)
 // convert win probability to evaluation score (in pawns)
 inline int32_t WinProbabilityToCentiPawns(float w)
 {
-    return (int32_t)std::round(100.0f * WinProbabilityToPawns(w));
+    if (w > 0.99999f)
+        return INT32_MAX;
+    else if (w < 0.00001f)
+		return -INT32_MAX;
+    else
+        return (int32_t)std::round(100.0f * WinProbabilityToPawns(w));
 }
 
 ScoreType Evaluate(const Position& position, NodeInfo* node = nullptr, bool useNN = true);
