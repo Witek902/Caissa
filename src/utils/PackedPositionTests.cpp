@@ -83,8 +83,11 @@ void RunPackedPositionTests()
             key.numBlackRooks   = Distr(0, 2)(mt);
             key.numBlackQueens  = Distr(0, 1)(mt);
 
+            RandomPosDesc desc;
+            desc.materialKey = key;
+
             Position originalPos;
-            GenerateRandomPosition(mt, key, originalPos);
+            GenerateRandomPosition(mt, desc, originalPos);
 
             PackedPosition packedPos;
             TEST_EXPECT(PackPosition(originalPos, packedPos));

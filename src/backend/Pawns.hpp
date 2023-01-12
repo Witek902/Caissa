@@ -60,3 +60,19 @@ inline int32_t CountPassedPawns(const Bitboard ourPawns, const Bitboard theirPaw
 
     return count;
 }
+
+inline uint32_t CountDoubledPawns(const Bitboard pawns)
+{
+    uint32_t count = 0;
+
+    for (uint32_t file = 0; file < 8; ++file)
+    {
+        const uint32_t pawnsOnFile = (Bitboard::FileBitboard(file) & pawns).Count();
+        if (pawnsOnFile > 0u)
+        {
+            count += (pawnsOnFile - 1);
+        }
+    }
+
+    return count;
+}
