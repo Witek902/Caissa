@@ -135,8 +135,11 @@ bool TrainEndgame()
                     materialKey = materialKey.SwappedColors();
                 }
 
+                RandomPosDesc desc;
+                desc.materialKey = materialKey;
+
                 Position pos;
-                GenerateRandomPosition(gen, materialKey, pos);
+                GenerateRandomPosition(gen, desc, pos);
 
                 // generate only quiet position
                 if (!pos.IsValid() || !pos.IsQuiet())
