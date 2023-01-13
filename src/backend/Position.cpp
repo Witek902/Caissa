@@ -1427,23 +1427,28 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
     Bitboard occupied = Whites().Occupied() | Blacks().Occupied();
 
-    int32_t balance = 0;
+    int32_t balance = -treshold;
 
+    if (move.IsCapture())
     {
         const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(toSquare);
-        balance = c_seePieceValues[(uint32_t)capturedPiece] - treshold;
+        ASSERT(capturedPiece != Piece::None);
+        balance += c_seePieceValues[(uint32_t)capturedPiece];
         if (balance < 0) return false;
     }
 
     {
-        const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(fromSquare);
-        balance = c_seePieceValues[(uint32_t)movedPiece] - balance;
+        ASSERT(move.GetPiece() == GetCurrentSide().GetPieceAtSquare(fromSquare));
+        balance = c_seePieceValues[(uint32_t)move.GetPiece()] - balance;
         if (balance <= 0) return true;
     }
 
     // "do" move
     occupied &= ~fromSquare.GetBitboard();
     occupied |= toSquare.GetBitboard();
+
+    const Bitboard bishopsAndQueens = Whites().bishops | Blacks().bishops | Whites().queens | Blacks().queens;
+    const Bitboard rooksAndQueens = Whites().rooks | Blacks().rooks | Whites().queens | Blacks().queens;
 
     Bitboard allAttackers = GetAttackers(toSquare, occupied);
 
@@ -1479,7 +1484,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             if (balance < result) break;
 
             // update diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(move.ToSquare(), occupied) & (Whites().bishops | Blacks().bishops | Whites().queens | Blacks().queens);
+            allAttackers |= Bitboard::GenerateBishopAttacks(move.ToSquare(), occupied) & bishopsAndQueens;
         }
         else if ((pieceBitboard = ourAttackers & side.knights))
         {
@@ -1502,7 +1507,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             if (balance < result) break;
 
             // update diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & (Whites().bishops | Blacks().bishops | Whites().queens | Blacks().queens);
+            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
         }
         else if ((pieceBitboard = ourAttackers & side.rooks))
         {
@@ -1515,7 +1520,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             if (balance < result) break;
 
             // update horizontal/vertical attackers
-            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & (Whites().rooks | Blacks().rooks | Whites().queens | Blacks().queens);
+            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
         }
         else if ((pieceBitboard = ourAttackers & side.queens))
         {
@@ -1528,8 +1533,8 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
             if (balance < result) break;
 
             // update horizontal/vertical/diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & (Whites().bishops | Blacks().bishops | Whites().queens | Blacks().queens);
-            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & (Whites().rooks | Blacks().rooks | Whites().queens | Blacks().queens);
+            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
+            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
         }
         else // king
         {
