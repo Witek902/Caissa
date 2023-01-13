@@ -1,9 +1,7 @@
 #pragma once
 
-#include "Common.hpp"
+#include "PositionHash.hpp"
 #include "Bitboard.hpp"
-#include "Piece.hpp"
-#include "Square.hpp"
 #include "Color.hpp"
 
 #include <string>
@@ -33,7 +31,7 @@ struct SidePosition
         return Square(FirstBitSet(king));
     }
 
-    bool operator == (const SidePosition& rhs) const
+    INLINE bool operator == (const SidePosition& rhs) const
     {
         return
             pawns == rhs.pawns &&
@@ -44,7 +42,7 @@ struct SidePosition
             king == rhs.king;
     }
 
-    bool operator != (const SidePosition& rhs) const
+    INLINE bool operator != (const SidePosition& rhs) const
     {
         return
             pawns != rhs.pawns ||
@@ -243,6 +241,7 @@ public:
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
+    INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu); }
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }

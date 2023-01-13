@@ -141,6 +141,8 @@ struct NodeInfo
 
     NNEvaluatorContext* nnContext = nullptr;
 
+    INLINE bool IsPV() const { return (beta - alpha) != 1; }
+
     bool ShouldCheckMove(const Move move) const
     {
         for (uint32_t i = 0; i < moveFilterCount; ++i)

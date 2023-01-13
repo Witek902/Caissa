@@ -1,6 +1,7 @@
 #include "UCI.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/NeuralNetworkEvaluator.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Material.hpp"
@@ -11,7 +12,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.4.10"
+#define VersionNumber "1.4.11"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -280,7 +281,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         MaterialKey matKey = { 8, 2, 2, 2, 1, 8, 2, 2, 2, 1 };
         std::random_device rd;
         std::mt19937 mt(rd());
-        GenerateRandomPosition(mt, matKey, pos);
+        GenerateRandomPosition(mt, RandomPosDesc{ matKey }, pos);
 
         if (args.size() >= 4 && args[2] == "moves")
         {
@@ -631,6 +632,16 @@ void UniversalChessInterface::DoSearch()
         }
 
         std::cout << std::endl << std::flush;
+
+        // print NN evaluator stats
+#ifdef NN_ACCUMULATOR_STATS
+		{
+			uint64_t numUpdates = 0, numRefreshes = 0;
+			NNEvaluator::GetStats(numUpdates, numRefreshes);
+            std::cout << "NN accumulator updates: " << numUpdates << std::endl;
+            std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
+		}
+#endif // NN_ACCUMULATOR_STATS
     }
     
     mSearchCtx->waitable.OnFinished();

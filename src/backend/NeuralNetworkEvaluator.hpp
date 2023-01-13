@@ -6,6 +6,8 @@
 #include "Square.hpp"
 #include "PackedNeuralNetwork.hpp"
 
+// #define NN_ACCUMULATOR_STATS
+
 // position to NN input mapping mode
 enum class NetworkInputMapping : uint8_t
 {
@@ -84,8 +86,13 @@ class NNEvaluator
 {
 public:
 	// evaluate a position from scratch
-	static int32_t Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos, NetworkInputMapping mapping);
+	static int32_t Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos);
 
 	// incrementally update and evaluate
-	static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, NetworkInputMapping mapping);
+	static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node);
+
+#ifdef NN_ACCUMULATOR_STATS
+	static void GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes);
+	static void ResetStats();
+#endif // NN_ACCUMULATOR_STATS
 };
