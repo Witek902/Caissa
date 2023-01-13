@@ -961,7 +961,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     ASSERT(node.alpha < node.beta);
     ASSERT(node.moveFilterCount == 0);
 
-    const bool isPvNode = node.beta - node.alpha != 1;
+    const bool isPvNode = node.IsPV();
 
     // clear PV line
     node.pvLength = 0;
@@ -1247,7 +1247,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     const Position& position = node.position;
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
-    const bool isPvNode = node.beta - node.alpha != 1;
+    const bool isPvNode = node.IsPV();
     const bool hasMoveFilter = node.moveFilterCount > 0u;
 
     ScoreType alpha = node.alpha;
@@ -1403,7 +1403,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // evaluate position if it wasn't evaluated
     if (!node.isInCheck)
     {
-        if (staticEval == InvalidValue)
+        // always evaluate on PV line so the NN accumulator is up to date
+        // TODO there should be a separate function to just update accumulator,
+        // so it could be done if in check as well
+        if (staticEval == InvalidValue || node.isPvNodeFromPrevIteration)
         {
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);

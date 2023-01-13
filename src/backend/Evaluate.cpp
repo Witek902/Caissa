@@ -362,8 +362,8 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         if (networkToUse && std::abs(finalValue) < c_nnTresholdMax)
         {
             int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
-                NNEvaluator::Evaluate(*networkToUse, *nodeInfo, NetworkInputMapping::Full_Symmetrical) :
-                NNEvaluator::Evaluate(*networkToUse, pos, NetworkInputMapping::Full_Symmetrical);
+                NNEvaluator::Evaluate(*networkToUse, *nodeInfo) :
+                NNEvaluator::Evaluate(*networkToUse, pos);
 
             // convert to centipawn range
             nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
