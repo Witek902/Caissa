@@ -847,18 +847,18 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
     return Move();
 }
 
-Move Position::MoveFromString(const std::string& str, MoveNotation notation) const
+Move Position::MoveFromString(const std::string& moveString, MoveNotation notation) const
 {
     if (notation == MoveNotation::LAN)
     {
-        if (str.length() < 4)
+        if (moveString.length() < 4)
         {
             fprintf(stderr, "MoveFromString: Move string too short\n");
             return {};
         }
 
-        Square fromSquare = Square::FromString(str.substr(0, 2));
-        Square toSquare = Square::FromString(str.substr(2, 2));
+        Square fromSquare = Square::FromString(moveString.substr(0, 2));
+        Square toSquare = Square::FromString(moveString.substr(2, 2));
 
         if (!fromSquare.IsValid() || !toSquare.IsValid())
         {
@@ -923,9 +923,9 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
         }
 
         Piece promoteTo = Piece::None;
-        if (str.length() > 4)
+        if (moveString.length() > 4)
         {
-            if (!CharToPiece(str[4], promoteTo))
+            if (!CharToPiece(moveString[4], promoteTo))
             {
                 fprintf(stderr, "MoveFromString: Failed to parse promotion\n");
                 return {};
@@ -936,6 +936,9 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
     }
     else if (notation == MoveNotation::SAN)
     {
+        // trim suffixes such as "!?", "+"
+        const std::string str = moveString.substr(0, moveString.find_last_not_of("?!#+") + 1);
+
         if (str.length() < 2)
         {
             fprintf(stderr, "MoveFromString: Move string too short\n");
@@ -948,12 +951,16 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             {
                 const Square sourceSquare = Whites().GetKingSquare();
                 const Square targetSquare = GetShortCastleRookSquare(sourceSquare, mWhitesCastlingRights);
+                ASSERT(sourceSquare.IsValid());
+                ASSERT(targetSquare.IsValid());
                 return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, false, true);
             }
             else
             {
                 const Square sourceSquare = Blacks().GetKingSquare();
                 const Square targetSquare = GetShortCastleRookSquare(sourceSquare, mBlacksCastlingRights);
+                ASSERT(sourceSquare.IsValid());
+                ASSERT(targetSquare.IsValid());
                 return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, false, true);
             }
         }
@@ -963,12 +970,16 @@ Move Position::MoveFromString(const std::string& str, MoveNotation notation) con
             {
                 const Square sourceSquare = Whites().GetKingSquare();
                 const Square targetSquare = GetLongCastleRookSquare(sourceSquare, mWhitesCastlingRights);
+                ASSERT(sourceSquare.IsValid());
+                ASSERT(targetSquare.IsValid());
                 return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, true, false);
             }
             else
             {
                 const Square sourceSquare = Blacks().GetKingSquare();
                 const Square targetSquare = GetLongCastleRookSquare(sourceSquare, mBlacksCastlingRights);
+                ASSERT(sourceSquare.IsValid());
+                ASSERT(targetSquare.IsValid());
                 return Move::Make(sourceSquare, targetSquare, Piece::King, Piece::None, false, false, true, false);
             }
         }
@@ -1298,16 +1309,16 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
 
         Bitboard occupied = 0;
 
-		// generate white king square
+        // generate white king square
         Square whiteKingSq;
-		{
-			const Bitboard mask = desc.allowedWhiteKing;
-			ASSERT(mask);
+        {
+            const Bitboard mask = desc.allowedWhiteKing;
+            ASSERT(mask);
             whiteKingSq = genLegalSquare(mask);
-			ASSERT(whiteKingSq.IsValid());
-			occupied |= whiteKingSq.GetBitboard();
-			outPosition.SetPiece(whiteKingSq, Piece::King, Color::White);
-		}
+            ASSERT(whiteKingSq.IsValid());
+            occupied |= whiteKingSq.GetBitboard();
+            outPosition.SetPiece(whiteKingSq, Piece::King, Color::White);
+        }
 
         // generate black king square
         Square blackKingSq;
