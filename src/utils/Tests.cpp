@@ -928,6 +928,12 @@ static void RunPositionTests()
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "2kr3r/pppppppp/8/8/8/8/PPPPPPPP/2KR3R w - - 2 2");
+
+            TEST_EXPECT(pos.FromFEN("rk4b1/p1bpqp2/1ppn1p1r/6pp/1PP1P2P/PNBB1P2/3P2P1/4QRKR b Ha - 0 12"));
+            move = pos.MoveFromString("O-O-O", MoveNotation::SAN);
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(pos.DoMove(move));
+            TEST_EXPECT(pos.ToFEN() == "2kr2b1/p1bpqp2/1ppn1p1r/6pp/1PP1P2P/PNBB1P2/3P2P1/4QRKR w H - 1 13");
         }
 
         Position::s_enableChess960 = false;
