@@ -75,34 +75,8 @@ Position::Position()
     , mBlacksCastlingRights(0)
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
-    , mPieceSquareValueMG(0)
-    , mPieceSquareValueEG(0)
     , mHash(0u)
 {}
-
-void Position::UpdatePieceSquareValue(Square square, const Piece piece, const Color color, bool remove)
-{
-    if (color != Color::White)
-    {
-        square = square.FlippedRank();
-        remove = !remove;
-    }
-
-    (void)piece;
-
-    //const PieceScore pieceScore = PSQT[(uint32_t)piece - (uint32_t)Piece::Pawn][square.mIndex];
-
-    //if (remove)
-    //{
-    //    mPieceSquareValueMG -= pieceScore.mg;
-    //    mPieceSquareValueEG -= pieceScore.eg;
-    //}
-    //else
-    //{
-    //    mPieceSquareValueMG += pieceScore.mg;
-    //    mPieceSquareValueEG += pieceScore.eg;
-    //}
-}
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
 {
@@ -120,8 +94,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.queens & mask) == 0);
     ASSERT((pos.king & mask) == 0);
 
-    UpdatePieceSquareValue(square, piece, color, false);
-
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 
     pos.GetPieceBitBoard(piece) |= mask;
@@ -135,8 +107,6 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
 
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
-
-    UpdatePieceSquareValue(square, piece, color, true);
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
