@@ -57,11 +57,55 @@
     #define INLINE_LAMBDA [[msvc::forceinline]]
     #define NO_INLINE __declspec(noinline)
 
+    INLINE uint32_t PopCount(uint8_t x)
+    {
+#ifdef USE_POPCNT
+        return __popcnt16(x);
+#else // !USE_POPCNT
+        const uint8_t m1 = 0x55;
+        const uint8_t m2 = 0x33;
+        const uint8_t m4 = 0x0f;
+        x = (x & m1) + ((x >> 1) & m1);
+        x = (x & m2) + ((x >> 2) & m2);
+        x = (x & m4) + ((x >> 4) & m4);
+        return x;
+#endif // USE_POPCNT
+    }
+
+    INLINE uint32_t PopCount(uint16_t x)
+    {
+#ifdef USE_POPCNT
+        return __popcnt16(x);
+#else // !USE_POPCNT
+        const uint16_t m1 = 0x5555;
+        const uint16_t m2 = 0x3333;
+        const uint16_t m4 = 0x0f0f;
+        const uint16_t m8 = 0x00ff;
+        x = (x & m1) + ((x >> 1) & m1);
+        x = (x & m2) + ((x >> 2) & m2);
+        x = (x & m4) + ((x >> 4) & m4);
+        x = (x & m8) + ((x >> 8) & m8);
+        return x;
+#endif // USE_POPCNT
+    }
+
+    INLINE uint32_t PopCount(uint32_t x)
+    {
+#ifdef USE_POPCNT
+        return __popcnt(x);
+#else // !USE_POPCNT
+        x -= ((x >> 1) & 0x55555555);
+        x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+        return (((x + (x >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
+#endif // USE_POPCNT
+    }
+
     INLINE uint32_t PopCount(uint64_t x)
     {
 #ifdef USE_POPCNT
         return (uint32_t)__popcnt64(x);
 #else // !USE_POPCNT
+        // https://en.wikipedia.org/wiki/Hamming_weight
         const uint64_t m1 = 0x5555555555555555;
         const uint64_t m2 = 0x3333333333333333;
         const uint64_t m4 = 0x0f0f0f0f0f0f0f0f;
