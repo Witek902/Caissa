@@ -26,13 +26,13 @@ static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const bool printGames = true;
-static const uint32_t c_maxNodes = 75000;
-static const uint32_t c_maxDepth = 15;
+static const uint32_t c_maxNodes = 40000;
+static const uint32_t c_maxDepth = 12;
 static const int32_t c_maxEval = 2000;
-static const int32_t c_openingMaxEval = 250;
+static const int32_t c_openingMaxEval = 500;
 static const int32_t c_multiPv = 2;
-static const int32_t c_multiPvMaxPly = 40;
-static const int32_t c_multiPvScoreTreshold = 25;
+static const int32_t c_multiPvMaxPly = 10;
+static const int32_t c_multiPvScoreTreshold = 20;
 static const uint32_t c_numRandomMoves = 4;
 
 using namespace threadpool;
@@ -195,9 +195,9 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Loading opening positions..." << std::endl;
     std::vector<PackedPosition> openingPositions;
-    if (args.size() > 0)
+    if (args.size() > 1)
     {
-        LoadOpeningPositions(args[0], openingPositions);
+        LoadOpeningPositions(args[1], openingPositions);
     }
 
     std::cout << "Starting games..." << std::endl;
@@ -335,6 +335,14 @@ void SelfPlay(const std::vector<std::string>& args)
                 }
             }
 
+            // reduce threshold of picking worse move
+            // this way the game will be more random at the beginning and there will be less blunders later in the game
+            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 1);
+
+            const bool moveSuccess = game.DoMove(move, moveScore);
+            ASSERT(moveSuccess);
+            (void)moveSuccess;
+
             // adjudicate draw if eval is zero
             if (std::abs(moveScore) >= 2)
             {
@@ -366,24 +374,16 @@ void SelfPlay(const std::vector<std::string>& args)
                     whiteWinsCounter = 0;
                 }
 
-				if (moveScore < -c_maxEval)
-				{
-					blackWinsCounter++;
-					if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
-				}
-				else
-				{
+                if (moveScore < -c_maxEval)
+                {
+                    blackWinsCounter++;
+                    if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
+                }
+                else
+                {
                     blackWinsCounter = 0;
                 }
             }
-
-            // reduce threshold of picking worse move
-            // this way the game will be more random at the beginning and there will be less blunders later in the game
-            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 1);
-
-            const bool moveSuccess = game.DoMove(move, moveScore);
-            ASSERT(moveSuccess);
-            (void)moveSuccess;
 
             if (game.GetPosition().IsMate())
             {
@@ -423,7 +423,7 @@ void SelfPlay(const std::vector<std::string>& args)
     {
         Waitable waitable;
         {
-            const uint32_t numGamesPerLoop = 4096;
+            const uint32_t numGamesPerLoop = 16 * 1024;
 
             TaskBuilder taskBuilder(waitable);
             taskBuilder.ParallelFor("SelfPlay", numGamesPerLoop, gameTask);
