@@ -235,10 +235,6 @@ public:
     INLINE Bitboard Occupied() const { return Whites().Occupied() | Blacks().Occupied(); }
     INLINE Bitboard OccupiedExcludingKing() const { return Whites().OccupiedExcludingKing() | Blacks().OccupiedExcludingKing(); }
 
-    // get piece square value
-    INLINE int32_t GetPieceSquareValueMG() const { return mPieceSquareValueMG; }
-    INLINE int32_t GetPieceSquareValueEG() const { return mPieceSquareValueEG; }
-
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
     INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu); }
@@ -284,8 +280,6 @@ private:
 
     void ClearRookCastlingRights(const Square affectedSquare);
 
-    void UpdatePieceSquareValue(Square square, const Piece piece, const Color color, bool remove);
-
     // BOARD STATE & FLAGS
 
     // bitboards for whites and blacks
@@ -304,9 +298,6 @@ private:
     uint16_t mMoveCount;
 
     // METADATA
-
-    int32_t mPieceSquareValueMG;
-    int32_t mPieceSquareValueEG;
 
     uint64_t mHash; // whole position hash
 };
