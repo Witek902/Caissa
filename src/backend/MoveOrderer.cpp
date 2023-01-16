@@ -234,13 +234,14 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
         Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
     const Bitboard oponentKnightAttacks = Bitboard::GetKnightAttacks(pos.GetOpponentSide().knights);
+    const uint32_t pawnFilesMask = pos.GetCurrentSide().pawns.FileMask();
 
     const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
 
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
     Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
 
-    // at root node, obtaing previous move from the game data
+    // at the root node, obtain previous move from the game data
     if (node.height == 0)
     {
         ASSERT(!prevMove.IsValid());
@@ -310,6 +311,12 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                 {
                     score = LosingCaptureValue + mvvLva;
                 }
+            }
+
+            // penalty for creating doubled pawns
+            if (move.GetPiece() == Piece::Pawn && ((1 << move.ToSquare().File()) & pawnFilesMask))
+            {
+                score--;
             }
 
             // bonus for capturing previously moved piece
@@ -387,20 +394,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
                     score += bonus[rank];
                 }
-
-                //// penalty for moving uncastled king
-                //if (move.GetPiece() == Piece::King)
-                //{
-                //    const uint8_t castlingRights = pos.GetSideToMove() == Color::White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
-                //    if (castlingRights && !move.IsCastling())
-                //    {
-                //        score -= 4000;
-                //    }
-                //    else if (move.IsCastling())
-                //    {
-                //        score += 2000;
-                //    }
-                //}
             }
         }
 

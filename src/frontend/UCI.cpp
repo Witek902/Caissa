@@ -12,7 +12,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.5.1"
+#define VersionNumber "1.5.2"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
