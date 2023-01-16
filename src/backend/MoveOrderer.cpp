@@ -150,7 +150,7 @@ void MoveOrderer::Clear()
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = (int32_t)counter + 8 * delta - ((int32_t)counter * std::abs(delta) + 512) / 1024;
+    int32_t newValue = (int32_t)counter + delta - ((int32_t)counter * std::abs(delta) + 8192) / 16384;
 
     // there should be no saturation
     ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());
@@ -164,7 +164,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(depth >= 0);
 
     // don't update uncertain moves
-    if (numMoves <= 1 && depth <= 2)
+    if (numMoves <= 1 && depth < 2)
     {
         return;
     }
@@ -174,7 +174,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
     const Move followupMove = node.parentNode && !node.parentNode->isNullMove ? node.parentNode->previousMove : Move::Invalid();
 
-    const int32_t bonus = std::min(depth * depth, 512);
+    const int32_t bonus = std::min(64 * (depth - 1) + depth * depth, 2000);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
