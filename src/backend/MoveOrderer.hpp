@@ -82,7 +82,7 @@ public:
     void UpdateKillerMove(const NodeInfo& node, const Move move);
 
     // assign scores to move list
-    void ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves) const;
+    void ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves, bool withQuiets = true) const;
 
     void DebugPrint() const;
 

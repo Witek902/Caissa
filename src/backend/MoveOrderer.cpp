@@ -223,17 +223,44 @@ void MoveOrderer::ClearKillerMoves(uint32_t depth)
 	}
 }
 
-void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves) const
+void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves, bool withQuiets) const
 {
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
+    
 
-    const Bitboard oponentPawnAttacks = (pos.GetSideToMove() == Color::White) ?
-        Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns) :
-        Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
-    const Bitboard oponentKnightAttacks = Bitboard::GetKnightAttacks(pos.GetOpponentSide().knights);
+    Bitboard attackedByPawns = 0;
+    Bitboard attackedByMinors = 0;
+    Bitboard attackedByRooks = 0;
+
+    if (withQuiets)
+    {
+        const SidePosition& currentSide = pos.GetCurrentSide();
+        const SidePosition& opponentSide = pos.GetOpponentSide();
+        const Bitboard occupied = pos.Occupied();
+
+        attackedByPawns = (pos.GetSideToMove() == Color::White) ?
+            Bitboard::GetPawnAttacks<Color::Black>(opponentSide.pawns) :
+            Bitboard::GetPawnAttacks<Color::White>(opponentSide.pawns);
+
+        if (currentSide.rooks | currentSide.queens)
+        {
+            attackedByMinors = attackedByPawns |
+                Bitboard::GetKnightAttacks(pos.GetOpponentSide().knights);
+            opponentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA{
+                attackedByMinors |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupied); });
+        }
+
+        if (currentSide.queens)
+        {
+            attackedByRooks = attackedByMinors;
+            opponentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA{
+                attackedByRooks |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupied); });
+        }
+    }
+
     const uint32_t pawnFilesMask = pos.GetCurrentSide().pawns.FileMask();
 
     const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
@@ -325,7 +352,7 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                 score += RecaptureBonus;
             }
         }
-        else // non-capture
+        else if (withQuiets) // non-capture
         {
             // killer moves heuristics
             if (node.height < MaxSearchDepth)
@@ -359,32 +386,32 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     score += quietMoveFollowupHistory[prevPiece][prevTo][piece][to];
                 }
 
-                // bonus for moving a piece out of pawn attack
-                if (move.GetPiece() != Piece::Pawn &&
-                    (oponentPawnAttacks & move.FromSquare().GetBitboard()))
+                // bonus for moving a piece out of attack
+                if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.FromSquare().GetBitboard()))
                 {
-                    score += 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_pawnValue.mg);
+                    score += 16000;
+                }
+                else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.FromSquare().GetBitboard()))
+                {
+                    score += 12000;
+                }
+                else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.FromSquare().GetBitboard()))
+                {
+                    score += 8000;
                 }
 
-                // bonus for moving a piece out of knight attack
-                if ((move.GetPiece() == Piece::Queen || move.GetPiece() == Piece::Rook) &&
-                    (oponentKnightAttacks & move.FromSquare().GetBitboard()))
+                // penalty for moving a piece into attack
+                if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.ToSquare().GetBitboard()))
                 {
-                    score += 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_knightValue.mg);
+                    score -= 16000 + 4000;
                 }
-
-                // penalty for moving a piece under pawn attack
-                if (move.GetPiece() != Piece::Pawn &&
-                    (oponentPawnAttacks & move.ToSquare().GetBitboard()))
+                else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.ToSquare().GetBitboard()))
                 {
-                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_pawnValue.mg);
+                    score -= 12000 + 4000;
                 }
-
-                // penalty for moving a piece under knight attack
-                if (move.GetPiece() != Piece::Pawn && move.GetPiece() != Piece::Knight &&
-                    (oponentKnightAttacks & move.ToSquare().GetBitboard()))
+                else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.ToSquare().GetBitboard()))
                 {
-                    score -= 8 * int32_t(c_pieceValues[(uint32_t)move.GetPiece()].mg - c_knightValue.mg);
+                    score -= 8000 + 4000;
                 }
 
                 // pawn push bonus
