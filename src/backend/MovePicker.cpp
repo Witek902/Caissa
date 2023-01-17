@@ -60,7 +60,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             moves.RemoveMove(pvMove);
             for (uint32_t i = 0; i < TTEntry::NumMoves; i++) moves.RemoveMove(ttEntry.moves[i]);
 
-            moveOrderer.ScoreMoves(node, game, moves);
+            moveOrderer.ScoreMoves(node, game, moves, false);
 
             [[fallthrough]];
         }
