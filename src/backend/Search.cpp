@@ -1094,6 +1094,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     uint32_t numQuietCheckEvasion = 0;
     bool searchAborted = false;
 
+    Move captureMovesTried[MoveList::MaxMoves];
+    uint32_t numCaptureMovesTried = 0;
+
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
         ASSERT(move.IsValid());
@@ -1160,6 +1163,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         const ScoreType score = -QuiescenceNegaMax(thread, childNode, ctx);
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
+        if (move.IsCapture())
+        {
+            captureMovesTried[numCaptureMovesTried++] = move;
+        }
+
         if (score > bestValue) // new best move found
         {
             // update PV line
@@ -1195,6 +1203,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     if (!searchAborted && node.isInCheck && moveIndex == 0)
     {
         return -CheckmateValue + (ScoreType)node.height;
+    }
+
+    // update move orderer
+    if (bestValue >= beta)
+    {
+        if (bestMoves[0].IsCapture())
+        {
+            thread.moveOrderer.UpdateCapturesHistory(node, captureMovesTried, numCaptureMovesTried, bestMoves[0], node.depth);
+        }
     }
 
     // store value in transposition table
@@ -1627,6 +1644,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     bool filteredSomeMove = false;
 
     Move quietMovesTried[MoveList::MaxMoves];
+    Move captureMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
     uint32_t numChecks = 0;
@@ -1884,9 +1902,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             quietMovesTried[numQuietMovesTried++] = move;
         }
-        else
+        else if (move.IsCapture())
         {
-            numCaptureMovesTried++;
+            captureMovesTried[numCaptureMovesTried++] = move;
         }
 
         if (score > bestValue) // new best move found
@@ -1944,16 +1962,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
-    // update move orderer
-    if (bestValue >= beta)
-    {
-        if (bestMoves[0].IsQuiet())
-        {
-            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMoves[0], node.depth);
-            thread.moveOrderer.UpdateKillerMove(node, bestMoves[0]);
-        }
-    }
-
     // no legal moves
     if (!searchAborted && moveIndex == 0u)
     {
@@ -1973,6 +1981,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue);
 #endif // ENABLE_SEARCH_TRACE
         return bestValue;
+    }
+
+    // update move orderer
+    if (bestValue >= beta)
+    {
+        if (bestMoves[0].IsQuiet())
+        {
+            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMoves[0], node.depth);
+            thread.moveOrderer.UpdateKillerMove(node, bestMoves[0]);
+        }
+        else if (bestMoves[0].IsCapture())
+        {
+            thread.moveOrderer.UpdateCapturesHistory(node, captureMovesTried, numCaptureMovesTried, bestMoves[0], node.depth);
+        }
     }
 
 #ifdef COLLECT_SEARCH_STATS
