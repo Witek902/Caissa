@@ -6,13 +6,9 @@
 
 #include <algorithm>
 #include <limits>
+#include <iomanip>
 
 static constexpr int32_t RecaptureBonus = 100000;
-
-static int32_t ComputeMvvLvaScore(const Piece capturedPiece, const Piece attackingPiece)
-{
-    return 8 * (int32_t)capturedPiece - (int32_t)attackingPiece;
-}
 
 MoveOrderer::MoveOrderer()
 {
@@ -125,6 +121,29 @@ void MoveOrderer::DebugPrint() const
     }
 
     std::cout << std::endl;
+    std::cout << "=== CAPTURE HISTORY ===" << std::endl;
+
+    for (uint32_t piece = 0; piece < 6; ++piece)
+    {
+        for (uint32_t capturedPiece = 0; capturedPiece < 5; ++capturedPiece)
+        {
+            std::cout << PieceToChar(Piece(piece + 1)) << 'x' << PieceToChar(Piece(capturedPiece + 1)) << std::endl;
+
+            for (uint32_t rank = 0; rank < 8; ++rank)
+            {
+                for (uint32_t file = 0; file < 8; ++file)
+                {
+                    const uint32_t square = 8 * (7 - rank) + file;
+                    const CounterType count = capturesHistory[0][piece][capturedPiece][square];
+                    std::cout << std::fixed << std::setw(8) << count;
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+        }
+    }
+
+    std::cout << std::endl;
 #endif // CONFIGURATION_FINAL
 }
 
@@ -145,6 +164,7 @@ void MoveOrderer::Clear()
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(quietMoveContinuationHistory, 0, sizeof(quietMoveContinuationHistory));
     memset(quietMoveFollowupHistory, 0, sizeof(quietMoveFollowupHistory));
+    memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -203,6 +223,45 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 }
 
+INLINE static Piece GetCapturedPiece(const Position& pos, const Move move)
+{
+    return move.IsEnPassant() ? Piece::Pawn : pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+}
+
+void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
+{
+    // depth can be negative in QSearch
+    depth = std::max(0, depth);
+
+    // don't update uncertain moves
+    if (numMoves <= 1)
+    {
+        return;
+    }
+
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+
+    const int32_t bonus = std::min(16 + 32 * depth + depth * depth, 2000);
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        const Move move = moves[i];
+        ASSERT(move.IsCapture());
+
+        const int32_t delta = move == bestMove ? bonus : -bonus;
+
+        const Piece captured = GetCapturedPiece(node.position, move);
+        ASSERT(captured != Piece::None);
+
+        const uint32_t capturedIdx = (uint32_t)captured - 1;
+        const uint32_t pieceIdx = (uint32_t)move.GetPiece() - 1;
+
+        ASSERT(pieceIdx < 6);
+        ASSERT(capturedIdx < 5);
+        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+    }
+}
+
 void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
 {
     if (node.height < MaxSearchDepth)
@@ -214,13 +273,13 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
 
 void MoveOrderer::ClearKillerMoves(uint32_t depth)
 {
-	if (depth < MaxSearchDepth)
-	{
+    if (depth < MaxSearchDepth)
+    {
         for (uint32_t numPieces = 0; numPieces <= MaxNumPieces; ++numPieces)
         {
             killerMoves[numPieces][depth].Clear();
         }
-	}
+    }
 }
 
 void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves, bool withQuiets) const
@@ -260,8 +319,6 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                 attackedByRooks |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupied); });
         }
     }
-
-    const uint32_t pawnFilesMask = pos.GetCurrentSide().pawns.FileMask();
 
     const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
 
@@ -312,38 +369,29 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
         if (move.IsCapture())
         {
             const Piece attackingPiece = move.GetPiece();
-            const Piece capturedPiece = move.IsEnPassant() ? Piece::Pawn : pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
-            const int32_t mvvLva = ComputeMvvLvaScore(capturedPiece, attackingPiece);
-            ASSERT(mvvLva > 0);
+            const Piece capturedPiece = GetCapturedPiece(pos, move);
+            ASSERT(capturedPiece != Piece::None);
 
-            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
+            if ((uint32_t)attackingPiece <= (uint32_t)capturedPiece)
             {
-                score = WinningCaptureValue + mvvLva;
-            }
-            else if ((uint32_t)attackingPiece == (uint32_t)capturedPiece)
-            {
-                score = GoodCaptureValue + mvvLva;
+                score = GoodCaptureValue;
             }
             else
             {
-                if (pos.StaticExchangeEvaluation(move, 100))
-                {
-                    score = WinningCaptureValue + mvvLva;
-                }
-                else if (pos.StaticExchangeEvaluation(move, 0))
-                {
-                    score = GoodCaptureValue + mvvLva;
-                }
-                else
-                {
-                    score = LosingCaptureValue + mvvLva;
-                }
+                if (pos.StaticExchangeEvaluation(move))     score = GoodCaptureValue;
+                else                                        score = LosingCaptureValue;
             }
 
-            // penalty for creating doubled pawns
-            if (move.GetPiece() == Piece::Pawn && ((1 << move.ToSquare().File()) & pawnFilesMask))
+            // most valuable victim first
+            score += 6 * (int32_t)capturedPiece * UINT16_MAX / 128;
+
+            // capture history
             {
-                score--;
+                const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
+                const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
+                ASSERT(capturedIdx < 5);
+                ASSERT(pieceIdx < 6);
+                score += ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
             }
 
             // bonus for capturing previously moved piece
