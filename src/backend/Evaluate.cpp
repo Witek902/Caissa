@@ -221,6 +221,107 @@ bool CheckInsufficientMaterial(const Position& pos)
     return false;
 }
 
+const TPieceScore<int32_t> ComputePSQT(const Position& pos)
+{
+    const Square whiteKingSq = pos.Whites().GetKingSquare();
+    const Square blackKingSq = pos.Blacks().GetKingSquare();
+
+    const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
+    const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
+
+    const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
+    const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
+
+    const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
+    const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
+
+    const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
+    const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
+
+    TPieceScore<int32_t> value = { 0, 0 };
+
+    pos.Whites().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[0][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[1][2 * (square ^ blackSqMask)]); });
+    pos.Whites().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[2][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[3][2 * (square ^ blackSqMask)]); });
+    pos.Whites().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[4][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[5][2 * (square ^ blackSqMask)]); });
+    pos.Whites().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[6][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[7][2 * (square ^ blackSqMask)]); });
+    pos.Whites().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[8][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[9][2 * (square ^ blackSqMask)]); });
+
+    pos.Blacks().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[1][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[0][2 * (square ^ blackSqMask)]); });
+    pos.Blacks().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[3][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[2][2 * (square ^ blackSqMask)]); });
+    pos.Blacks().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[5][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[4][2 * (square ^ blackSqMask)]); });
+    pos.Blacks().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[7][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[6][2 * (square ^ blackSqMask)]); });
+    pos.Blacks().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA{
+        value += PieceScore(&whitesPSQT[9][2 * (square ^ whiteSqMask)]);
+        value -= PieceScore(&blacksPSQT[8][2 * (square ^ blackSqMask)]); });
+
+    return value;
+}
+
+void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, const DirtyPiece* dirtyPieces, uint32_t numDirtyPieces)
+{
+    const Square whiteKingSq = pos.Whites().GetKingSquare();
+    const Square blackKingSq = pos.Blacks().GetKingSquare();
+
+    const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
+    const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
+
+    const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
+    const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
+
+    const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
+    const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
+
+    const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
+    const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
+
+    for (uint32_t i = 0; i < numDirtyPieces; ++i)
+    {
+        const DirtyPiece& dirtyPiece = dirtyPieces[i];
+
+        // any king movement invalidates PSQT as the values are king-relative
+        // it should be checked before
+        ASSERT(dirtyPiece.piece != Piece::King);
+
+        const uint32_t pieceIndex = (uint32_t)dirtyPiece.piece - (uint32_t)Piece::Pawn;
+        ASSERT(pieceIndex < 5);
+
+        const uint32_t whitePieceIndex = 2u * pieceIndex + (0 ^ (uint32_t)dirtyPiece.color);
+        const uint32_t blackPieceIndex = 2u * pieceIndex + (1 ^ (uint32_t)dirtyPiece.color);
+
+        if (dirtyPiece.toSquare.IsValid()) // add piece
+        {
+            score += PieceScore(&whitesPSQT[whitePieceIndex][2u * (dirtyPiece.toSquare.Index() ^ whiteSqMask)]);
+            score -= PieceScore(&blacksPSQT[blackPieceIndex][2u * (dirtyPiece.toSquare.Index() ^ blackSqMask)]);
+        }
+        if (dirtyPiece.fromSquare.IsValid()) // remove piece
+        {
+            score -= PieceScore(&whitesPSQT[whitePieceIndex][2u * (dirtyPiece.fromSquare.Index() ^ whiteSqMask)]);
+            score += PieceScore(&blacksPSQT[blackPieceIndex][2u * (dirtyPiece.fromSquare.Index() ^ blackSqMask)]);
+        }
+    }
+
+    // compare with non-incremental version
+    ASSERT(score == ComputePSQT(pos));
+}
+
 ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 {
     const MaterialKey materialKey = pos.GetMaterialKey();
@@ -236,14 +337,17 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         }
     }
 
-    const Bitboard occupiedExcludingKing = pos.OccupiedExcludingKing();
-	const Bitboard whitePawnsAttacks = Bitboard::GetPawnAttacks<Color::White>(pos.Whites().pawns);
-	const Bitboard blackPawnsAttacks = Bitboard::GetPawnAttacks<Color::Black>(pos.Blacks().pawns);
-
-    const Square whiteKingSq(FirstBitSet(pos.Whites().king));
-    const Square blackKingSq(FirstBitSet(pos.Blacks().king));
-
-    TPieceScore<int32_t> value = { 0, 0 };
+    TPieceScore<int32_t> value;
+    
+    if (nodeInfo)
+    {
+        value = nodeInfo->psqtScore;
+        ASSERT(value.mg != INT32_MIN && value.eg != INT32_MIN);
+    }
+    else
+    {
+        value = ComputePSQT(pos);
+    }
 
     const int32_t whiteQueens   = materialKey.numWhiteQueens;
     const int32_t whiteRooks    = materialKey.numWhiteRooks;
@@ -256,53 +360,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     const int32_t blackBishops  = materialKey.numBlackBishops;
     const int32_t blackKnights  = materialKey.numBlackKnights;
     const int32_t blackPawns    = materialKey.numBlackPawns;
-
-    // piece square tables probing
-    {
-        const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
-        const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
-
-        const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
-        const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
-
-        const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
-        const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
-
-        const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
-        const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
-
-        pos.Whites().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[0][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[1][2 * (square ^ blackSqMask)]); });
-        pos.Whites().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[2][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[3][2 * (square ^ blackSqMask)]); });
-        pos.Whites().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[4][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[5][2 * (square ^ blackSqMask)]); });
-        pos.Whites().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[6][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[7][2 * (square ^ blackSqMask)]); });
-        pos.Whites().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[8][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[9][2 * (square ^ blackSqMask)]); });
-        
-        pos.Blacks().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[1][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[0][2 * (square ^ blackSqMask)]); });
-        pos.Blacks().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[3][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[2][2 * (square ^ blackSqMask)]); });
-        pos.Blacks().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[5][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[4][2 * (square ^ blackSqMask)]); });
-        pos.Blacks().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[7][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[6][2 * (square ^ blackSqMask)]); });
-        pos.Blacks().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA {
-            value += PieceScore(&whitesPSQT[9][2 * (square ^ whiteSqMask)]);
-            value -= PieceScore(&blacksPSQT[8][2 * (square ^ blackSqMask)]); });
-    }
 
     value += c_queenValue * (whiteQueens - blackQueens);
     value += c_rookValue * (whiteRooks - blackRooks);
@@ -326,12 +383,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     // castling rights
     value += c_castlingRightsBonus * ((int8_t)PopCount(pos.GetWhitesCastlingRights()) - (int8_t)PopCount(pos.GetBlacksCastlingRights()));
-
-    //{
-    //    value += c_kingMobilityBonus[(Bitboard::GetKingAttacks(pos.Whites().GetKingSquare()) & ~occupiedExcludingKing & ~blackPawnsAttacks).Count()];
-    //    value -= c_kingMobilityBonus[(Bitboard::GetKingAttacks(pos.Blacks().GetKingSquare()) & ~occupiedExcludingKing & ~whitePawnsAttacks).Count()];
-    //}
-
 
     // 0 - endgame, 64 - opening
     const int32_t gamePhase =
@@ -384,9 +435,9 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 8;
     }
     else if (finalValue < -c_evalSaturationTreshold)
-	{
-		finalValue = -c_evalSaturationTreshold - (c_evalSaturationTreshold - finalValue) / 8;
-	}
+    {
+        finalValue = -c_evalSaturationTreshold - (c_evalSaturationTreshold - finalValue) / 8;
+    }
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 

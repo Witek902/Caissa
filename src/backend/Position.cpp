@@ -782,8 +782,8 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
         if (nnContext)
         {
             nnContext->MarkAsDirty();
-            nnContext->removedPieces[0] = { move.GetPiece(), mSideToMove, move.FromSquare() };
-            nnContext->numRemovedPieces = 1;
+            nnContext->dirtyPieces[0] = { move.GetPiece(), mSideToMove, move.FromSquare(), move.ToSquare() };
+            nnContext->numDirtyPieces = 1;
         }
     }
 
@@ -798,7 +798,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
             if (nnContext)
             {
-                nnContext->removedPieces[nnContext->numRemovedPieces++] = { capturedPiece, capturedColor, move.ToSquare() };
+                nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { capturedPiece, capturedColor, move.ToSquare(), Square::Invalid() };
             }
         }
 
@@ -809,14 +809,18 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
     // put moved piece
     if (!move.IsCastling())
     {
-        const bool isPromotion = move.GetPiece() == Piece::Pawn && move.GetPromoteTo() != Piece::None;
+        const bool isPromotion = move.GetPromoteTo() != Piece::None;
         const Piece targetPiece = isPromotion ? move.GetPromoteTo() : move.GetPiece();
         SetPiece(move.ToSquare(), targetPiece, mSideToMove);
 
-        if (nnContext)
+        if (isPromotion)
         {
-            nnContext->addedPieces[0] = { targetPiece, mSideToMove, move.ToSquare() };
-            nnContext->numAddedPieces = 1;
+            ASSERT(move.GetPiece() == Piece::Pawn);
+            if (nnContext)
+            {
+                nnContext->dirtyPieces[0].toSquare = Square::Invalid();
+                nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { targetPiece, mSideToMove, Square::Invalid(), move.ToSquare() };
+            }
         }
     }
 
@@ -831,7 +835,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
         if (nnContext)
         {
-            nnContext->removedPieces[nnContext->numRemovedPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare };
+            nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare, Square::Invalid() };
         }
     }
 
@@ -875,9 +879,11 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
             if (nnContext)
             {
-                nnContext->removedPieces[nnContext->numRemovedPieces++] = { Piece::Rook, mSideToMove, oldRookSquare };
-                nnContext->addedPieces[nnContext->numAddedPieces++] = { Piece::King, mSideToMove, newKingSquare };
-                nnContext->addedPieces[nnContext->numAddedPieces++] = { Piece::Rook, mSideToMove, newRookSquare };
+                ASSERT(nnContext->numDirtyPieces == 1);
+                // adjust king movement
+                nnContext->dirtyPieces[0].toSquare = newKingSquare;
+                // move the rook
+                nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { Piece::Rook, mSideToMove, oldRookSquare, newRookSquare };
             }
         }
 
@@ -924,8 +930,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
 
     if (nnContext)
     {
-        ASSERT(nnContext->numRemovedPieces > 0 && nnContext->numAddedPieces > 0);
-        ASSERT(nnContext->numRemovedPieces <= 2 && nnContext->numAddedPieces <= 2);
+        ASSERT(nnContext->numDirtyPieces > 0 && nnContext->numDirtyPieces <= MaxNumDirtyPieces);
     }
 
     // can't be in check after move
