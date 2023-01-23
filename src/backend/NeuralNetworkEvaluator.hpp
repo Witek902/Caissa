@@ -37,8 +37,12 @@ struct DirtyPiece
 {
 	Piece piece;
 	Color color;
-	Square square;
+	Square fromSquare;
+	Square toSquare;
 };
+
+// promotion with capture
+static constexpr uint32_t MaxNumDirtyPieces = 3;
 
 struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 {
@@ -49,10 +53,8 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 	bool accumDirty[2];
 
 	// added and removed pieces information
-	DirtyPiece addedPieces[2];
-	DirtyPiece removedPieces[2];
-	uint32_t numAddedPieces;
-	uint32_t numRemovedPieces;
+	DirtyPiece dirtyPieces[MaxNumDirtyPieces];
+	uint32_t numDirtyPieces;
 
 	// cache NN output
 	int32_t nnScore;
@@ -76,8 +78,7 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 	{
 		accumDirty[0] = true;
 		accumDirty[1] = true;
-		numAddedPieces = 0;
-		numRemovedPieces = 0;
+		numDirtyPieces = 0;
 		nnScore = InvalidValue;
 	}
 };

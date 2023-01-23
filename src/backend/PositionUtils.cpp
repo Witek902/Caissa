@@ -117,6 +117,8 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos)
         outPos.SetEnPassantSquare(Square(inPos.enPassantFile, inPos.sideToMove == 0 ? 5 : 2));
     }
 
+    outPos.ComputeHash();
+
     return success;
 }
 
@@ -136,7 +138,7 @@ bool Position::operator == (const Position& rhs) const
         mWhitesCastlingRights == rhs.mWhitesCastlingRights &&
         mBlacksCastlingRights == rhs.mBlacksCastlingRights;
 
-    if (result)
+    if (result && mHash != 0 && rhs.mHash != 0)
     {
         ASSERT(mHash == rhs.mHash);
     }

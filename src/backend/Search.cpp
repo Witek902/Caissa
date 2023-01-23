@@ -956,6 +956,23 @@ static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
     return static_cast<ScoreType>(adjustedScore);
 }
 
+static void RefreshPsqtScore(NodeInfo& node)
+{
+    // refresh PSQT score (incrementally, if possible)
+    if (node.height == 0 ||
+        node.previousMove.GetPiece() == Piece::King ||
+        !node.nnContext)
+    {
+        node.psqtScore = ComputePSQT(node.position);
+    }
+    else // incremental update
+    {
+        node.psqtScore = node.parentNode->psqtScore;
+        ASSERT(node.psqtScore.mg != INT32_MIN && node.psqtScore.eg != INT32_MIN);
+        ComputeIncrementalPSQT(node.psqtScore, node.position, node.nnContext->dirtyPieces, node.nnContext->numDirtyPieces);
+    }
+}
+
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.alpha < node.beta);
@@ -1008,6 +1025,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
         }
     }
+
+    // make sure PSQT score is up to date before calling Evaluate()
+    RefreshPsqtScore(node);
 
     const bool maxDepthReached = false; // node.height + 1 >= MaxSearchDepth;
 
@@ -1416,6 +1436,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         }
     }
+
+    // make sure PSQT score is up to date before calling Evaluate()
+    RefreshPsqtScore(node);
 
     // evaluate position if it wasn't evaluated
     if (!node.isInCheck)

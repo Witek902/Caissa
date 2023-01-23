@@ -5,6 +5,7 @@
 #include "MoveOrderer.hpp"
 #include "Time.hpp"
 #include "Memory.hpp"
+#include "Score.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 
 #include <atomic>
@@ -112,14 +113,15 @@ struct NodeInfo
 
     // ignore given moves in search, used for multi-PV search
     const Move* moveFilter = nullptr;
+	uint8_t moveFilterCount = 0;
+
+	uint8_t pvIndex = 0;
 
     // remaining depth
     int16_t depth = 0;
 
     // depth in ply (depth counting from root)
     uint16_t height = 0;
-
-    uint8_t moveFilterCount = 0;
 
     ScoreType alpha;
     ScoreType beta;
@@ -128,10 +130,7 @@ struct NodeInfo
 
     Move previousMove = Move::Invalid();
 
-    uint8_t pvIndex = 0;
-
-    uint16_t pvLength = 0;
-    PackedMove pvLine[MaxSearchDepth];
+    TPieceScore<int32_t> psqtScore = { INT32_MIN, INT32_MIN };
 
     bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
@@ -140,6 +139,9 @@ struct NodeInfo
     bool isSingularSearch = false;
 
     NNEvaluatorContext* nnContext = nullptr;
+
+	uint16_t pvLength = 0;
+	PackedMove pvLine[MaxSearchDepth];
 
     INLINE bool IsPV() const { return (beta - alpha) != 1; }
 
