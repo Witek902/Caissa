@@ -30,7 +30,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 16 * 1024;
-static const uint32_t cBatchSize = 8 * 1024;
+static const uint32_t cMinBatchSize = 32;
+static const uint32_t cMaxBatchSize = 16 * 1024;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
 {
@@ -262,7 +263,7 @@ bool TrainEndgame()
 			taskBuilder.Task("Train", [&](const TaskContext& ctx)
 			{
 				nn::TrainParams params;
-				params.batchSize = cBatchSize;
+				params.batchSize = std::min(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
 				params.learningRate = learningRate;
 
 				TaskBuilder taskBuilder{ ctx };

@@ -63,12 +63,21 @@ public:
 
     Layer(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants = 1);
 
+    struct WeightsUpdateOptions
+    {
+        float learningRate = 1.0f;
+        float gradientScale = 1.0f;
+        float weightsRange = 10.0f;
+        float biasRange = 10.0f;
+        float weightDecay = 0.0f;
+    };
+
     void InitWeights();
-    void Run(const float* values, LayerRunContext& ctx) const;
-    void Run(uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
-    void Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
-    void Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
-    void UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay);
+    void Run(uint32_t variantIndex, const float* values, LayerRunContext& ctx, float additionalBias = 0.0f) const;
+    void Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
+    void Run(uint32_t variantIndex, uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
+    void Backpropagate(uint32_t variantIndex, const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
+    void UpdateWeights(uint32_t variantIndex, const Gradients& gradients, const WeightsUpdateOptions& options);
 
     uint32_t numInputs;
     uint32_t numOutputs;
@@ -85,6 +94,11 @@ public:
     };
 
     std::vector<Variant> variants;
+
+private:
+
+    Variant& GetVariant(uint32_t index) { return index < variants.size() ? variants[index] : variants.front(); }
+    const Variant& GetConstVariant(uint32_t index) const { return index < variants.size() ? variants[index] : variants.front(); }
 };
 
 } // namespace nn

@@ -256,23 +256,32 @@ const Values& NeuralNetwork::Run(const InputDesc& input, NeuralNetworkRunContext
 {
     ASSERT(layers.size() == ctx.layers.size());
 
-    switch (input.mode)
+    // first layer
     {
-    case InputMode::Full:
-        layers.front().Run(input.floatValues, ctx.layers.front());
-        break;
-    case InputMode::Sparse:
-        layers.front().Run(input.numFeatures, input.floatFeatures, ctx.layers.front());
-        break;
-    case InputMode::SparseBinary:
-        layers.front().Run(input.numFeatures, input.binaryFeatures, ctx.layers.front());
-        break;
+        const Layer& layer = layers.front();
+        const uint32_t variantIndex = layer.variants.size() > 0 ? input.variant : 0u;
+        switch (input.mode)
+        {
+        case InputMode::Full:
+            layer.Run(variantIndex, input.floatValues, ctx.layers.front());
+            break;
+        case InputMode::Sparse:
+            layer.Run(variantIndex, input.numFeatures, input.floatFeatures, ctx.layers.front());
+            break;
+        case InputMode::SparseBinary:
+            layer.Run(variantIndex, input.numFeatures, input.binaryFeatures, ctx.layers.front());
+            break;
+        }
     }
     
     for (size_t i = 1; i < layers.size(); i++)
     {
+        const uint32_t variantIndex = layers[i].variants.size() > 0 ? input.variant : 0u;
+
+        const float additionalBias = (i + 1) < layers.size() ? 0.0f : input.lastLayerBias;
+
         const Values& prevOutput = ctx.layers[i - 1].output;
-        layers[i].Run(prevOutput.data(), ctx.layers[i]);
+        layers[i].Run(variantIndex, prevOutput.data(), ctx.layers[i], additionalBias);
     }
 
     return ctx.layers.back().output;
@@ -291,7 +300,12 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
         threadData.gradients.resize(network.GetLayersNumber());
         for (size_t i = 0; i < network.layers.size(); ++i)
         {
-            threadData.gradients[i].Init(network.layers[i].numInputs, network.layers[i].numOutputs);
+            const Layer& layer = network.layers[i];
+            threadData.gradients[i].resize(layer.variants.size());
+            for (size_t j = 0; j < layer.variants.size(); ++j)
+            {
+                threadData.gradients[i][j].Init(network.layers[i].numInputs, network.layers[i].numOutputs);
+            }
         }
     }
 
@@ -304,12 +318,18 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             PerThreadData& threadData = m_perThreadData[threadIdx];
 
             // at the first layer, clear only dirty gradients (most of them are zero)
-            threadData.gradients.front().Clear();
+            for (auto& layerGradients : threadData.gradients.front())
+            {
+                layerGradients.Clear();
+            }
 
             // reset accumulated gradients for remaining layers
             for (size_t i = 1; i < network.layers.size(); ++i)
             {
-                std::fill(threadData.gradients[i].m_values.begin(), threadData.gradients[i].m_values.end(), 0.0f);
+                for (auto& layerGradients : threadData.gradients[i])
+                {
+                    std::fill(layerGradients.m_values.begin(), layerGradients.m_values.end(), 0.0f);
+                }
             }
         };
 
@@ -326,6 +346,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             NeuralNetwork::InputDesc inputDesc;
             inputDesc.mode = vec.inputMode;
             inputDesc.variant = vec.networkVariant;
+            inputDesc.lastLayerBias = vec.lastLayerBias;
 
             switch (vec.inputMode)
             {
@@ -348,7 +369,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
             // train last layers
             {
-                const float errorScale = 2.0f;
+                const float errorScale = 1.0f;
 
                 // compute gradient (error derivative)
                 if (vec.outputMode == OutputMode::Single)
@@ -365,7 +386,10 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                     }
                 }
 
-                network.layers.back().Backpropagate(ctx.tempValues, ctx.layers.back(), perThreadData.gradients.back());
+                network.layers.back().Backpropagate(inputDesc.variant,
+                                                    ctx.tempValues,
+                                                    ctx.layers.back(),
+                                                    perThreadData.gradients.back()[inputDesc.variant]);
             }
 
             // train hidden layers
@@ -373,84 +397,92 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             {
                 for (size_t i = network.layers.size() - 1; i-- > 0; )
                 {
-                    network.layers[i].Backpropagate(ctx.layers[i + 1].inputGradient, ctx.layers[i], perThreadData.gradients[i]);
+                    const Layer& layer = network.layers[i];
+                    const uint32_t layerVariantIndex = inputDesc.variant < layer.variants.size() ? inputDesc.variant : 0;
+                    layer.Backpropagate(inputDesc.variant,
+                                        ctx.layers[i + 1].inputGradient,
+                                        ctx.layers[i],
+                                        perThreadData.gradients[i][layerVariantIndex]);
                 }
             }
         };
 
         const auto updateWeightsFunc = [this, &network, params]() INLINE_LAMBDA
         {
-            const float gradientScale = 1.0f;  // (float)params.batchSize;
             for (size_t layerIdx = 0; layerIdx < network.layers.size(); ++layerIdx)
             {
                 Layer& layer = network.layers[layerIdx];
 
+                Layer::WeightsUpdateOptions updateOptions;
+                updateOptions.learningRate = params.learningRate;
+                updateOptions.gradientScale = 1.0f; // (float)params.batchSize;
+
                 float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
                 float weightRange = 0.0f, biasRange = 0.0f;
-                float weightDecay = 0.0f;
-
                 if (layerIdx == 0) // input layer
                 {
+                    updateOptions.weightDecay = 1.0e-6f;
                     weightQuantizationScale = InputLayerWeightQuantizationScale;
                     biasQuantizationScale = InputLayerBiasQuantizationScale;
                     // divide by number of active input features to avoid accumulator overflow
                     weightRange = (float)std::numeric_limits<FirstLayerWeightType>::max() / 32;
                     biasRange = (float)std::numeric_limits<FirstLayerBiasType>::max() / 32;
-                    weightDecay = 1.0e-7f;
                 }
                 else if (layerIdx + 1 == network.layers.size()) // output layer
                 {
+                    updateOptions.weightDecay = 1.0e-3f;
                     weightQuantizationScale = OutputLayerWeightQuantizationScale;
                     biasQuantizationScale = OutputLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
                     biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
-                    weightDecay = 1.0e-6f;
                 }
                 else // hidden layer
                 {
+                    updateOptions.weightDecay = 1.0e-3f;
                     weightQuantizationScale = HiddenLayerWeightQuantizationScale;
                     biasQuantizationScale = HiddenLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
                     biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
-                    weightDecay = 1.0e-6f;
                 }
 
-                // accumulate gradients from all per-thread gradients
+                updateOptions.weightsRange = params.clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f;
+                updateOptions.biasRange = params.clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f;
+
+                for (size_t variantIdx = 0; variantIdx < layer.variants.size(); ++variantIdx)
                 {
-                    MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
-                    for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
+                    // accumulate gradients from all per-thread gradients
                     {
-                        Gradients& targetGradients = m_perThreadData.front().gradients[layerIdx];
-                        Gradients& srcGradients = m_perThreadData[threadIdx].gradients[layerIdx];
-
-                        const size_t numGradients = targetGradients.m_values.size();
-                        ASSERT(srcGradients.m_values.size() == numGradients);
-
-                        if (layerIdx == 0)
+                        MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
+                        for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                         {
-                            // in case of first layer copy only dirty gradients
-                            targetGradients.Accumulate(srcGradients);
-                        }
-                        else
-                        {
-                            for (size_t i = 0; i <= layer.numInputs; ++i)
+                            Gradients& targetGradients = m_perThreadData.front().gradients[layerIdx][variantIdx];
+                            Gradients& srcGradients = m_perThreadData[threadIdx].gradients[layerIdx][variantIdx];
+
+                            const size_t numGradients = targetGradients.m_values.size();
+                            ASSERT(srcGradients.m_values.size() == numGradients);
+
+                            if (layerIdx == 0)
                             {
-                                targetGradients.m_dirty[i] = true;
+                                // in case of first layer copy only dirty gradients
+                                targetGradients.Accumulate(srcGradients);
                             }
-
-                            for (size_t i = 0; i < numGradients; ++i)
+                            else
                             {
-                                targetGradients.m_values[i] += srcGradients.m_values[i];
+                                for (size_t i = 0; i <= layer.numInputs; ++i)
+                                {
+                                    targetGradients.m_dirty[i] = true;
+                                }
+
+                                for (size_t i = 0; i < numGradients; ++i)
+                                {
+                                    targetGradients.m_values[i] += srcGradients.m_values[i];
+                                }
                             }
                         }
                     }
-                }
 
-                layer.UpdateWeights(
-                    params.learningRate, m_perThreadData.front().gradients[layerIdx], gradientScale,
-                    params.clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f,
-                    params.clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f,
-                    weightDecay);
+                    layer.UpdateWeights((uint32_t)variantIdx, m_perThreadData.front().gradients[layerIdx][variantIdx], updateOptions);
+                }
             }
         };
 
@@ -573,12 +605,11 @@ static void PackLayerWeights(const Layer& layer, uint32_t variantIdx, WeightType
 
 bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 {
-    const uint32_t variant = 0; // TODO
-
     ASSERT(layers.size() <= PackedNeuralNetwork::MaxNumLayers);
     ASSERT(layers[0].numOutputs <= FirstLayerMaxSize);
     ASSERT(layers[1].numInputs <= FirstLayerMaxSize);
     ASSERT(layers.back().numOutputs == 1);
+    ASSERT(layers.front().variants.size() == 1);
 
     {
         std::vector<uint32_t> layerSizes, layerVariants;
@@ -596,7 +627,7 @@ bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 
     // first layer
     PackLayerWeights(layers.front(),
-                     variant,
+                     0,
                      const_cast<FirstLayerWeightType*>(outNetwork.GetAccumulatorWeights()),
                      const_cast<FirstLayerBiasType*>(outNetwork.GetAccumulatorBiases()),
                      InputLayerWeightQuantizationScale,
@@ -606,24 +637,30 @@ bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
     // hidden layers
     for (uint32_t i = 1; i + 1 < layers.size(); ++i)
     {
-        PackLayerWeights(layers[i],
-                         variant,
-                         const_cast<HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variant)),
-                         const_cast<HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variant)),
-                         HiddenLayerWeightQuantizationScale,
-                         HiddenLayerBiasQuantizationScale,
-                         false);
+        for (uint32_t variantIdx = 0; variantIdx < layers[i].variants.size(); ++variantIdx)
+        {
+            PackLayerWeights(layers[i],
+                             variantIdx,
+                             const_cast<HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
+                             const_cast<HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
+                             HiddenLayerWeightQuantizationScale,
+                             HiddenLayerBiasQuantizationScale,
+                             false);
+        }
     }
 
     // last layer
     const uint32_t lastLayerIndex = (uint32_t)layers.size() - 1;
-    PackLayerWeights(layers.back(),
-                     variant,
-                     const_cast<LastLayerWeightType*>(outNetwork.GetLayerWeights<LastLayerWeightType>(lastLayerIndex, variant)),
-                     const_cast<LastLayerBiasType*>(outNetwork.GetLayerBiases<LastLayerBiasType>(lastLayerIndex, variant)),
-                     OutputLayerWeightQuantizationScale,
-                     OutputLayerBiasQuantizationScale,
-                     false);
+    for (uint32_t variantIdx = 0; variantIdx < layers.back().variants.size(); ++variantIdx)
+    {
+        PackLayerWeights(layers.back(),
+                         variantIdx,
+                         const_cast<LastLayerWeightType*>(outNetwork.GetLayerWeights<LastLayerWeightType>(lastLayerIndex, variantIdx)),
+                         const_cast<LastLayerBiasType*>(outNetwork.GetLayerBiases<LastLayerBiasType>(lastLayerIndex, variantIdx)),
+                         OutputLayerWeightQuantizationScale,
+                         OutputLayerBiasQuantizationScale,
+                         false);
+    }
 
     return true;
 }

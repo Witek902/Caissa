@@ -35,6 +35,7 @@ struct TrainingVector
     float singleOutput;
 
     uint32_t networkVariant = 0;
+    float lastLayerBias = 0.0f;
 
     void CombineSparseInputs();
     void Validate() const;
@@ -75,6 +76,9 @@ public:
 
 		// used to select weights variant in deeper layers
 		uint32_t variant = 0;
+
+        // additional bias for last layer
+        float lastLayerBias = 0.0f;
 
         InputDesc() = default;
 
@@ -141,10 +145,12 @@ public:
 
 private:
 
+    using PerVariantGradients = std::vector<Gradients>;
+
     struct PerThreadData
     {
-        std::deque<Gradients>       gradients;      // per-layer gradients
-        NeuralNetworkRunContext     runContext;
+        std::vector<PerVariantGradients>    gradients;      // per-layer, per-variant gradients
+        NeuralNetworkRunContext             runContext;
     };
 
     std::vector<PerThreadData> m_perThreadData;

@@ -46,16 +46,22 @@ void Layer::InitWeights()
     {
         memset(variant.gradientMean.data(), 0, sizeof(float) * variant.gradientMean.size());
         memset(variant.gradientMoment.data(), 0, sizeof(float) * variant.gradientMoment.size());
+    }
+
+    {
+        Variant& variant = variants.front();
 
         size_t offs = 0;
 
         if (activationFunc == ActivationFunction::Sigmoid)
         {
-            const float r = sqrtf(6.0f / numInputs);
-            std::uniform_real_distribution<float> weightDistr(-r, r);
+            // in last layer generate weights in [-1.0,-0.5] and [1.0,0.5] ranges
+            // as we don't want zero weights there
+            std::uniform_real_distribution<float> weightDistr(-0.5f, 0.5f);
             for (; offs < numOutputs * numInputs; offs++)
             {
-                variant.weights[offs] = weightDistr(rd);
+                const float u = weightDistr(rd);
+                variant.weights[offs] = u >= 0.0f ? (u + 0.5f) : (u - 0.5f);
             }
 
             for (size_t j = 0; j < numOutputs; j++)
@@ -78,6 +84,12 @@ void Layer::InitWeights()
                 variant.weights[offs + j] = 0.01f;
             }
         }
+    }
+
+    // set same starting weights in all variants
+    for (size_t i = 1; i < variants.size(); ++i)
+    {
+        variants[i].weights = variants.front().weights;
     }
 }
 
@@ -121,13 +133,12 @@ INLINE static float m256_hadd(__m256 x)
 
 #endif // USE_AVX
 
-void Layer::Run(const float* values, LayerRunContext& ctx) const
+void Layer::Run(uint32_t variantIndex, const float* values, LayerRunContext& ctx, float additionalBias) const
 {
     ctx.inputs.resize(numInputs);
     ctx.inputMode = InputMode::Full;
 
-    // TODO VARIANT
-    const Variant& variant = variants.front();
+    const Variant& variant = GetConstVariant(variantIndex);
     const Values& weights = variant.weights;
 
     // apply biases
@@ -191,12 +202,20 @@ void Layer::Run(const float* values, LayerRunContext& ctx) const
         }
     }
 
+    if (additionalBias != 0)
+    {
+        for (uint32_t i = 0; i < numOutputs; i++)
+        {
+            ctx.linearValue[i] += additionalBias;
+        }
+    }
+
     ctx.ComputeOutput(activationFunc);
 }
 
-void Layer::Run(uint32_t numFeatures, const uint16_t* featureIndices, LayerRunContext& ctx) const
+void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* featureIndices, LayerRunContext& ctx) const
 {
-	const Variant& variant = variants.front();
+    const Variant& variant = GetConstVariant(variantIndex);
 	const Values& weights = variant.weights;
 
     ctx.sparseBinaryInputs.resize(numFeatures);
@@ -239,9 +258,9 @@ void Layer::Run(uint32_t numFeatures, const uint16_t* featureIndices, LayerRunCo
     ctx.ComputeOutput(activationFunc);
 }
 
-void Layer::Run(uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const
+void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const
 {
-	const Variant& variant = variants.front();
+	const Variant& variant = GetConstVariant(variantIndex);
 	const Values& weights = variant.weights;
 
     ctx.sparseInputs.resize(numFeatures);
@@ -318,9 +337,9 @@ void LayerRunContext::ComputeOutput(ActivationFunction activationFunc)
     }
 }
 
-void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& gradients) const
+void Layer::Backpropagate(uint32_t variantIndex, const Values& error, LayerRunContext& ctx, Gradients& gradients) const
 {
-	const Variant& variant = variants.front();
+    const Variant& variant = GetConstVariant(variantIndex);
 	const Values& weights = variant.weights;
 
     ASSERT(ctx.output.size() == error.size());
@@ -469,11 +488,13 @@ void Layer::Backpropagate(const Values& error, LayerRunContext& ctx, Gradients& 
     }
 }
 
-void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const float gradientScale, const float weightsRange, const float biasRange, const float weightDecay)
+void Layer::UpdateWeights(uint32_t variantIndex, const Gradients& gradients, const WeightsUpdateOptions& options)
 {
     MTR_SCOPE("Layer::UpdateWeights", "UpdateWeights");
 
     ASSERT(gradients.m_values.size() == (numInputs + 1) * numOutputs);
+
+    Variant& variant = GetVariant(variantIndex);
 
     const float cRho = 0.95f;
     const float cEpsilon = 1.0e-8f;
@@ -482,79 +503,76 @@ void Layer::UpdateWeights(float learningRate, const Gradients& gradients, const 
     const __m256 cOneMinusRhoVec = _mm256_set1_ps(1.0f - cRho);
     const __m256 cRhoVec = _mm256_set1_ps(cRho);
     const __m256 cEpsilonVec = _mm256_set1_ps(cEpsilon);
-    const __m256 gradientScaleVec = _mm256_set1_ps(gradientScale);
+    const __m256 gradientScaleVec = _mm256_set1_ps(options.gradientScale);
 #endif
 
-    for (Variant& variant : variants)
+    for (size_t j = 0; j <= numInputs; j++)
     {
-        for (size_t j = 0; j <= numInputs; j++)
-        {
-            const float maxWeightValue = j < numInputs ? weightsRange : biasRange;
+        const float maxWeightValue = j < numInputs ? options.weightsRange : options.biasRange;
 
-            size_t i = 0;
+        size_t i = 0;
 
 #ifdef USE_AVX
-            const __m256 minValueV = _mm256_sub_ps(_mm256_setzero_ps(), _mm256_set1_ps(maxWeightValue));
-            const __m256 maxValueV = _mm256_set1_ps(maxWeightValue);
-            for (; i + 8 <= numOutputs; i += 8)
-            {
-                float* mPtr = variant.gradientMean.data() + j * numOutputs + i;
-                float* vPtr = variant.gradientMoment.data() + j * numOutputs + i;
-                float* wPtr = variant.weights.data() + j * numOutputs + i;
-                const float* gPtr = gradients.m_values.data() + j * numOutputs + i;
+        const __m256 minValueV = _mm256_sub_ps(_mm256_setzero_ps(), _mm256_set1_ps(maxWeightValue));
+        const __m256 maxValueV = _mm256_set1_ps(maxWeightValue);
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            float* mPtr = variant.gradientMean.data() + j * numOutputs + i;
+            float* vPtr = variant.gradientMoment.data() + j * numOutputs + i;
+            float* wPtr = variant.weights.data() + j * numOutputs + i;
+            const float* gPtr = gradients.m_values.data() + j * numOutputs + i;
 
-                __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
-                __m256 v = _mm256_load_ps(vPtr);
-                __m256 m = _mm256_load_ps(mPtr);
-                __m256 w = _mm256_load_ps(wPtr);
+            __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
+            __m256 v = _mm256_load_ps(vPtr);
+            __m256 m = _mm256_load_ps(mPtr);
+            __m256 w = _mm256_load_ps(wPtr);
 
-                // weight decay
-                g = _mm256_fmadd_ps(w, _mm256_set1_ps(weightDecay), g);
+            // weight decay
+            g = _mm256_fmadd_ps(w, _mm256_set1_ps(options.weightDecay), g);
 
-                // ADADELTA algorithm
-                m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
-                const __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
-                v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
-                w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(learningRate), w);
+            // ADADELTA algorithm
+            m = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(g, g), _mm256_mul_ps(cRhoVec, m));
+            const __m256 delta = _mm256_mul_ps(g, _mm256_sqrt_ps(_mm256_div_ps(_mm256_add_ps(v, cEpsilonVec), _mm256_add_ps(m, cEpsilonVec))));
+            v = _mm256_fmadd_ps(cOneMinusRhoVec, _mm256_mul_ps(delta, delta), _mm256_mul_ps(cRhoVec, v));
+            w = _mm256_fnmadd_ps(delta, _mm256_set1_ps(options.learningRate), w);
 
-                // clamping
-                w = _mm256_min_ps(w, maxValueV);
-                w = _mm256_max_ps(w, minValueV);
+            // clamping
+            w = _mm256_min_ps(w, maxValueV);
+            w = _mm256_max_ps(w, minValueV);
 
-                _mm256_store_ps(vPtr, v);
-                _mm256_store_ps(mPtr, m);
-                _mm256_store_ps(wPtr, w);
-            }
+            _mm256_store_ps(vPtr, v);
+            _mm256_store_ps(mPtr, m);
+            _mm256_store_ps(wPtr, w);
+        }
 #endif // USE_AVX
 
-            for (; i < numOutputs; ++i)
-            {
-				float& m = variant.gradientMean[j * numOutputs + i];
-				float& v = variant.gradientMoment[j * numOutputs + i];
-				float& w = variant.weights[j * numOutputs + i];
-                float g = gradientScale * gradients.m_values[j * numOutputs + i];
+        for (; i < numOutputs; ++i)
+        {
+            float& m = variant.gradientMean[j * numOutputs + i];
+            float& v = variant.gradientMoment[j * numOutputs + i];
+            float& w = variant.weights[j * numOutputs + i];
+            float g = options.gradientScale * gradients.m_values[j * numOutputs + i];
 
-                ASSERT(!std::isnan(g));
-                ASSERT(v >= 0.0f);
-                ASSERT(m >= 0.0f);
+            ASSERT(!std::isnan(g));
+            ASSERT(v >= 0.0f);
+            ASSERT(m >= 0.0f);
 
-                // weight decay
-                g += w * weightDecay;
+            // weight decay
+            g += w * options.weightDecay;
 
-                // ADADELTA algorithm
-                m = cRho * m + (1.0f - cRho) * g * g;
-                ASSERT(!std::isnan(m));
+            // ADADELTA algorithm
+            m = cRho * m + (1.0f - cRho) * g * g;
+            ASSERT(!std::isnan(m));
 
-                const float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
-                v = cRho * v + (1.0f - cRho) * delta * delta;
-                ASSERT(!std::isnan(v));
+            const float delta = g * sqrtf((v + cEpsilon) / (m + cEpsilon));
+            v = cRho * v + (1.0f - cRho) * delta * delta;
+            ASSERT(!std::isnan(v));
 
-                w -= learningRate * delta;
-                ASSERT(!std::isnan(w));
+            w -= options.learningRate * delta;
+            ASSERT(!std::isnan(w));
 
-                // clamping
-                w = std::clamp(w, -maxWeightValue, maxWeightValue);
-            }
+            // clamping
+            w = std::clamp(w, -maxWeightValue, maxWeightValue);
         }
     }
 }

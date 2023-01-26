@@ -573,8 +573,10 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
             ThreadData& threadData = (*threadDataPtr)[i];
             threadData.numElements = (arraySize / numTasksToSpawn) + ((arraySize % numTasksToSpawn > i) ? 1 : 0);
             threadData.elementOffset = totalElements;
+            ASSERT(threadData.numElements + threadData.elementOffset <= arraySize);
             totalElements += threadData.numElements;
         }
+        ASSERT(totalElements == arraySize);
     }
 
     for (uint32_t i = 0; i < numTasksToSpawn; ++i)
