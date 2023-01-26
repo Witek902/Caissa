@@ -12,7 +12,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.5.6"
+#define VersionNumber "1.5.7"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -51,7 +51,9 @@ UniversalChessInterface::UniversalChessInterface()
     std::cout << c_EngineName << " by " << c_Author << std::endl;
 
     TryLoadingDefaultEvalFile();
+#ifdef USE_ENDGAME_NEURAL_NETWORK
     TryLoadingDefaultEndgameEvalFile();
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
     // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
     SetGaviotaCacheSize(1024 * 1024 * c_DefaultGaviotaTbCacheInMB);
@@ -145,7 +147,9 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
+#ifdef USE_ENDGAME_NEURAL_NETWORK
         std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
+#endif // USE_ENDGAME_NEURAL_NETWORK
 #ifdef USE_TABLE_BASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
@@ -790,10 +794,12 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         LoadMainNeuralNetwork(value.c_str());
     }
+#ifdef USE_ENDGAME_NEURAL_NETWORK
     else if (lowerCaseName == "endgameevalfile")
     {
         LoadEndgameNeuralNetwork(value.c_str());
     }
+#endif // USE_ENDGAME_NEURAL_NETWORK
     else if (lowerCaseName == "ponder")
     {
         // nothing special here

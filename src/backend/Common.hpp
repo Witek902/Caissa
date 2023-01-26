@@ -38,7 +38,7 @@
     #define VERIFY(x) (x)
 #endif
 
-#define CACHELINE_SIZE 64
+#define CACHELINE_SIZE 64u
 
 #if defined(_MSC_VER)
 
@@ -300,6 +300,12 @@ inline uint8_t ReverseBits(uint8_t x)
 {
     constexpr uint8_t lookup[16] = { 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
     return (lookup[x & 0xf] << 4) | lookup[x >> 4];
+}
+
+template<typename T, T multiple>
+INLINE constexpr const T RoundUp(const T x)
+{
+    return ((x + (multiple - 1)) / multiple) * multiple;
 }
 
 inline void* AlignedMalloc(size_t size, size_t alignment)

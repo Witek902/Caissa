@@ -42,6 +42,8 @@ struct TPieceScore
     {
         return { mg * rhs, eg * rhs };
     }
+
+    INLINE T Average() const { return (mg + eg) / 2; }
 };
 
 using PieceScore = TPieceScore<int16_t>;

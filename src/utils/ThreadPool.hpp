@@ -153,7 +153,7 @@ class ThreadPool final
 
 public:
 
-    static constexpr uint32_t TasksCapacity = 1024 * 128;
+    static constexpr uint32_t TasksCapacity = 1024 * 512;
     static constexpr uint32_t NumPriorities = 3;
     static constexpr uint32_t MaxPriority = NumPriorities - 1;
 

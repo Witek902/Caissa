@@ -7,6 +7,9 @@
 #include <math.h>
 #include <algorithm>
 
+// TODO re-enable once new net is generated
+// #define USE_ENDGAME_NEURAL_NETWORK
+
 struct DirtyPiece;
 
 extern const char* c_DefaultEvalFile;
@@ -42,11 +45,12 @@ static constexpr int32_t c_nnTresholdMin = 256;
 static constexpr int32_t c_nnTresholdMax = 768;
 
 bool TryLoadingDefaultEvalFile();
-bool TryLoadingDefaultEndgameEvalFile();
-
 bool LoadMainNeuralNetwork(const char* path);
-bool LoadEndgameNeuralNetwork(const char* path);
 
+#ifdef USE_ENDGAME_NEURAL_NETWORK
+bool TryLoadingDefaultEndgameEvalFile();
+bool LoadEndgameNeuralNetwork(const char* path);
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
 // scaling factor when converting from neural network output (logistic space) to centipawn value
 // equal to 400/ln(10) = 173.7177...

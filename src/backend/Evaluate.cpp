@@ -11,8 +11,10 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-5.pnn";
+const char* c_DefaultEvalFile = "eval-6.pnn";
+#ifdef USE_ENDGAME_NEURAL_NETWORK
 const char* c_DefaultEndgameEvalFile = "endgame-2.pnn";
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -31,7 +33,9 @@ static constexpr PieceScore c_castlingRightsBonus   = S(9, 37);
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 static PackedNeuralNetworkPtr g_mainNeuralNetwork;
+#ifdef USE_ENDGAME_NEURAL_NETWORK
 static PackedNeuralNetworkPtr g_endgameNeuralNetwork;
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
 } // namespace
 
@@ -57,6 +61,7 @@ bool LoadMainNeuralNetwork(const char* path)
     return false;
 }
 
+#ifdef USE_ENDGAME_NEURAL_NETWORK
 bool LoadEndgameNeuralNetwork(const char* path)
 {
     if (strcmp(path, "") == 0)
@@ -77,6 +82,7 @@ bool LoadEndgameNeuralNetwork(const char* path)
     g_endgameNeuralNetwork.reset();
     return false;
 }
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
 static std::string GetDefaultEvalFilePath()
 {
@@ -129,6 +135,7 @@ bool TryLoadingDefaultEvalFile()
     return false;
 }
 
+#ifdef USE_ENDGAME_NEURAL_NETWORK
 bool TryLoadingDefaultEndgameEvalFile()
 {
     // check if there's eval file in same directory as executable
@@ -166,6 +173,7 @@ bool TryLoadingDefaultEndgameEvalFile()
     std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
     return false;
 }
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
 static int32_t InterpolateScore(const int32_t phase, const TPieceScore<int32_t>& score)
 {
@@ -325,7 +333,6 @@ void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, co
 ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 {
     const MaterialKey materialKey = pos.GetMaterialKey();
-    const uint32_t numPieces = pos.GetNumPieces();
 
     // check endgame evaluation first
     {
@@ -397,17 +404,17 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     if (useNN)
     {
-        const nn::PackedNeuralNetwork* networkToUse = nullptr;
-        bool useIncrementalUpdate = false;
-        if (numPieces >= 4 && numPieces <= 6)
+        const nn::PackedNeuralNetwork* networkToUse = g_mainNeuralNetwork.get();
+        bool useIncrementalUpdate = true;
+
+#ifdef USE_ENDGAME_NEURAL_NETWORK
+        const uint32_t numPieces = pos.GetNumPieces();
+        if (numPieces >= 4 && numPieces <= 6 && g_endgameNeuralNetwork)
         {
             networkToUse = g_endgameNeuralNetwork.get();
+            useIncrementalUpdate = false;
         }
-        if (!networkToUse)
-        {
-            networkToUse = g_mainNeuralNetwork.get();
-            useIncrementalUpdate = true;
-        }
+#endif // USE_ENDGAME_NEURAL_NETWORK
 
         // use neural network for balanced positions
         if (networkToUse && std::abs(finalValue) < c_nnTresholdMax)

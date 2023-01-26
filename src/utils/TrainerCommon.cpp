@@ -52,52 +52,46 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];
 
-            if (move.IsQuiet() &&
-                pos.GetNumPieces() <= 32 && pos.GetNumPieces() >= 5 &&
+            const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
+            const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
+
+            if (move.IsQuiet() &&                                   // best move must be quiet
+                (i >= 8 || pos.GetNumPieces() < 32) &&
+                pos.GetNumPieces() >= 4 &&
+                whitePawnsMoved && blackPawnsMoved &&
+                std::abs(Evaluate(pos, nullptr, false)) < 1200 &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};
 
-                int32_t wdl = 0;
-                if (ProbeSyzygy_WDL(pos, &wdl))
+                // blend in future scores into current move score
+                float scoreSum = 0.0f;
+                float weightSum = 0.0f;
+                const size_t maxLookahead = 8;
+                for (size_t j = 0; j < maxLookahead; ++j)
                 {
-                    if (wdl > 0)        entry.score = std::lerp(entry.score, 1.0f, 0.8f);
-                    else if (wdl < 0)   entry.score = std::lerp(entry.score, 0.0f, 0.8f);
-                    else                entry.score = 0.5f;
+                    if (i + j >= game.GetMoves().size()) break;
+                    const float weight = expf(-(float)j * 0.6f);
+                    scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
+                    weightSum += weight;
                 }
-                else
+                ASSERT(weightSum > 0.0f);
+                scoreSum /= weightSum;
+
+                // scale position that approach fifty-move rule
+                if (gameScore == Game::Score::Draw)
                 {
-                    // blend in future scores into current move score
-                    float scoreSum = 0.0f;
-                    float weightSum = 0.0f;
-                    const size_t maxLookahead = 6;
-                    for (size_t j = 0; j < maxLookahead; ++j)
-                    {
-                        if (i + j >= game.GetMoves().size()) break;
-                        const float weight = expf(-(float)j * 0.8f);
-                        scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
-                        weightSum += weight;
-                    }
-                    ASSERT(weightSum > 0.0f);
-                    scoreSum /= weightSum;
+                    scoreSum = std::lerp(0.5f, scoreSum, Sqr(1.0f - pos.GetHalfMoveCount() / 100.0f));
 
-                    // scale position that approach fifty-move rule
-                    if (gameScore == Game::Score::Draw)
-                    {
-                        scoreSum = std::lerp(0.5f, scoreSum, Sqr(1.0f - pos.GetHalfMoveCount() / 100.0f));
-
-                        if (pos.GetHalfMoveCount() > 40 && std::abs(moveScore) < 5)
-                        {
-                            break;
-                        }
-                    }
-
-                    // blend between eval score and actual game score
-                    const float lambda = std::lerp(0.95f, 0.8f, gamePhase);
-                    entry.score = std::lerp(score, scoreSum, lambda);
+                    if (pos.GetHalfMoveCount() > 50 && std::abs(moveScore) < 5) break;
                 }
 
-                const float offset = 0.0001f;
+                // blend between eval score and actual game score
+                const float lambda = std::lerp(0.95f, 0.8f, gamePhase);
+                entry.score = std::lerp(score, scoreSum, lambda);
+
+                // don't saturate to 0.0 / 1.0
+                const float offset = 0.00001f;
                 entry.score = offset + entry.score * (1.0f - 2.0f * offset);
 
                 Position normalizedPos = pos;
@@ -106,6 +100,15 @@ static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entr
                     // make whites side to move
                     normalizedPos = normalizedPos.SwappedColors();
                     entry.score = 1.0f - entry.score;
+                }
+
+                // tweak score with the help of endgame tablebases
+                int32_t wdl = 0;
+                if (pos.GetNumPieces() <= 7 && ProbeSyzygy_WDL(pos, &wdl))
+                {
+                    if (wdl > 0)        entry.score = std::lerp(entry.score, 1.0f, 0.8f);
+                    else if (wdl < 0)   entry.score = std::lerp(entry.score, 0.0f, 0.8f);
+                    else                entry.score = 0.5f;
                 }
 
                 ASSERT(normalizedPos.IsValid());
