@@ -126,7 +126,7 @@ struct alignas(CACHELINE_SIZE) AccumulatorCacheEntry
 static constexpr uint32_t c_AccumulatorCacheSize = 8 * 1024;
 static AccumulatorCacheEntry c_AccumulatorCache[c_AccumulatorCacheSize];
 
-NO_INLINE static bool ReadAccumulatorCache(const Position& pos, const Color perspective, nn::Accumulator& outAccumulator)
+static bool ReadAccumulatorCache(const Position& pos, const Color perspective, nn::Accumulator& outAccumulator)
 {
     const uint64_t posHash = pos.GetHash_NoSideToMove();
     const uint32_t index = posHash % c_AccumulatorCacheSize;

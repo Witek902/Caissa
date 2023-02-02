@@ -35,7 +35,6 @@ static_assert(sizeof(PackedNeuralNetwork::Header) % CACHELINE_SIZE == 0, "Networ
 
 using IntermediateType = int8_t;
 
-NO_INLINE
 void Accumulator::Refresh(
     const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
     uint32_t numInputs, uint32_t numOutputs,
