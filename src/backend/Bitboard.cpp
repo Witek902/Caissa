@@ -148,7 +148,7 @@ Bitboard Bitboard::GetKnightAttacks(const Square square)
     return gKnightAttacksBitboard[square.Index()];
 }
 
-NO_INLINE Bitboard Bitboard::GetKnightAttacks(const Bitboard squares)
+Bitboard Bitboard::GetKnightAttacks(const Bitboard squares)
 {
     Bitboard result = 0;
     if (squares)

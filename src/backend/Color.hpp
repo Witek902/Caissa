@@ -10,7 +10,7 @@ enum class Color : uint8_t
 
 INLINE Color GetOppositeColor(Color color)
 {
-    return Color((uint32_t)color ^ 1);
+    return Color((uint8_t)color ^ 1);
 }
 
 INLINE ScoreType ColorMultiplier(Color color)

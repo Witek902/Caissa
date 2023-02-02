@@ -411,7 +411,7 @@ enum class NetworkInputMapping : uint8_t;
 using ScoreType = int16_t;
 
 static constexpr ScoreType InfValue             = 32767;
-static constexpr ScoreType InvalidValue         = INT16_MIN;
+static constexpr ScoreType InvalidValue         = INT16_MAX;
 static constexpr ScoreType CheckmateValue       = 32000;
 static constexpr ScoreType TablebaseWinValue    = 31000;
 static constexpr ScoreType KnownWinValue        = 20000;
