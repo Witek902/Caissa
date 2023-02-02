@@ -20,6 +20,9 @@
 #elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
 #define ArchitectureStr "POPCNT/SSE4"
 #define AppNamePostfix " (" ArchitectureStr ")"
+#elif defined(USE_ARM_NEON) 
+#define ArchitectureStr "ARM NEON"
+#define AppNamePostfix " (" ArchitectureStr ")"
 #else
 #define ArchitectureStr "legacy"
 #define AppNamePostfix " (" ArchitectureStr ")"

@@ -12,6 +12,10 @@
     #include <immintrin.h>
 #endif // USE_SSE
 
+#ifdef USE_ARM_NEON
+    #include <arm_neon.h>
+#endif // USE_ARM_NEON
+
 #if defined(PLATFORM_LINUX)
     #include <fcntl.h>
     #include <unistd.h>
@@ -25,18 +29,37 @@
 
 #ifdef USE_AVX2
     #define NN_USE_AVX2
-#endif // USE_AVX2
-
-#ifdef USE_SSE2
+    using Int16VecType = __m256i;
+    constexpr const uint32_t VectorRegSize = 256;
+    #define Int16VecLoad(ptr) _mm256_load_si256(reinterpret_cast<const __m256i*>(ptr))
+    #define Int16VecStore(ptr,val) _mm256_store_si256(reinterpret_cast<__m256i*>(ptr), (val))
+    #define Int16VecAdd _mm256_add_epi16
+    #define Int16VecSub _mm256_sub_epi16
+#elif defined(USE_AVX2)
     #define NN_USE_SSE2
-#endif // USE_SSE
+    using Int16VecType = __m128i;
+    constexpr const uint32_t VectorRegSize = 128;
+    #define Int16VecLoad(ptr) _mm_load_si128(reinterpret_cast<const __m128i*>(ptr))
+    #define Int16VecStore(ptr,val) _mm_store_si128(reinterpret_cast<__m128i*>(ptr), (val))
+    #define Int16VecAdd _mm128_add_epi16
+    #define Int16VecSub _mm128_sub_epi16
+#elif defined(USE_ARM_NEON)
+    #define NN_USE_ARM_NEON
+    using Int16VecType = int16x8_t;
+    constexpr const uint32_t VectorRegSize = 128;
+    #define Int16VecLoad(ptr) (*reinterpret_cast<const int16x8_t*>(ptr))
+    #define Int16VecStore(ptr,val) ((*reinterpret_cast<int16x8_t*>(ptr)) = (val))
+    #define Int16VecAdd vaddq_s16
+    #define Int16VecSub vsubq_s16
+#endif // USE_ARM_NEON
 
 #ifdef USE_SSE4
     #define NN_USE_SSE4
 #endif // USE_SSE
 
-// assume SSE
+#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 constexpr uint32_t OptimalRegisterCount = 8;
+#endif // NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
 
 namespace nn {
 
@@ -62,10 +85,10 @@ void Accumulator::Refresh(
     }
 #endif // CONFIGURATION_FINAL
 
-#if defined(NN_USE_AVX2)
+#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 
-    constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    static_assert(AccumulatorSize % registerWidth == 0, "");
+    constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+    static_assert(AccumulatorSize % registerWidth == 0);
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)biases % 32 == 0);
     ASSERT((size_t)values % 32 == 0);
@@ -76,18 +99,15 @@ void Accumulator::Refresh(
 
     AccumulatorType* valuesStart = values;
 
-    __m256i regs[OptimalRegisterCount];
+    Int16VecType regs[OptimalRegisterCount];
     for (uint32_t tile = 0; tile < numTiles; ++tile)
     {
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
 
+        for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
         {
-            //const FirstLayerBiasType* biasesStart = biases + chunkBase;
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm256_load_si256(reinterpret_cast<const __m256i*>(biases));
-                biases += registerWidth;
-            }
+            regs[i] = Int16VecLoad(biases);
+            biases += registerWidth;
         }
 
         for (uint32_t j = 0; j < numActiveFeatures; ++j)
@@ -98,67 +118,14 @@ void Accumulator::Refresh(
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                regs[i] = _mm256_add_epi16(
-                    regs[i],
-                    _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsStart + i * registerWidth))
-                );
+                regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
             }
         }
 
+        for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
         {
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                _mm256_store_si256(reinterpret_cast<__m256i*>(valuesStart), regs[i]);
-                valuesStart += registerWidth;
-            }
-        }
-    }
-
-#elif defined(NN_USE_SSE2)
-
-    constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
-    static_assert(AccumulatorSize % registerWidth == 0, "");
-    ASSERT((size_t)weights % 16 == 0);
-    ASSERT((size_t)biases % 16 == 0);
-
-    const uint32_t numChunks = AccumulatorSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0, "");
-    const uint32_t numTiles = numChunks / OptimalRegisterCount;
-
-    __m128i regs[OptimalRegisterCount];
-
-    for (uint32_t tile = 0; tile < numTiles; ++tile)
-    {
-        const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
-
-        {
-            const FirstLayerBiasType* biasesStart = biases + chunkBase;
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm_load_si128(reinterpret_cast<const __m128i*>(biasesStart + i * registerWidth));
-            }
-        }
-
-        for (uint32_t j = 0; j < numActiveFeatures; ++j)
-        {
-            ASSERT(activeFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * AccumulatorSize);
-
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm_add_epi16(
-                    regs[i],
-                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
-                );
-            }
-        }
-
-        {
-            AccumulatorType* valuesStart = values + chunkBase;
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
-            }
+            Int16VecStore(valuesStart, regs[i]);
+            valuesStart += registerWidth;
         }
     }
 
@@ -201,17 +168,18 @@ void Accumulator::Update(
 {
     (void)numInputs;
 
-#if defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    static_assert(AccumulatorSize % registerWidth == 0, "");
-    constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0, "");
+#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+
+    constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+    static_assert(AccumulatorSize % registerWidth == 0);
+    const uint32_t numChunks = AccumulatorSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0);
     const uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)source.values % 32 == 0);
     ASSERT((size_t)values % 32 == 0);
 
-    __m256i regs[OptimalRegisterCount];
+    Int16VecType regs[OptimalRegisterCount];
     for (uint32_t tile = 0; tile < numTiles; ++tile)
     {
         const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
@@ -220,7 +188,7 @@ void Accumulator::Update(
             const AccumulatorType* valuesStart = source.values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                regs[i] = _mm256_load_si256(reinterpret_cast<const __m256i*>(valuesStart + i * registerWidth));
+                regs[i] = Int16VecLoad(valuesStart + i * registerWidth);
             }
         }
 
@@ -230,10 +198,7 @@ void Accumulator::Update(
             const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                regs[i] = _mm256_sub_epi16(
-                    regs[i],
-                    _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsStart + i * registerWidth))
-                );
+                regs[i] = Int16VecSub(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
             }
         }
 
@@ -243,10 +208,7 @@ void Accumulator::Update(
             const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                regs[i] = _mm256_add_epi16(
-                    regs[i],
-                    _mm256_load_si256(reinterpret_cast<const __m256i*>(weightsStart + i * registerWidth))
-                );
+                regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
             }
         }
 
@@ -254,68 +216,11 @@ void Accumulator::Update(
             AccumulatorType* valuesStart = values + chunkBase;
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
-                _mm256_store_si256(reinterpret_cast<__m256i*>(valuesStart + i * registerWidth), regs[i]);
+                Int16VecStore(valuesStart + i * registerWidth, regs[i]);
             }
         }
     }
 
-#elif defined(NN_USE_SSE2)
-    constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
-    static_assert(AccumulatorSize % registerWidth == 0, "");
-    constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
-    static_assert(numChunks % OptimalRegisterCount == 0, "");
-    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
-    ASSERT((size_t)weights % 16 == 0);
-    ASSERT((size_t)source.values % 16 == 0);
-    ASSERT((size_t)values % 16 == 0);
-
-    __m128i regs[OptimalRegisterCount];
-    for (uint32_t tile = 0; tile < numTiles; ++tile)
-    {
-        const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
-
-        {
-            const AccumulatorType* valuesStart = source.values + chunkBase;
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm_load_si128(reinterpret_cast<const __m128i*>(valuesStart + i * registerWidth));
-            }
-        }
-
-        for (uint32_t j = 0; j < numRemovedFeatures; ++j)
-        {
-            ASSERT(removedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * AccumulatorSize);
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm_sub_epi16(
-                    regs[i],
-                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
-                );
-            }
-        }
-
-        for (uint32_t j = 0; j < numAddedFeatures; ++j)
-        {
-            ASSERT(addedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * AccumulatorSize);
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                regs[i] = _mm_add_epi16(
-                    regs[i],
-                    _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth))
-                );
-            }
-        }
-
-        {
-            AccumulatorType* valuesStart = values + chunkBase;
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                _mm_store_si128(reinterpret_cast<__m128i*>(valuesStart + i * registerWidth), regs[i]);
-            }
-        }
-    }
 #else // no SIMD support
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
@@ -726,7 +631,7 @@ INLINE static int32_t LinearLayer_SingleOutput(
     return (val + (WeightScale / 2)) >> WeightScaleShift;
 }
 
-INLINE static int32_t LinearLayer_Accum_SingleOutput(
+NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
     const AccumulatorType* input)
 {
@@ -791,6 +696,32 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
     // add 8 int32s horizontally
     val += m128_hadd(_mm_add_epi32(sumA, sumB));
+
+#elif defined(NN_USE_ARM_NEON)
+
+    constexpr uint32_t registerWidth = 8;
+    static_assert(AccumulatorSize % registerWidth == 0, "");
+    ASSERT((size_t)weights % (2 * registerWidth) == 0);
+    ASSERT((size_t)biases % (2 * registerWidth) == 0);
+
+    int32x4_t sumA = vdupq_n_s32(0);
+    int32x4_t sumB = vdupq_n_s32(0);
+    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    {
+        // load 8 16bit inputs
+        int16x8_t in = vld1q_s16(input + j);
+        // apply clipped-ReLU
+        in = vminq_s16(vmaxq_s16(in, vdupq_n_s16(0)), vdupq_n_s16(127));
+
+        // load 8 16bit weights
+        const int16x8_t w = vld1q_s16(weights + j);
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(w), vget_low_s16(in)));
+        sumB = vaddq_s32(sumB, vmull_high_s16(w, in));
+    }
+
+    // add 8 int32s horizontally
+    val += vaddvq_s32(vaddq_s32(sumA, sumB));
 
 #else
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
