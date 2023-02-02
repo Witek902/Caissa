@@ -141,10 +141,9 @@ void TranspositionTable::NextGeneration()
 void TranspositionTable::Prefetch(const Position& position) const
 {
 #ifdef USE_SSE
-    if (clusters)
-    {
-        _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), _MM_HINT_T0);
-    }
+    _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), _MM_HINT_T0);
+#elif defined(USE_NEON)
+    __builtin_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), 0, 0);
 #else
     (void)position;
 #endif // USE_SSE
