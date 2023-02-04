@@ -27,10 +27,10 @@ static const int32_t SingularitySearchScoreTresholdMax = 400;
 static const int32_t SingularitySearchScoreStep = 25;
 
 static const uint32_t DefaultMaxPvLineLength = 20;
-static const uint32_t MateCountStopCondition = 5;
+static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t WdlTablebaseProbeDepth = 4;
-static const int32_t WdlTablebaseProbeMaxNumPieces = 7;
+static const int32_t WdlTablebaseProbeMaxNumPieces = 5;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -141,14 +141,18 @@ INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 
 void Search::Stats::Append(ThreadStats& threadStats, bool flush)
 {
-    if (threadStats.nodes >= 64 || flush)
+    if (threadStats.nodesTemp >= 64 || flush)
     {
-        nodes += threadStats.nodes;
-        quiescenceNodes += threadStats.quiescenceNodes;
-        AtomicMax(maxDepth, threadStats.maxDepth);
-        tbHits += threadStats.tbHits;
+        nodes += threadStats.nodesTemp;
+        threadStats.nodesTemp = 0;
 
-        threadStats = ThreadStats{};
+        quiescenceNodes += threadStats.quiescenceNodes;
+        threadStats.quiescenceNodes = 0;
+
+        tbHits += threadStats.tbHits;
+        threadStats.tbHits = 0;
+
+        AtomicMax(maxDepth, threadStats.maxDepth);
     }
 }
 
@@ -213,6 +217,11 @@ const MoveOrderer& Search::GetMoveOrderer() const
     return mThreadData.front()->moveOrderer;
 }
 
+const NodeCache& Search::GetNodeCache() const
+{
+    return mThreadData.front()->nodeCache;
+}
+
 bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode)
 {
     SearchParam& param = ctx.searchParam;
@@ -233,7 +242,7 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         }
 
         // check inner nodes periodically
-        if (isRootNode || (thread.stats.nodes % 256 == 0))
+        if (isRootNode || (thread.stats.nodesTotal % 256 == 0))
         {
             if (param.limits.maxTime.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
@@ -366,6 +375,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         }
 
         const ThreadDataPtr& threadData = mThreadData[i];
+        threadData->nodeCache.OnNewSearch();
         {
             std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
             ASSERT(!threadData->callback);
@@ -378,7 +388,10 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     }
         
     // do search on main thread
-    Search_Internal(0, numPvLines, game, param, globalStats);
+    {
+        mThreadData.front()->nodeCache.OnNewSearch();
+        Search_Internal(0, numPvLines, game, param, globalStats);
+    }
 
     // wait for worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
@@ -984,9 +997,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     node.pvLength = 0;
 
     // update stats
-    thread.stats.nodes++;
     thread.stats.quiescenceNodes++;
-    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height + 1);
+    thread.stats.OnNodeEnter(node.height + 1);
     ctx.stats.Append(thread.stats);
 
     // Not checking for draw by repetition in the quiescence search
@@ -1103,7 +1115,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         moveGenFlags |= MOVE_GEN_MASK_QUIET;
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry, Move::Invalid(), moveGenFlags);
+    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry, Move::Invalid(), moveGenFlags);
 
     int32_t moveScore = 0;
     Move move;
@@ -1278,8 +1290,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     node.pvLength = 0;
 
     // update stats
-    thread.stats.nodes++;
-    thread.stats.maxDepth = std::max<uint32_t>(thread.stats.maxDepth, node.height + 1);
+    thread.stats.OnNodeEnter(node.height + 1);
     ctx.stats.Append(thread.stats);
 
     const Position& position = node.position;
@@ -1646,7 +1657,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     thread.moveOrderer.ClearKillerMoves(node.height + 1);
 
-    MovePicker movePicker(position, thread.moveOrderer, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
+    NodeCacheEntry* nodeCacheEntry = nullptr;
+    if (node.height < 3)
+    {
+        nodeCacheEntry = thread.nodeCache.GetEntry(position, node.height);
+    }
+
+    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
 
     // randomize move order for root node on secondary threads
     if (isRootNode && !thread.isMainThread)
@@ -1839,6 +1856,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         childNode.previousMove = move;
         childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
 
+        const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
+
         int32_t depthReduction = 0;
 
         // Late Move Reduction
@@ -1917,6 +1936,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
                 score = -NegaMax(thread, childNode, ctx);
             }
+        }
+
+        // update node cache after searching a move
+        if (nodeCacheEntry)
+        {
+            ASSERT(thread.stats.nodesTotal > nodesSearchedBefore);
+            const uint64_t nodesSearched = thread.stats.nodesTotal - nodesSearchedBefore;
+            nodeCacheEntry->AddMoveStats(move, nodesSearched);
         }
 
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -2009,14 +2036,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // update move orderer
     if (bestValue >= beta)
     {
-        if (bestMoves[0].IsQuiet())
+        if (!nodeCacheEntry || nodeCacheEntry->nodesSum < 10000)
         {
-            thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMoves[0], node.depth);
-            thread.moveOrderer.UpdateKillerMove(node, bestMoves[0]);
-        }
-        else if (bestMoves[0].IsCapture())
-        {
-            thread.moveOrderer.UpdateCapturesHistory(node, captureMovesTried, numCaptureMovesTried, bestMoves[0], node.depth);
+            if (bestMoves[0].IsQuiet())
+            {
+                thread.moveOrderer.UpdateQuietMovesHistory(node, quietMovesTried, numQuietMovesTried, bestMoves[0], node.depth);
+                thread.moveOrderer.UpdateKillerMove(node, bestMoves[0]);
+            }
+            else if (bestMoves[0].IsCapture())
+            {
+                thread.moveOrderer.UpdateCapturesHistory(node, captureMovesTried, numCaptureMovesTried, bestMoves[0], node.depth);
+            }
         }
     }
 

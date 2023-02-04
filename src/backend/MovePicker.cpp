@@ -3,15 +3,6 @@
 #include "Position.hpp"
 #include "TranspositionTable.hpp"
 
-MovePicker::MovePicker(const Position& pos, const MoveOrderer& moveOrderer, const TTEntry& ttEntry, const Move pvMove, uint32_t moveGenFlags)
-    : position(pos)
-    , ttEntry(ttEntry)
-    , pvMove(pvMove)
-    , moveGenFlags(moveGenFlags)
-    , moveOrderer(moveOrderer)
-{
-}
-
 void MovePicker::Shuffle()
 {
     moves.Shuffle();
@@ -94,7 +85,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 moves.RemoveMove(pvMove);
                 for (uint32_t i = 0; i < TTEntry::NumMoves; i++) moves.RemoveMove(ttEntry.moves[i]);
 
-                moveOrderer.ScoreMoves(node, game, moves);
+                moveOrderer.ScoreMoves(node, game, moves, true, nodeCacheEntry);
             }
 
             [[fallthrough]];

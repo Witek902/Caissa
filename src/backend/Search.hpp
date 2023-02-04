@@ -7,6 +7,7 @@
 #include "Memory.hpp"
 #include "Score.hpp"
 #include "NeuralNetworkEvaluator.hpp"
+#include "NodeCache.hpp"
 
 #include <atomic>
 #include <memory>
@@ -172,6 +173,7 @@ public:
     void DoSearch(const Game& game, SearchParam& param, SearchResult& outResult);
 
     const MoveOrderer& GetMoveOrderer() const;
+    const NodeCache& GetNodeCache() const;
 
 private:
 
@@ -186,10 +188,18 @@ private:
 
     struct ThreadStats
     {
-        uint64_t nodes = 0;
+        uint64_t nodesTemp = 0;     // flushed to global stats
+        uint64_t nodesTotal = 0;
         uint64_t quiescenceNodes = 0;
         uint32_t maxDepth = 0;
         uint64_t tbHits = 0;
+
+        void OnNodeEnter(uint32_t height)
+        {
+            nodesTemp++;
+            nodesTotal++;
+            maxDepth = std::max(maxDepth, height);
+        }
     };
 
     struct Stats
@@ -262,6 +272,8 @@ private:
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
+
+        NodeCache nodeCache;
 
         // neural network context for each node height
         using NNEvaluatorContextPtr = std::unique_ptr<NNEvaluatorContext>;

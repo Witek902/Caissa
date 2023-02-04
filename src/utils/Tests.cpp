@@ -978,7 +978,7 @@ static void RunPositionTests()
         TTEntry ttEntry;
         uint32_t moveIndex = 0;
 
-        MovePicker movePicker(pos, moveOrderer, ttEntry, Move::Invalid(), flags);
+        MovePicker movePicker(pos, moveOrderer, nullptr, ttEntry, Move::Invalid(), flags);
         while (movePicker.PickMove(node, Game(), move, moveScore))
         {
             bool found = false;
@@ -1810,6 +1810,27 @@ static void RunEvalTests()
             TEST_EXPECT(score > -KnownWinValue);
         }
     }
+
+    // pawns endgame
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PP6/K7 w - - 0 1")) >= 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PP6/K7 b - - 0 1")) >= 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPP5/K7 w - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPP5/K7 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("k7/pp6/8/8/8/8/PPP5/K7 w - - 0 1")) >= 0);
+    TEST_EXPECT(Evaluate(Position("k7/pp6/8/8/8/8/PPP5/K7 w - - 0 1")) >= 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPPP4/K7 w - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPPP4/K7 b - - 0 1")) > 0);
+
+    // queen vs. weaker piece
+    TEST_EXPECT(Evaluate(Position("3rk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3rk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3nk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3nk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3bk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3bk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 w - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+
 }
 
 // this test suite runs full search on well known/easy positions

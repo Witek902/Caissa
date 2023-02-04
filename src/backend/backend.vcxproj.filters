@@ -191,6 +191,9 @@
     <ClCompile Include="PSQT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="NodeCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -321,6 +324,9 @@
     </ClInclude>
     <ClInclude Include="gaviota\compression\zlib\crc32.h">
       <Filter>gaviota\compression\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="NodeCache.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
