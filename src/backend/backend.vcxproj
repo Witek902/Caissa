@@ -785,6 +785,7 @@
     <ClCompile Include="MoveOrderer.cpp" />
     <ClCompile Include="MovePicker.cpp" />
     <ClCompile Include="NeuralNetworkEvaluator.cpp" />
+    <ClCompile Include="NodeCache.cpp" />
     <ClCompile Include="PackedNeuralNetwork.cpp" />
     <ClCompile Include="PGNParser.cpp" />
     <ClCompile Include="Position.cpp" />
@@ -863,6 +864,7 @@
     <ClInclude Include="MoveOrderer.hpp" />
     <ClInclude Include="MovePicker.hpp" />
     <ClInclude Include="NeuralNetworkEvaluator.hpp" />
+    <ClInclude Include="NodeCache.hpp" />
     <ClInclude Include="PackedNeuralNetwork.hpp" />
     <ClInclude Include="Pawns.hpp" />
     <ClInclude Include="PGNParser.hpp" />

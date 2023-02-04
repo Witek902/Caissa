@@ -12,7 +12,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.5.8"
+#define VersionNumber "1.5.10"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -244,6 +244,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "tbprobe")
     {
         Command_TablebaseProbe();
+    }
+    else if (command == "cacheprobe")
+    {
+        Command_NodeCacheProbe();
     }
 #ifndef CONFIGURATION_FINAL
     else if (command == "moveordererstats")
@@ -898,6 +902,24 @@ bool UniversalChessInterface::Command_TablebaseProbe()
     return true;
 }
 
+bool UniversalChessInterface::Command_NodeCacheProbe()
+{
+    const NodeCacheEntry* entry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
+
+    if (entry)
+    {
+        std::cout << "Node Cache entry found!" << std::endl;
+        entry->PrintMoves();
+    }
+    else
+    {
+        std::cout << "Node Cache not found" << std::endl;
+    }
+
+    return true;
+}
+
+
 bool UniversalChessInterface::Command_ScoreMoves()
 {
     MoveList moves;
@@ -912,7 +934,9 @@ bool UniversalChessInterface::Command_ScoreMoves()
         moves.AssignTTScores(ttEntry);
     }
 
-    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves);
+    const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
+
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves, true, nodeCacheEntry);
 
     moves.Sort();
     moves.Print(mGame.GetPosition());

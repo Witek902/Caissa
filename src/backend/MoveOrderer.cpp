@@ -282,14 +282,18 @@ void MoveOrderer::ClearKillerMoves(uint32_t depth)
     }
 }
 
-void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& moves, bool withQuiets) const
+void MoveOrderer::ScoreMoves(
+    const NodeInfo& node,
+    const Game& game,
+    MoveList& moves,
+    bool withQuiets,
+    const NodeCacheEntry* nodeCacheEntry) const
 {
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
     
-
     Bitboard attackedByPawns = 0;
     Bitboard attackedByMinors = 0;
     Bitboard attackedByRooks = 0;
@@ -468,6 +472,18 @@ void MoveOrderer::ScoreMoves(const NodeInfo& node, const Game& game, MoveList& m
                     constexpr int32_t bonus[] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
                     const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
                     score += bonus[rank];
+                }
+
+                // use node cache for scoring moves near the root
+                if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
+                {
+                    if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
+                    {
+                        const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
+                        ASSERT(fraction >= 0.0f);
+                        ASSERT(fraction <= 1.0f);
+                        score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * log2f(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
+                    }
                 }
             }
         }
