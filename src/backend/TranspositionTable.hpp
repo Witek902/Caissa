@@ -110,9 +110,15 @@ private:
     TranspositionTable(const TranspositionTable&) = delete;
     TranspositionTable& operator = (const TranspositionTable&) = delete;
 
+    INLINE TTCluster& GetCluster(uint64_t hash) const
+    {
+        const uint64_t index = MulHi64(hash, numClusters);
+        ASSERT(index < numClusters);
+        return clusters[index];
+    }
+
     mutable TTCluster* clusters;
     size_t numClusters;
-    size_t hashMask;
     uint8_t generation;
 };
 
