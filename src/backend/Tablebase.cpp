@@ -3,6 +3,8 @@
 #include "Move.hpp"
 #include "MoveList.hpp"
 
+uint32_t g_syzygyProbeLimit = 7;
+
 #ifdef USE_TABLE_BASES
 
 #include "syzygy/tbprobe.h"

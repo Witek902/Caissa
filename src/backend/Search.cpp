@@ -30,7 +30,6 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t WdlTablebaseProbeDepth = 4;
-static const int32_t WdlTablebaseProbeMaxNumPieces = 5;
 
 static const int32_t NullMoveReductionsStartDepth = 2;
 static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
@@ -1398,7 +1397,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         int32_t wdl = 0;
         if (!isRootNode &&
             (node.depth >= WdlTablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
-            position.GetNumPieces() <= WdlTablebaseProbeMaxNumPieces &&
+            position.GetNumPieces() <= g_syzygyProbeLimit &&
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
             tbHit = true;
