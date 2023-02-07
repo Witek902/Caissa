@@ -11,10 +11,10 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 
 ### Playing strength
 
-* CCRL 40/15 4CPU Score: **3385** (#19) (version 1.4)
-* CCRL FRC 40/2 Score: **3545** (#14) (version 1.4)
-* CCRL 40/15 Score: **3305** (#38) (version 1.1)
-* CCRL 2+1 Score: **3404** (#38) (version 1.4)
+* CCRL 40/15 4CPU Score: **3386** (#19) (version 1.5)
+* CCRL FRC 40/2 Score: **3597** (#11) (version 1.5)
+* CCRL 40/15 Score: **3314** (#36) (version 1.5)
+* CCRL 2+1 Score: **3405** (#39) (version 1.5)
 * CEGT 40/4 Score: **3306** (#29) (version 1.3)
 * CEGT 40/20 Score: **3291** (#34) (version 1.3)
 * SPCC Score: **3418** (#30) (version 1.4)
@@ -29,6 +29,7 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 * **Ponder** (bool) Enables pondering.
 * **EvalFile** (string) Neural network evaluation file.
 * **SyzygyPath** (string) Semicolon-separated list of paths to Syzygy endgame tablebases.
+* **SyzygyProbeLimit** (int) Maximum number of piece on the board where Syzygy tablebases can be used.
 * **GaviotaTbPath** (string) Path to Gaviota endgame tablebases.
 * **GaviotaTbCache** (int) Gaviota cache size in megabytes.
 * **UCI_AnalyseMode** (bool) Enables analysis mode: search full PV lines and disable any depth constrains.
@@ -63,15 +64,16 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 
 #### Evaluation
 * Custom neural network
-  * 704&rarr;768&rarr;1 architecture
+  * 704&rarr;1024&rarr;1 architecture
   * effectively updated first layer, AVX2/SSE accelerated
   * clipped-ReLU activation function
+  * 4 variants of last layer weights (selected based on piece count)
   * absolute piece coordinates with horizontal symmetry, no king-relative features
   * custom CPU-based trainer using Adagrad SGD algorithm
   * dedicated network for endgame positions (6 or less pieces on board)
 * Endgame evaluation
 * Simple classic evaluation function based purely on Piece Square Tables
-* NN and PSQT trained on data generated during self-play matches (mixture of regular chess, FRC and DFRC games)
+* NN and PSQT trained on data generated during self-play matches (mixture of regular chess, FRC and DFRC games, 400M positions in total)
 
 #### Selectivity
 * Null Move Reductions
@@ -82,10 +84,11 @@ UCI command-line chess engine written in C++ from scratch. In development since 
 * Upcoming repetition detection
 
 #### Move Ordering
-* MVV/LVA
+* Most Valuable Victim + capture history
 * Winning/Losing Captures (Static Exchange Evaluation)
 * Killer/History/Counter/Followup Move Heuristic
 * Sacrifice penalty / threat bonus
+* Custom ordering for nodes near the root based on time spent on move
 
 #### Time Management
 * Heuristics based on approximate move count left and score fluctuations.
