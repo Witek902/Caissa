@@ -2,6 +2,8 @@
 
 #include "Common.hpp"
 
+extern uint32_t g_syzygyProbeLimit;
+
 bool HasSyzygyTablebases();
 bool HasGaviotaTablebases();
 

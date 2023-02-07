@@ -12,7 +12,7 @@
 #include <random>
 #include <atomic>
 
-#define VersionNumber "1.5.10"
+#define VersionNumber "1.5.11"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -152,6 +152,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #endif // USE_ENDGAME_NEURAL_NETWORK
 #ifdef USE_TABLE_BASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
+        std::cout << "option name SyzygyProbeLimit type spin default 7 min 4 max 7\n";
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
         std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
 #endif // USE_TABLE_BASES
@@ -783,6 +784,10 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "syzygypath")
     {
         LoadSyzygyTablebase(value.c_str());
+    }
+    else if (lowerCaseName == "syzygyprobelimit")
+    {
+        g_syzygyProbeLimit = std::clamp(atoi(value.c_str()), 4, 7);
     }
     else if (lowerCaseName == "gaviotatbpath")
     {
