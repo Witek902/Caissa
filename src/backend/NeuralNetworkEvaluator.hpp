@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
+#include "Memory.hpp"
 #include "Color.hpp"
 #include "Piece.hpp"
 #include "Square.hpp"

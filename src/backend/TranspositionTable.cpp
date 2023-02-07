@@ -56,7 +56,6 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
 TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
     , numClusters(0)
-    , hashMask(0)
     , generation(0)
 {
     Resize(initialSize);
@@ -70,12 +69,10 @@ TranspositionTable::~TranspositionTable()
 TranspositionTable::TranspositionTable(TranspositionTable&& rhs)
 	: clusters(rhs.clusters)
 	, numClusters(rhs.numClusters)
-	, hashMask(rhs.hashMask)
 	, generation(rhs.generation)
 {
 	rhs.clusters = nullptr;
 	rhs.numClusters = 0;
-	rhs.hashMask = 0;
 	rhs.generation = 0;
 }
 
@@ -87,12 +84,10 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
         clusters = rhs.clusters;
         numClusters = rhs.numClusters;
-        hashMask = rhs.hashMask;
         generation = rhs.generation;
 
         rhs.clusters = nullptr;
         rhs.numClusters = 0;
-        rhs.hashMask = 0;
         rhs.generation = 0;
     }
 
@@ -105,23 +100,9 @@ void TranspositionTable::Clear()
     generation = 0;
 }
 
-static uint64_t NextPowerOfTwo(uint64_t v)
-{
-    v--;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v |= v >> 32;
-    v++;
-    return v;
-
-}
-
 void TranspositionTable::Resize(size_t newSizeInBytes)
 {
-    const size_t newNumClusters = NextPowerOfTwo(newSizeInBytes) / sizeof(TTCluster);
+    const size_t newNumClusters = newSizeInBytes / sizeof(TTCluster);
     const size_t newSize = newNumClusters / NumEntriesPerCluster;
 
     if (numClusters == newNumClusters)
@@ -142,14 +123,13 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
 
     clusters = (TTCluster*)Malloc(newNumClusters * sizeof(TTCluster));
     numClusters = newNumClusters;
-    hashMask = numClusters - 1;
     ASSERT(clusters);
     ASSERT((size_t)clusters % CACHELINE_SIZE == 0);
 
     if (!clusters)
     {
+        numClusters = 0;
         std::cerr << "Failed to allocate transposition table" << std::endl;
-        ::exit(1);
     }
 }
 
@@ -163,8 +143,7 @@ void TranspositionTable::Prefetch(const Position& position) const
 #ifdef USE_SSE
     if (clusters)
     {
-        const TTCluster* cluster = clusters + (position.GetHash() & hashMask);
-        _mm_prefetch(reinterpret_cast<const char*>(cluster), _MM_HINT_T0);
+        _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), _MM_HINT_T0);
     }
 #else
     (void)position;
@@ -175,7 +154,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 {
     if (clusters)
     {
-        TTCluster& cluster = clusters[position.GetHash() & hashMask];
+        TTCluster& cluster = GetCluster(position.GetHash());
 
         const uint32_t posKey = (position.GetHash() >> 32);
 
@@ -228,7 +207,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     const uint64_t positionHash = position.GetHash();
     const uint32_t positionKey = (uint32_t)(positionHash >> 32);
 
-    TTCluster& cluster = clusters[positionHash & hashMask];
+    TTCluster& cluster = GetCluster(position.GetHash());
 
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;

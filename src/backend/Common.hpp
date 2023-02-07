@@ -14,6 +14,7 @@
 
 #if defined(_MSC_VER)
     #define PLATFORM_WINDOWS
+    #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
     #define PLATFORM_LINUX
 #endif
@@ -296,6 +297,23 @@ inline uint64_t SwapBytes(uint64_t x)
 #endif
 }
 
+// return high bits of a 64 bit multiplication
+inline uint64_t MulHi64(uint64_t a, uint64_t b)
+{
+#if defined(__GNUC__) && defined(ARCHITECTURE_X64)
+    return ((unsigned __int128)a * (unsigned __int128)b) >> 64;
+#elif defined(_MSC_VER) && defined(ARCHITECTURE_X64)
+    return (uint64_t)__umulh(a, b);
+#else
+    uint64_t aLow = (uint32_t)a, aHi = a >> 32;
+    uint64_t bLow = (uint32_t)b, bHi = b >> 32;
+    uint64_t c1 = (aLow * bLow) >> 32;
+    uint64_t c2 = aHi * bLow + c1;
+    uint64_t c3 = aLow * bHi + (uint32_t)c2;
+    return aHi * bHi + (c2 >> 32) + (c3 >> 32);
+#endif
+}
+
 inline uint8_t ReverseBits(uint8_t x)
 {
     constexpr uint8_t lookup[16] = { 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
@@ -307,65 +325,6 @@ INLINE constexpr const T RoundUp(const T x)
 {
     return ((x + (multiple - 1)) / multiple) * multiple;
 }
-
-inline void* AlignedMalloc(size_t size, size_t alignment)
-{
-    void* ptr = nullptr;
-#if defined(PLATFORM_WINDOWS)
-    ptr = _aligned_malloc(size, alignment);
-#elif defined(PLATFORM_LINUX)
-    alignment = std::max(alignment, sizeof(void*));
-    int ret = posix_memalign(&ptr, alignment, size);
-    if (ret != 0) ptr = nullptr;
-#endif
-    return ptr;
-}
-
-inline void AlignedFree(void* ptr)
-{
-#if defined(PLATFORM_WINDOWS)
-    _aligned_free(ptr);
-#elif defined(PLATFORM_LINUX)
-    free(ptr);
-#endif
-}
-
-// https://stackoverflow.com/a/8545389
-template <typename T, std::size_t N = 16>
-class AlignmentAllocator
-{
-public:
-    typedef T value_type;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    typedef T& reference;
-    typedef const T& const_reference;
-
-public:
-    AlignmentAllocator() throw () { }
-
-    template <typename T2>
-    AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw () { }
-
-    ~AlignmentAllocator() throw () { }
-
-    pointer adress(reference r) { return &r; }
-    const_pointer adress(const_reference r) const { return &r; }
-    pointer allocate(size_type n) { return (pointer)AlignedMalloc(n * sizeof(value_type), N); }
-
-    void deallocate(pointer p, size_type) { AlignedFree(p); }
-    void construct(pointer p, const value_type& wert) { new (p) value_type(wert); }
-    void destroy(pointer p) { p->~value_type(); }
-    size_type max_size() const throw () { return size_type(-1) / sizeof(value_type); }
-
-    template <typename T2>
-    struct rebind {  typedef AlignmentAllocator<T2, N> other; };
-
-    bool operator != (const AlignmentAllocator<T, N>& other) const { return !(*this == other); }
-    bool operator == (const AlignmentAllocator<T, N>&) const { return true; }
-};
 
 template<typename T>
 INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
