@@ -25,15 +25,15 @@
 static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
-static const bool printGames = true;
-static const uint32_t c_maxNodes = 40000;
+static const uint32_t c_printPgnFrequency = 64; // print every 64th game
+static const uint32_t c_maxNodes = 10000;
 static const uint32_t c_maxDepth = 12;
-static const int32_t c_maxEval = 2000;
+static const int32_t c_maxEval = InfValue;
 static const int32_t c_openingMaxEval = 500;
-static const int32_t c_multiPv = 2;
+static const int32_t c_multiPv = 4;
 static const int32_t c_multiPvMaxPly = 10;
-static const int32_t c_multiPvScoreTreshold = 20;
-static const uint32_t c_numRandomMoves = 4;
+static const int32_t c_multiPvScoreTreshold = 30;
+static const uint32_t c_numRandomMoves = 6;
 
 using namespace threadpool;
 
@@ -133,12 +133,33 @@ bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& 
     return true;
 }
 
-bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos)
+bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos, bool preferKingMove = false)
 {
     std::vector<Move> moves;
     pos.GetNumLegalMoves(&moves);
 
     if (moves.empty()) return false;
+
+    if (preferKingMove)
+    {
+        bool hasAnyKingMove = false;
+        for (const Move& move : moves)
+        {
+            if (move.GetPiece() == Piece::King)
+            {
+                hasAnyKingMove = true;
+                break;
+            }
+        }
+
+        if (hasAnyKingMove)
+        {
+            moves.erase(std::remove_if(moves.begin(),
+                                       moves.end(),
+                                       [](const Move& move) { return move.GetPiece() != Piece::King; }),
+                        moves.end());
+        }
+    }
 
     Move move = moves.front();
     if (moves.size() > 1)
@@ -152,7 +173,17 @@ bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos)
 
 void SelfPlay(const std::vector<std::string>& args)
 {
-    FileOutputStream gamesFile("selfplay.dat");
+    g_syzygyProbeLimit = 5;
+
+    std::string outputFileName = "../../data/selfplayGames/selfplay";
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> distrib;
+        outputFileName = "../../data/selfplayGames/selfplay_" + std::to_string(distrib(gen)) + ".dat";
+    }
+
+    FileOutputStream gamesFile(outputFileName.c_str());
     GameCollection::Writer writer(gamesFile);
     if (!writer.IsOK())
     {
@@ -187,10 +218,12 @@ void SelfPlay(const std::vector<std::string>& args)
     std::vector<Search> searchArray{ numThreads };
     std::vector<TranspositionTable> ttArray;
 
+    const size_t c_transpositionTableSize = 8ull * 1024ull * 1024ull;
+
     std::cout << "Allocating transposition table..." << std::endl;
     for (size_t i = 0; i < numThreads; ++i)
     {
-        ttArray.emplace_back(16ull * 1024ull * 1024ull);
+        ttArray.emplace_back(c_transpositionTableSize);
     }
 
     std::cout << "Loading opening positions..." << std::endl;
@@ -235,8 +268,9 @@ void SelfPlay(const std::vector<std::string>& args)
 
         for (uint32_t i = 0; i < c_numRandomMoves; ++i)
         {
-            ApplyRandomMove(gen, openingPos);
-            ApplyRandomMove(gen, openingPos);
+            const bool preferKingMove = i > 4;
+            ApplyRandomMove(gen, openingPos, preferKingMove);
+            ApplyRandomMove(gen, openingPos, preferKingMove);
         }
 
         if (openingPos.IsMate() || openingPos.IsStalemate())
@@ -263,10 +297,11 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.useRootTablebase = false;
             searchParam.useAspirationWindows = false; // disable aspiration windows so we don't get lower/upper bound scores
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
+            searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
             searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 32)(gen);
-            searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
 
+            searchParam.limits.maxNodes *= searchParam.numPvLines;
             if (halfMoveNumber == 0)
             {
                 searchParam.limits.maxDepth *= 2;
@@ -337,7 +372,7 @@ void SelfPlay(const std::vector<std::string>& args)
 
             // reduce threshold of picking worse move
             // this way the game will be more random at the beginning and there will be less blunders later in the game
-            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 1);
+            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 2);
 
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
@@ -410,7 +445,7 @@ void SelfPlay(const std::vector<std::string>& args)
             metadata.roundNumber = index;
             game.SetMetadata(metadata);
 
-            if (printGames)
+            if (c_printPgnFrequency != 0 && (index % c_printPgnFrequency == 0))
             {
                 const std::string pgn = game.ToPGN(true);
                 std::cout << std::endl << pgn << std::endl;
