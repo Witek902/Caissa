@@ -1353,7 +1353,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     const ScoreType oldAlpha = node.alpha;
     ScoreType bestValue = -InfValue;
     ScoreType staticEval = InvalidValue;
-    ScoreType maxValue = InfValue; // max value according to tablebases
+    ScoreType tbMinValue = -InfValue; // min value according to tablebases
+    ScoreType tbMaxValue = InfValue; // max value according to tablebases
     bool tbHit = false;
 
     // transposition table lookup
@@ -1416,17 +1417,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 TTEntry::Bounds::Exact;
 
             // clamp best score to tablebase score
-            if (bounds == TTEntry::Bounds::Lower)
+            if (isPvNode)
             {
-                alpha = std::max(alpha, bestValue);
-            }
-            else
-            {
-                maxValue = tbValue;
+                if (bounds == TTEntry::Bounds::Lower)
+                {
+                    alpha = std::max(alpha, bestValue);
+                    tbMinValue = tbValue;
+                }
+                else if (bounds == TTEntry::Bounds::Upper)
+                {
+                    tbMaxValue = tbValue;
+                }
             }
 
-            if (!isPvNode &&
-                (bounds == TTEntry::Bounds::Exact ||
+            if ((bounds == TTEntry::Bounds::Exact ||
                  (bounds == TTEntry::Bounds::Lower && tbValue >= beta) ||
                  (bounds == TTEntry::Bounds::Upper && tbValue <= alpha)))
             {
@@ -1862,7 +1866,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Late Move Reduction
         // don't reduce while in check, good captures, promotions, etc.
         if (node.depth >= LateMoveReductionStartDepth &&
-            !node.isInCheck &&
             !isFirstCheckMove &&
             moveIndex > 1u &&
             (moveScore < MoveOrderer::GoodCaptureValue || numCaptureMovesTried > 4) && // allow reducing bad captures and any capture if far in the list
@@ -1874,11 +1877,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             depthReduction += mMoveReductionTable[std::min(uint32_t(node.depth), LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
 
             // reduce good moves less
+            if (moveScore < -16000) depthReduction++;
             if (moveScore < -8000) depthReduction++;
             if (moveScore > 0) depthReduction--;
             if (moveScore > 8000) depthReduction--;
+            if (moveScore > 16000) depthReduction--;
 
             // reduce less if move gives check
+            if (node.isInCheck) depthReduction--;
             if (childNode.isInCheck) depthReduction--;
 
             if (node.isCutNode) depthReduction++;
@@ -2071,7 +2077,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(!isPvNode || node.pvLine[0] == bestMoves[0]);
     }
 
-    bestValue = std::min(bestValue, maxValue);
+    // clamp score to TB bounds
+    if (isPvNode) bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
 
     // update transposition table
     // don't write if:
