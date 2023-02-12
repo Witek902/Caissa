@@ -28,7 +28,7 @@
 #define USE_BISHOP_PAIR
 //#define USE_CASTLING_RIGHTS
 //#define USE_IMBALANCE
-#define USE_MOBILITY
+//#define USE_MOBILITY
 //#define USE_PAWN_STRUCTURE
 //#define USE_PASSED_PAWNS
 
@@ -42,7 +42,7 @@ static const uint32_t cBatchSize = 8192;
 static const uint32_t cNumNetworkInputs =
     2 * 5                       // piece values
 #ifdef USE_PSQT
-    + 2 * 32 * 64 * 10 +        // king-relative PSQT
+    + 2 * 32 * 64 * 10          // king-relative PSQT
 #endif
 #ifdef USE_BISHOP_PAIR
     + 2                         // bishop pair
@@ -592,6 +592,12 @@ bool TrainPieceSquareTables()
 
     nn::NeuralNetworkTrainer trainer;
 
+    // clear weights
+    {
+        float* weights = network.layers[0].variants[0].weights.data();
+        memset(weights, 0, sizeof(float) * (cNumNetworkInputs + 1));
+    }
+
     // reset weights
     const auto initPieceValueWeights = [&network]()
     {
@@ -666,61 +672,6 @@ bool TrainPieceSquareTables()
         TimePoint startTime = TimePoint::GetCurrent();
 
         const float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.001f * iteration));
-
-        /*
-#ifdef USE_PSQT
-        {
-            float* psqtWeightsBase = network.layers[0].weights.data() + 10;
-
-            // normalize weights so they don't explode into infinity
-            for (uint32_t pieceIndex = 0; pieceIndex < 5; ++pieceIndex)
-            {
-                float* ourKingWeights = psqtWeightsBase + (2 * pieceIndex + 0) * 32 * 64 * 2;
-                float* theirKingWeights = psqtWeightsBase + (2 * pieceIndex + 1) * 32 * 64 * 2;
-
-                float ourKingWeightsSumMG = 0.0f, ourKingWeightsSumEG = 0.0f;
-                float theirKingWeightsSumMG = 0.0f, theirKingWeightsSumEG = 0.0f;
-
-                for (uint32_t i = 0; i < 32 * 64; ++i)
-                {
-                    ourKingWeightsSumMG += ourKingWeights[2 * i + 0];
-                    ourKingWeightsSumEG += ourKingWeights[2 * i + 1];
-                    theirKingWeightsSumMG += theirKingWeights[2 * i + 0];
-                    theirKingWeightsSumEG += theirKingWeights[2 * i + 1];
-                }
-
-                //const float offsetMG = (ourKingWeightsSumMG - theirKingWeightsSumMG) / (32 * 64);
-                //const float offsetEG = (ourKingWeightsSumEG - theirKingWeightsSumEG) / (32 * 64);
-
-                const auto saturateWeight = [](float& w) INLINE_LAMBDA
-                {
-                    if (w > 0.5f)
-                    {
-                        w = 1.5f - expf(0.5f - w);
-                    }
-                };
-
-                for (uint32_t i = 0; i < 32 * 64; ++i)
-                {
-                    ourKingWeights[2 * i + 0] -= ourKingWeightsSumMG / (32 * 64);
-                    ourKingWeights[2 * i + 1] -= ourKingWeightsSumEG / (32 * 64);
-                    theirKingWeights[2 * i + 0] -= theirKingWeightsSumMG / (32 * 64);
-                    theirKingWeights[2 * i + 1] -= theirKingWeightsSumEG / (32 * 64);
-
-                    saturateWeight(ourKingWeights[2 * i + 0]);
-                    saturateWeight(ourKingWeights[2 * i + 1]);
-                    saturateWeight(theirKingWeights[2 * i + 0]);
-                    saturateWeight(theirKingWeights[2 * i + 1]);
-                }
-
-                network.layers[0].weights.data()[2 * pieceIndex + 0] += ourKingWeightsSumMG / (32 * 64);
-                network.layers[0].weights.data()[2 * pieceIndex + 0] -= theirKingWeightsSumMG / (32 * 64);
-                network.layers[0].weights.data()[2 * pieceIndex + 1] += ourKingWeightsSumEG / (32 * 64);
-                network.layers[0].weights.data()[2 * pieceIndex + 1] -= theirKingWeightsSumEG / (32 * 64);
-            }
-        }
-#endif // USE_PSQT
-        */
 
         // force fixed piece values
         initPieceValueWeights();
