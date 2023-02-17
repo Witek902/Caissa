@@ -1183,7 +1183,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
                  if (node.depth < -4 && moveIndex > 1) break;
             else if (node.depth < -2 && moveIndex > 2) break;
-            else if (node.depth <  0 && moveIndex > 3) break;
+            else if (node.depth < 0 && moveIndex > 3) break;
         }
 
         childNode.previousMove = move;
@@ -1319,10 +1319,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         return QuiescenceNegaMax(thread, node, ctx);
     }
 
-    // Check for draw
-    // Skip root node as we need some move to be reported in PV
     if (!isRootNode)
     {
+        // Check for draw
+        // Skip root node as we need some move to be reported in PV
         if (node.position.GetHalfMoveCount() >= 100 ||
             CheckInsufficientMaterial(node.position) ||
             SearchUtils::IsRepetition(node, ctx.game))
@@ -1332,13 +1332,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // ENABLE_SEARCH_TRACE
             return 0;
         }
-    }
 
-    ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
-
-    // mate distance pruning
-    if (!isRootNode)
-    {
+        // mate distance pruning
         alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node.height, alpha);
         beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node.height - 1, beta);
         if (alpha >= beta)
@@ -1349,6 +1344,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             return alpha;
         }
     }
+
+    ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
 
     const ScoreType oldAlpha = node.alpha;
     ScoreType bestValue = -InfValue;
@@ -2027,9 +2024,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         else
         {
             bestValue = node.isInCheck ? -CheckmateValue + (ScoreType)node.height : 0;
-
-            // write TT entry so it will overwrite any incorrect entry coming from QSearch
-            ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), bestValue, INT8_MAX, TTEntry::Bounds::Exact);
         }
 
 #ifdef ENABLE_SEARCH_TRACE
