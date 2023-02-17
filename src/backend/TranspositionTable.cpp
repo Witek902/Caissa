@@ -156,7 +156,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     {
         TTCluster& cluster = GetCluster(position.GetHash());
 
-        const uint32_t posKey = (position.GetHash() >> 32);
+        const uint32_t posKey = (uint32_t)position.GetHash();
 
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
@@ -205,7 +205,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     }
 
     const uint64_t positionHash = position.GetHash();
-    const uint32_t positionKey = (uint32_t)(positionHash >> 32);
+    const uint32_t positionKey = (uint32_t)positionHash;
 
     TTCluster& cluster = GetCluster(position.GetHash());
 
@@ -232,7 +232,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - 8 * entryAge + 4 * (data.bounds == TTEntry::Bounds::Exact);
+        const int32_t entryRelevance = (int32_t)data.depth - 64 * entryAge + 4 * (data.bounds == TTEntry::Bounds::Exact);
 
         if (entryRelevance < minRelevanceInCluster)
         {
