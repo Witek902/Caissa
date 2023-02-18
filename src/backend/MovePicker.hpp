@@ -9,6 +9,16 @@ struct NodeCacheEntry;
 class MovePicker
 {
 public:
+
+    enum class Stage : uint8_t
+    {
+        PVMove,
+        TTMove,
+        Captures,
+        Quiet,
+        End,
+    };
+
     MovePicker(const Position& pos,
                const MoveOrderer& moveOrderer,
                const NodeCacheEntry* nodeCacheEntry,
@@ -28,18 +38,10 @@ public:
 
     bool PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore);
 
+    INLINE Stage GetStage() const { return stage; }
     INLINE uint32_t GetNumMoves() const { return moves.Size(); }
 
 private:
-
-    enum class Stage : uint8_t
-    {
-        PVMove,
-        TTMove,
-        Captures,
-        Quiet,
-        End,
-    };
 
     const Position& position;
     const TTEntry& ttEntry;

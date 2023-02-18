@@ -1706,30 +1706,26 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
-
         moveIndex++;
         if (move.IsQuiet()) quietMoveIndex++;
 
-        childNode.isInCheck = childNode.position.IsInCheck();
-        const bool isFirstCheckMove = childNode.isInCheck && numChecks == 0;
-        numChecks += childNode.isInCheck;
-
         if (!node.isInCheck &&
-            !childNode.isInCheck &&
             !isRootNode &&
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
+                //const int32_t historyScore = thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
+
                 // Late Move Pruning
                 // skip quiet moves that are far in the list
                 // the higher depth is, the less aggressive pruning is
-                if (node.depth < 9 &&
-                    quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
+                if (quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
                 {
+                    // if we're in quiets stage, skip everything
+                    if (movePicker.GetStage() == MovePicker::Stage::Quiet) break;
+
                     continue;
                 }
 
@@ -1768,6 +1764,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     !position.StaticExchangeEvaluation(move, -64 * node.depth)) continue;
             }
         }
+
+        childNode.isInCheck = childNode.position.IsInCheck();
+        const bool isFirstCheckMove = childNode.isInCheck && numChecks == 0;
+        numChecks += childNode.isInCheck;
+
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         // report current move to UCI
         if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
