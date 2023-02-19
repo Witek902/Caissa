@@ -194,7 +194,7 @@ void Search::BuildMoveReductionTable()
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(0.25f + 0.5f * logf(float(depth)) * logf(float(moveIndex)));
+            const int32_t reduction = int32_t(0.5f + 0.5f * logf(float(depth)) * logf(float(moveIndex)));
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
