@@ -3,12 +3,6 @@
 #include "Position.hpp"
 #include "TranspositionTable.hpp"
 
-void MovePicker::Shuffle()
-{
-    moves.Shuffle();
-    shuffleEnabled = true;
-}
-
 bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
     const bool generateQuiets = moveGenFlags & MOVE_GEN_MASK_QUIET;

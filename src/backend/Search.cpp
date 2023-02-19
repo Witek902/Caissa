@@ -1665,12 +1665,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
 
-    // randomize move order for root node on secondary threads
-    if (isRootNode && !thread.isMainThread)
-    {
-        movePicker.Shuffle();
-    }
-
     int32_t moveScore = 0;
     Move move;
 

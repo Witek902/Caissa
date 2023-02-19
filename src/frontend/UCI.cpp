@@ -9,10 +9,9 @@
 #include "../backend/PositionUtils.hpp"
 
 #include <math.h>
-#include <random>
 #include <atomic>
 
-#define VersionNumber "1.6.5"
+#define VersionNumber "1.6.6"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -285,6 +284,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             extraMovesStart = 2;
         }
     }
+#ifndef CONFIGURATION_FINAL
     else if (args.size() >= 2 && args[1] == "random")
     {
         MaterialKey matKey = { 8, 2, 2, 2, 1, 8, 2, 2, 2, 1 };
@@ -308,6 +308,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             extraMovesStart = 2;
         }
     }
+#endif // CONFIGURATION_FINAL
     else if (args.size() > 2 && args[1] == "fen")
     {
         size_t numFenElements = 0;

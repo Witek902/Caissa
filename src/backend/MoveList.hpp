@@ -111,8 +111,6 @@ public:
 
     void Sort();
 
-    void Shuffle();
-
     void Print(const Position& pos) const;
 
 private:

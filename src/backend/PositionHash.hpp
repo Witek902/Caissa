@@ -4,7 +4,9 @@
 #include "Piece.hpp"
 #include "Square.hpp"
 
-extern uint64_t s_ZobristHash[128];
+static constexpr uint32_t c_ZobristHashSize = 100;
+
+extern uint64_t s_ZobristHash[c_ZobristHashSize];
 
 void InitZobristHash();
 
@@ -27,6 +29,7 @@ INLINE static uint64_t GetEnPassantFileZobristHash(uint32_t fileIndex)
 
     // skip position hashes
     const uint32_t offset = (2 * 6 * 64) + fileIndex;
+    ASSERT(offset < 2 * 6 * 64 + 8);
     return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
 }
 
@@ -36,5 +39,6 @@ INLINE static uint64_t GetCastlingRightsZobristHash(const Color color, uint32_t 
 
     // skip position hashes and en passant hashes
     const uint32_t offset = (2 * 6 * 64 + 8) + 2 * rookIndex + (uint32_t)color;
+    ASSERT(offset < 2 * 6 * 64 + 8 + 16);
     return *(const uint64_t*)((const uint8_t*)s_ZobristHash + offset);
 }
