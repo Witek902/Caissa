@@ -34,8 +34,6 @@ public:
     {
     }
 
-    void Shuffle();
-
     bool PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore);
 
     INLINE Stage GetStage() const { return stage; }

@@ -5,8 +5,6 @@
 #include "Evaluate.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 
-#include <random>
-
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 bool Position::s_enableChess960 = false;

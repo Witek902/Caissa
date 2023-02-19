@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <random>
 #include <iomanip>
 
 uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
@@ -53,12 +52,6 @@ void MoveList::Sort()
         moves[i] = movesCopy[indices[i]];
         scores[i] = scoresCopy[indices[i]];
     }
-}
-
-void MoveList::Shuffle()
-{
-    static std::atomic<uint32_t> shuffleSeed = 0;
-    std::shuffle(moves, moves + numMoves, std::default_random_engine(shuffleSeed++));
 }
 
 void MoveList::Print(const Position& pos) const
