@@ -1681,7 +1681,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     Move captureMovesTried[MoveList::MaxMoves];
     uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
-    uint32_t numChecks = 0;
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
@@ -1760,8 +1759,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         childNode.isInCheck = childNode.position.IsInCheck();
-        const bool isFirstCheckMove = childNode.isInCheck && numChecks == 0;
-        numChecks += childNode.isInCheck;
 
         // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
@@ -1860,7 +1857,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Late Move Reduction
         // don't reduce while in check, good captures, promotions, etc.
         if (node.depth >= LateMoveReductionStartDepth &&
-            !isFirstCheckMove &&
             moveIndex > 1u &&
             (moveScore < MoveOrderer::GoodCaptureValue || numCaptureMovesTried > 4) && // allow reducing bad captures and any capture if far in the list
             move.GetPromoteTo() != Piece::Queen)
@@ -1877,8 +1873,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if (moveScore > 8000) depthReduction--;
             if (moveScore > 16000) depthReduction--;
 
-            // reduce less if move gives check
-            if (node.isInCheck) depthReduction--;
+            if (node.isInCheck && move.GetPiece() == Piece::King) depthReduction--;
             if (childNode.isInCheck) depthReduction--;
 
             if (node.isCutNode) depthReduction++;

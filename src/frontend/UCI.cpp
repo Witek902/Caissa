@@ -11,7 +11,7 @@
 #include <math.h>
 #include <atomic>
 
-#define VersionNumber "1.6.6"
+#define VersionNumber "1.6.7"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
