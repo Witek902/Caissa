@@ -1798,12 +1798,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
             ttEntry.depth >= node.depth - 2)
         {
-            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - 2 * node.depth);
+            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node.depth);
 
             NodeInfo singularChildNode = node;
             singularChildNode.isPvNodeFromPrevIteration = false;
             singularChildNode.isSingularSearch = true;
-            singularChildNode.depth = node.depth / 2;
+            singularChildNode.depth = node.depth / 2 - 1;
             singularChildNode.alpha = singularBeta - 1;
             singularChildNode.beta = singularBeta;
             singularChildNode.moveFilter = &move;
