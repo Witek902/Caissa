@@ -105,12 +105,14 @@ public:
 
 private:
 
+    using PieceSquareHistory = CounterType[6][64];
+    using ContinuationHistory = PieceSquareHistory[2][6][64];
+
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][64][64];                // side, from-square, to-square
-    CounterType quietMoveContinuationHistory[6][64][6][64];
-    CounterType quietMoveFollowupHistory[6][64][6][64];
-
+    ContinuationHistory counterMoveHistory;
+    ContinuationHistory continuationHistory;
     CounterType capturesHistory[2][6][5][64];               // side, capturing piece, captured piece, to-square
 
     KillerMoves<NumKillerMoves> killerMoves[MaxNumPieces+1][MaxSearchDepth];
