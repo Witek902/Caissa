@@ -1,5 +1,5 @@
 #include "Material.hpp"
-#include "Color.hpp"
+#include "Position.hpp"
 
 static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
 
@@ -99,4 +99,23 @@ uint32_t MaterialKey::GetNeuralNetworkInputsNumber() const
     if (numBlackPawns)      inputs += 48;
 
     return inputs;
+}
+
+MaterialMask BuildMaterialMask(const Position& pos)
+{
+    MaterialMask mask = (MaterialMask)0;
+
+    if (pos.Whites().pawns)     mask = mask | MaterialMask_WhitePawn;
+    if (pos.Whites().knights)   mask = mask | MaterialMask_WhiteKnight;
+    if (pos.Whites().bishops)   mask = mask | MaterialMask_WhiteBishop;
+    if (pos.Whites().rooks)     mask = mask | MaterialMask_WhiteRook;
+    if (pos.Whites().queens)    mask = mask | MaterialMask_WhiteQueen;
+
+    if (pos.Blacks().pawns)     mask = mask | MaterialMask_BlackPawn;
+    if (pos.Blacks().knights)   mask = mask | MaterialMask_BlackKnight;
+    if (pos.Blacks().bishops)   mask = mask | MaterialMask_BlackBishop;
+    if (pos.Blacks().rooks)     mask = mask | MaterialMask_BlackRook;
+    if (pos.Blacks().queens)    mask = mask | MaterialMask_BlackQueen;
+
+    return mask;
 }
