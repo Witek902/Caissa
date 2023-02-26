@@ -194,53 +194,6 @@ Result KPKPosition::Classify(const std::vector<KPKPosition>& db)
 
 } // KPKEndgame
 
-enum MaterialMask : uint32_t
-{
-    MaterialMask_WhitePawn      = 1 << 0,
-    MaterialMask_WhiteKnight    = 1 << 1,
-    MaterialMask_WhiteBishop    = 1 << 2,
-    MaterialMask_WhiteRook      = 1 << 3,
-    MaterialMask_WhiteQueen     = 1 << 4,
-
-    MaterialMask_BlackPawn      = 1 << 5,
-    MaterialMask_BlackKnight    = 1 << 6,
-    MaterialMask_BlackBishop    = 1 << 7,
-    MaterialMask_BlackRook      = 1 << 8,
-    MaterialMask_BlackQueen     = 1 << 9,
-
-    MaterialMask_MAX            = 1 << 10,
-    MaterialMask_WhitesMAX      = MaterialMask_BlackPawn,
-};
-
-INLINE constexpr MaterialMask operator | (MaterialMask a, MaterialMask b)
-{
-    return static_cast<MaterialMask>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
-}
-
-INLINE static MaterialMask BuildMaterialMask(const Position& pos)
-{
-    MaterialMask mask = (MaterialMask)0;
-
-    if (pos.Whites().pawns)     mask = mask | MaterialMask_WhitePawn;
-    if (pos.Whites().knights)   mask = mask | MaterialMask_WhiteKnight;
-    if (pos.Whites().bishops)   mask = mask | MaterialMask_WhiteBishop;
-    if (pos.Whites().rooks)     mask = mask | MaterialMask_WhiteRook;
-    if (pos.Whites().queens)    mask = mask | MaterialMask_WhiteQueen;
-
-    if (pos.Blacks().pawns)     mask = mask | MaterialMask_BlackPawn;
-    if (pos.Blacks().knights)   mask = mask | MaterialMask_BlackKnight;
-    if (pos.Blacks().bishops)   mask = mask | MaterialMask_BlackBishop;
-    if (pos.Blacks().rooks)     mask = mask | MaterialMask_BlackRook;
-    if (pos.Blacks().queens)    mask = mask | MaterialMask_BlackQueen;
-
-    return mask;
-}
-
-INLINE static MaterialMask FlipColor(const MaterialMask mask)
-{
-    return MaterialMask((mask >> 5) | ((mask & 0x1F) << 5));
-}
-
 using EndgameEvaluationFunc = bool (*)(const Position&, int32_t&);
 
 // map: material mask -> function index

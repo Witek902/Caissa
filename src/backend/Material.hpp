@@ -97,6 +97,43 @@ union MaterialKey
     std::string ToString() const;
 };
 
+///
+
+enum MaterialMask : uint16_t
+{
+    MaterialMask_NONE           = 0,
+
+    MaterialMask_WhitePawn      = 1 << 0,
+    MaterialMask_WhiteKnight    = 1 << 1,
+    MaterialMask_WhiteBishop    = 1 << 2,
+    MaterialMask_WhiteRook      = 1 << 3,
+    MaterialMask_WhiteQueen     = 1 << 4,
+
+    MaterialMask_BlackPawn      = 1 << 5,
+    MaterialMask_BlackKnight    = 1 << 6,
+    MaterialMask_BlackBishop    = 1 << 7,
+    MaterialMask_BlackRook      = 1 << 8,
+    MaterialMask_BlackQueen     = 1 << 9,
+
+    MaterialMask_MAX            = 1 << 10,
+    MaterialMask_ALL            = MaterialMask_MAX - 1,
+    MaterialMask_WhitesMAX = MaterialMask_BlackPawn,
+};
+
+INLINE constexpr MaterialMask operator | (MaterialMask a, MaterialMask b)
+{
+    return static_cast<MaterialMask>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+
+MaterialMask BuildMaterialMask(const Position& pos);
+
+INLINE MaterialMask FlipColor(const MaterialMask mask)
+{
+    return MaterialMask((mask >> 5) | ((mask & 0x1F) << 5));
+}
+
+///
+
 namespace std
 {
 
