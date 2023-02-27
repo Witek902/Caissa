@@ -33,11 +33,11 @@ uint64_t Position::ComputeHash() const
 
     for (uint32_t i = 0; i < 8; ++i)
     {
-        if (mWhitesCastlingRights & (1 << i))
+        if (GetWhitesCastlingRights() & (1 << i))
         {
             hash ^= GetCastlingRightsZobristHash(Color::White, i);
         }
-        if (mBlacksCastlingRights & (1 << i))
+        if (GetBlacksCastlingRights() & (1 << i))
         {
             hash ^= GetCastlingRightsZobristHash(Color::Black, i);
         }
@@ -69,8 +69,7 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 Position::Position()
     : mSideToMove(Color::White)
     , mEnPassantSquare(Square::Invalid())
-    , mWhitesCastlingRights(0)
-    , mBlacksCastlingRights(0)
+    , mCastlingRights{0,0}
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
     , mHash(0u)
@@ -120,39 +119,21 @@ void Position::SetSideToMove(Color color)
     }
 }
 
-void Position::SetWhitesCastlingRights(uint8_t rightsMask)
+void Position::SetCastlingRights(Color color, uint8_t rightsMask)
 {
     ASSERT(PopCount(rightsMask) <= 2);
 
-    if (const uint8_t difference = mWhitesCastlingRights ^ rightsMask)
+    if (const uint8_t difference = mCastlingRights[(uint32_t)color] ^ rightsMask)
     {
         for (uint32_t i = 0; i < 8; ++i)
         {
             if (difference & (1 << i))
             {
-                mHash ^= GetCastlingRightsZobristHash(Color::White, i);
+                mHash ^= GetCastlingRightsZobristHash(color, i);
             }
         }
 
-        mWhitesCastlingRights = rightsMask;
-    }
-}
-
-void Position::SetBlacksCastlingRights(uint8_t rightsMask)
-{
-    ASSERT(PopCount(rightsMask) <= 2);
-
-    if (const uint8_t difference = mBlacksCastlingRights ^ rightsMask)
-    {
-        for (uint32_t i = 0; i < 8; ++i)
-        {
-            if (difference & (1 << i))
-            {
-                mHash ^= GetCastlingRightsZobristHash(Color::Black, i);
-            }
-        }
-
-        mBlacksCastlingRights = rightsMask;
+        mCastlingRights[(uint32_t)color] = rightsMask;
     }
 }
 
@@ -424,7 +405,7 @@ Square Position::GetShortCastleRookSquare(const Square kingSquare, uint8_t castl
 
 void Position::GenerateKingMoveList(MoveList& outMoveList, uint32_t flags) const
 {
-    const uint8_t currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+    const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
     const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
 
@@ -755,18 +736,18 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
 {
     if (affectedSquare.Rank() == 0)
     {
-        if (mWhitesCastlingRights & (1 << affectedSquare.File()))
+        if (mCastlingRights[0] & (1 << affectedSquare.File()))
         {
             mHash ^= GetCastlingRightsZobristHash(Color::White, affectedSquare.File());
-            mWhitesCastlingRights &= ~(1 << affectedSquare.File());
+            mCastlingRights[0] &= ~(1 << affectedSquare.File());
         }
     }
     else if (affectedSquare.Rank() == 7)
     {
-        if (mBlacksCastlingRights & (1 << affectedSquare.File()))
+        if (mCastlingRights[1] & (1 << affectedSquare.File()))
         {
             mHash ^= GetCastlingRightsZobristHash(Color::Black, affectedSquare.File());
-            mBlacksCastlingRights &= ~(1 << affectedSquare.File());
+            mCastlingRights[1] &= ~(1 << affectedSquare.File());
         }
     }
 }
@@ -848,7 +829,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
     {
         if (move.IsCastling())
         {
-            const uint8_t currentSideCastlingRights = (mSideToMove == Color::White) ? mWhitesCastlingRights : mBlacksCastlingRights;
+            const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
 
             ASSERT(currentSideCastlingRights != 0);
             ASSERT(move.FromSquare().Rank() == 0 || move.FromSquare().Rank() == 7);
@@ -891,14 +872,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
         }
 
         // clear all castling rights after moving a king
-        if (mSideToMove == Color::White)
-        {
-            SetWhitesCastlingRights(0);
-        }
-        else
-        {
-            SetBlacksCastlingRights(0);
-        }
+        SetCastlingRights(mSideToMove, 0);
     }
 
     // clear specific castling right after moving a rook
@@ -980,8 +954,8 @@ Position Position::SwappedColors() const
     result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
     result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
     result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
-    result.mBlacksCastlingRights    = mWhitesCastlingRights;
-    result.mWhitesCastlingRights    = mBlacksCastlingRights;
+    result.mCastlingRights[0]       = mCastlingRights[1];
+    result.mCastlingRights[1]       = mCastlingRights[0];
     result.mSideToMove              = GetOppositeColor(mSideToMove);
     result.mMoveCount               = mMoveCount;
     result.mHalfMoveCount           = mHalfMoveCount;
@@ -1005,8 +979,8 @@ void Position::MirrorVertically()
     mColors[1].knights  = mColors[1].knights.MirroredVertically();
     mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
 
-    mWhitesCastlingRights = 0;
-    mBlacksCastlingRights = 0;
+    mCastlingRights[0] = 0;
+    mCastlingRights[1] = 0;
 
     mHash = ComputeHash();
 }
@@ -1027,8 +1001,8 @@ void Position::MirrorHorizontally()
     mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
     mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
 
-    mWhitesCastlingRights = ReverseBits(mWhitesCastlingRights);
-    mBlacksCastlingRights = ReverseBits(mBlacksCastlingRights);
+    mCastlingRights[0] = ReverseBits(mCastlingRights[0]);
+    mCastlingRights[1] = ReverseBits(mCastlingRights[1]);
 
     mHash = ComputeHash();
 }

@@ -219,8 +219,8 @@ public:
     INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
-    INLINE uint8_t GetWhitesCastlingRights() const { return mWhitesCastlingRights; }
-    INLINE uint8_t GetBlacksCastlingRights() const { return mBlacksCastlingRights; }
+    INLINE uint8_t GetWhitesCastlingRights() const { return mCastlingRights[0]; }
+    INLINE uint8_t GetBlacksCastlingRights() const { return mCastlingRights[1]; }
 
     INLINE uint32_t GetNumPiecesExcludingKing() const
     {
@@ -248,8 +248,7 @@ public:
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
 
     void SetSideToMove(Color color);
-    void SetWhitesCastlingRights(uint8_t rightsMask);
-    void SetBlacksCastlingRights(uint8_t rightsMask);
+    void SetCastlingRights(Color color, uint8_t rightsMask);
     INLINE void SetHalfMoveCount(uint16_t halfMoveCount) { mHalfMoveCount = halfMoveCount; }
     INLINE void SetMoveCount(uint16_t moveCount) { mMoveCount = moveCount; }
 
@@ -294,8 +293,7 @@ private:
     // en passant target square
     Square mEnPassantSquare;
 
-    uint8_t mWhitesCastlingRights;
-    uint8_t mBlacksCastlingRights;
+    uint8_t mCastlingRights[2];
 
     uint16_t mHalfMoveCount;
     uint16_t mMoveCount;
