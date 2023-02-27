@@ -711,6 +711,11 @@ bool Position::IsMoveLegal(const Move& move) const
     return positionAfterMove.DoMove(move);
 }
 
+Piece Position::GetCapturedPiece(const Move move) const
+{
+    return move.IsEnPassant() ? Piece::Pawn : GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+}
+
 Square Position::ExtractEnPassantSquareFromMove(const Move& move) const
 {
     ASSERT(move.GetPiece() == Piece::Pawn);
