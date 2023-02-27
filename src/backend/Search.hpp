@@ -118,6 +118,8 @@ struct NodeInfo
 
 	uint8_t pvIndex = 0;
 
+    uint8_t doubleExtensions = 0;
+
     // remaining depth
     int16_t depth = 0;
 

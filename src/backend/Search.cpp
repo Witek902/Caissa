@@ -47,6 +47,7 @@ static const int32_t AspirationWindowEnd = 20;
 static const int32_t AspirationWindowStep = 4;
 
 static const int32_t SingularExtensionScoreMarigin = 5;
+static const int32_t SingularDoubleExtensionMarigin = 22;
 
 static const int32_t BetaPruningDepth = 7;
 static const int32_t BetaMarginMultiplier = 135;
@@ -1579,6 +1580,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 childNode.alpha = -beta;
                 childNode.beta = -beta + 1;
                 childNode.isNullMove = true;
+                childNode.doubleExtensions = node.doubleExtensions;
                 childNode.height = node.height + 1;
                 childNode.depth = static_cast<int16_t>(node.depth - depthReduction);
                 childNode.isCutNode = !node.isCutNode;
@@ -1623,6 +1625,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     childNode.parentNode = &node;
     childNode.height = node.height + 1;
     childNode.pvIndex = node.pvIndex;
+    childNode.doubleExtensions = node.doubleExtensions;
     childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
     childNode.nnContext->MarkAsDirty();
 
@@ -1816,6 +1819,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 if (node.height < 2 * thread.rootDepth)
                 {
                     moveExtension++;
+
+                    // double extension if singular score is way below beta
+                    if (!isPvNode &&
+                        node.doubleExtensions < 8 &&
+                        singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                    {
+                        moveExtension++;
+                    }
                 }
             }
             else if (singularScore >= beta)
@@ -1849,6 +1860,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         childNode.previousMove = move;
         childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
+        childNode.doubleExtensions = node.doubleExtensions + (moveExtension >= 2);
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
 
