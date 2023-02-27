@@ -176,6 +176,9 @@ public:
     // Approximate check if packed move is a capture
     bool IsCapture(const PackedMove& move) const;
 
+    // get captured piece type
+    Piece GetCapturedPiece(const Move move) const;
+
     // Check if a valid pseudomove is legal. This is full validity test, it includes checks/checkmates.
     // NOTE: It's assumed that provided move is a valid move, otherwise the function will assert
     bool IsMoveLegal(const Move& move) const;

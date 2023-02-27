@@ -204,11 +204,6 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 }
 
-INLINE static Piece GetCapturedPiece(const Position& pos, const Move move)
-{
-    return move.IsEnPassant() ? Piece::Pawn : pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
-}
-
 void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
 {
     // depth can be negative in QSearch
@@ -231,8 +226,9 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         const int32_t delta = move == bestMove ? bonus : -bonus;
 
-        const Piece captured = GetCapturedPiece(node.position, move);
-        ASSERT(captured != Piece::None);
+        const Piece captured = node.position.GetCapturedPiece(move);
+        ASSERT(captured > Piece::None);
+        ASSERT(captured < Piece::King);
 
         const uint32_t capturedIdx = (uint32_t)captured - 1;
         const uint32_t pieceIdx = (uint32_t)move.GetPiece() - 1;
@@ -357,8 +353,9 @@ void MoveOrderer::ScoreMoves(
         if (move.IsCapture())
         {
             const Piece attackingPiece = move.GetPiece();
-            const Piece capturedPiece = GetCapturedPiece(pos, move);
-            ASSERT(capturedPiece != Piece::None);
+            const Piece capturedPiece = pos.GetCapturedPiece(move);
+            ASSERT(capturedPiece > Piece::None);
+            ASSERT(capturedPiece < Piece::King);
 
             if ((uint32_t)attackingPiece <= (uint32_t)capturedPiece)
             {
