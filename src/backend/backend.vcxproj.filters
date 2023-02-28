@@ -194,6 +194,9 @@
     <ClCompile Include="NodeCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Tuning.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Position.hpp">
@@ -326,6 +329,9 @@
       <Filter>gaviota\compression\zlib</Filter>
     </ClInclude>
     <ClInclude Include="NodeCache.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Tuning.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

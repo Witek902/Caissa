@@ -837,6 +837,7 @@
     <ClCompile Include="Time.cpp" />
     <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TranspositionTable.cpp" />
+    <ClCompile Include="Tuning.cpp" />
     <ClCompile Include="Waitable.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -883,6 +884,7 @@
     <ClInclude Include="Time.hpp" />
     <ClInclude Include="TimeManager.hpp" />
     <ClInclude Include="TranspositionTable.hpp" />
+    <ClInclude Include="Tuning.hpp" />
     <ClInclude Include="Waitable.hpp" />
   </ItemGroup>
   <ItemGroup>

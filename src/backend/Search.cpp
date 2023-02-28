@@ -9,6 +9,7 @@
 #include "TimeManager.hpp"
 #include "PositionHash.hpp"
 #include "Score.hpp"
+#include "Tuning.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -20,46 +21,47 @@
 // #define ENABLE_SEARCH_TRACE
 
 static const float CurrentMoveReportDelay = 10.0f;
-
-static const int32_t SingularitySearchMinDepth = 8;
-static const int32_t SingularitySearchScoreTresholdMin = 200;
-static const int32_t SingularitySearchScoreTresholdMax = 400;
-static const int32_t SingularitySearchScoreStep = 25;
-
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
+static const int32_t MaxExtension = 2;
+static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 4;
 
-static const int32_t NullMoveReductionsStartDepth = 2;
-static const int32_t NullMoveReductions_NullMoveDepthReduction = 4;
-static const int32_t NullMoveReductions_ReSearchDepthReduction = 4;
+DEFINE_PARAM(LateMoveReductionScale, 50);
+DEFINE_PARAM(LateMoveReductionBias, 50);
 
-static const int32_t MaxExtension = 2;
+DEFINE_PARAM(SingularitySearchMinDepth, 8);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 400);
+DEFINE_PARAM(SingularitySearchScoreStep, 25);
 
-static const int32_t MaxDepthReduction = 12;
-static const int32_t LateMoveReductionStartDepth = 2;
+DEFINE_PARAM(NullMoveReductionsStartDepth, 2);
+DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
+DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 
-static const int32_t AspirationWindowDepthStart = 6;
-static const int32_t AspirationWindowMaxSize = 500;
-static const int32_t AspirationWindowStart = 40;
-static const int32_t AspirationWindowEnd = 20;
-static const int32_t AspirationWindowStep = 4;
+DEFINE_PARAM(LateMoveReductionStartDepth, 2);
 
-static const int32_t SingularExtensionScoreMarigin = 5;
-static const int32_t SingularDoubleExtensionMarigin = 22;
+DEFINE_PARAM(AspirationWindowDepthStart, 6);
+DEFINE_PARAM(AspirationWindowMaxSize, 500);
+DEFINE_PARAM(AspirationWindowStart, 40);
+DEFINE_PARAM(AspirationWindowEnd, 20);
+DEFINE_PARAM(AspirationWindowStep, 4);
 
-static const int32_t BetaPruningDepth = 7;
-static const int32_t BetaMarginMultiplier = 135;
-static const int32_t BetaMarginBias = 5;
+DEFINE_PARAM(SingularExtensionScoreMarigin, 5);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 22);
 
-static const int32_t AlphaPruningDepth = 5;
-static const int32_t AlphaMarginMultiplier = 256;
-static const int32_t AlphaMarginBias = 2000;
+DEFINE_PARAM(BetaPruningDepth, 7);
+DEFINE_PARAM(BetaMarginMultiplier, 135);
+DEFINE_PARAM(BetaMarginBias, 5);
 
-static const int32_t RazoringStartDepth = 3;
-static const int32_t RazoringMarginMultiplier = 128;
-static const int32_t RazoringMarginBias = 20;
+DEFINE_PARAM(AlphaPruningDepth, 5);
+DEFINE_PARAM(AlphaMarginMultiplier, 256);
+DEFINE_PARAM(AlphaMarginBias, 2000);
+
+DEFINE_PARAM(RazoringStartDepth, 3);
+DEFINE_PARAM(RazoringMarginMultiplier, 128);
+DEFINE_PARAM(RazoringMarginBias, 20);
 
 class SearchTrace
 {
@@ -189,13 +191,14 @@ void Search::StopWorkerThreads()
 
 void Search::BuildMoveReductionTable()
 {
-    memset(mMoveReductionTable, 0, sizeof(mMoveReductionTable));
+    const float scale = static_cast<float>(LateMoveReductionScale) / 100.0f;
+    const float bias = static_cast<float>(LateMoveReductionBias) / 100.0f;
 
     for (uint32_t depth = 1; depth < LMRTableSize; ++depth)
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(0.5f + 0.5f * logf(float(depth)) * logf(float(moveIndex)));
+            const int32_t reduction = int32_t(bias + scale * logf(float(depth)) * logf(float(moveIndex)));
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
@@ -327,6 +330,10 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             }
         }
     }
+
+#ifdef ENABLE_TUNING
+    BuildMoveReductionTable();
+#endif // ENABLE_TUNING
 
     Stats globalStats;
 
@@ -802,7 +809,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     // start applying aspiration window at given depth
     if (param.searchParam.useAspirationWindows &&
-        param.depth >= AspirationWindowDepthStart &&
+        param.depth >= static_cast<uint32_t>(AspirationWindowDepthStart) &&
         param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(thread, param.searchContext, true))
@@ -867,7 +874,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
-            if (depth > AspirationWindowDepthStart && depth + 3 > param.depth)
+            if (depth > static_cast<uint32_t>(AspirationWindowDepthStart) &&
+                depth + 3 > param.depth)
             {
                 depth--;
             }
@@ -1604,7 +1612,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                         return nullMoveScore;
                     }
 
-                    node.depth -= NullMoveReductions_ReSearchDepthReduction;
+                    node.depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
 
                     if (node.depth <= 0)
                     {
