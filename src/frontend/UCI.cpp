@@ -7,11 +7,12 @@
 #include "../backend/Material.hpp"
 #include "../backend/TimeManager.hpp"
 #include "../backend/PositionUtils.hpp"
+#include "../backend/Tuning.hpp"
 
 #include <math.h>
 #include <atomic>
 
-#define VersionNumber "1.6.11"
+#define VersionNumber "1.6.12"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -159,6 +160,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
+#ifdef ENABLE_TUNING
+        for (const TunableParameter& param : g_TunableParameters)
+        {
+            std::cout << "option name " << param.m_name << " type spin default " << (*param.m_valuePtr) << "\n";
+        }
+#endif // ENABLE_TUNING
         std::cout << "uciok" << std::endl;
     }
     else if (command == "isready")
@@ -828,6 +835,18 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else
     {
+#ifdef ENABLE_TUNING
+        for (const TunableParameter& param : g_TunableParameters)
+        {
+            if (name == param.m_name)
+            {
+                // TODO clamp to min/max
+                *param.m_valuePtr = atoi(value.c_str());
+                return true;
+            }
+        }
+#endif // ENABLE_TUNING
+
         std::cout << "Invalid option: " << name << std::endl;
         return false;
     }
