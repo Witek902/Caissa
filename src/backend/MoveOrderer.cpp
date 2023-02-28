@@ -184,7 +184,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         }
     }
 
-    const int32_t bonus = std::min(64 * (depth - 1) + depth * depth, 2000);
+    const int32_t bonus = std::min(128 * (depth - 1) + depth * depth, 2000);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
