@@ -236,8 +236,10 @@ private:
         uint64_t totalBetaCutoffs = 0;
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
         uint64_t ttMoveBetaCutoffs[TTEntry::NumMoves] = { };
-        uint64_t captureCutoffs = 0;
+        uint64_t goodCaptureCutoffs = 0;
+        uint64_t badCaptureCutoffs = 0;
         uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
+        uint64_t counterMoveCutoffs = 0;
         uint64_t quietCutoffs = 0;
 
         uint64_t evalHistogram[EvalHistogramBins] = { 0 };

@@ -116,6 +116,29 @@ void MoveOrderer::DebugPrint() const
     }
 
     std::cout << std::endl;
+    std::cout << "=== COUNTER MOVES ===" << std::endl;
+
+    for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
+    {
+        for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
+        {
+            for (uint32_t color = 0; color < 2; ++color)
+            {
+                const PackedMove cm = counterMoves[color][fromIndex][toIndex];
+                if (cm.IsValid())
+                {
+                    std::cout
+                        << Square(fromIndex).ToString() << Square(toIndex).ToString()
+                        << " ==> " << cm.ToString()
+                        << (color > 0 ? " (black)" : " (white)")
+                        << '\n';
+                }
+            }
+        }
+    }
+
+    std::cout << std::endl;
+
 #endif // CONFIGURATION_FINAL
 }
 
@@ -138,6 +161,7 @@ void MoveOrderer::Clear()
     memset(counterMoveHistory, 0, sizeof(counterMoveHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
+    memset(counterMoves, 0, sizeof(counterMoves));
 }
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
@@ -154,14 +178,22 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
 {
     ASSERT(depth >= 0);
+    ASSERT(numMoves > 0);
+    ASSERT(moves[0].IsQuiet());
+
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+
+    // update counter move
+    if (node.previousMove.IsValid())
+    {
+        counterMoves[color][node.previousMove.FromSquare().Index()][node.previousMove.ToSquare().Index()] = moves[0];
+    }
 
     // don't update uncertain moves
     if (numMoves <= 1 && depth < 2)
     {
         return;
     }
-
-    const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     PieceSquareHistory* continuationHistories[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
     {
@@ -336,9 +368,9 @@ void MoveOrderer::ScoreMoves(
         ASSERT(to < 64);
 
         // skip moves that has been scored
-        if (moves.scores[i] > INT32_MIN) continue;
+        if (moves.GetScore(i) > INT32_MIN) continue;
 
-        int64_t score = 0;
+        int32_t score = 0;
 
         if (move.IsCapture())
         {
@@ -366,7 +398,9 @@ void MoveOrderer::ScoreMoves(
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                score += ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
+                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
+                ASSERT(historyScore >= 0);
+                score += historyScore;
             }
 
             // bonus for capturing previously moved piece
@@ -443,6 +477,6 @@ void MoveOrderer::ScoreMoves(
             score += PromotionValue;
         }
 
-        moves.scores[i] = (int32_t)std::min<int64_t>(score, INT32_MAX);
+        moves.entries[i].score = score;
     }
 }
