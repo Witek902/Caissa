@@ -15,11 +15,11 @@ public:
     static constexpr uint32_t MaxMoves = 240;
 
     INLINE uint32_t Size() const { return numMoves; }
-    INLINE const Move GetMove(uint32_t index) const { ASSERT(index < numMoves); return moves[index]; }
-    INLINE int32_t GetScore(uint32_t index) const { ASSERT(index < numMoves); return scores[index]; }
+    INLINE const Move GetMove(uint32_t index) const { ASSERT(index < numMoves); return entries[index].move; }
+    INLINE int32_t GetScore(uint32_t index) const { ASSERT(index < numMoves); return entries[index].score; }
 
     template<typename MoveType>
-    void RemoveMove(const MoveType move)
+    INLINE void RemoveMove(const MoveType move)
     {
         static_assert(std::is_same_v<MoveType, Move> || std::is_same_v<MoveType, PackedMove>, "Invalid move type");
 
@@ -27,12 +27,11 @@ public:
 
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            if (moves[i] == move)
+            if (entries[i].move == move)
             {
-                std::swap(moves[i], moves[numMoves - 1]);
-                std::swap(scores[i], scores[numMoves - 1]);
+                std::swap(entries[i], entries[numMoves - 1]);
                 numMoves--;
-                i--;
+                return;
             }
         }
     }
@@ -47,12 +46,12 @@ public:
         ASSERT(numMoves < MaxMoves);
         for (uint32_t i = 0; i < numMoves; ++i)
         {
-            ASSERT(move != moves[i]);
+            ASSERT(move != entries[i].move);
         }
 
         uint32_t index = numMoves++;
-        moves[index] = move;
-        scores[index] = INT32_MIN;
+        entries[index].move = move;
+        entries[index].score = INT32_MIN;
     }
 
     uint32_t AssignTTScores(const TTEntry& ttEntry);
@@ -60,8 +59,7 @@ public:
     void RemoveByIndex(uint32_t index)
     {
         ASSERT(index < numMoves);
-        std::swap(moves[numMoves - 1], moves[index]);
-        std::swap(scores[numMoves - 1], scores[index]);
+        std::swap(entries[numMoves - 1], entries[index]);
         numMoves--;
     }
 
@@ -72,7 +70,7 @@ public:
 
         for (uint32_t j = 0; j < numMoves; ++j)
         {
-            const int32_t score = scores[j];
+            const int32_t score = entries[j].score;
             if (score > bestScore)
             {
                 bestScore = score;
@@ -86,26 +84,16 @@ public:
     bool HasMove(const Move move) const
     {
         for (uint32_t i = 0; i < numMoves; ++i)
-        {
-            if (moves[i] == move)
-            {
+            if (entries[i].move == move)
                 return true;
-            }
-        }
-
         return false;
     }
 
     bool HasMove(const PackedMove move) const
     {
         for (uint32_t i = 0; i < numMoves; ++i)
-        {
-            if (moves[i] == move)
-            {
+            if (entries[i].move == move)
                 return true;
-            }
-        }
-
         return false;
     }
 
@@ -115,7 +103,12 @@ public:
 
 private:
 
+    struct Entry
+    {
+        Move move;
+        int32_t score;
+    };
+
     uint32_t numMoves = 0;
-    Move moves[MaxMoves];
-    alignas(32) int32_t scores[MaxMoves];
+    Entry entries[MaxMoves];
 };

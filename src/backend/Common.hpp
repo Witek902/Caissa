@@ -32,10 +32,10 @@
 
 
 #ifndef CONFIGURATION_FINAL
-    #define ASSERT(x) if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); }
-    #define VERIFY(x) if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); }
+    #define ASSERT(x) do { if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
+    #define VERIFY(x) do { if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
 #else
-    #define ASSERT(x)
+    #define ASSERT(x) do { } while (0)
     #define VERIFY(x) (x)
 #endif
 

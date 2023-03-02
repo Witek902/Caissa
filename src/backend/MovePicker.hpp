@@ -17,6 +17,7 @@ public:
         Captures,
         Killer1,
         Killer2,
+        Counter,
         GenerateQuiets,
         PickQuiets,
         End,
@@ -28,31 +29,34 @@ public:
                const TTEntry& ttEntry,
                const Move pvMove,
                uint32_t moveGenFlags)
-        : position(pos)
-        , ttEntry(ttEntry)
-        , nodeCacheEntry(nodeCacheEntry)
-        , pvMove(pvMove)
-        , moveGenFlags(moveGenFlags)
-        , moveOrderer(moveOrderer)
+        : m_position(pos)
+        , m_ttEntry(ttEntry)
+        , m_nodeCacheEntry(nodeCacheEntry)
+        , m_pvMove(pvMove)
+        , m_moveGenFlags(moveGenFlags)
+        , m_moveOrderer(moveOrderer)
     {
     }
 
     bool PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore);
 
-    INLINE Stage GetStage() const { return stage; }
-    INLINE uint32_t GetNumMoves() const { return moves.Size(); }
+    INLINE Stage GetStage() const { return m_stage; }
+    INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
 
 private:
 
-    const Position& position;
-    const TTEntry& ttEntry;
-    const NodeCacheEntry* nodeCacheEntry;
-    const Move pvMove;
-    const uint32_t moveGenFlags;
+    const Position& m_position;
+    const TTEntry& m_ttEntry;
+    const NodeCacheEntry* m_nodeCacheEntry;
+    const Move m_pvMove;
+    const uint32_t m_moveGenFlags;
 
-    const MoveOrderer& moveOrderer;
-    uint32_t moveIndex = 0;
-    Stage stage = Stage::PVMove;
-    bool shuffleEnabled = false;
-    MoveList moves;
+    const MoveOrderer& m_moveOrderer;
+    uint32_t m_moveIndex = 0;
+    Stage m_stage = Stage::PVMove;
+
+    Move m_counterMove = Move::Invalid();
+    Move m_killerMoves[2] = { Move::Invalid(), Move::Invalid() };
+
+    MoveList m_moves;
 };

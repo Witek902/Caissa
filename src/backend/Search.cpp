@@ -19,6 +19,7 @@
 #include <math.h>
 
 // #define ENABLE_SEARCH_TRACE
+// #define VALIDATE_MOVE_PICKER
 
 static const float CurrentMoveReportDelay = 10.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
@@ -590,13 +591,15 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
                 const uint64_t value = stats.ttMoveBetaCutoffs[i];
                 printf("TT-move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
             }
-            printf("Capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.captureCutoffs, 100.0f * float(stats.captureCutoffs) / float(stats.totalBetaCutoffs));
+            printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
             for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
             {
                 const uint64_t value = stats.killerMoveBetaCutoffs[i];
                 printf("Killer move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
             }
+            printf("Counter move cutoffs : %" PRIu64 " (%.2f%%)\n", stats.counterMoveCutoffs, 100.0f * float(stats.counterMoveCutoffs) / float(stats.totalBetaCutoffs));
             printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
+            printf("Bad capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.badCaptureCutoffs, 100.0f * float(stats.badCaptureCutoffs) / float(stats.totalBetaCutoffs));
 
             for (uint32_t i = 0; i < maxMoveIndex; ++i)
             {
@@ -1722,9 +1725,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
 
+#ifdef VALIDATE_MOVE_PICKER
+    uint32_t numGeneratedMoves = 0;
+    Move generatedSoFar[MoveList::MaxMoves];
+    int32_t generatedSoFarScores[MoveList::MaxMoves];
+#endif // VALIDATE_MOVE_PICKER
+
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
         ASSERT(move.IsValid());
+
+#ifdef VALIDATE_MOVE_PICKER
+        for (uint32_t i = 0; i < numGeneratedMoves; ++i) ASSERT(generatedSoFar[i] != move);
+        generatedSoFarScores[numGeneratedMoves] = moveScore;
+        generatedSoFar[numGeneratedMoves++] = move;
+#endif // VALIDATE_MOVE_PICKER
 
         // apply node filter (multi-PV search, singularity search, etc.)
         if (!node.ShouldCheckMove(move))
@@ -2038,8 +2053,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 if (moveScore == MoveOrderer::KillerMoveBonus - i)
                     ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-            if (!ttOrKiller && move.IsCapture())
-                ctx.stats.captureCutoffs++;
+            if (moveScore == MoveOrderer::CounterMoveBonus)
+                ctx.stats.counterMoveCutoffs++;
+
+            if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue)
+                ctx.stats.goodCaptureCutoffs++;
+            if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue)
+                ctx.stats.badCaptureCutoffs++;
             if (!ttOrKiller && move.IsQuiet())
                 ctx.stats.quietCutoffs++;
 

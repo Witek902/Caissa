@@ -66,6 +66,7 @@ public:
     static constexpr int32_t GoodCaptureValue       = 10000000;
     static constexpr int32_t PromotionValue         = 5000000;
     static constexpr int32_t KillerMoveBonus        = 1000000;
+    static constexpr int32_t CounterMoveBonus       = 900000;
     static constexpr int32_t LosingCaptureValue     = -4000;
 
     static constexpr uint32_t NumKillerMoves        = 2;
@@ -77,7 +78,7 @@ public:
     void NewSearch();
     void Clear();
 
-    INLINE CounterType GetHistoryScore(Color color, Move move) const
+    INLINE CounterType GetHistoryScore(const Color color, const Move move) const
     {
         ASSERT(move.IsValid());
         const uint32_t from = move.FromSquare().Index();
@@ -90,6 +91,21 @@ public:
     INLINE const KillerMoves<NumKillerMoves>& GetKillerMoves(uint32_t treeHeight) const
     {
         return killerMoves[treeHeight];
+    }
+
+    INLINE PackedMove GetCounterMove(const Color color, const Move prevMove) const
+    {
+        if (prevMove.IsValid())
+        {
+            const uint32_t from = (uint32_t)prevMove.FromSquare().Index();
+            const uint32_t to = prevMove.ToSquare().Index();
+            ASSERT(from < 64 && to < 64);
+            return counterMoves[(uint32_t)color][from][to];
+        }
+        else
+        {
+            return Move::Invalid();
+        }
     }
 
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
@@ -119,6 +135,7 @@ private:
     ContinuationHistory counterMoveHistory;
     ContinuationHistory continuationHistory;
     CounterType capturesHistory[2][6][5][64];               // side, capturing piece, captured piece, to-square
+    PackedMove counterMoves[2][64][64];                     // side, from-square, to-square
 
     KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
 };
