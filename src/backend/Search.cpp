@@ -202,6 +202,13 @@ void Search::BuildMoveReductionTable()
     const float scale = static_cast<float>(LateMoveReductionScale) / 100.0f;
     const float bias = static_cast<float>(LateMoveReductionBias) / 100.0f;
 
+    // clear first row and column
+    for (uint32_t i = 0; i < LMRTableSize; ++i)
+    {
+        mMoveReductionTable[i][0] = 0;
+        mMoveReductionTable[0][i] = 0;
+    }
+
     for (uint32_t depth = 1; depth < LMRTableSize; ++depth)
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
@@ -564,29 +571,39 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             printf("Expected Cut-Nodes Hits: %.2f%%\n", 100.0f * float(stats.expectedCutNodesSuccess) / float(stats.expectedCutNodesSuccess + stats.expectedCutNodesFailure));
         }
 
+        // beta cutoffs stats
         {
             uint32_t maxMoveIndex = 0;
-            uint64_t sum = 0;
             double average = 0.0;
             for (uint32_t i = 0; i < MoveList::MaxMoves; ++i)
             {
                 if (stats.betaCutoffHistogram[i])
                 {
-                    sum += stats.betaCutoffHistogram[i];
                     average += (double)i * (double)stats.betaCutoffHistogram[i];
                     maxMoveIndex = std::max(maxMoveIndex, i);
                 }
             }
-            average /= sum;
+            average /= stats.totalBetaCutoffs;
             printf("Average cutoff move index: %.3f\n", average);
-            printf("Beta cutoff histogram\n");
+            for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
+            {
+                const uint64_t value = stats.ttMoveBetaCutoffs[i];
+                printf("TT-move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
+            }
+            printf("Capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.captureCutoffs, 100.0f * float(stats.captureCutoffs) / float(stats.totalBetaCutoffs));
+            for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
+            {
+                const uint64_t value = stats.killerMoveBetaCutoffs[i];
+                printf("Killer move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
+            }
+            printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
+
             for (uint32_t i = 0; i < maxMoveIndex; ++i)
             {
                 const uint64_t value = stats.betaCutoffHistogram[i];
-                printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(sum));
+                printf("    %u : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
             }
         }
-
 
         {
             printf("Eval value histogram\n");
@@ -2007,8 +2024,25 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         {
             ASSERT(moveIndex > 0);
             ASSERT(moveIndex <= MoveList::MaxMoves);
+
 #ifdef COLLECT_SEARCH_STATS
+            ctx.stats.totalBetaCutoffs++;
             ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
+
+            bool ttOrKiller = false;
+            for (int32_t i = 0; i < TTEntry::NumMoves; ++i)
+                if (moveScore == MoveOrderer::TTMoveValue - i)
+                    ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
+
+            for (int32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
+                if (moveScore == MoveOrderer::KillerMoveBonus - i)
+                    ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
+
+            if (!ttOrKiller && move.IsCapture())
+                ctx.stats.captureCutoffs++;
+            if (!ttOrKiller && move.IsQuiet())
+                ctx.stats.quietCutoffs++;
+
 #endif // COLLECT_SEARCH_STATS
 
             break;

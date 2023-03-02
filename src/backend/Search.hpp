@@ -2,6 +2,7 @@
 
 #include "Position.hpp"
 #include "MoveList.hpp"
+#include "TranspositionTable.hpp"
 #include "MoveOrderer.hpp"
 #include "Time.hpp"
 #include "Memory.hpp"
@@ -232,7 +233,13 @@ private:
         uint64_t expectedCutNodesSuccess = 0;
         uint64_t expectedCutNodesFailure = 0;
 
+        uint64_t totalBetaCutoffs = 0;
         uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
+        uint64_t ttMoveBetaCutoffs[TTEntry::NumMoves] = { };
+        uint64_t captureCutoffs = 0;
+        uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
+        uint64_t quietCutoffs = 0;
+
         uint64_t evalHistogram[EvalHistogramBins] = { 0 };
 #endif // COLLECT_SEARCH_STATS
 

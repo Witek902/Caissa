@@ -29,9 +29,9 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 const Move move = position.MoveFromPacked(ttEntry.moves[moveIndex]);
                 if (move.IsValid() && (!move.IsQuiet() || generateQuiets) && move != pvMove)
                 {
-                    moveIndex++;
                     outMove = move;
                     outScore = MoveOrderer::TTMoveValue - moveIndex;
+                    moveIndex++;
                     return true;
                 }
             }
