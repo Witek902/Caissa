@@ -19,6 +19,8 @@
 #define COLLECT_SEARCH_STATS
 #endif // CONFIGURATION_FINAL
 
+// #define USE_EVAL_PROBING
+
 struct SearchLimits
 {
     // a time point where search started
@@ -46,6 +48,8 @@ struct SearchLimits
     bool analysisMode = false;
 };
 
+#ifdef USE_EVAL_PROBING
+
 // Utility that allows for collecting evaluated positions during the search
 // This is used for collecting positions for parameter tuning
 class EvalProbingInterface
@@ -53,6 +57,8 @@ class EvalProbingInterface
 public:
     virtual void ReportPosition(const Position& pos, ScoreType eval) = 0;
 };
+
+#endif // USE_EVAL_PROBING
 
 struct SearchParam
 {
@@ -93,8 +99,10 @@ struct SearchParam
     // print verbose debug stats (not UCI compatible)
     bool verboseStats = false;
 
+#ifdef USE_EVAL_PROBING
     // optional eval probing interface
     EvalProbingInterface* evalProbingInterface = nullptr;
+#endif // USE_EVAL_PROBING
 };
 
 struct PvLine
@@ -299,6 +307,11 @@ private:
 
     static constexpr uint32_t LMRTableSize = 64;
     uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
+
+    INLINE uint8_t GetDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    {
+        return mMoveReductionTable[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+    }
 
     void BuildMoveReductionTable();
 
