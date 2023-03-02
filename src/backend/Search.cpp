@@ -41,6 +41,9 @@ DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
 DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
+DEFINE_PARAM(LateMovePruningBase, 3);
+DEFINE_PARAM(HistoryPruningLinearFactor, 256);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 64);
 
 DEFINE_PARAM(AspirationWindowDepthStart, 6);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
@@ -51,6 +54,8 @@ DEFINE_PARAM(AspirationWindowStep, 4);
 DEFINE_PARAM(SingularExtensionScoreMarigin, 5);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 22);
 
+DEFINE_PARAM(QSearchFutilityPruningOffset, 150);
+
 DEFINE_PARAM(BetaPruningDepth, 7);
 DEFINE_PARAM(BetaMarginMultiplier, 135);
 DEFINE_PARAM(BetaMarginBias, 5);
@@ -58,6 +63,9 @@ DEFINE_PARAM(BetaMarginBias, 5);
 DEFINE_PARAM(AlphaPruningDepth, 5);
 DEFINE_PARAM(AlphaMarginMultiplier, 256);
 DEFINE_PARAM(AlphaMarginBias, 2000);
+
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 120);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 64);
 
 DEFINE_PARAM(RazoringStartDepth, 3);
 DEFINE_PARAM(RazoringMarginMultiplier, 128);
@@ -133,12 +141,12 @@ private:
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth)
 {
-    return 3 + depth + depth * depth / 2;
+    return LateMovePruningBase + depth + depth * depth / 2;
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 {
-    return 0 - 256 * depth - 64 * depth * depth;
+    return 0 - HistoryPruningLinearFactor * depth - HistoryPruningQuadraticFactor * depth * depth;
 }
 
 void Search::Stats::Append(ThreadStats& threadStats, bool flush)
@@ -1059,10 +1067,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
 
+#ifdef USE_EVAL_PROBING
             if (ctx.searchParam.evalProbingInterface)
             {
                 ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
             }
+#endif // USE_EVAL_PROBING
 
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
 
@@ -1104,7 +1114,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             alpha = bestValue;
         }
 
-        futilityBase = bestValue + 150;
+        futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
 
     ScoreType oldAlpha = alpha;
@@ -1471,10 +1481,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
 
+#ifdef USE_EVAL_PROBING
             if (ctx.searchParam.evalProbingInterface)
             {
                 ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
             }
+#endif // USE_EVAL_PROBING
 
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
@@ -1760,12 +1772,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 if (node.depth <= 4 &&
                     moveScore < MoveOrderer::GoodCaptureValue &&
-                    !position.StaticExchangeEvaluation(move, -120 * node.depth)) continue;
+                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node.depth)) continue;
             }
             else
             {
                 if (node.depth <= 8 &&
-                    !position.StaticExchangeEvaluation(move, -64 * node.depth)) continue;
+                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node.depth)) continue;
             }
         }
 
@@ -1884,7 +1896,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             depthReduction = globalDepthReduction;
 
             // reduce depth gradually
-            depthReduction += mMoveReductionTable[std::min(uint32_t(node.depth), LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+            depthReduction += GetDepthReduction(node.depth, moveIndex);
 
             // reduce good moves less
             if (moveScore < -16000) depthReduction++;

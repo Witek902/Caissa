@@ -25,13 +25,13 @@
 static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
-static const uint32_t c_printPgnFrequency = 64; // print every 64th game
-static const uint32_t c_maxNodes = 10000;
+static const uint32_t c_printPgnFrequency = 1; // print every 64th game
+static const uint32_t c_maxNodes = 200000;
 static const uint32_t c_maxDepth = 12;
 static const int32_t c_maxEval = InfValue;
 static const int32_t c_openingMaxEval = 500;
 static const int32_t c_multiPv = 4;
-static const int32_t c_multiPvMaxPly = 10;
+static const int32_t c_multiPvMaxPly = 8;
 static const int32_t c_multiPvScoreTreshold = 30;
 static const uint32_t c_numRandomMoves = 6;
 
@@ -46,6 +46,8 @@ uint32_t XorShift32(uint32_t state)
     x ^= x << 5;
     return x;
 }
+
+#ifdef USE_EVAL_PROBING
 
 class EvalProbing : public EvalProbingInterface
 {
@@ -97,6 +99,8 @@ private:
 
     uint32_t randomSeed;
 };
+
+#endif // USE_EVAL_PROBING
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -248,7 +252,9 @@ void SelfPlay(const std::vector<std::string>& args)
         TranspositionTable& tt = ttArray[context.threadId];
 
         SearchResult searchResult;
+#ifdef USE_EVAL_PROBING
         EvalProbing evalProbing(probedPositionsFile, gen());
+#endif // USE_EVAL_PROBING
 
         // generate opening position
         Position openingPos;
@@ -296,7 +302,9 @@ void SelfPlay(const std::vector<std::string>& args)
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
             searchParam.useAspirationWindows = false; // disable aspiration windows so we don't get lower/upper bound scores
+#ifdef USE_EVAL_PROBING
             searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
+#endif // USE_EVAL_PROBING
             searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
             searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 32)(gen);
@@ -436,10 +444,12 @@ void SelfPlay(const std::vector<std::string>& args)
 
             writer.WriteGame(game);
 
+#ifdef USE_EVAL_PROBING
             if (probePositions)
             {
                 evalProbing.Flush();
             }
+#endif // USE_EVAL_PROBING
 
             GameMetadata metadata;
             metadata.roundNumber = index;
