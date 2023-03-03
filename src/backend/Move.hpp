@@ -183,6 +183,19 @@ public:
     INLINE const MoveType* Data() const { return moves; }
 
     template<typename MoveType2>
+    INLINE bool HasMove(const MoveType2 move) const
+    {
+        if (move.IsValid())
+        {
+            for (uint32_t j = 0; j < MaxSize; ++j)
+            {
+                if (move == moves[j]) return true;
+            }
+        }
+        return false;
+    }
+
+    template<typename MoveType2>
     void Remove(const MoveType2 move)
     {
         for (uint32_t j = 0; j < MaxSize; ++j)

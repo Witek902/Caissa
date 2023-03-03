@@ -15,7 +15,10 @@ public:
         PVMove,
         TTMove,
         Captures,
-        Quiet,
+        Killer1,
+        Killer2,
+        GenerateQuiets,
+        PickQuiets,
         End,
     };
 

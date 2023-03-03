@@ -87,6 +87,11 @@ public:
         return quietMoveHistory[(uint32_t)color][from][to];
     }
 
+    INLINE const KillerMoves<NumKillerMoves>& GetKillerMoves(uint32_t treeHeight) const
+    {
+        return killerMoves[treeHeight];
+    }
+
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
     void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
 
@@ -115,5 +120,5 @@ private:
     ContinuationHistory continuationHistory;
     CounterType capturesHistory[2][6][5][64];               // side, capturing piece, captured piece, to-square
 
-    KillerMoves<NumKillerMoves> killerMoves[MaxNumPieces+1][MaxSearchDepth];
+    KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
 };
