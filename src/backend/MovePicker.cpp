@@ -2,6 +2,7 @@
 #include "MoveOrderer.hpp"
 #include "Position.hpp"
 #include "TranspositionTable.hpp"
+#include "Search.hpp"
 
 bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
@@ -68,9 +69,45 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 }
             }
 
-            stage = Stage::Quiet;
-            moveIndex = 0;
+            if (!generateQuiets)
+            {
+                stage = Stage::End;
+                return false;
+            }
 
+            stage = Stage::Killer1;
+            [[fallthrough]];
+        }
+
+        case Stage::Killer1:
+        {
+            stage = Stage::Killer2;
+            const Move move = position.MoveFromPacked(moveOrderer.GetKillerMoves(node.height).moves[0]);
+            if (move.IsValid() && !move.IsCapture() && move != pvMove && !ttEntry.moves.HasMove(move))
+            {
+                outMove = move;
+                outScore = MoveOrderer::KillerMoveBonus;
+                return true;
+            }
+            [[fallthrough]];
+        }
+
+        case Stage::Killer2:
+        {
+            stage = Stage::GenerateQuiets;
+            const Move move = position.MoveFromPacked(moveOrderer.GetKillerMoves(node.height).moves[1]);
+            if (move.IsValid() && !move.IsCapture() && move != pvMove && !ttEntry.moves.HasMove(move))
+            {
+                outMove = move;
+                outScore = MoveOrderer::KillerMoveBonus - 1;
+                return true;
+            }
+            [[fallthrough]];
+        }
+
+        case Stage::GenerateQuiets:
+        {
+            stage = Stage::PickQuiets;
             if (moveGenFlags & MOVE_GEN_MASK_QUIET)
             {
                 position.GenerateMoveList(moves, MOVE_GEN_MASK_QUIET);
@@ -79,13 +116,16 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 moves.RemoveMove(pvMove);
                 for (uint32_t i = 0; i < TTEntry::NumMoves; i++) moves.RemoveMove(ttEntry.moves[i]);
 
+                const auto& killerMoves = moveOrderer.GetKillerMoves(node.height).moves;
+                if (killerMoves[0].IsValid()) moves.RemoveMove(killerMoves[0]);
+                if (killerMoves[1].IsValid()) moves.RemoveMove(killerMoves[1]);
+
                 moveOrderer.ScoreMoves(node, game, moves, true, nodeCacheEntry);
             }
-
             [[fallthrough]];
         }
 
-        case Stage::Quiet:
+        case Stage::PickQuiets:
         {
             if (moves.Size() > 0)
             {
@@ -102,7 +142,6 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             }
 
             stage = Stage::End;
-
             break;
         }
     }

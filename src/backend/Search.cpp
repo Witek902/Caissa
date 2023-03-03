@@ -1757,7 +1757,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 if (quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
                 {
                     // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::Quiet) break;
+                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
 
                     continue;
                 }

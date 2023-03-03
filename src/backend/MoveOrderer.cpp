@@ -67,17 +67,13 @@ void MoveOrderer::DebugPrint() const
 
     std::cout << std::endl;
     std::cout << "=== KILLER MOVE HEURISTICS ===" << std::endl;
-
-    for (uint32_t numPieces = 3; numPieces <= MaxNumPieces; ++numPieces)
     {
-        std::cout << numPieces << " pieces:" << std::endl;
-
         uint32_t lastValidDepth = 0;
         for (uint32_t d = 0; d < MaxSearchDepth; ++d)
         {
             for (uint32_t i = 0; i < NumKillerMoves; ++i)
             {
-                if (killerMoves[numPieces][d].moves[i].IsValid())
+                if (killerMoves[d].moves[i].IsValid())
                 {
                     lastValidDepth = std::max(lastValidDepth, d);
                 }
@@ -89,7 +85,7 @@ void MoveOrderer::DebugPrint() const
             std::cout << d;
             for (uint32_t i = 0; i < NumKillerMoves; ++i)
             {
-                std::cout << "\t" << killerMoves[numPieces][d].moves[i].ToString() << " ";
+                std::cout << "\t" << killerMoves[d].moves[i].ToString() << " ";
             }
             std::cout << std::endl;
         }
@@ -243,8 +239,7 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
 {
     if (node.height < MaxSearchDepth)
     {
-        const uint32_t numPieces = std::min(MaxNumPieces, node.position.GetNumPieces());
-        killerMoves[numPieces][node.height].Push(move);
+        killerMoves[node.height].Push(move);
     }
 }
 
@@ -252,10 +247,7 @@ void MoveOrderer::ClearKillerMoves(uint32_t depth)
 {
     if (depth < MaxSearchDepth)
     {
-        for (uint32_t numPieces = 0; numPieces <= MaxNumPieces; ++numPieces)
-        {
-            killerMoves[numPieces][depth].Clear();
-        }
+        killerMoves[depth].Clear();
     }
 }
 
@@ -269,7 +261,6 @@ void MoveOrderer::ScoreMoves(
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
-    const uint32_t numPieces = std::min(MaxNumPieces, pos.GetNumPieces());
     
     Bitboard attackedByPawns = 0;
     Bitboard attackedByMinors = 0;
@@ -301,8 +292,6 @@ void MoveOrderer::ScoreMoves(
         }
     }
 
-    const auto& killerMovesForCurrentNode = killerMoves[numPieces][node.height];
-
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
 
     // at the root node, obtain previous move from the game data
@@ -316,6 +305,7 @@ void MoveOrderer::ScoreMoves(
     }
 
     const PieceSquareHistory* continuationHistories[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    if (withQuiets)
     {
         const NodeInfo* prevNode = &node;
         for (uint32_t i = 0; i < 6; ++i)
@@ -387,74 +377,63 @@ void MoveOrderer::ScoreMoves(
         }
         else if (withQuiets) // non-capture
         {
-            // killer moves heuristics
-            if (node.height < MaxSearchDepth)
+            // killer moves should be filtered by move picker
+            ASSERT(killerMoves[node.height].Find(move) < 0);
+
+            // history heuristics
+            score += quietMoveHistory[color][from][to];
+
+            // continuation history
+            if (const PieceSquareHistory* h = continuationHistories[0]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = continuationHistories[1]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = continuationHistories[3]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = continuationHistories[5]) score += (*h)[piece][to];
+
+            // bonus for moving a piece out of attack
+            if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.FromSquare().GetBitboard()))
             {
-                const int32_t killerMoveIndex = killerMovesForCurrentNode.Find(move);
-                if (killerMoveIndex >= 0)
-                {
-                    score = KillerMoveBonus - killerMoveIndex;
-                }
+                score += 16000;
+            }
+            else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.FromSquare().GetBitboard()))
+            {
+                score += 12000;
+            }
+            else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.FromSquare().GetBitboard()))
+            {
+                score += 8000;
             }
 
-            // not killer move
-            if (score <= KillerMoveBonus - NumKillerMoves)
+            // penalty for moving a piece into attack
+            if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.ToSquare().GetBitboard()))
             {
-                // history heuristics
-                score += quietMoveHistory[color][from][to];
+                score -= 16000 + 4000;
+            }
+            else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.ToSquare().GetBitboard()))
+            {
+                score -= 12000 + 4000;
+            }
+            else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.ToSquare().GetBitboard()))
+            {
+                score -= 8000 + 4000;
+            }
 
-                // continuation history
-                if (const PieceSquareHistory* h = continuationHistories[0]) score += (*h)[piece][to];
-                if (const PieceSquareHistory* h = continuationHistories[1]) score += (*h)[piece][to];
-                if (const PieceSquareHistory* h = continuationHistories[3]) score += (*h)[piece][to];
-                if (const PieceSquareHistory* h = continuationHistories[5]) score += (*h)[piece][to];
+            // pawn push bonus
+            if (move.GetPiece() == Piece::Pawn)
+            {
+                constexpr int32_t bonus[] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
+                const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
+                score += bonus[rank];
+            }
 
-                // bonus for moving a piece out of attack
-                if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.FromSquare().GetBitboard()))
+            // use node cache for scoring moves near the root
+            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
+            {
+                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
                 {
-                    score += 16000;
-                }
-                else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.FromSquare().GetBitboard()))
-                {
-                    score += 12000;
-                }
-                else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.FromSquare().GetBitboard()))
-                {
-                    score += 8000;
-                }
-
-                // penalty for moving a piece into attack
-                if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.ToSquare().GetBitboard()))
-                {
-                    score -= 16000 + 4000;
-                }
-                else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.ToSquare().GetBitboard()))
-                {
-                    score -= 12000 + 4000;
-                }
-                else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.ToSquare().GetBitboard()))
-                {
-                    score -= 8000 + 4000;
-                }
-
-                // pawn push bonus
-                if (move.GetPiece() == Piece::Pawn)
-                {
-                    constexpr int32_t bonus[] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-                    const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
-                    score += bonus[rank];
-                }
-
-                // use node cache for scoring moves near the root
-                if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
-                {
-                    if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
-                    {
-                        const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
-                        ASSERT(fraction >= 0.0f);
-                        ASSERT(fraction <= 1.0f);
-                        score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * log2f(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
-                    }
+                    const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
+                    ASSERT(fraction >= 0.0f);
+                    ASSERT(fraction <= 1.0f);
+                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * log2f(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
                 }
             }
         }
