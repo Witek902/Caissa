@@ -382,8 +382,6 @@ static constexpr uint32_t MaxNumPieces      = 32;
 
 static constexpr ScoreType DrawScoreRandomness = 2;
 
-extern int32_t g_TunedParameter;
-
 // initialize all engine subsystems
 EXPORT void InitEngine();
 

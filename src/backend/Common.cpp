@@ -7,12 +7,10 @@
 #include "SearchUtils.hpp"
 
 #if defined(PLATFORM_WINDOWS)
-	#define WIN32_LEAN_AND_MEAN
-	#define NOMINMAX
-	#include <Windows.h>
+    #define WIN32_LEAN_AND_MEAN
+    #define NOMINMAX
+    #include <Windows.h>
 #endif
-
-int32_t g_TunedParameter = 0;
 
 void InitEngine()
 {

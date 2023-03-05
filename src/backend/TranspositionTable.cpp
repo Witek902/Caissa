@@ -67,13 +67,13 @@ TranspositionTable::~TranspositionTable()
 }
 
 TranspositionTable::TranspositionTable(TranspositionTable&& rhs)
-	: clusters(rhs.clusters)
-	, numClusters(rhs.numClusters)
-	, generation(rhs.generation)
+    : clusters(rhs.clusters)
+    , numClusters(rhs.numClusters)
+    , generation(rhs.generation)
 {
-	rhs.clusters = nullptr;
-	rhs.numClusters = 0;
-	rhs.generation = 0;
+    rhs.clusters = nullptr;
+    rhs.numClusters = 0;
+    rhs.generation = 0;
 }
 
 TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)

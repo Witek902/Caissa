@@ -216,7 +216,7 @@ void Layer::Run(uint32_t variantIndex, const float* values, LayerRunContext& ctx
 void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* featureIndices, LayerRunContext& ctx) const
 {
     const Variant& variant = GetConstVariant(variantIndex);
-	const Values& weights = variant.weights;
+    const Values& weights = variant.weights;
 
     ctx.sparseBinaryInputs.resize(numFeatures);
     ctx.inputMode = InputMode::SparseBinary;
@@ -228,8 +228,8 @@ void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* fea
         ctx.sparseBinaryInputs[i] = idx;
     }
 
-	// apply biases
-	memcpy(ctx.linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
+    // apply biases
+    memcpy(ctx.linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
 
     // accumulate active feature weights
     for (uint32_t j = 0; j < numFeatures; ++j)
@@ -260,8 +260,8 @@ void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* fea
 
 void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const
 {
-	const Variant& variant = GetConstVariant(variantIndex);
-	const Values& weights = variant.weights;
+    const Variant& variant = GetConstVariant(variantIndex);
+    const Values& weights = variant.weights;
 
     ctx.sparseInputs.resize(numFeatures);
     ctx.inputMode = InputMode::Sparse;
@@ -274,8 +274,8 @@ void Layer::Run(uint32_t variantIndex, uint32_t numFeatures, const ActiveFeature
         ctx.sparseInputs[i] = feature;
     }
 
-	// apply biases
-	memcpy(ctx.linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
+    // apply biases
+    memcpy(ctx.linearValue.data(), weights.data() + numOutputs * numInputs, sizeof(float) * numOutputs);
 
     // accumulate active feature weights
     for (uint32_t j = 0; j < numFeatures; ++j)
@@ -340,7 +340,7 @@ void LayerRunContext::ComputeOutput(ActivationFunction activationFunc)
 void Layer::Backpropagate(uint32_t variantIndex, const Values& error, LayerRunContext& ctx, Gradients& gradients) const
 {
     const Variant& variant = GetConstVariant(variantIndex);
-	const Values& weights = variant.weights;
+    const Values& weights = variant.weights;
 
     ASSERT(ctx.output.size() == error.size());
     ASSERT(ctx.output.size() <= MaxLayerOutputs);
@@ -579,30 +579,30 @@ void Layer::UpdateWeights(uint32_t variantIndex, const Gradients& gradients, con
 
 void Gradients::Init(uint32_t numInputs, uint32_t numOutputs)
 {
-	m_numInputs = numInputs;
-	m_numOutputs = numOutputs;
+    m_numInputs = numInputs;
+    m_numOutputs = numOutputs;
     m_values.resize((numInputs + 1) * numOutputs, 0.0f);
     m_dirty.resize(numInputs + 1, false);
 }
 
 void Gradients::Clear()
 {
-	for (size_t i = 0; i <= m_numInputs; ++i)
-	{
-		if (m_dirty[i])
-		{
-			std::fill(m_values.begin() + i * m_numOutputs,
+    for (size_t i = 0; i <= m_numInputs; ++i)
+    {
+        if (m_dirty[i])
+        {
+            std::fill(m_values.begin() + i * m_numOutputs,
                       m_values.begin() + (i + 1) * m_numOutputs,
-					  0.0f);
-		}
-	}
+                      0.0f);
+        }
+    }
 
-	for (size_t i = 0; i < m_values.size(); ++i)
-	{
-		ASSERT(m_values[i] == 0.0f);
-	}
+    for (size_t i = 0; i < m_values.size(); ++i)
+    {
+        ASSERT(m_values[i] == 0.0f);
+    }
 
-	std::fill(m_dirty.begin(), m_dirty.end(), false);
+    std::fill(m_dirty.begin(), m_dirty.end(), false);
 }
 
 void Gradients::Accumulate(Gradients& rhs)
@@ -610,10 +610,10 @@ void Gradients::Accumulate(Gradients& rhs)
     ASSERT(rhs.m_numInputs == m_numInputs);
     ASSERT(rhs.m_numOutputs == m_numOutputs);
 
-	for (size_t i = 0; i <= m_numInputs; ++i)
-	{
-		if (rhs.m_dirty[i])
-		{
+    for (size_t i = 0; i <= m_numInputs; ++i)
+    {
+        if (rhs.m_dirty[i])
+        {
             m_dirty[i] = true;
             rhs.m_dirty[i] = false;
 
@@ -631,13 +631,13 @@ void Gradients::Accumulate(Gradients& rhs)
             }
 #endif // USE_AVX
 
-			for (; j < j_max; ++j)
-			{
+            for (; j < j_max; ++j)
+            {
                 m_values[j] += rhs.m_values[j];
                 rhs.m_values[j] = 0.0f;
-			}
-		}
-	}
+            }
+        }
+    }
 }
 
 } // namespace nn

@@ -421,12 +421,12 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 
     // piece values
     {
-		std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
-		std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
-		std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
-		std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
-		std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
-		std::cout << std::endl;
+        std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
+        std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
+        std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
+        std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
+        std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
+        std::cout << std::endl;
     }
 
 #ifdef USE_PSQT
@@ -693,12 +693,12 @@ bool TrainPieceSquareTables()
 
             taskBuilder.Task("Train", [&](const TaskContext& ctx)
             {
-				nn::TrainParams params;
-				params.batchSize = cBatchSize;
-				params.learningRate = learningRate;
+                nn::TrainParams params;
+                params.batchSize = cBatchSize;
+                params.learningRate = learningRate;
                 params.clampWeights = false;
 
-				TaskBuilder taskBuilder{ ctx };
+                TaskBuilder taskBuilder{ ctx };
                 trainer.Train(network, trainingBatch, params, &taskBuilder);
             });
         }

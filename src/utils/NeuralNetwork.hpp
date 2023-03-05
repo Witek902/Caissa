@@ -62,44 +62,44 @@ class NeuralNetwork
 
 public:
 
-	struct InputDesc
-	{
-		InputMode mode = InputMode::Unknown;
+    struct InputDesc
+    {
+        InputMode mode = InputMode::Unknown;
         uint32_t numFeatures = 0;
 
-		union
-		{
-			const float* floatValues;
-			const ActiveFeature* floatFeatures;
-			const uint16_t* binaryFeatures;
-		};
+        union
+        {
+            const float* floatValues;
+            const ActiveFeature* floatFeatures;
+            const uint16_t* binaryFeatures;
+        };
 
-		// used to select weights variant in deeper layers
-		uint32_t variant = 0;
+        // used to select weights variant in deeper layers
+        uint32_t variant = 0;
 
         // additional bias for last layer
         float lastLayerBias = 0.0f;
 
         InputDesc() = default;
 
-		InputDesc(const std::vector<float>& features)
-			: mode(InputMode::Full)
-			, numFeatures(static_cast<uint32_t>(features.size()))
-			, floatValues(features.data())
-		{}
+        InputDesc(const std::vector<float>& features)
+            : mode(InputMode::Full)
+            , numFeatures(static_cast<uint32_t>(features.size()))
+            , floatValues(features.data())
+        {}
 
-		InputDesc(const std::vector<ActiveFeature>& features)
-			: mode(InputMode::Sparse)
-			, numFeatures(static_cast<uint32_t>(features.size()))
-			, floatFeatures(features.data())
-		{}
+        InputDesc(const std::vector<ActiveFeature>& features)
+            : mode(InputMode::Sparse)
+            , numFeatures(static_cast<uint32_t>(features.size()))
+            , floatFeatures(features.data())
+        {}
 
         InputDesc(const std::vector<uint16_t>& features)
             : mode(InputMode::SparseBinary)
             , numFeatures(static_cast<uint32_t>(features.size()))
             , binaryFeatures(features.data())
         {}
-	};
+    };
 
     // Create multi-layer neural network
     void Init(uint32_t inputSize,

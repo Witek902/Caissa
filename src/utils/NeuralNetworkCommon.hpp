@@ -5,15 +5,15 @@
 
 namespace nn {
 
-	class Layer;
-	class NeuralNetwork;
+    class Layer;
+    class NeuralNetwork;
 
 using Values = std::vector<float, AlignmentAllocator<float, 32>>;
 
 struct ActiveFeature
 {
-	uint32_t index;
-	float value;
+    uint32_t index;
+    float value;
 };
 
 

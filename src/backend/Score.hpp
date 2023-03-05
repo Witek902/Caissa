@@ -51,7 +51,7 @@ using PieceScore = TPieceScore<int16_t>;
 
 inline bool IsMate(const ScoreType score)
 {
-	return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
+    return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
 }
 
 inline std::string ScoreToStr(const ScoreType score)

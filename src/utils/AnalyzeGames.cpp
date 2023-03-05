@@ -67,9 +67,9 @@ void AnalyzeGames()
         //std::cout << game.ToPGN(true);
         //std::cout << std::endl << std::endl;
 
-		for (size_t i = 0; i < game.GetMoves().size(); ++i)
-		{
-			const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
+        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        {
+            const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];
 
             if (!pos.IsInCheck(pos.GetSideToMove()) && !move.IsCapture() && !move.IsPromotion() &&
@@ -97,8 +97,8 @@ void AnalyzeGames()
                 //}
             }
 
-			pos.DoMove(move);
-		}
+            pos.DoMove(move);
+        }
 
         numGames++;
     }
