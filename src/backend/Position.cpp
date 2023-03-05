@@ -774,7 +774,21 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
     // remove captured piece
     if (move.IsCapture())
     {
-        if (!move.IsEnPassant())
+        if (move.IsEnPassant())
+        {
+            Square captureSquare = Square::Invalid();
+            if (move.ToSquare().Rank() == 5)  captureSquare = Square(move.ToSquare().File(), 4u);
+            if (move.ToSquare().Rank() == 2)  captureSquare = Square(move.ToSquare().File(), 3u);
+            ASSERT(captureSquare.IsValid());
+
+            RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
+
+            if (nnContext)
+            {
+                nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare, Square::Invalid() };
+            }
+        }
+        else // regular piece capture
         {
             const Piece capturedPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
             const Color capturedColor = GetOppositeColor(mSideToMove);
@@ -784,10 +798,13 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
             {
                 nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { capturedPiece, capturedColor, move.ToSquare(), Square::Invalid() };
             }
-        }
 
-        // clear specific castling right after capturing a rook
-        ClearRookCastlingRights(move.ToSquare());
+            if (capturedPiece == Piece::Rook)
+            {
+                // clear specific castling right after capturing a rook
+                ClearRookCastlingRights(move.ToSquare());
+            }
+        }
     }
 
     // put moved piece
@@ -805,21 +822,6 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
                 nnContext->dirtyPieces[0].toSquare = Square::Invalid();
                 nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { targetPiece, mSideToMove, Square::Invalid(), move.ToSquare() };
             }
-        }
-    }
-
-    if (move.IsEnPassant())
-    {
-        Square captureSquare = Square::Invalid();
-        if (move.ToSquare().Rank() == 5)  captureSquare = Square(move.ToSquare().File(), 4u);
-        if (move.ToSquare().Rank() == 2)  captureSquare = Square(move.ToSquare().File(), 3u);
-        ASSERT(captureSquare.IsValid());
-
-        RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
-
-        if (nnContext)
-        {
-            nnContext->dirtyPieces[nnContext->numDirtyPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare, Square::Invalid() };
         }
     }
 
@@ -874,10 +876,9 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext* nnContext)
         // clear all castling rights after moving a king
         SetCastlingRights(mSideToMove, 0);
     }
-
-    // clear specific castling right after moving a rook
-    if (move.GetPiece() == Piece::Rook)
+    else if (move.GetPiece() == Piece::Rook)
     {
+        // clear specific castling right after moving a rook
         ClearRookCastlingRights(move.FromSquare());
     }
 
