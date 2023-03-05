@@ -12,7 +12,7 @@ enum class InputMode : uint8_t
 
 enum class OutputMode : uint8_t
 {
-	Single,
+    Single,
     Array,
 };
 
@@ -45,14 +45,14 @@ public:
 
 struct Gradients
 {
-	uint32_t            m_numInputs;
-	uint32_t            m_numOutputs;
-	Values              m_values;
-	std::vector<bool>   m_dirty;
+    uint32_t            m_numInputs;
+    uint32_t            m_numOutputs;
+    Values              m_values;
+    std::vector<bool>   m_dirty;
 
-	void Init(uint32_t numInputs, uint32_t numOutputs);
-	void Clear();
-	void Accumulate(Gradients& rhs);
+    void Init(uint32_t numInputs, uint32_t numOutputs);
+    void Clear();
+    void Accumulate(Gradients& rhs);
 };
 
 class Layer

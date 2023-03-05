@@ -66,7 +66,7 @@ ThreadPool& ThreadPool::GetInstance()
 ThreadPool::ThreadPool()
     : mFirstFreeTask(InvalidTaskID)
 {
-	mtr_init("trace.json");
+    mtr_init("trace.json");
 
     MTR_META_THREAD_NAME("Main Thread");
 
@@ -95,8 +95,8 @@ ThreadPool::~ThreadPool()
         thread->mThread.join();
     }
 
-	mtr_flush();
-	mtr_shutdown();
+    mtr_flush();
+    mtr_shutdown();
 }
 
 bool ThreadPool::InitTasksTable(uint32_t newSize)

@@ -12,15 +12,15 @@ struct PGNGame
 class PGNParser
 {
 public:
-	PGNParser(std::istream& stream);
+    PGNParser(std::istream& stream);
 
-	bool GetGame(PGNGame& outGame);
+    bool GetGame(PGNGame& outGame);
 
 private:
-	std::istream& mStream;
+    std::istream& mStream;
 
-	bool ParseTags(PGNGame& outGame);
-	bool ParseMoves(PGNGame& outGame);
+    bool ParseTags(PGNGame& outGame);
+    bool ParseMoves(PGNGame& outGame);
 
-	void SkipBlank();
+    void SkipBlank();
 };

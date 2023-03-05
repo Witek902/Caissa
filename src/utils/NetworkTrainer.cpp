@@ -84,17 +84,17 @@ private:
         float evalMaxError = 0.0f, evalErrorSum = 0.0f;
     };
 
-	struct alignas(CACHELINE_SIZE) ValidationPerThreadData
-	{
-		ValidationStats stats;
-		nn::NeuralNetworkRunContext networkRunContext;
-		uint8_t __padding[CACHELINE_SIZE];
-	};
+    struct alignas(CACHELINE_SIZE) ValidationPerThreadData
+    {
+        ValidationStats stats;
+        nn::NeuralNetworkRunContext networkRunContext;
+        uint8_t __padding[CACHELINE_SIZE];
+    };
 
-	nn::NeuralNetwork m_network;
-	nn::NeuralNetworkRunContext m_runCtx;
-	nn::NeuralNetworkTrainer m_trainer;
-	nn::PackedNeuralNetwork m_packedNet;
+    nn::NeuralNetwork m_network;
+    nn::NeuralNetworkRunContext m_runCtx;
+    nn::NeuralNetworkTrainer m_trainer;
+    nn::PackedNeuralNetwork m_packedNet;
 
     std::vector<PositionEntry> m_entries;
     std::vector<TrainingEntry> m_trainingSet;
@@ -147,19 +147,19 @@ void NetworkTrainer::InitNetwork()
                    nn::ActivationFunction::Sigmoid,
                    { 1, cNumVariants });
 
-	//m_network.Init(cNumNetworkInputs,
-	//			   { 512, 16, 32, 1 },
-	//			   nn::ActivationFunction::Sigmoid,
-	//			   { 1, cNumVariants, cNumVariants, cNumVariants });
+    //m_network.Init(cNumNetworkInputs,
+    //               { 512, 16, 32, 1 },
+    //               nn::ActivationFunction::Sigmoid,
+    //               { 1, cNumVariants, cNumVariants, cNumVariants });
 
     //m_network.Load("eval-ckpt.nn");
 
-	m_runCtx.Init(m_network);
+    m_runCtx.Init(m_network);
 
-	for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
-	{
-		m_validationPerThreadData[i].networkRunContext.Init(m_network);
-	}
+    for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
+    {
+        m_validationPerThreadData[i].networkRunContext.Init(m_network);
+    }
 }
 
 static uint32_t GetNetworkVariant(const Position& pos)
@@ -205,7 +205,7 @@ void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
 
 static void ParallelFor(const char* debugName, uint32_t arraySize, const threadpool::ParallelForTaskFunction& func, uint32_t maxThreads = 0)
 {
-	Waitable waitable;
+    Waitable waitable;
     {
         TaskBuilder taskBuilder(waitable);
         taskBuilder.ParallelFor(debugName, arraySize, func, maxThreads);
@@ -376,8 +376,8 @@ void NetworkTrainer::Train()
     {
         if ((iteration % 1024) == 0)
         {
-			std::cout << "Shuffling..." << std::endl;
-			std::shuffle(m_entries.begin(), m_entries.end(), m_randomGenerator);
+            std::cout << "Shuffling..." << std::endl;
+            std::shuffle(m_entries.begin(), m_entries.end(), m_randomGenerator);
         }
 
         if (iteration == 0)
@@ -408,9 +408,9 @@ void NetworkTrainer::Train()
 
             taskBuilder.Task("Train", [this, iteration, &batch, &learningRate](const TaskContext& ctx)
             {
-				nn::TrainParams params;
+                nn::TrainParams params;
                 params.batchSize = std::min(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
-				params.learningRate = learningRate;
+                params.learningRate = learningRate;
 
                 TaskBuilder taskBuilder{ ctx };
                 m_trainer.Train(m_network, batch, params, &taskBuilder);

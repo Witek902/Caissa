@@ -52,8 +52,8 @@ bool TestNetwork()
 
     for (uint32_t iteration = 0; ; ++iteration)
     {
-		nn::TrainParams params;
-		params.batchSize = cBatchSize;
+        nn::TrainParams params;
+        params.batchSize = cBatchSize;
 
         trainer.Train(network, trainingSet, params);
         //network.PrintStats();

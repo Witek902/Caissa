@@ -240,41 +240,41 @@ bool TrainEndgame()
         waitable.Wait();
     }
 
-	TimePoint prevIterationStartTime = TimePoint::GetCurrent();
+    TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
     for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
         float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.00001f * iteration));
 
-		TimePoint iterationStartTime = TimePoint::GetCurrent();
-		float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
-		prevIterationStartTime = iterationStartTime;
+        TimePoint iterationStartTime = TimePoint::GetCurrent();
+        float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
+        prevIterationStartTime = iterationStartTime;
 
-		for (size_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
-		{
-			batch[i] = trainingSet[i].trainingVector;
-		}
+        for (size_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
+        {
+            batch[i] = trainingSet[i].trainingVector;
+        }
 
         // validation vectors generation can be done in parallel with training
         Waitable waitable;
         {
             TaskBuilder taskBuilder(waitable);
 
-			taskBuilder.Task("Train", [&](const TaskContext& ctx)
-			{
-				nn::TrainParams params;
-				params.batchSize = std::min(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
-				params.learningRate = learningRate;
+            taskBuilder.Task("Train", [&](const TaskContext& ctx)
+            {
+                nn::TrainParams params;
+                params.batchSize = std::min(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
+                params.learningRate = learningRate;
 
-				TaskBuilder taskBuilder{ ctx };
+                TaskBuilder taskBuilder{ ctx };
                 trainer.Train(network, batch, params, &taskBuilder);
-			});
+            });
 
-			taskBuilder.Task("GenerateSet", [&](const TaskContext& ctx)
-			{
-				TaskBuilder childTaskBuilder(ctx);
-				generateTrainingSet(childTaskBuilder, trainingSet);
-			});
+            taskBuilder.Task("GenerateSet", [&](const TaskContext& ctx)
+            {
+                TaskBuilder childTaskBuilder(ctx);
+                generateTrainingSet(childTaskBuilder, trainingSet);
+            });
 
         }
         waitable.Wait();

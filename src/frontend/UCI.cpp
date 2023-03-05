@@ -551,11 +551,11 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
     mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
 
-	{
-		std::unique_lock<std::mutex> lock(mSearchThreadMutex);
-		mNewSearchContext = mSearchCtx.get();
-		mNewSearchConditionVariable.notify_one();
-	}
+    {
+        std::unique_lock<std::mutex> lock(mSearchThreadMutex);
+        mNewSearchContext = mSearchCtx.get();
+        mNewSearchConditionVariable.notify_one();
+    }
 
     // make sure search thread actually started running before exiting from this function
     while (!mSearchCtx->searchStarted.load(std::memory_order_acquire))
@@ -652,12 +652,12 @@ void UniversalChessInterface::DoSearch()
 
         // print NN evaluator stats
 #ifdef NN_ACCUMULATOR_STATS
-		{
-			uint64_t numUpdates = 0, numRefreshes = 0;
-			NNEvaluator::GetStats(numUpdates, numRefreshes);
+        {
+            uint64_t numUpdates = 0, numRefreshes = 0;
+            NNEvaluator::GetStats(numUpdates, numRefreshes);
             std::cout << "NN accumulator updates: " << numUpdates << std::endl;
             std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
-		}
+        }
 #endif // NN_ACCUMULATOR_STATS
     }
     
@@ -828,10 +828,6 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
             std::cout << "Invalid value" << std::endl;
             return false;
         }
-    }
-    else if (lowerCaseName == "tunedparam")
-    {
-        g_TunedParameter = atoi(value.c_str());
     }
     else
     {

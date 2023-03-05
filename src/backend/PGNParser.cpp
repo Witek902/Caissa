@@ -3,25 +3,25 @@
 #include <iostream>
 
 PGNParser::PGNParser(std::istream& stream)
-	: mStream(stream)
+    : mStream(stream)
 {
 }
 
 bool PGNParser::GetGame(PGNGame& outGame)
 {
-	if (!ParseTags(outGame))
-	{
-		std::cerr << "Failed to parse tags from PGN" << std::endl;
-		return false;
-	}
+    if (!ParseTags(outGame))
+    {
+        std::cerr << "Failed to parse tags from PGN" << std::endl;
+        return false;
+    }
 
-	if (!ParseMoves(outGame))
-	{
-		std::cerr << "Failed to parse moves from PGN" << std::endl;
-		return false;
-	}
+    if (!ParseMoves(outGame))
+    {
+        std::cerr << "Failed to parse moves from PGN" << std::endl;
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 void PGNParser::SkipBlank()
@@ -40,23 +40,23 @@ void PGNParser::SkipBlank()
 
 bool PGNParser::ParseTags(PGNGame& outGame)
 {
-	// TODO
-	(void)outGame;
+    // TODO
+    (void)outGame;
 
-	SkipBlank();
+    SkipBlank();
 
-	if (!mStream.eof())
-	{
+    if (!mStream.eof())
+    {
 
-	}
+    }
 
-	return false;
+    return false;
 }
 
 bool PGNParser::ParseMoves(PGNGame& outGame)
 {
-	// TODO
-	(void)outGame;
+    // TODO
+    (void)outGame;
 
-	return false;
+    return false;
 }

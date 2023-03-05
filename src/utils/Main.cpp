@@ -44,11 +44,11 @@ int main(int argc, const char* argv[])
         }
     }
 
-	if (args.empty())
-	{
-		std::cerr << "Missing argument" << std::endl;
-		return 1;
-	}
+    if (args.empty())
+    {
+        std::cerr << "Missing argument" << std::endl;
+        return 1;
+    }
 
     if (args[0] == "unittest")
     {
@@ -92,8 +92,8 @@ int main(int argc, const char* argv[])
     }
     else
     {
-		std::cerr << "Unknown option: " << args[0] << std::endl;
-		return 1;
+        std::cerr << "Unknown option: " << args[0] << std::endl;
+        return 1;
     }
 
     return 0;

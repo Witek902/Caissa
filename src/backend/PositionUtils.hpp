@@ -24,19 +24,19 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos);
 struct RandomPosDesc
 {
     MaterialKey materialKey;
-	// bitboards restricting piece placement
-	Bitboard allowedWhiteKing = Bitboard::Full();
-	Bitboard allowedWhitePawns = Bitboard::Full();
-	Bitboard allowedWhiteKnights = Bitboard::Full();
-	Bitboard allowedWhiteBishops = Bitboard::Full();
-	Bitboard allowedWhiteRooks = Bitboard::Full();
-	Bitboard allowedWhiteQueens = Bitboard::Full();
-	Bitboard allowedBlackKing = Bitboard::Full();
-	Bitboard allowedBlackPawns = Bitboard::Full();
-	Bitboard allowedBlackKnights = Bitboard::Full();
-	Bitboard allowedBlackBishops = Bitboard::Full();
-	Bitboard allowedBlackRooks = Bitboard::Full();
-	Bitboard allowedBlackQueens = Bitboard::Full();
+    // bitboards restricting piece placement
+    Bitboard allowedWhiteKing = Bitboard::Full();
+    Bitboard allowedWhitePawns = Bitboard::Full();
+    Bitboard allowedWhiteKnights = Bitboard::Full();
+    Bitboard allowedWhiteBishops = Bitboard::Full();
+    Bitboard allowedWhiteRooks = Bitboard::Full();
+    Bitboard allowedWhiteQueens = Bitboard::Full();
+    Bitboard allowedBlackKing = Bitboard::Full();
+    Bitboard allowedBlackPawns = Bitboard::Full();
+    Bitboard allowedBlackKnights = Bitboard::Full();
+    Bitboard allowedBlackBishops = Bitboard::Full();
+    Bitboard allowedBlackRooks = Bitboard::Full();
+    Bitboard allowedBlackQueens = Bitboard::Full();
 };
 
 void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition);

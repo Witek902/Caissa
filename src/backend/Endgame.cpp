@@ -68,12 +68,12 @@ static_assert(sizeof(KPKPosition) <= 4, "Invalid KPKPosition size");
 
 bool Probe(Square whiteKingSq, Square pawnSq, Square blackKingSq, Color sideToMove)
 {
-	if (pawnSq.File() >= 4)
-	{
+    if (pawnSq.File() >= 4)
+    {
         whiteKingSq = whiteKingSq.FlippedFile();
         blackKingSq = blackKingSq.FlippedFile();
         pawnSq = pawnSq.FlippedFile();
-	}
+    }
 
     const uint32_t index = EncodeIndex(sideToMove, blackKingSq, whiteKingSq, pawnSq);
     ASSERT(index < MaxIndex);

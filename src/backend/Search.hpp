@@ -80,8 +80,8 @@ struct SearchParam
     // in pondering we don't care about limits
     std::atomic<bool> isPonder = false;
 
-	// used to stop search
-	std::atomic<bool> stopSearch = false;
+    // used to stop search
+    std::atomic<bool> stopSearch = false;
 
     // print UCI-style output
     bool debugLog = true;
@@ -123,9 +123,9 @@ struct NodeInfo
 
     // ignore given moves in search, used for multi-PV search
     const Move* moveFilter = nullptr;
-	uint8_t moveFilterCount = 0;
+    uint8_t moveFilterCount = 0;
 
-	uint8_t pvIndex = 0;
+    uint8_t pvIndex = 0;
 
     uint8_t doubleExtensions = 0;
 
@@ -152,8 +152,8 @@ struct NodeInfo
 
     NNEvaluatorContext* nnContext = nullptr;
 
-	uint16_t pvLength = 0;
-	PackedMove pvLine[MaxSearchDepth];
+    uint16_t pvLength = 0;
+    PackedMove pvLine[MaxSearchDepth];
 
     INLINE bool IsPV() const { return (beta - alpha) != 1; }
 
