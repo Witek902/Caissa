@@ -652,13 +652,8 @@ INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const
 
 INLINE static int32_t LinearLayer_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
-    uint32_t numInputs, uint32_t numOutputs,
-    const IntermediateType* input)
+    uint32_t numInputs, const IntermediateType* input)
 {
-    (void)numInputs;
-    (void)numOutputs;
-    ASSERT(numOutputs == 1);
-
     int32_t val = biases[0];
 
 #if defined(NN_USE_AVX2)
@@ -702,12 +697,84 @@ INLINE static int32_t LinearLayer_SingleOutput(
     val += m128_hadd(sum);
 
 #else
-
     for (uint32_t i = 0; i < numInputs; ++i)
     {
         val += (int32_t)input[i] * (int32_t)weights[i];
     }
 
+#endif
+
+    // divide with rounding to nearest
+    return (val + (WeightScale / 2)) >> WeightScaleShift;
+}
+
+NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
+    const LastLayerWeightType* weights, const LastLayerBiasType* biases,
+    uint32_t numInputs, const AccumulatorType* input)
+{
+    int32_t val = biases[0];
+
+#if defined(NN_USE_AVX2)
+    constexpr uint32_t registerWidth = 16;
+    ASSERT((size_t)weights % (2 * registerWidth) == 0);
+    ASSERT((size_t)biases % (2 * registerWidth) == 0);
+
+    // unroll 2x so two sums can be calculated independently
+    __m256i sumA = _mm256_setzero_si256();
+    __m256i sumB = _mm256_setzero_si256();
+    for (uint32_t j = 0; j < numInputs; j += 2 * registerWidth)
+    {
+        __m256i inA = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
+        __m256i inB = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j + registerWidth));
+
+        // apply clipped-ReLU
+        inA = _mm256_min_epi16(_mm256_max_epi16(inA, _mm256_setzero_si256()), _mm256_set1_epi16(127));
+        inB = _mm256_min_epi16(_mm256_max_epi16(inB, _mm256_setzero_si256()), _mm256_set1_epi16(127));
+
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
+        const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + registerWidth));
+        sumA = _mm256_add_epi32(sumA, _mm256_madd_epi16(inA, wA));
+        sumB = _mm256_add_epi32(sumB, _mm256_madd_epi16(inB, wB));
+    }
+
+    // add 8 int32s horizontally
+    val += m256_hadd(_mm256_add_epi32(sumA, sumB));
+
+#elif defined(NN_USE_SSE4)
+    constexpr uint32_t registerWidth = 8;
+    ASSERT(numInputs % registerWidth == 0);
+    ASSERT((size_t)weights % (2 * registerWidth) == 0);
+    ASSERT((size_t)biases % (2 * registerWidth) == 0);
+
+    // unroll 2x so two sums can be calculated independently
+    __m128i sumA = _mm_setzero_si128();
+    __m128i sumB = _mm_setzero_si128();
+    for (uint32_t j = 0; j < numInputs; j += 2 * registerWidth)
+    {
+        __m128i inA = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j));
+        __m128i inB = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j + registerWidth));
+
+        // apply clipped-ReLU
+        inA = _mm_min_epi16(_mm_max_epi16(inA, _mm_setzero_si128()), _mm_set1_epi16(127));
+        inB = _mm_min_epi16(_mm_max_epi16(inB, _mm_setzero_si128()), _mm_set1_epi16(127));
+
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        const __m128i wA = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j));
+        const __m128i wB = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j + registerWidth));
+        sumA = _mm_add_epi32(sumA, _mm_madd_epi16(inA, wA));
+        sumB = _mm_add_epi32(sumB, _mm_madd_epi16(inB, wB));
+    }
+
+    // add 8 int32s horizontally
+    val += m128_hadd(_mm_add_epi32(sumA, sumB));
+
+#else
+    for (uint32_t i = 0; i < numInputs; ++i)
+    {
+        const AccumulatorType in = std::clamp<AccumulatorType>(input[i], 0, std::numeric_limits<IntermediateType>::max());
+        val += (int32_t)in * (int32_t)weights[i];
+    }
 #endif
 
     // divide with rounding to nearest
@@ -1115,29 +1182,39 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator, uint32_t varian
     ASSERT(GetLayerSize(2) <= MaxNeuronsInHiddenLayers);
     ASSERT(GetLayerSize(3) <= MaxNeuronsInHiddenLayers);
 
-    alignas(CACHELINE_SIZE) IntermediateType tempA[MaxNeuronsInFirstLayer];
-    alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInHiddenLayers];
-
-    // apply activation function on the accumulator
-    ClippedReLU_Accum(GetLayerSize(1), tempA, accumulator.values);
-
-    // hidden layers
-    for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
+    if (numActiveLayers == 2)
     {
-        const uint32_t thisLayerSize = GetLayerSize(i);
-        const uint32_t nextLayerSize = GetLayerSize(i + 1);
-
-        const HiddenLayerWeightType* weights = GetLayerWeights<HiddenLayerWeightType>(i, variant);
-        const HiddenLayerBiasType* biases = GetLayerBiases<HiddenLayerBiasType>(i, variant);
-
-        LinearLayer(weights, biases, thisLayerSize, nextLayerSize, tempB, tempA);
-        ClippedReLU_32(nextLayerSize, tempA, tempB);
+        constexpr uint32_t lastLayerIdx = 1;
+        const LastLayerWeightType* weights = GetLayerWeights<LastLayerWeightType>(lastLayerIdx, variant);
+        const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
+        return LinearLayer_Accum_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), accumulator.values);
     }
+    else
+    {
+        alignas(CACHELINE_SIZE) IntermediateType tempA[MaxNeuronsInFirstLayer];
+        alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInHiddenLayers];
 
-    const uint32_t lastLayerIdx = numActiveLayers - 1;
-    const LastLayerWeightType* weights = GetLayerWeights<LastLayerWeightType>(lastLayerIdx, variant);
-    const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
-    return LinearLayer_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), 1u, tempA);
+        // apply activation function on the accumulator
+        ClippedReLU_Accum(GetLayerSize(1), tempA, accumulator.values);
+
+        // hidden layers
+        for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
+        {
+            const uint32_t thisLayerSize = GetLayerSize(i);
+            const uint32_t nextLayerSize = GetLayerSize(i + 1);
+
+            const HiddenLayerWeightType* weights = GetLayerWeights<HiddenLayerWeightType>(i, variant);
+            const HiddenLayerBiasType* biases = GetLayerBiases<HiddenLayerBiasType>(i, variant);
+
+            LinearLayer(weights, biases, thisLayerSize, nextLayerSize, tempB, tempA);
+            ClippedReLU_32(nextLayerSize, tempA, tempB);
+        }
+
+        const uint32_t lastLayerIdx = numActiveLayers - 1;
+        const LastLayerWeightType* weights = GetLayerWeights<LastLayerWeightType>(lastLayerIdx, variant);
+        const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
+        return LinearLayer_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), tempA);
+    }
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs, uint32_t variant) const
