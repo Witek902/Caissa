@@ -14,6 +14,7 @@ public:
     {
         PVMove,
         TTMove,
+        GenerateCaptures,
         Captures,
         Killer1,
         Killer2,

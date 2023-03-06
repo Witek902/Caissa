@@ -9,7 +9,7 @@
     #include <xmmintrin.h>
 #endif // USE_SSE
 
-static_assert(sizeof(TTEntry) == 3 * sizeof(uint32_t), "Invalid TT entry size");
+static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "Invalid TT cluster size");
 
 ScoreType ScoreToTT(ScoreType v, int32_t height)
@@ -162,7 +162,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
         {
             uint32_t hash;
             TTEntry data;
-            cluster[i].Load(hash, data);
+            cluster.entries[i].Load(hash, data);
 
             if (hash == posKey && data.bounds != TTEntry::Bounds::Invalid)
             {
@@ -170,7 +170,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
                 {
                     // update entry generation
                     data.generation = generation;
-                    cluster[i].Store(hash, data);
+                    cluster.entries[i].Store(hash, data);
                 }
 
                 outEntry = data;
@@ -182,7 +182,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, uint32_t numMoves, const PackedMove* moves)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
@@ -191,11 +191,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     entry.staticEval = staticEval;
     entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
     entry.bounds = bounds;
-
-    for (uint32_t i = 0; i < numMoves; ++i)
-    {
-        entry.moves[i] = moves[i];
-    }
+    entry.move = move;
 
     ASSERT(entry.IsValid());
 
@@ -219,7 +215,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     {
         uint32_t hash;
         TTEntry data;
-        cluster[i].Load(hash, data);
+        cluster.entries[i].Load(hash, data);
 
         // found entry with same hash or empty entry
         if (hash == positionKey || !data.IsValid())
@@ -252,14 +248,14 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     }
 
     // preserve existing move
-    if (positionKey == prevKey && !entry.moves[0].IsValid())
+    if (positionKey == prevKey && !entry.move.IsValid())
     {
-        entry.moves = prevEntry.moves;
+        entry.move = prevEntry.move;
     }
 
     entry.generation = generation;
 
-    cluster[replaceIndex].Store(positionKey, entry);
+    cluster.entries[replaceIndex].Store(positionKey, entry);
 }
 
 size_t TranspositionTable::GetNumUsedEntries() const
@@ -271,7 +267,7 @@ size_t TranspositionTable::GetNumUsedEntries() const
         const TTCluster& cluster = clusters[i];
         for (size_t j = 0; j < NumEntriesPerCluster; ++j)
         {
-            const InternalEntry& entry = cluster[j];
+            const InternalEntry& entry = cluster.entries[j];
             if (entry.entry.IsValid())
             {
                 num++;

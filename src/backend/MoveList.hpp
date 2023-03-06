@@ -29,14 +29,13 @@ public:
         {
             if (entries[i].move == move)
             {
-                std::swap(entries[i], entries[numMoves - 1]);
-                numMoves--;
+                RemoveByIndex(i);
                 return;
             }
         }
     }
 
-    void Clear()
+    INLINE void Clear()
     {
         numMoves = 0;
     }
@@ -54,13 +53,10 @@ public:
         entries[index].score = INT32_MIN;
     }
 
-    uint32_t AssignTTScores(const TTEntry& ttEntry);
-
-    void RemoveByIndex(uint32_t index)
+    INLINE void RemoveByIndex(uint32_t index)
     {
         ASSERT(index < numMoves);
-        std::swap(entries[numMoves - 1], entries[index]);
-        numMoves--;
+        entries[index] = entries[--numMoves];
     }
 
     uint32_t BestMoveIndex() const
