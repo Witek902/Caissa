@@ -12,7 +12,7 @@
 #include <math.h>
 #include <atomic>
 
-#define VersionNumber "1.6.17"
+#define VersionNumber "1.6.18"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -869,17 +869,7 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
         std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
         std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
-        std::cout << "Moves:      ";
-
-        uint32_t numMoves = 0;
-        for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
-        {
-            if (!ttEntry.moves[i].IsValid()) break;
-            std::cout << ttEntry.moves[i].ToString() << " ";
-            numMoves++;
-        }
-        if (numMoves == 0) std::cout << "<none>";
-        std::cout << std::endl;
+        std::cout << "Moves:      " << ttEntry.move.ToString() << std::endl;
     }
     else
     {
@@ -948,12 +938,6 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
-
-    TTEntry ttEntry;
-    if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
-    {
-        moves.AssignTTScores(ttEntry);
-    }
 
     const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
 

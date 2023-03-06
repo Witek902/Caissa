@@ -9,7 +9,7 @@ class Position;
 
 struct TTEntry
 {
-    static constexpr uint32_t NumMoves = 3;
+    static constexpr uint32_t NumMoves = 1;
     static constexpr uint32_t GenerationBits = 6;
     static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
 
@@ -23,7 +23,7 @@ struct TTEntry
 
     ScoreType score;
     ScoreType staticEval;
-    MovesArray<PackedMove, NumMoves> moves;
+    PackedMove move;
     int8_t depth;
     Bounds bounds : 2;
     uint8_t generation : GenerationBits;
@@ -31,6 +31,7 @@ struct TTEntry
     INLINE TTEntry()
         : score(0)
         , staticEval(0)
+        , move(PackedMove::Invalid())
         , depth(0)
         , bounds(Bounds::Invalid)
         , generation(0)
@@ -44,7 +45,7 @@ struct TTEntry
     INLINE uint32_t GetHash() const
     {
         const uint32_t* t = reinterpret_cast<const uint32_t*>(this);
-        return t[0] ^ t[1] ^ t[2];
+        return t[0] ^ t[1];
     }
 };
 
@@ -59,13 +60,7 @@ public:
         INLINE void Load(uint32_t& outHash, TTEntry& outEntry) const
         {
             // Xor trick by Robert Hyatt and Tim Mann
-            
-            // equivalent of:
-            // outHash = key ^ entry.GetHash();
-            const uint64_t* t = reinterpret_cast<const uint64_t*>(this);
-            const uint64_t hash = t[0] ^ t[1];
-            outHash = (uint32_t)hash ^ (uint32_t)(hash >> 32);
-            
+            outHash = key ^ entry.GetHash();
             outEntry = entry;
         }
 
@@ -78,8 +73,12 @@ public:
     };
 
     // one cluster occupies one cache line
-    static constexpr uint32_t NumEntriesPerCluster = 4;
-    using TTCluster = InternalEntry[NumEntriesPerCluster];
+    static constexpr uint32_t NumEntriesPerCluster = 5;
+    struct alignas(CACHELINE_SIZE) TTCluster
+    {
+        InternalEntry entries[NumEntriesPerCluster];
+        uint16_t padding;
+    };
 
     TranspositionTable(size_t initialSize = 0);
     TranspositionTable(TranspositionTable&& rhs);
@@ -90,7 +89,7 @@ public:
     void NextGeneration();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, uint32_t numMoves = 0, const PackedMove* moves = nullptr);
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
     void Prefetch(const Position& position) const;
 
     // invalidate all entries

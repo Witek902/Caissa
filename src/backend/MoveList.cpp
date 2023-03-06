@@ -7,31 +7,6 @@
 #include <cstring>
 #include <iomanip>
 
-uint32_t MoveList::AssignTTScores(const TTEntry& ttEntry)
-{
-    uint32_t numAssignedMoves = 0;
-
-    for (uint32_t j = 0; j < TTEntry::NumMoves; ++j)
-    {
-        if (!ttEntry.moves[j].IsValid())
-        {
-            continue;
-        }
-
-        for (uint32_t i = 0; i < numMoves; ++i)
-        {
-            if (entries[i].move == ttEntry.moves[j])
-            {
-                entries[i].score = MoveOrderer::TTMoveValue - j;
-                numAssignedMoves++;
-                break;
-            }
-        }
-    }
-
-    return numAssignedMoves;
-}
-
 void MoveList::Sort()
 {
     std::sort(entries, entries + numMoves, [this](const Entry& a, const Entry& b) { return a.score > b.score; });
