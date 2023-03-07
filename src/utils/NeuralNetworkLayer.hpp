@@ -59,7 +59,7 @@ class Layer
 {
 public:
     // maximum number of layer outputs
-    static constexpr uint32_t MaxLayerOutputs = 1024;
+    static constexpr uint32_t MaxLayerOutputs = 2048;
 
     Layer(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants = 1);
 

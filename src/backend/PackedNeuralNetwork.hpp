@@ -20,7 +20,7 @@ class NeuralNetwork;
 static constexpr uint32_t CurrentVersion = 3;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t FirstLayerMaxSize = 1024;
+static constexpr uint32_t FirstLayerMaxSize = 1536;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -74,7 +74,7 @@ public:
     friend class NeuralNetwork;
 
     static constexpr uint32_t MaxInputs = 262144;
-    static constexpr uint32_t MaxNeuronsInFirstLayer = 1024;
+    static constexpr uint32_t MaxNeuronsInFirstLayer = FirstLayerMaxSize;
     static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
     static constexpr uint32_t MinNeuronsInHiddenLayers = 16;
     static constexpr uint32_t MaxNumLayers = 4;
