@@ -1796,10 +1796,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        childNode.isInCheck = childNode.position.IsInCheck();
-
         // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
+
+        childNode.isInCheck = childNode.position.IsInCheck();
 
         // report current move to UCI
         if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
