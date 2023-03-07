@@ -17,6 +17,12 @@ enum class Piece : uint8_t
     King,
 };
 
+INLINE Piece NextPiece(Piece piece)
+{
+    ASSERT((uint32_t)piece < (uint32_t)Piece::King);
+    return (Piece)(uint32_t(piece) + 1);
+}
+
 inline char PieceToChar(Piece p, bool upperCase = true)
 {
     char c = ' ';
