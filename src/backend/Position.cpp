@@ -52,16 +52,16 @@ Piece SidePosition::GetPieceAtSquare(const Square square) const
 
     const Bitboard squareBitboard = square.GetBitboard();
 
-    Piece piece = Piece::None;
+    uint32_t piece = 0;
 
-    if (pawns & squareBitboard)     piece = Piece::Pawn;
-    if (knights & squareBitboard)   piece = Piece::Knight;
-    if (bishops & squareBitboard)   piece = Piece::Bishop;
-    if (rooks & squareBitboard)     piece = Piece::Rook;
-    if (queens & squareBitboard)    piece = Piece::Queen;
-    if (king & squareBitboard)      piece = Piece::King;
+    if (pawns & squareBitboard)     piece = (uint32_t)Piece::Pawn;
+    if (knights & squareBitboard)   piece = (uint32_t)Piece::Knight;
+    if (bishops & squareBitboard)   piece = (uint32_t)Piece::Bishop;
+    if (rooks & squareBitboard)     piece = (uint32_t)Piece::Rook;
+    if (queens & squareBitboard)    piece = (uint32_t)Piece::Queen;
+    if (king & squareBitboard)      piece = (uint32_t)Piece::King;
 
-    return piece;
+    return (Piece)piece;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1378,8 +1378,6 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         kingValue,
     };
 
-    Bitboard occupied = Whites().Occupied() | Blacks().Occupied();
-
     int32_t balance = -treshold;
 
     if (move.IsCapture())
@@ -1394,6 +1392,10 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         balance = c_seePieceValues[(uint32_t)move.GetPiece()] - balance;
         if (balance <= 0) return true;
     }
+
+    const Bitboard whiteOccupied = Whites().Occupied();
+    const Bitboard blackOccupied = Blacks().Occupied();
+    Bitboard occupied = whiteOccupied | blackOccupied;
 
     // "do" move
     occupied &= ~fromSquare.GetBitboard();
@@ -1412,9 +1414,9 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         sideToMove = GetOppositeColor(sideToMove);
         allAttackers &= occupied;
 
-        const SidePosition& side = mColors[(uint8_t)sideToMove];
-        const Bitboard ourAttackers = allAttackers & side.Occupied();
-        const Bitboard theirAttackers = allAttackers & ~side.Occupied();
+        const SidePosition& side = GetSide(sideToMove);
+        const Bitboard ourAttackers = allAttackers & (sideToMove == Color::White ? whiteOccupied : blackOccupied);
+        const Bitboard theirAttackers = allAttackers & (sideToMove == Color::White ? blackOccupied : whiteOccupied);
 
         // no more attackers - side to move loses
         if (ourAttackers == 0) break;
@@ -1423,81 +1425,32 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
         // TODO filter out pinned pieces
 
-        Bitboard pieceBitboard;
+        // find attacking piece
+        Piece piece = Piece::Pawn;
+        for (; piece != Piece::King; piece = NextPiece(piece))
+            if (side.GetPieceBitBoard(piece) & ourAttackers)
+                break;
 
-        if ((pieceBitboard = ourAttackers & side.pawns))
-        {
-            // remove attacker from occupied squares
-            const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
-            const Bitboard mask = 1ull << attackerSquare;
-            ASSERT((occupied & mask) != 0);
-            occupied ^= mask;
-            balance = pawnValue - balance;
-            if (balance < result) break;
-
-            // update diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(move.ToSquare(), occupied) & bishopsAndQueens;
-        }
-        else if ((pieceBitboard = ourAttackers & side.knights))
-        {
-            // remove attacker from occupied squares
-            const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
-            const Bitboard mask = 1ull << attackerSquare;
-            ASSERT((occupied & mask) != 0);
-            occupied ^= mask;
-            balance = knightValue - balance;
-            if (balance < result) break;
-        }
-        else if ((pieceBitboard = ourAttackers & side.bishops))
-        {
-            // remove attacker from occupied squares
-            const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
-            const Bitboard mask = 1ull << attackerSquare;
-            ASSERT((occupied & mask) != 0);
-            occupied ^= mask;
-            balance = bishopValue - balance;
-            if (balance < result) break;
-
-            // update diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
-        }
-        else if ((pieceBitboard = ourAttackers & side.rooks))
-        {
-            // remove attacker from occupied squares
-            const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
-            const Bitboard mask = 1ull << attackerSquare;
-            ASSERT((occupied & mask) != 0);
-            occupied ^= mask;
-            balance = rookValue - balance;
-            if (balance < result) break;
-
-            // update horizontal/vertical attackers
-            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
-        }
-        else if ((pieceBitboard = ourAttackers & side.queens))
-        {
-            // remove attacker from occupied squares
-            const uint32_t attackerSquare = FirstBitSet(pieceBitboard.value);
-            const Bitboard mask = 1ull << attackerSquare;
-            ASSERT((occupied & mask) != 0);
-            occupied ^= mask;
-            balance = rookValue - balance;
-            if (balance < result) break;
-
-            // update horizontal/vertical/diagonal attackers
-            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
-            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
-        }
-        else // king
+        if (piece == Piece::King)
         {
             // if capturing with the king, but opponent still has attacker, return the result (can't be in check)
-            if (theirAttackers)
-            {
-                result ^= 1;
-            }
-
+            if (theirAttackers) result ^= 1;
             break;
         }
+
+        balance = c_seePieceValues[(uint32_t)piece] - balance;
+        if (balance < result) break;
+
+        // remove one attacker from occupied squares
+        occupied ^= (1ull << FirstBitSet(side.GetPieceBitBoard(piece) & ourAttackers));
+
+        // update diagonal attackers
+        if (piece == Piece::Pawn || piece == Piece::Bishop || piece == Piece::Queen)
+            allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
+
+        // update horizontal/vertical attackers
+        if (piece == Piece::Rook || piece == Piece::Queen)
+            allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
     }
 
     return result != 0;

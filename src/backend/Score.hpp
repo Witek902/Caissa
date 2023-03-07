@@ -18,7 +18,7 @@ struct TPieceScore
     INLINE bool operator == (const TPieceScore<T>& rhs) const { return mg == rhs.mg && eg == rhs.eg; }
 
     template<typename T2>
-    INLINE TPieceScore& operator += (const TPieceScore<T2>& rhs)
+    INLINE constexpr TPieceScore& operator += (const TPieceScore<T2>& rhs)
     {
         mg += rhs.mg;
         eg += rhs.eg;
@@ -26,24 +26,24 @@ struct TPieceScore
     }
 
     template<typename T2>
-    INLINE TPieceScore& operator -= (const TPieceScore<T2>& rhs)
+    INLINE constexpr TPieceScore& operator -= (const TPieceScore<T2>& rhs)
     {
         mg -= rhs.mg;
         eg -= rhs.eg;
         return *this;
     }
 
-    INLINE TPieceScore<int32_t> operator - (const TPieceScore rhs) const
+    INLINE constexpr TPieceScore<int32_t> operator - (const TPieceScore rhs) const
     {
         return { mg - rhs.mg, eg - rhs.eg };
     }
 
-    INLINE TPieceScore<int32_t> operator * (const int32_t rhs) const
+    INLINE constexpr TPieceScore<int32_t> operator * (const int32_t rhs) const
     {
         return { mg * rhs, eg * rhs };
     }
 
-    INLINE T Average() const { return (mg + eg) / 2; }
+    INLINE constexpr T Average() const { return (mg + eg) / 2; }
 };
 
 using PieceScore = TPieceScore<int16_t>;

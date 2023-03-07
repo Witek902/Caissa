@@ -1161,6 +1161,33 @@ static void RunPositionTests()
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
         }
 
+        // 2 rooks battery + bishop
+        {
+            Position pos("K2R4/3R4/6b1/8/8/3r3r/8/7k w - - 0 1");
+            const Move move = pos.MoveFromString("d7d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+        }
+
+        // 3 rooks battery
+        {
+            Position pos("K2R4/3R4/3R4/8/8/3r2rr/8/7k w - - 0 1");
+            const Move move = pos.MoveFromString("d7d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 501));
+        }
+
+        // complex
+        {
+            Position pos("6k1/1pp4p/p1pb4/6q1/3P1pRr/2P4P/PP1Br1P1/5RKN w - - 0 1");
+            const Move move = pos.MoveFromString("f1f4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -100));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -99));
+        }
+
         // pawns and bishops on diagonal
         {
             Position pos("7k/b7/8/2p5/3P4/4B3/8/7K w - - 0 1");
