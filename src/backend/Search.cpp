@@ -1681,6 +1681,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // reduce more if entered a winning endgame
         if (node.previousMove.IsCapture() && node.staticEval >= KnownWinValue) globalDepthReduction++;
+
+        if (!position.HasNonPawnMaterial(position.GetSideToMove())) globalDepthReduction++;
+
+        if (node.isNullMove) globalDepthReduction++;
+        if (node.isCutNode) globalDepthReduction++;
     }
 
     thread.moveOrderer.ClearKillerMoves(node.height + 1);
@@ -1904,7 +1909,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // Late Move Reduction
         // don't reduce while in check, good captures, promotions, etc.
         if (node.depth >= LateMoveReductionStartDepth &&
-            moveIndex > 1u &&
+            moveIndex > (1u + isPvNode + isRootNode) &&
             (moveScore < MoveOrderer::GoodCaptureValue || numCaptureMovesTried > 4) && // allow reducing bad captures and any capture if far in the list
             move.GetPromoteTo() != Piece::Queen)
         {
@@ -1922,8 +1927,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
             if (node.isInCheck && move.GetPiece() == Piece::King) depthReduction--;
             if (childNode.isInCheck) depthReduction--;
-
-            if (node.isCutNode) depthReduction++;
 
             if (!thread.isMainThread && (thread.GetRandomUint() % 8 == 0)) depthReduction++;
         }
