@@ -975,10 +975,9 @@ static void RunPositionTests()
 
         int32_t moveScore = 0;
         Move move;
-        TTEntry ttEntry;
         uint32_t moveIndex = 0;
 
-        MovePicker movePicker(pos, *moveOrderer, nullptr, ttEntry, Move::Invalid(), flags);
+        MovePicker movePicker(pos, *moveOrderer, nullptr, Move::Invalid(), flags);
         while (movePicker.PickMove(node, Game(), move, moveScore))
         {
             bool found = false;

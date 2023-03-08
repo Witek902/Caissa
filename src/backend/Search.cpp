@@ -1153,7 +1153,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         moveGenFlags |= MOVE_GEN_MASK_QUIET;
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry, Move::Invalid(), moveGenFlags);
+    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, moveGenFlags);
 
     int32_t moveScore = 0;
     Move move;
@@ -1663,7 +1663,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     const Move pvMove = thread.GetPvMove(node);
-    const PackedMove ttMove = ttEntry.move;
+    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
 
     // determine global depth reduction for quiet moves
     int32_t globalDepthReduction = 0;
@@ -1691,7 +1691,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         nodeCacheEntry = thread.nodeCache.GetEntry(position, node.height);
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttEntry, pvMove, MOVE_GEN_MASK_ALL);
+    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, MOVE_GEN_MASK_ALL);
 
     int32_t moveScore = 0;
     Move move;
