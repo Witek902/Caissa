@@ -12,8 +12,7 @@ public:
 
     enum class Stage : uint8_t
     {
-        PVMove,
-        TTMove,
+        TTMove = 0,
         GenerateCaptures,
         Captures,
         Killer1,
@@ -27,13 +26,11 @@ public:
     MovePicker(const Position& pos,
                const MoveOrderer& moveOrderer,
                const NodeCacheEntry* nodeCacheEntry,
-               const TTEntry& ttEntry,
-               const Move pvMove,
+               const PackedMove ttMove,
                uint32_t moveGenFlags)
         : m_position(pos)
-        , m_ttEntry(ttEntry)
         , m_nodeCacheEntry(nodeCacheEntry)
-        , m_pvMove(pvMove)
+        , m_ttMove(ttMove)
         , m_moveGenFlags(moveGenFlags)
         , m_moveOrderer(moveOrderer)
     {
@@ -47,14 +44,14 @@ public:
 private:
 
     const Position& m_position;
-    const TTEntry& m_ttEntry;
+    const TTEntry* m_ttEntry;
     const NodeCacheEntry* m_nodeCacheEntry;
-    const Move m_pvMove;
+    const PackedMove m_ttMove;
     const uint32_t m_moveGenFlags;
 
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex = 0;
-    Stage m_stage = Stage::PVMove;
+    Stage m_stage = Stage::TTMove;
 
     Move m_counterMove = Move::Invalid();
     Move m_killerMoves[2] = { Move::Invalid(), Move::Invalid() };
