@@ -1,9 +1,8 @@
 #pragma once
 
 #include "Move.hpp"
+#include "Math.hpp"
 
-#include <vector>
-#include <atomic>
 
 class Position;
 

@@ -859,6 +859,7 @@
     <ClInclude Include="gaviota\compression\zlib\zlib.h" />
     <ClInclude Include="gaviota\compression\zlib\zutil.h" />
     <ClInclude Include="Material.hpp" />
+    <ClInclude Include="Math.hpp" />
     <ClInclude Include="Memory.hpp" />
     <ClInclude Include="Move.hpp" />
     <ClInclude Include="MoveList.hpp" />

@@ -204,18 +204,6 @@
 #endif
 
 
-template<typename T>
-INLINE constexpr bool IsPowerOfTwo(const T n)
-{
-    return (n & (n - 1)) == 0;
-}
-
-template<typename T>
-INLINE constexpr T Sqr(const T& x)
-{
-    return x * x;
-}
-
 inline uint64_t ParallelBitsDeposit(uint64_t src, uint64_t mask)
 {
 #ifdef USE_BMI2
@@ -297,40 +285,10 @@ inline uint64_t SwapBytes(uint64_t x)
 #endif
 }
 
-// return high bits of a 64 bit multiplication
-inline uint64_t MulHi64(uint64_t a, uint64_t b)
-{
-#if defined(__GNUC__) && defined(ARCHITECTURE_X64)
-    return ((unsigned __int128)a * (unsigned __int128)b) >> 64;
-#elif defined(_MSC_VER) && defined(ARCHITECTURE_X64)
-    return (uint64_t)__umulh(a, b);
-#else
-    uint64_t aLow = (uint32_t)a, aHi = a >> 32;
-    uint64_t bLow = (uint32_t)b, bHi = b >> 32;
-    uint64_t c1 = (aLow * bLow) >> 32;
-    uint64_t c2 = aHi * bLow + c1;
-    uint64_t c3 = aLow * bHi + (uint32_t)c2;
-    return aHi * bHi + (c2 >> 32) + (c3 >> 32);
-#endif
-}
-
 inline uint8_t ReverseBits(uint8_t x)
 {
     constexpr uint8_t lookup[16] = { 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
     return (lookup[x & 0xf] << 4) | lookup[x >> 4];
-}
-
-template<typename T, T multiple>
-INLINE constexpr const T RoundUp(const T x)
-{
-    return ((x + (multiple - 1)) / multiple) * multiple;
-}
-
-template<typename T>
-INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
-{
-    T prev = outMax;
-    while (prev < value && !outMax.compare_exchange_weak(prev, value)) { }
 }
 
 class SpinLock

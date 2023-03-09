@@ -13,7 +13,7 @@ struct Options
 {
     uint32_t multiPV = 1;
     uint32_t threads = 1;
-    int32_t moveOverhead = 10;
+    int32_t moveOverhead = 5;
     bool analysisMode = false;
     bool useStandardAlgebraicNotation = false;
     bool colorConsoleOutput = false;
@@ -70,4 +70,6 @@ private:
     SearchTaskContext* mNewSearchContext = nullptr;
 
     std::unique_ptr<SearchTaskContext> mSearchCtx;
+
+    std::vector<std::string> mCommandArgs;
 };

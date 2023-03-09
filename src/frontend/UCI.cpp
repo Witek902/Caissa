@@ -12,7 +12,7 @@
 #include <math.h>
 #include <atomic>
 
-#define VersionNumber "1.6.24"
+#define VersionNumber "1.6.25"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -85,7 +85,7 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
         if (!ExecuteCommand(str))
         {
             break;
-        }
+    }
     }
 
     UnloadTablebase();
@@ -126,7 +126,8 @@ static void ParseCommandString(const std::string& str, std::vector<std::string>&
 
 bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 {
-    std::vector<std::string> args;
+    std::vector<std::string>& args = mCommandArgs;
+    args.clear();
     ParseCommandString(commandString, args);
 
     if (args.empty())
@@ -648,7 +649,7 @@ void UniversalChessInterface::DoSearch()
             std::cout << "bestmove 0000";
         }
 
-        std::cout << std::endl << std::flush;
+        std::cout << std::endl;
 
         // print NN evaluator stats
 #ifdef NN_ACCUMULATOR_STATS

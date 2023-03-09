@@ -1,5 +1,6 @@
 #include "PackedNeuralNetwork.hpp"
 #include "Memory.hpp"
+#include "Math.hpp"
 
 #include <cassert>
 #include <cmath>

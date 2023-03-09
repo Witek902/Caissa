@@ -467,7 +467,7 @@ void MoveOrderer::ScoreMoves(
                     const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
                     ASSERT(fraction >= 0.0f);
                     ASSERT(fraction <= 1.0f);
-                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * log2f(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
+                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
                 }
             }
         }
