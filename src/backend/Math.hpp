@@ -16,6 +16,18 @@ INLINE constexpr T Sqr(const T& x)
     return x * x;
 }
 
+template<typename T>
+INLINE constexpr bool IsAscending(const T& a, const T& b, const T& c)
+{
+    return c > b && b > a;
+}
+
+template<typename T>
+INLINE constexpr bool IsAscendingOrDescending(const T& a, const T& b, const T& c)
+{
+    return IsAscending(a, b, c) || IsAscending(c, b, a);
+}
+
 // return high bits of a 64 bit multiplication
 INLINE uint64_t MulHi64(uint64_t a, uint64_t b)
 {
