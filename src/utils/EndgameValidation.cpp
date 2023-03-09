@@ -27,9 +27,12 @@ struct EndgameValidationStats
 
     double totalErrorSqr = 0.0;
 
-    uint64_t incorrectWins = 0;
-    uint64_t incorrectDraws = 0;
-    uint64_t incorrectLosses = 0;
+    uint64_t incorrectWins_evalAsLoss = 0;
+    uint64_t incorrectWins_evalAsDraw = 0;
+    uint64_t incorrectDraws_evalAsWin = 0;
+    uint64_t incorrectDraws_evalAsLoss = 0;
+    uint64_t incorrectLosses_evalAsWin = 0;
+    uint64_t incorrectLosses_evalAsDraw = 0;
 
     uint64_t recognizedWins = 0;
     uint64_t recognizedDraws = 0;
@@ -53,9 +56,12 @@ struct EndgameValidationStats
         count += other.count;
         totalErrorSqr += other.totalErrorSqr;
 
-        incorrectWins += other.incorrectWins;
-        incorrectDraws += other.incorrectDraws;
-        incorrectLosses += other.incorrectLosses;
+        incorrectWins_evalAsLoss += other.incorrectWins_evalAsLoss;
+        incorrectWins_evalAsDraw += other.incorrectWins_evalAsDraw;
+        incorrectDraws_evalAsWin += other.incorrectDraws_evalAsWin;
+        incorrectDraws_evalAsLoss += other.incorrectDraws_evalAsLoss;
+        incorrectLosses_evalAsWin += other.incorrectLosses_evalAsWin;
+        incorrectLosses_evalAsDraw += other.incorrectLosses_evalAsDraw;
 
         recognizedWins += other.recognizedWins;
         recognizedDraws += other.recognizedDraws;
@@ -224,7 +230,6 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
 
         if (!pos.IsValid(true)) continue;
         if (pos.IsInCheck(GetOppositeColor(param.sideToMove))) continue;
-        if (pos.IsInCheck(param.sideToMove)) continue;
         if (!pos.IsQuiet()) continue;
 
         int32_t wdl = 0;
@@ -250,7 +255,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
             int32_t evalScore = 0;
             if (EvaluateEndgame(pos, evalScore))
             {
-                const float error = trueScore - PawnToWinProbability(evalScore * 0.01f);
+                const float error = trueScore - CentiPawnToWinProbability(evalScore);
                 stats.totalErrorSqr += error * error;
 
                 if (wdl > 0) // win
@@ -262,8 +267,13 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
                     }
                     else if (evalScore <= -KnownWinValue)
                     {
-                        std::cout << "Incorrect win score: " << pos.ToFEN() << std::endl;
-                        stats.incorrectWins++;
+                        //std::cout << "Incorrect win score: " << pos.ToFEN() << " (evaluated as loss)" << std::endl;
+                        stats.incorrectWins_evalAsLoss++;
+                    }
+                    else if (evalScore == 0)
+                    {
+                        //std::cout << "Incorrect win score: " << pos.ToFEN() << " (evaluated as draw)" << std::endl;
+                        stats.incorrectWins_evalAsDraw++;
                     }
                     else
                     {
@@ -279,8 +289,13 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
                     }
                     else if (evalScore >= KnownWinValue)
                     {
-                        std::cout << "Incorrect loss score: " << pos.ToFEN() << std::endl;
-                        stats.incorrectLosses++;
+                        //std::cout << "Incorrect loss score: " << pos.ToFEN() << " (evaluated as win)" << std::endl;
+                        stats.incorrectLosses_evalAsWin++;
+                    }
+                    else if (evalScore == 0)
+                    {
+                        //std::cout << "Incorrect loss score: " << pos.ToFEN() << " (evaluated as draw)" << std::endl;
+                        stats.incorrectLosses_evalAsDraw++;
                     }
                     else
                     {
@@ -294,10 +309,15 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
                         stats.recognizedDraws++;
                         exactScoreRecognized = true;
                     }
-                    else if (evalScore >= KnownWinValue || evalScore <= -KnownWinValue)
+                    else if (evalScore >= KnownWinValue)
                     {
-                        std::cout << "Incorrect draw score: " << pos.ToFEN() << std::endl;
-                        stats.incorrectDraws++;
+                        //std::cout << "Incorrect draw score: " << pos.ToFEN() << " (evaluated as win)" << std::endl;
+                        stats.incorrectDraws_evalAsWin++;
+                    }
+                    else if (evalScore <= -KnownWinValue)
+                    {
+                        //std::cout << "Incorrect draw score: " << pos.ToFEN() << " (evaluated as loss)" << std::endl;
+                        stats.incorrectDraws_evalAsLoss++;
                     }
                     else
                     {
@@ -374,19 +394,22 @@ static void ValidateEndgame(const EndgameValidationParam& param)
     std::cout << "Successfully probed:   " << stats.count << std::endl << std::endl;
     std::cout << "Mean square error:     " << std::sqrt(stats.totalErrorSqr / stats.count) << std::endl << std::endl;
 
-    std::cout << "Incorrect Wins:        " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectWins / (float)stats.count) << "% (" << stats.incorrectWins << ")" << std::endl;
-    std::cout << "Incorrect Draws:       " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectDraws / (float)stats.count) << "% (" << stats.incorrectDraws << ")" << std::endl;
-    std::cout << "Incorrect Losses:      " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectLosses / (float)stats.count) << "% (" << stats.incorrectLosses << ")" << std::endl;
-    std::cout << "Correct Wins:          " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedWins / (float)stats.count) << "% (" << stats.recognizedWins << ")" << std::endl;
-    std::cout << "Correct Draws:         " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedDraws / (float)stats.count) << "% (" << stats.recognizedDraws << ")" << std::endl;
-    std::cout << "Correct Losses:        " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedLosses / (float)stats.count) << "% (" << stats.recognizedLosses << ")" << std::endl;
-    std::cout << "Non-recognized Wins:   " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedWins / (float)stats.count) << "% (" << stats.notRecognizedWins << ")" << std::endl;
-    std::cout << "Non-recognized Draws:  " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedDraws / (float)stats.count) << "% (" << stats.notRecognizedDraws << ")" << std::endl;
-    std::cout << "Non-recognized Losses: " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedLosses / (float)stats.count) << "% (" << stats.notRecognizedLosses << ")" << std::endl;
+    std::cout << "Incorrect Wins   (evaluated as loss): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectWins_evalAsLoss / (float)stats.count) << "% (" << stats.incorrectWins_evalAsLoss << ")" << std::endl;
+    std::cout << "Incorrect Wins   (evaluated as draw): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectWins_evalAsDraw / (float)stats.count) << "% (" << stats.incorrectWins_evalAsDraw << ")" << std::endl;
+    std::cout << "Incorrect Draws  (evaluated as loss): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectDraws_evalAsLoss / (float)stats.count) << "% (" << stats.incorrectDraws_evalAsLoss << ")" << std::endl;
+    std::cout << "Incorrect Draws  (evaluated as win ): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectDraws_evalAsWin / (float)stats.count) << "% (" << stats.incorrectDraws_evalAsWin << ")" << std::endl;
+    std::cout << "Incorrect Losses (evaluated as draw): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectLosses_evalAsDraw / (float)stats.count) << "% (" << stats.incorrectLosses_evalAsDraw << ")" << std::endl;
+    std::cout << "Incorrect Losses (evaluated as win ): " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.incorrectLosses_evalAsWin / (float)stats.count) << "% (" << stats.incorrectLosses_evalAsWin << ")" << std::endl;
+    std::cout << "Correct Wins:                         " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedWins / (float)stats.count) << "% (" << stats.recognizedWins << ")" << std::endl;
+    std::cout << "Correct Draws:                        " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedDraws / (float)stats.count) << "% (" << stats.recognizedDraws << ")" << std::endl;
+    std::cout << "Correct Losses:                       " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.recognizedLosses / (float)stats.count) << "% (" << stats.recognizedLosses << ")" << std::endl;
+    std::cout << "Non-recognized Wins:                  " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedWins / (float)stats.count) << "% (" << stats.notRecognizedWins << ")" << std::endl;
+    std::cout << "Non-recognized Draws:                 " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedDraws / (float)stats.count) << "% (" << stats.notRecognizedDraws << ")" << std::endl;
+    std::cout << "Non-recognized Losses:                " << std::right << std::fixed << std::setprecision(1) << (100.0f * (float)stats.notRecognizedLosses / (float)stats.count) << "% (" << stats.notRecognizedLosses << ")" << std::endl;
 
     std::cout << std::endl;
 
-    stats.PrintPieceSquareTable();
+    //stats.PrintPieceSquareTable();
 }
 
 void ValidateEndgame()
@@ -394,9 +417,10 @@ void ValidateEndgame()
     EndgameValidationParam param;
     param.matKey.numWhiteBishops = 0;
     param.matKey.numWhiteRooks = 0;
+    param.matKey.numWhiteQueens = 0;
     param.matKey.numWhitePawns = 1;
-    param.matKey.numBlackRooks = 1;
-    param.matKey.numBlackPawns = 0;
+    param.matKey.numBlackRooks = 0;
+    param.matKey.numBlackPawns = 1;
     param.matKey.numBlackKnights = 0;
     param.matKey.numBlackBishops = 0;
 
