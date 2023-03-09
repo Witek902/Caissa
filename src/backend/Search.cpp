@@ -52,7 +52,8 @@ DEFINE_PARAM(AspirationWindowStart, 40);
 DEFINE_PARAM(AspirationWindowEnd, 20);
 DEFINE_PARAM(AspirationWindowStep, 4);
 
-DEFINE_PARAM(SingularExtensionScoreMarigin, 5);
+DEFINE_PARAM(SingularExtensionMinDepth, 6);
+DEFINE_PARAM(SingularExtensionScoreMarigin, 2);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 22);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 150);
@@ -1836,7 +1837,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (!isRootNode &&
             !hasMoveFilter &&
             move == ttMove &&
-            node.depth >= SingularitySearchMinDepth &&
+            node.depth >= SingularExtensionMinDepth &&
             std::abs(ttScore) < KnownWinValue &&
             ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
             ttEntry.depth >= node.depth - 2)
