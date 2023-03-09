@@ -216,7 +216,7 @@ void Search::BuildMoveReductionTable()
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(bias + scale * logf(float(depth)) * logf(float(moveIndex)));
+            const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
             ASSERT(reduction <= 64);
             mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
@@ -634,7 +634,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     }
 #endif // COLLECT_SEARCH_STATS
 
-    std::cout << std::move(ss.str()) << std::endl;
+    std::cout << std::move(ss.str()) << '\n';
 }
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
@@ -645,7 +645,7 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
     ss << " currmove " << move.ToString();
     ss << " currmovenumber " << moveNumber;
 
-    std::cout << std::move(ss.str()) << std::endl;
+    std::cout << std::move(ss.str()) << '\n';
 }
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats)
@@ -1388,7 +1388,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ScoreType staticEval = InvalidValue;
     ScoreType tbMinValue = -InfValue; // min value according to tablebases
     ScoreType tbMaxValue = InfValue; // max value according to tablebases
-    bool tbHit = false;
 
     // transposition table lookup
     TTEntry ttEntry;
@@ -1434,7 +1433,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             position.GetNumPieces() <= g_syzygyProbeLimit &&
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
-            tbHit = true;
             thread.stats.tbHits++;
 
             // convert the WDL value to a score
@@ -1689,8 +1687,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         // reduce more if TT move is a capture
         if (ttMove.IsValid() && position.IsCapture(ttMove)) globalDepthReduction++;
 
-        if (tbHit) globalDepthReduction++;
-
         // reduce more if entered a winning endgame
         if (node.previousMove.IsCapture() && node.staticEval >= KnownWinValue) globalDepthReduction++;
 
@@ -1715,15 +1711,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     Move bestMove = Move::Invalid();
 
-    uint32_t moveIndex = 0;
-    uint32_t quietMoveIndex = 0;
+    uint8_t moveIndex = 0;
+    uint8_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
-    Move quietMovesTried[MoveList::MaxMoves];
-    Move captureMovesTried[MoveList::MaxMoves];
-    uint32_t numQuietMovesTried = 0;
-    uint32_t numCaptureMovesTried = 0;
+    constexpr uint32_t maxMovesTried = 32;
+    Move quietMovesTried[maxMovesTried];
+    Move captureMovesTried[maxMovesTried];
+    uint8_t numQuietMovesTried = 0;
+    uint8_t numCaptureMovesTried = 0;
 
 #ifdef VALIDATE_MOVE_PICKER
     uint32_t numGeneratedMoves = 0;
@@ -2004,11 +2001,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-        if (move.IsQuiet())
+        if (move.IsQuiet() && numQuietMovesTried < maxMovesTried)
         {
             quietMovesTried[numQuietMovesTried++] = move;
         }
-        else if (move.IsCapture())
+        else if (move.IsCapture() && numCaptureMovesTried < maxMovesTried)
         {
             captureMovesTried[numCaptureMovesTried++] = move;
         }
