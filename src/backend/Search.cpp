@@ -21,6 +21,7 @@
 // #define ENABLE_SEARCH_TRACE
 // #define VALIDATE_MOVE_PICKER
 
+static const float PvLineReportDelay = 0.005f;
 static const float CurrentMoveReportDelay = 10.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
@@ -492,6 +493,16 @@ void Search::WorkerThreadCallback(ThreadData* threadData)
 
 void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
 {
+    const float timeInSeconds = searchTime.ToSeconds();
+
+    // don't report PV line if very small amount of time passed and we have time limits
+    if (timeInSeconds < PvLineReportDelay &&
+        param.searchParam.limits.maxTime.IsValid() &&
+        !param.searchParam.limits.analysisMode)
+    {
+        return;
+    }
+
     std::stringstream ss{ std::ios_base::out };
 
     ss << "info depth " << param.depth;
@@ -523,7 +534,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         ss << " upperbound";
     }
 
-    const float timeInSeconds = searchTime.ToSeconds();
+    
     const uint64_t numNodes = param.searchContext.stats.nodes.load();
 
     ss << " nodes " << numNodes;
