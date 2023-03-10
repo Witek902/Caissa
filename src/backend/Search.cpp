@@ -22,7 +22,7 @@
 // #define VALIDATE_MOVE_PICKER
 
 static const float PvLineReportDelay = 0.005f;
-static const float CurrentMoveReportDelay = 10.0f;
+static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
@@ -607,7 +607,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     }
 #endif // COLLECT_SEARCH_STATS
 
-    std::cout << std::move(ss.str()) << '\n';
+    std::cout << std::move(ss.str()) << std::endl;
 }
 
 void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
@@ -618,7 +618,7 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
     ss << " currmove " << move.ToString();
     ss << " currmovenumber " << moveNumber;
 
-    std::cout << std::move(ss.str()) << '\n';
+    std::cout << std::move(ss.str()) << std::endl;
 }
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats)
