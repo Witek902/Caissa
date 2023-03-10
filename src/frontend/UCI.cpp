@@ -10,7 +10,6 @@
 #include "../backend/Tuning.hpp"
 
 #include <math.h>
-#include <atomic>
 
 #define VersionNumber "1.6.25"
 
@@ -472,21 +471,23 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         }
         else if (args[i] == "searchmoves" && i + 1 < args.size())
         {
-            // TODO use 'excludedMoves' to implement this feature
-            // restrict search to this moves only
-            //for (size_t j = i + 1; j < args.size(); ++j)
-            //{
-            //    const Move move = mGame.GetPosition().MoveFromString(args[j]);
-            //    if (move.IsValid())
-            //    {
-            //        rootMoves.push_back(move);
-            //    }
-            //    else
-            //    {
-            //        std::cout << "Invalid move: " << args[j] << std::endl;
-            //        return false;
-            //    }
-            //}
+            mGame.GetPosition().GetNumLegalMoves(&excludedMoves);
+
+            for (size_t j = i + 1; j < args.size(); ++j)
+            {
+                const Move move = mGame.GetPosition().MoveFromString(args[j]);
+                if (move.IsValid())
+                {
+                    excludedMoves.erase(
+                        remove(excludedMoves.begin(), excludedMoves.end(), move),
+                        excludedMoves.end());
+                }
+                else
+                {
+                    std::cout << "Invalid move: " << args[j] << std::endl;
+                    return false;
+                }
+            }
         }
         else if (args[i] == "excludemoves" && i + 1 < args.size())
         {
