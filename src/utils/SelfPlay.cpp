@@ -25,15 +25,16 @@
 static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
-static const uint32_t c_printPgnFrequency = 1; // print every 64th game
-static const uint32_t c_maxNodes = 200000;
+static const uint32_t c_printPgnFrequency = 64; // print every 64th game
+static const uint32_t c_maxNodes = 20000;
 static const uint32_t c_maxDepth = 12;
 static const int32_t c_maxEval = InfValue;
-static const int32_t c_openingMaxEval = 500;
-static const int32_t c_multiPv = 4;
+static const int32_t c_openingMaxEval = 800;
+static const int32_t c_multiPv = 3;
 static const int32_t c_multiPvMaxPly = 8;
 static const int32_t c_multiPvScoreTreshold = 30;
-static const uint32_t c_numRandomMoves = 6;
+static const uint32_t c_minRandomMoves = 2;
+static const uint32_t c_maxRandomMoves = 10;
 
 using namespace threadpool;
 
@@ -141,6 +142,12 @@ bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos, bool preferKi
 {
     std::vector<Move> moves;
     pos.GetNumLegalMoves(&moves);
+
+    // don't play losing moves (according to SEE)
+    moves.erase(std::remove_if(moves.begin(),
+        moves.end(),
+        [&](const Move& move) { return !pos.StaticExchangeEvaluation(move); }),
+        moves.end());
 
     if (moves.empty()) return false;
 
@@ -272,9 +279,11 @@ void SelfPlay(const std::vector<std::string>& args)
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
-        for (uint32_t i = 0; i < c_numRandomMoves; ++i)
+        // play few random moves in the opening
+        const uint32_t numRandomMoves = std::uniform_int_distribution<uint32_t>(c_minRandomMoves, c_maxRandomMoves)(gen);
+        for (uint32_t i = 0; i < numRandomMoves; ++i)
         {
-            const bool preferKingMove = i > 4;
+            const bool preferKingMove = false;// (i + 1) >= c_numRandomMoves;
             ApplyRandomMove(gen, openingPos, preferKingMove);
             ApplyRandomMove(gen, openingPos, preferKingMove);
         }
