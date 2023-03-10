@@ -369,7 +369,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
-        SearchContext searchContext{ game, param, globalStats };
+        SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
         outResult.resize(1);
         outResult.front().score = QuiescenceNegaMax(thread, rootNode, searchContext);
         SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
@@ -626,9 +626,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     const bool isMainThread = threadID == 0;
     ThreadData& thread = *(mThreadData[threadID]);
 
-    std::vector<Move> pvMovesSoFar;
-    pvMovesSoFar.reserve(param.excludedMoves.size() + numPvLines);
-
     // clear per-thread data for new search
     thread.stats = ThreadStats{};
     thread.depthCompleted = 0;
@@ -639,6 +636,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     uint32_t mateCounter = 0;
 
     SearchContext searchContext{ game, param, outStats };
+    searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
 
     // main iterative deepening loop
     for (uint16_t depth = 1; depth <= param.limits.maxDepth; ++depth)
@@ -646,8 +644,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         SearchResult tempResult;
         tempResult.resize(numPvLines);
 
-        pvMovesSoFar.clear();
-        pvMovesSoFar = param.excludedMoves;
+        searchContext.excludedRootMoves.clear();
+        searchContext.excludedRootMoves = param.excludedMoves;
 
         thread.rootDepth = depth;
 
@@ -679,8 +677,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 depth,
                 (uint8_t)pvIndex,
                 searchContext,
-                !pvMovesSoFar.empty() ? pvMovesSoFar.data() : nullptr,
-                (uint8_t)(!pvMovesSoFar.empty() ? pvMovesSoFar.size() : 0u),
                 prevScore,
                 threadID,
             };
@@ -712,12 +708,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             // store for multi-PV filtering in next iteration
 #ifndef CONFIGURATION_FINAL
-            for (const Move prevMove : pvMovesSoFar)
+            for (const Move prevMove : searchContext.excludedRootMoves)
             {
                 ASSERT(prevMove != pvLine.moves.front());
             }
 #endif // CONFIGURATION_FINAL
-            pvMovesSoFar.push_back(pvLine.moves.front());
+            searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
         }
@@ -789,8 +785,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.depth = singularDepth;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
-            rootNode.moveFilter = &primaryMove;
-            rootNode.moveFilterCount = 1;
+            rootNode.filteredMove = primaryMove;
             rootNode.nnContext = thread.nnContextStack[0].get();
             rootNode.nnContext->MarkAsDirty();
 
@@ -838,8 +833,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     for (;;)
     {
-        //std::cout << "Window: " << alpha << " ... " << beta << std::endl;
-
         NodeInfo rootNode;
         rootNode.position = param.position;
         rootNode.isInCheck = param.position.IsInCheck();
@@ -848,8 +841,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.pvIndex = param.pvIndex;
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
-        rootNode.moveFilter = param.moveFilter;
-        rootNode.moveFilterCount = param.moveFilterCount;
         rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
         rootNode.nnContext->MarkAsDirty();
 
@@ -1010,7 +1001,7 @@ static void RefreshPsqtScore(NodeInfo& node)
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.alpha < node.beta);
-    ASSERT(node.moveFilterCount == 0);
+    ASSERT(!node.filteredMove.IsValid());
 
     const bool isPvNode = node.IsPV();
 
@@ -1304,7 +1295,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     const Position& position = node.position;
     const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.IsPV();
-    const bool hasMoveFilter = node.moveFilterCount > 0u;
 
     ScoreType alpha = node.alpha;
     ScoreType beta = node.beta;
@@ -1378,7 +1368,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // don't prune in PV nodes, because TT does not contain path information
         if (!isPvNode &&
-            !hasMoveFilter &&
+            !node.filteredMove.IsValid() &&
             ttEntry.depth >= node.depth &&
             position.GetHalfMoveCount() < 80)
         {
@@ -1523,7 +1513,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
     const bool isImproving = evalImprovement >= -5; // leave some small margin
 
-    if (!isPvNode && !hasMoveFilter && !node.isInCheck)
+    if (!isPvNode && !node.filteredMove.IsValid() && !node.isInCheck)
     {
         // Futility/Beta Pruning
         if (node.depth <= BetaPruningDepth &&
@@ -1711,8 +1701,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         generatedSoFar[numGeneratedMoves++] = move;
 #endif // VALIDATE_MOVE_PICKER
 
-        // apply node filter (multi-PV search, singularity search, etc.)
-        if (!node.ShouldCheckMove(move))
+        // apply move filter (multi-PV search, singularity search, etc.)
+        if (move == node.filteredMove ||
+            (isRootNode && ctx.excludedRootMoves.end() != std::find(
+                ctx.excludedRootMoves.begin(), ctx.excludedRootMoves.end(), move)))
         {
             filteredSomeMove = true;
             continue;
@@ -1816,7 +1808,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // Singular move detection
         if (!isRootNode &&
-            !hasMoveFilter &&
+            !node.filteredMove.IsValid() &&
             move == ttMove &&
             node.depth >= SingularExtensionMinDepth &&
             std::abs(ttScore) < KnownWinValue &&
@@ -1831,8 +1823,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             singularChildNode.depth = node.depth / 2 - 1;
             singularChildNode.alpha = singularBeta - 1;
             singularChildNode.beta = singularBeta;
-            singularChildNode.moveFilter = &move;
-            singularChildNode.moveFilterCount = 1;
+            singularChildNode.filteredMove = move;
 
             const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
 

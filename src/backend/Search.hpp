@@ -121,9 +121,8 @@ struct NodeInfo
 
     NodeInfo* parentNode = nullptr;
 
-    // ignore given moves in search, used for multi-PV search
-    const Move* moveFilter = nullptr;
-    uint8_t moveFilterCount = 0;
+    // ignore given moves in search, used for singular extensions
+    PackedMove filteredMove = PackedMove::Invalid();
 
     uint8_t pvIndex = 0;
 
@@ -156,19 +155,6 @@ struct NodeInfo
     PackedMove pvLine[MaxSearchDepth];
 
     INLINE bool IsPV() const { return (beta - alpha) != 1; }
-
-    bool ShouldCheckMove(const Move move) const
-    {
-        for (uint32_t i = 0; i < moveFilterCount; ++i)
-        {
-            if (move == moveFilter[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 };
 
 class Search
@@ -253,6 +239,7 @@ private:
         const Game& game;
         SearchParam& searchParam;
         Stats& stats;
+        std::vector<Move> excludedRootMoves;
     };
 
     struct AspirationWindowSearchParam
@@ -262,8 +249,6 @@ private:
         uint32_t depth;
         uint8_t pvIndex;
         SearchContext& searchContext;
-        const Move* moveFilter = nullptr;
-        uint8_t moveFilterCount = 0;
         ScoreType previousScore = 0;                  // score in previous ID iteration
         uint32_t threadID = 0;
     };
@@ -330,11 +315,7 @@ private:
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats);
-
-    bool IsSingular(const Position& position, const Move move, ThreadData& thread, SearchContext& ctx) const;
-
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
-
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
 
