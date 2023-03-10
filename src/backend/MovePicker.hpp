@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MoveList.hpp"
+#include "Position.hpp"
 
 class MoveOrderer;
 struct NodeInfo;
@@ -40,6 +41,7 @@ public:
 
     INLINE Stage GetStage() const { return m_stage; }
     INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
+    INLINE void SkipQuiets() { m_moveGenFlags &= ~MOVE_GEN_MASK_QUIET; }
 
 private:
 
@@ -47,7 +49,7 @@ private:
     const TTEntry* m_ttEntry;
     const NodeCacheEntry* m_nodeCacheEntry;
     const PackedMove m_ttMove;
-    const uint32_t m_moveGenFlags;
+    uint32_t m_moveGenFlags;
 
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex = 0;
