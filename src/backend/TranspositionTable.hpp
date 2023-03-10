@@ -103,6 +103,9 @@ public:
     // compute number of used entries
     size_t GetNumUsedEntries() const;
 
+    // compute percent of TT used (value displayed in UCI output)
+    uint32_t GetHashFull() const;
+
 private:
 
     TranspositionTable(const TranspositionTable&) = delete;

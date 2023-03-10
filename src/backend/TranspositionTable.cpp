@@ -277,3 +277,19 @@ size_t TranspositionTable::GetNumUsedEntries() const
 
     return num;
 }
+
+uint32_t TranspositionTable::GetHashFull() const
+{
+    const uint32_t clusterCount = 1000 / NumEntriesPerCluster;
+
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < clusterCount; ++i)
+    {
+        for (const InternalEntry& entry : clusters[i].entries)
+        {
+            count += (entry.entry.IsValid() && entry.entry.generation == generation);
+        }
+    }
+
+    return count;
+}
