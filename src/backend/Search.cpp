@@ -505,50 +505,23 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
     std::stringstream ss{ std::ios_base::out };
 
-    ss << "info depth " << param.depth;
-    ss << " seldepth " << (uint32_t)param.searchContext.stats.maxDepth;
-    if (param.searchParam.numPvLines > 1)
-    {
-        ss << " multipv " << (param.pvIndex + 1);
-    }
-
-    if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)
-    {
-        ss << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
-    }
-    else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)
-    {
-        ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
-    }
-    else
-    {
-        ss << " score cp " << pvLine.score;
-    }
-
-    if (boundsType == BoundsType::LowerBound)
-    {
-        ss << " lowerbound";
-    }
-    if (boundsType == BoundsType::UpperBound)
-    {
-        ss << " upperbound";
-    }
-
-    
     const uint64_t numNodes = param.searchContext.stats.nodes.load();
 
+    ss << "info depth " << param.depth;
+    ss << " seldepth " << (uint32_t)param.searchContext.stats.maxDepth;
+    if (param.searchParam.numPvLines > 1) ss << " multipv " << (param.pvIndex + 1);
+
+    if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)        ss << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
+    else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)  ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
+    else                                                                ss << " score cp " << pvLine.score;
+
+    if (boundsType == BoundsType::LowerBound) ss << " lowerbound";
+    if (boundsType == BoundsType::UpperBound) ss << " upperbound";
+
     ss << " nodes " << numNodes;
-
-    if (timeInSeconds > 0.01f && numNodes > 100)
-    {
-        ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
-    }
-
-    if (param.searchContext.stats.tbHits)
-    {
-        ss << " tbhits " << param.searchContext.stats.tbHits;
-    }
-
+    if (timeInSeconds > 0.01f && numNodes > 100) ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
+    ss << " hashfull " << param.searchParam.transpositionTable.GetHashFull();
+    if (param.searchContext.stats.tbHits) ss << " tbhits " << param.searchContext.stats.tbHits;
     ss << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
 
     ss << " pv ";
