@@ -6,7 +6,9 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#ifdef USE_SSE
 #include <immintrin.h>
+#endif // USE_SSE
 
 static constexpr float c_activationEpsilon = 1.0e-10f;
 

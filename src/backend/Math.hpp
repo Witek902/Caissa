@@ -2,6 +2,7 @@
 
 #include "Common.hpp"
 
+#include <bit>
 
 template<typename T>
 INLINE constexpr bool IsPowerOfTwo(const T n)

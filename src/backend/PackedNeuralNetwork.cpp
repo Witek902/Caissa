@@ -7,7 +7,10 @@
 #include <algorithm>
 #include <iostream>
 #include <vector>
-#include <immintrin.h>
+
+#ifdef USE_SSE
+    #include <immintrin.h>
+#endif // USE_SSE
 
 #if defined(PLATFORM_LINUX)
     #include <fcntl.h>

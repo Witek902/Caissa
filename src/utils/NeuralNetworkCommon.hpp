@@ -50,6 +50,9 @@ inline float ClippedReLuDerivative(float x)
     if (x >= 1.0f) return 0.0f;
     return 1.0f;
 }
+
+#ifdef USE_AVX
+
 inline __m256 ClippedReLu(const __m256 x)
 {
     return _mm256_min_ps(_mm256_set1_ps(1.0f), _mm256_max_ps(_mm256_setzero_ps(), x));
@@ -60,5 +63,7 @@ inline __m256 ClippedReLuDerivative(const __m256 x, const __m256 coeff)
                          _mm256_and_ps(_mm256_cmp_ps(x, _mm256_setzero_ps(),  _CMP_GT_OQ),
                                        _mm256_cmp_ps(x, _mm256_set1_ps(1.0f), _CMP_LT_OQ)));
 }
+
+#endif // USE_AVX
 
 } // namespace nn
