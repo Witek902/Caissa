@@ -9,7 +9,9 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#ifdef USE_SSE
 #include <immintrin.h>
+#endif // USE_SSE
 
 using namespace threadpool;
 
