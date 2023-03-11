@@ -1154,8 +1154,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             // skip underpromotions
             if (move.IsUnderpromotion()) continue;
 
-            // skip losing captures
-            if (moveScore < MoveOrderer::GoodCaptureValue) continue;
+            // skip very bad captures
+            if (moveScore < MoveOrderer::GoodCaptureValue &&
+                !position.StaticExchangeEvaluation(move, -120)) continue;
 
             // futility pruning - skip captures that won't beat alpha
             if (move.IsCapture() &&
