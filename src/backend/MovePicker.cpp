@@ -1,20 +1,19 @@
 #include "MovePicker.hpp"
 #include "MoveOrderer.hpp"
+#include "MoveGen.hpp"
 #include "Position.hpp"
 #include "TranspositionTable.hpp"
 #include "Search.hpp"
 
 bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
 {
-    const bool generateQuiets = m_moveGenFlags & MOVE_GEN_MASK_QUIET;
-
     switch (m_stage)
     {
         case Stage::TTMove:
         {
             m_stage = Stage::GenerateCaptures;
             const Move move = m_position.MoveFromPacked(m_ttMove);
-            if (move.IsValid() && (!move.IsQuiet() || generateQuiets))
+            if (move.IsValid() && (!move.IsQuiet() || m_generateQuiets))
             {
                 outMove = move;
                 outScore = MoveOrderer::TTMoveValue;
@@ -27,7 +26,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
         {
             m_stage = Stage::Captures;
             m_moveIndex = 0;
-            m_position.GenerateMoveList(m_moves, m_moveGenFlags & (MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS));
+            GenerateMoveList<MoveGenerationMode::Captures>(m_position, m_moves);
 
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
@@ -55,7 +54,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 }
             }
 
-            if (!generateQuiets)
+            if (!m_generateQuiets)
             {
                 m_stage = Stage::End;
                 return false;
@@ -126,9 +125,9 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
         case Stage::GenerateQuiets:
         {
             m_stage = Stage::PickQuiets;
-            if (m_moveGenFlags & MOVE_GEN_MASK_QUIET)
+            if (m_generateQuiets)
             {
-                m_position.GenerateMoveList(m_moves, MOVE_GEN_MASK_QUIET);
+                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, m_moves);
 
                 // remove PV and TT moves from generated list
                 m_moves.RemoveMove(m_ttMove);

@@ -2,6 +2,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "MoveList.hpp"
+#include "MoveGen.hpp"
 
 uint32_t g_syzygyProbeLimit = 7;
 
@@ -378,7 +379,7 @@ bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM, int
     }
 
     MoveList moves;
-    pos.GenerateMoveList(moves);
+    GenerateMoveList(pos, moves);
 
     if (moves.Size() == 0)
     {

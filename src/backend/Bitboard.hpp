@@ -8,7 +8,7 @@
 
 class Square;
 
-enum class RayDir
+enum class Direction
 {
     North,
     South,
@@ -75,7 +75,7 @@ struct Bitboard
         return SwapBytes(value);
     }
 
-    const Bitboard MirroredHorizontally() const
+    const constexpr Bitboard MirroredHorizontally() const
     {
         const uint64_t k1 = 0x5555555555555555ull;
         const uint64_t k2 = 0x3333333333333333ull;
@@ -86,6 +86,19 @@ struct Bitboard
         x = ((x >> 2) & k2) +  4u * (x & k2);
         x = ((x >> 4) & k4) + 16u * (x & k4);
         return x;
+    }
+
+    template<Direction dir>
+    INLINE constexpr Bitboard Shift() const
+    {
+        if constexpr (dir == Direction::North) return North();
+        if constexpr (dir == Direction::South) return South();
+        if constexpr (dir == Direction::East) return East();
+        if constexpr (dir == Direction::West) return West();
+        if constexpr (dir == Direction::NorthEast) return North().East();
+        if constexpr (dir == Direction::NorthWest) return North().West();
+        if constexpr (dir == Direction::SouthEast) return South().East();
+        if constexpr (dir == Direction::SouthWest) return South().East();
     }
 
     INLINE constexpr Bitboard North() const
@@ -207,7 +220,7 @@ struct Bitboard
         }
     }
 
-    static Bitboard GetRay(const Square square, const RayDir dir);
+    static Bitboard GetRay(const Square square, const Direction dir);
     static Bitboard GetBetween(const Square squareA, const Square squareB);
 
     template<Color color>

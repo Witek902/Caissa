@@ -80,7 +80,7 @@ static uint64_t gBishopAttackTable[Square::NumSquares][BishopAttackTableSize];
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Bitboard Bitboard::GetRay(const Square square, const RayDir dir)
+Bitboard Bitboard::GetRay(const Square square, const Direction dir)
 {
     ASSERT(square.IsValid());
     ASSERT(static_cast<uint32_t>(dir) < 8u);
@@ -208,31 +208,31 @@ Bitboard Bitboard::GenerateQueenAttacks(const Square square, const Bitboard bloc
 Bitboard Bitboard::GenerateRookAttacks_Slow(const Square square, const Bitboard blockers)
 {
     uint32_t blockerIndexN;
-    uint64_t bitboardN = GetRay(square, RayDir::North);
+    uint64_t bitboardN = GetRay(square, Direction::North);
     if (Bitboard(bitboardN & blockers).BitScanForward(blockerIndexN))
     {
-        bitboardN &= ~GetRay(blockerIndexN, RayDir::North);
+        bitboardN &= ~GetRay(blockerIndexN, Direction::North);
     }
 
     uint32_t blockerIndexE;
-    uint64_t bitboardE = GetRay(square, RayDir::East);
+    uint64_t bitboardE = GetRay(square, Direction::East);
     if (Bitboard(bitboardE & blockers).BitScanForward(blockerIndexE))
     {
-        bitboardE &= ~GetRay(blockerIndexE, RayDir::East);
+        bitboardE &= ~GetRay(blockerIndexE, Direction::East);
     }
 
     uint32_t blockerIndexS;
-    uint64_t bitboardS = GetRay(square, RayDir::South);
+    uint64_t bitboardS = GetRay(square, Direction::South);
     if (Bitboard(bitboardS & blockers).BitScanReverse(blockerIndexS))
     {
-        bitboardS &= ~GetRay(blockerIndexS, RayDir::South);
+        bitboardS &= ~GetRay(blockerIndexS, Direction::South);
     }
 
     uint32_t blockerIndexW;
-    uint64_t bitboardW = GetRay(square, RayDir::West);
+    uint64_t bitboardW = GetRay(square, Direction::West);
     if (Bitboard(bitboardW & blockers).BitScanReverse(blockerIndexW))
     {
-        bitboardW &= ~GetRay(blockerIndexW, RayDir::West);
+        bitboardW &= ~GetRay(blockerIndexW, Direction::West);
     }
 
     return bitboardN | bitboardS | bitboardE | bitboardW;
@@ -241,31 +241,31 @@ Bitboard Bitboard::GenerateRookAttacks_Slow(const Square square, const Bitboard 
 Bitboard Bitboard::GenerateBishopAttacks_Slow(const Square square, const Bitboard blockers)
 {
     uint32_t blockerIndexNW;
-    uint64_t bitboardNW = GetRay(square, RayDir::NorthWest);
+    uint64_t bitboardNW = GetRay(square, Direction::NorthWest);
     if (Bitboard(bitboardNW & blockers).BitScanForward(blockerIndexNW))
     {
-        bitboardNW &= ~GetRay(blockerIndexNW, RayDir::NorthWest);
+        bitboardNW &= ~GetRay(blockerIndexNW, Direction::NorthWest);
     }
 
     uint32_t blockerIndexNE;
-    uint64_t bitboardNE = GetRay(square, RayDir::NorthEast);
+    uint64_t bitboardNE = GetRay(square, Direction::NorthEast);
     if (Bitboard(bitboardNE & blockers).BitScanForward(blockerIndexNE))
     {
-        bitboardNE &= ~GetRay(blockerIndexNE, RayDir::NorthEast);
+        bitboardNE &= ~GetRay(blockerIndexNE, Direction::NorthEast);
     }
 
     uint32_t blockerIndexSE;
-    uint64_t bitboardSE = GetRay(square, RayDir::SouthEast);
+    uint64_t bitboardSE = GetRay(square, Direction::SouthEast);
     if (Bitboard(bitboardSE & blockers).BitScanReverse(blockerIndexSE))
     {
-        bitboardSE &= ~GetRay(blockerIndexSE, RayDir::SouthEast);
+        bitboardSE &= ~GetRay(blockerIndexSE, Direction::SouthEast);
     }
 
     uint32_t blockerIndexSW;
-    uint64_t bitboardSW = GetRay(square, RayDir::SouthWest);
+    uint64_t bitboardSW = GetRay(square, Direction::SouthWest);
     if (Bitboard(bitboardSW & blockers).BitScanReverse(blockerIndexSW))
     {
-        bitboardSW &= ~GetRay(blockerIndexSW, RayDir::SouthWest);
+        bitboardSW &= ~GetRay(blockerIndexSW, Direction::SouthWest);
     }
 
     return bitboardNW | bitboardNE | bitboardSE | bitboardSW;
@@ -314,14 +314,14 @@ static void InitRays()
     {
         const Square square(squareIndex);
 
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::North] = 0x0101010101010100ull << squareIndex;
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::South] = 0x0080808080808080ull >> (63 - squareIndex);
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::East] = 2 * ((1ull << (squareIndex | 7)) - (1ull << squareIndex));
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::West] = (1ull << squareIndex) - (1ull << (squareIndex & 56u));
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::NorthEast] = Bitboard::ShiftRight(0x8040201008040200ull, square.File()) << (square.Rank() * 8u);
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::NorthWest] = Bitboard::ShiftLeft(0x102040810204000ull, 7u - square.File()) << (square.Rank() * 8u);
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::SouthEast] = Bitboard::ShiftRight(0x2040810204080ull, square.File()) >> ((7 - square.Rank()) * 8u);
-        gRaysBitboard[squareIndex][(uint32_t)RayDir::SouthWest] = Bitboard::ShiftLeft(0x40201008040201ull, 7u - square.File()) >> ((7 - square.Rank()) * 8u);
+        gRaysBitboard[squareIndex][(uint32_t)Direction::North] = 0x0101010101010100ull << squareIndex;
+        gRaysBitboard[squareIndex][(uint32_t)Direction::South] = 0x0080808080808080ull >> (63 - squareIndex);
+        gRaysBitboard[squareIndex][(uint32_t)Direction::East] = 2 * ((1ull << (squareIndex | 7)) - (1ull << squareIndex));
+        gRaysBitboard[squareIndex][(uint32_t)Direction::West] = (1ull << squareIndex) - (1ull << (squareIndex & 56u));
+        gRaysBitboard[squareIndex][(uint32_t)Direction::NorthEast] = Bitboard::ShiftRight(0x8040201008040200ull, square.File()) << (square.Rank() * 8u);
+        gRaysBitboard[squareIndex][(uint32_t)Direction::NorthWest] = Bitboard::ShiftLeft(0x102040810204000ull, 7u - square.File()) << (square.Rank() * 8u);
+        gRaysBitboard[squareIndex][(uint32_t)Direction::SouthEast] = Bitboard::ShiftRight(0x2040810204080ull, square.File()) >> ((7 - square.Rank()) * 8u);
+        gRaysBitboard[squareIndex][(uint32_t)Direction::SouthWest] = Bitboard::ShiftLeft(0x40201008040201ull, 7u - square.File()) >> ((7 - square.Rank()) * 8u);
     }
 }
 
@@ -413,10 +413,10 @@ static void InitBishopAttacks()
         const Square square(squareIndex);
 
         gBishopAttacksBitboard[squareIndex] =
-            Bitboard::GetRay(square, RayDir::NorthEast) |
-            Bitboard::GetRay(square, RayDir::NorthWest) |
-            Bitboard::GetRay(square, RayDir::SouthEast) |
-            Bitboard::GetRay(square, RayDir::SouthWest);
+            Bitboard::GetRay(square, Direction::NorthEast) |
+            Bitboard::GetRay(square, Direction::NorthWest) |
+            Bitboard::GetRay(square, Direction::SouthEast) |
+            Bitboard::GetRay(square, Direction::SouthWest);
     }
 }
 
@@ -437,10 +437,10 @@ static Bitboard GetBishopAttackMask(const Square square)
 {
     Bitboard b = 0;
 
-    b |= Bitboard::GetRay(square, RayDir::NorthEast);
-    b |= Bitboard::GetRay(square, RayDir::NorthWest);
-    b |= Bitboard::GetRay(square, RayDir::SouthEast);
-    b |= Bitboard::GetRay(square, RayDir::SouthWest);
+    b |= Bitboard::GetRay(square, Direction::NorthEast);
+    b |= Bitboard::GetRay(square, Direction::NorthWest);
+    b |= Bitboard::GetRay(square, Direction::SouthEast);
+    b |= Bitboard::GetRay(square, Direction::SouthWest);
 
     // exclude self and borders
     b &= ~square.GetBitboard();

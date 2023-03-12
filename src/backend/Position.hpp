@@ -77,11 +77,6 @@ INLINE const Bitboard& SidePosition::GetPieceBitBoard(Piece piece) const
     return (&pawns)[index - (uint32_t)Piece::Pawn];
 }
 
-#define MOVE_GEN_MASK_CAPTURES          (1<<0)
-#define MOVE_GEN_MASK_PROMOTIONS        (1<<1)
-#define MOVE_GEN_MASK_QUIET             (1<<2)
-#define MOVE_GEN_MASK_ALL               MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS | MOVE_GEN_MASK_QUIET
-
 enum class MoveNotation : uint8_t
 {
     SAN,    // Standard Algebraic Notation
@@ -167,8 +162,6 @@ public:
     // check if position is relatively quiet (no immediate winning captures and promotions)
     bool IsQuiet() const;
     
-    void GenerateMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
-
     // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;
     bool IsMoveValid_Fast(const PackedMove& move) const;
@@ -215,7 +208,7 @@ public:
 
     INLINE const SidePosition& Whites() const { return mColors[0]; }
     INLINE const SidePosition& Blacks() const { return mColors[1]; }
-
+    INLINE const SidePosition& GetSide(const Color color) const { return color == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
@@ -262,9 +255,6 @@ public:
     // returns number of active features
     uint32_t ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMapping mapping) const;
 
-    void GeneratePawnMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
-    void GenerateKingMoveList(MoveList& outMoveList, uint32_t flags = MOVE_GEN_MASK_ALL) const;
-
     static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
     static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
 
@@ -273,8 +263,6 @@ private:
     friend class Search;
 
     INLINE SidePosition& GetSide(const Color color) { return color == Color::White ? mColors[0] : mColors[1]; }
-    INLINE const SidePosition& GetSide(const Color color) const { return color == Color::White ? mColors[0] : mColors[1]; }
-
     INLINE SidePosition& GetCurrentSide() { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE SidePosition& GetOpponentSide() { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
 
