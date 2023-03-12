@@ -1,5 +1,6 @@
 #include "UCI.hpp"
 #include "../backend/Move.hpp"
+#include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 #include "../backend/Endgame.hpp"
@@ -11,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.6.28"
+#define VersionNumber "1.6.29_movegen"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -936,7 +937,7 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 bool UniversalChessInterface::Command_ScoreMoves()
 {
     MoveList moves;
-    mGame.GetPosition().GenerateMoveList(moves);
+    GenerateMoveList(mGame.GetPosition(), moves);
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();

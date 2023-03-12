@@ -8,12 +8,12 @@ enum class Color : uint8_t
     Black,
 };
 
-INLINE Color GetOppositeColor(Color color)
+INLINE constexpr Color GetOppositeColor(Color color)
 {
     return Color((uint8_t)color ^ 1);
 }
 
-INLINE ScoreType ColorMultiplier(Color color)
+INLINE constexpr ScoreType ColorMultiplier(Color color)
 {
     return color == Color::White ? 1 : -1;
 }

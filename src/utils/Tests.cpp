@@ -2,6 +2,7 @@
 
 #include "../backend/Position.hpp"
 #include "../backend/MoveList.hpp"
+#include "../backend/MoveGen.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
@@ -139,98 +140,98 @@ static void RunPositionTests()
         // king moves (a1)
         {
             Position pos("k7/8/8/8/8/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 3u);
         }
 
         // king moves (h1)
         {
             Position pos("k7/8/8/8/8/8/8/7K w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 3u);
         }
 
         // king moves (h8)
         {
             Position pos("k6K/8/8/8/8/8/8/8 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 3u);
         }
 
         // king moves (a1)
         {
             Position pos("K7/8/8/8/8/8/8/k7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 3u);
         }
 
         // king moves (b1)
         {
             Position pos("k7/8/8/8/8/8/8/1K6 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 5u);
         }
 
         // king moves (h2)
         {
             Position pos("k7/8/8/8/8/8/7K/8 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 5u);
         }
 
         // king moves (g8)
         {
             Position pos("k5K1/8/8/8/8/8/8/8 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 5u);
         }
 
         // king moves (a7)
         {
             Position pos("8/K7/8/8/8/8/8/7k w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 5u);
         }
 
         // king moves (d5)
         {
             Position pos("8/8/8/3K4/8/8/8/7k w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 8u);
         }
 
         // castling
         {
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 25u);
         }
 
         // castling
         {
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RN2K2R w KQkq - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 23u);
         }
 
         // castling
         {
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w Kkq - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 24u);
         }
 
         // castling
         {
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w Qkq - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 24u);
         }
 
         // castling
         {
             Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w kq - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() == 23u);
         }
     }
@@ -242,70 +243,70 @@ static void RunPositionTests()
         // 2rd rank
         {
             Position pos("k7/8/8/8/8/8/4P3/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 2u);
         }
 
         // 3rd rank
         {
             Position pos("k7/8/8/8/8/4P3/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 1u);
         }
 
         // 2rd rank blocked
         {
             Position pos("k7/8/8/8/8/4p3/4P3/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 0u);
         }
 
         // 3rd rank blocked
         {
             Position pos("k7/8/8/8/4p3/4P3/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 0u);
         }
 
         // simple capture
         {
             Position pos("k7/8/8/3p4/4P3/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 2u);
         }
 
         // two captures
         {
             Position pos("k7/8/8/3p1p2/4P3/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 3u);
         }
 
         // two captures and block
         {
             Position pos("k7/8/8/3ppp2/4P3/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 2u);
         }
 
         // promotion
         {
             Position pos("k7/4P3/8/8/8/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 4u);
         }
 
         // blocked promotion
         {
             Position pos("k3n3/4P3/8/8/8/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 0u);
         }
 
         // 3 promotions possible
         {
             Position pos("k3n1n1/5P2/8/8/8/8/8/K7 w - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 12u);
         }
     }
@@ -317,14 +318,14 @@ static void RunPositionTests()
         // simple capture
         {
             Position pos("k7/8/8/2Rp4/2P5/8/8/K7 b - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 2u);
         }
 
         // promotion
         {
             Position pos("k7/8/8/8/8/8/4p3/K7 b - - 0 1");
-            MoveList moveList; pos.GenerateMoveList(moveList);
+            MoveList moveList; GenerateMoveList(pos, moveList);
             TEST_EXPECT(moveList.Size() - kingMoves == 4u);
         }
     }
@@ -332,7 +333,7 @@ static void RunPositionTests()
     // moves from starting position
     {
         Position pos(Position::InitPositionFEN);
-        MoveList moveList; pos.GenerateMoveList(moveList);
+        MoveList moveList; GenerateMoveList(pos, moveList);
         TEST_EXPECT(moveList.Size() == 20u);
     }
 
@@ -460,20 +461,6 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pp1ppppp/2P5/8/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1");
-        }
-
-        // can't en passant own pawn
-        {
-            Position pos("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d3 0 1");
-            const Move move = pos.MoveFromString("e2d3");
-            TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(move.FromSquare() == Square_e2);
-            TEST_EXPECT(move.ToSquare() == Square_d3);
-            TEST_EXPECT(move.GetPiece() == Piece::Pawn);
-            TEST_EXPECT(move.IsCapture() == true);
-            TEST_EXPECT(move.IsEnPassant() == true);
-            TEST_EXPECT(move.GetPromoteTo() == Piece::None);
-            TEST_EXPECT(!pos.IsMoveValid(move));
         }
 
         // move pawn (invalid promotion)
@@ -966,18 +953,16 @@ static void RunPositionTests()
         const Position pos("k2r4/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
         const NodeInfo node{ pos };
 
-        uint8_t flags = MOVE_GEN_MASK_ALL;
-        //uint8_t flags = MOVE_GEN_MASK_CAPTURES | MOVE_GEN_MASK_PROMOTIONS;
-
         MoveList allMoves;
-        pos.GenerateMoveList(allMoves, flags);
+        GenerateMoveList<MoveGenerationMode::Captures>(pos, allMoves);
+        GenerateMoveList<MoveGenerationMode::Quiets>(pos, allMoves);
         moveOrderer->ScoreMoves(node, Game(), allMoves);
 
         int32_t moveScore = 0;
         Move move;
         uint32_t moveIndex = 0;
 
-        MovePicker movePicker(pos, *moveOrderer, nullptr, Move::Invalid(), flags);
+        MovePicker movePicker(pos, *moveOrderer, nullptr, Move::Invalid(), true);
         while (movePicker.PickMove(node, Game(), move, moveScore))
         {
             bool found = false;

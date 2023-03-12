@@ -116,10 +116,36 @@ public:
         return File() > 0 ? (mIndex - 1) : Invalid();
     }
 
-    INLINE Square North_Unsafe() const { return mIndex + 8; }
-    INLINE Square South_Unsafe() const { return mIndex - 8; }
-    INLINE Square East_Unsafe() const { return mIndex + 1; }
-    INLINE Square West_Unsafe() const { return mIndex - 1; }
+    INLINE Square North_Unsafe() const { ASSERT(Rank() < 7); return mIndex + 8; }
+    INLINE Square South_Unsafe() const { ASSERT(Rank() > 0); return mIndex - 8; }
+    INLINE Square East_Unsafe() const { ASSERT(File() < 7); return mIndex + 1; }
+    INLINE Square West_Unsafe() const { ASSERT(File() > 0); return mIndex - 1; }
+
+    template<Direction dir>
+    INLINE constexpr Square Shift() const
+    {
+        if constexpr (dir == Direction::North) return North();
+        if constexpr (dir == Direction::South) return South();
+        if constexpr (dir == Direction::East) return East();
+        if constexpr (dir == Direction::West) return West();
+        if constexpr (dir == Direction::NorthEast) return North().East();
+        if constexpr (dir == Direction::NorthWest) return North().West();
+        if constexpr (dir == Direction::SouthEast) return South().East();
+        if constexpr (dir == Direction::SouthWest) return South().East();
+    }
+
+    template<Direction dir>
+    INLINE constexpr Square Shift_Unsafe() const
+    {
+        if constexpr (dir == Direction::North) return North_Unsafe();
+        if constexpr (dir == Direction::South) return South_Unsafe();
+        if constexpr (dir == Direction::East) return East_Unsafe();
+        if constexpr (dir == Direction::West) return West_Unsafe();
+        if constexpr (dir == Direction::NorthEast) return North_Unsafe().East_Unsafe();
+        if constexpr (dir == Direction::NorthWest) return North_Unsafe().West_Unsafe();
+        if constexpr (dir == Direction::SouthEast) return South_Unsafe().East_Unsafe();
+        if constexpr (dir == Direction::SouthWest) return South_Unsafe().East_Unsafe();
+    }
 
     INLINE Square FlippedFile() const
     {

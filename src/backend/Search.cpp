@@ -1123,13 +1123,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
     childNode.nnContext->MarkAsDirty();
 
-    uint32_t moveGenFlags = MOVE_GEN_MASK_CAPTURES|MOVE_GEN_MASK_PROMOTIONS;
-    if (node.isInCheck)
-    {
-        moveGenFlags |= MOVE_GEN_MASK_QUIET;
-    }
-
-    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, moveGenFlags);
+    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node.isInCheck);
 
     int32_t moveScore = 0;
     Move move;
@@ -1668,7 +1662,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         nodeCacheEntry = thread.nodeCache.GetEntry(position, node.height);
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, MOVE_GEN_MASK_ALL);
+    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, true);
 
     int32_t moveScore = 0;
     Move move;

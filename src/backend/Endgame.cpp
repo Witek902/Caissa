@@ -4,6 +4,7 @@
 #include "Material.hpp"
 #include "Move.hpp"
 #include "MoveList.hpp"
+#include "MoveGen.hpp"
 #include "PackedNeuralNetwork.hpp"
 
 #include <bitset>
@@ -241,7 +242,7 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
     if (pos.GetSideToMove() == Color::Black)
     {
         MoveList moves;
-        pos.GenerateKingMoveList(moves);
+        GenerateKingMoveList(pos, moves);
 
         // TODO this does not handle all cases
         // detect stalemate

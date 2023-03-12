@@ -4,6 +4,7 @@
 #include "MoveList.hpp"
 #include "Time.hpp"
 #include "Material.hpp"
+#include "MoveGen.hpp"
 
 #include <random>
 
@@ -670,7 +671,7 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                     bool ambiguousPiece = false;
                     {
                         MoveList moves;
-                        GenerateMoveList(moves);
+                        GenerateMoveList(*this, moves);
 
                         for (uint32_t i = 0; i < moves.Size(); ++i)
                         {
@@ -752,7 +753,16 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
         {
             // TODO generate pawn move directly
             MoveList moves;
-            GeneratePawnMoveList(moves);
+            if (GetSideToMove() == Color::White)
+            {
+                GeneratePawnMoveList<MoveGenerationMode::Captures, Color::White>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Quiets, Color::White>(*this, moves);
+            }
+            else
+            {
+                GeneratePawnMoveList<MoveGenerationMode::Captures, Color::Black>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Quiets, Color::Black>(*this, moves);
+            }
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
                 const Move move = moves.GetMove(i);
@@ -813,25 +823,37 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
             Square fromSquare = packedMove.FromSquare();
             Square toSquare = packedMove.ToSquare();
 
-            const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
-            const Square longCastleRookSquare = GetLongCastleRookSquare(fromSquare, currentSideCastlingRights);
-            const Square shortCastleRookSquare = GetShortCastleRookSquare(fromSquare, currentSideCastlingRights);
+            if (!isCapture)
+            {
+                const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
+                const Square longCastleRookSquare = GetLongCastleRookSquare(fromSquare, currentSideCastlingRights);
+                const Square shortCastleRookSquare = GetShortCastleRookSquare(fromSquare, currentSideCastlingRights);
 
-            if ((toSquare == longCastleRookSquare) ||
-                (fromSquare == Square_e1 && toSquare == Square_c1 && longCastleRookSquare == Square_a1) ||
-                (fromSquare == Square_e8 && toSquare == Square_c8 && longCastleRookSquare == Square_a8))
-            {
-                toSquare = longCastleRookSquare;
-            }
-            else if ((toSquare == shortCastleRookSquare) ||
-                        (fromSquare == Square_e1 && toSquare == Square_g1 && shortCastleRookSquare == Square_h1) ||
-                        (fromSquare == Square_e8 && toSquare == Square_g8 && shortCastleRookSquare == Square_h8))
-            {
-                toSquare = shortCastleRookSquare;
+                if ((toSquare == longCastleRookSquare) ||
+                    (fromSquare == Square_e1 && toSquare == Square_c1 && longCastleRookSquare == Square_a1) ||
+                    (fromSquare == Square_e8 && toSquare == Square_c8 && longCastleRookSquare == Square_a8))
+                {
+                    toSquare = longCastleRookSquare;
+                }
+                else if ((toSquare == shortCastleRookSquare) ||
+                    (fromSquare == Square_e1 && toSquare == Square_g1 && shortCastleRookSquare == Square_h1) ||
+                    (fromSquare == Square_e8 && toSquare == Square_g8 && shortCastleRookSquare == Square_h8))
+                {
+                    toSquare = shortCastleRookSquare;
+                }
             }
 
             MoveList moves;
-            GenerateKingMoveList(moves);
+            if (GetSideToMove() == Color::White)
+            {
+                if (isCapture) GenerateKingMoveList<MoveGenerationMode::Captures, Color::White>(*this, moves);
+                else GenerateKingMoveList<MoveGenerationMode::Quiets, Color::White>(*this, moves);
+            }
+            else
+            {
+                if (isCapture) GenerateKingMoveList<MoveGenerationMode::Captures, Color::Black>(*this, moves);
+                else GenerateKingMoveList<MoveGenerationMode::Quiets, Color::Black>(*this, moves);
+            }
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -903,7 +925,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
             }
 
             MoveList moves;
-            GenerateKingMoveList(moves);
+            GenerateKingMoveList(*this, moves);
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -1097,7 +1119,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
         const Square toSquare((uint8_t)toFile, (uint8_t)toRank);
 
         MoveList moves;
-        GenerateMoveList(moves);
+        GenerateMoveList(*this, moves);
 
         for (uint32_t i = 0; i < moves.Size(); ++i)
         {
@@ -1245,7 +1267,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     }
 
     MoveList moveList;
-    GenerateMoveList(moveList);
+    GenerateMoveList(*this, moveList);
 
     uint64_t nodes = 0;
     for (uint32_t i = 0; i < moveList.Size(); i++)

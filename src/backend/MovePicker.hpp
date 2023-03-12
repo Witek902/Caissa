@@ -28,11 +28,11 @@ public:
                const MoveOrderer& moveOrderer,
                const NodeCacheEntry* nodeCacheEntry,
                const PackedMove ttMove,
-               uint32_t moveGenFlags)
+               bool generateQuiets)
         : m_position(pos)
         , m_nodeCacheEntry(nodeCacheEntry)
         , m_ttMove(ttMove)
-        , m_moveGenFlags(moveGenFlags)
+        , m_generateQuiets(generateQuiets)
         , m_moveOrderer(moveOrderer)
     {
     }
@@ -41,7 +41,7 @@ public:
 
     INLINE Stage GetStage() const { return m_stage; }
     INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
-    INLINE void SkipQuiets() { m_moveGenFlags &= ~MOVE_GEN_MASK_QUIET; }
+    INLINE void SkipQuiets() { m_generateQuiets = false; }
 
 private:
 
@@ -49,7 +49,7 @@ private:
     const TTEntry* m_ttEntry;
     const NodeCacheEntry* m_nodeCacheEntry;
     const PackedMove m_ttMove;
-    uint32_t m_moveGenFlags;
+    bool m_generateQuiets;
 
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex = 0;

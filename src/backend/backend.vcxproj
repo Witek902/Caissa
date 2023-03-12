@@ -862,6 +862,7 @@
     <ClInclude Include="Math.hpp" />
     <ClInclude Include="Memory.hpp" />
     <ClInclude Include="Move.hpp" />
+    <ClInclude Include="MoveGen.hpp" />
     <ClInclude Include="MoveList.hpp" />
     <ClInclude Include="MoveOrderer.hpp" />
     <ClInclude Include="MovePicker.hpp" />
