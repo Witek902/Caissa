@@ -8,7 +8,7 @@
 #include <string>
 #include <iostream>
 
-#ifdef ARCHITECTURE_X64
+#ifdef USE_SSE
     #include <immintrin.h>
 #endif
 
@@ -103,7 +103,7 @@
 
     INLINE uint32_t PopCount(uint64_t x)
     {
-#ifdef USE_POPCNT
+#if defined(USE_POPCNT) && defined(_WIN64)
         return (uint32_t)__popcnt64(x);
 #else // !USE_POPCNT
         // https://en.wikipedia.org/wiki/Hamming_weight
@@ -118,9 +118,48 @@
 #endif // USE_POPCNT
     }
 
-    INLINE uint32_t FirstBitSet(uint64_t x)
+    INLINE uint32_t FirstBitSet(uint16_t x)
     {
 #ifdef USE_POPCNT
+        unsigned long index;
+        _BitScanForward(&index, x);
+        return (uint32_t)index;
+#else // !USE_POPCNT
+        uint16_t v = x;   // 32-bit word input to count zero bits on right
+        uint32_t c = 16;  // c will be the number of zero bits on the right
+        v &= -static_cast<int16_t>(v);
+        if (v) c--;
+        if (v & static_cast<uint16_t>(0x00FF)) c -= 8;
+        if (v & static_cast<uint16_t>(0x0F0F)) c -= 4;
+        if (v & static_cast<uint16_t>(0x3333)) c -= 2;
+        if (v & static_cast<uint16_t>(0x5555)) c -= 1;
+        return c;
+#endif // USE_POPCNT
+    }
+
+    INLINE uint32_t FirstBitSet(uint32_t x)
+    {
+#ifdef USE_POPCNT
+        unsigned long index;
+        _BitScanForward(&index, x);
+        return (uint32_t)index;
+#else // !USE_POPCNT
+        uint32_t v = x;   // 32-bit word input to count zero bits on right
+        uint32_t c = 32;  // c will be the number of zero bits on the right
+        v &= -static_cast<int32_t>(v);
+        if (v) c--;
+        if (v & 0x0000FFFF) c -= 16;
+        if (v & 0x00FF00FF) c -= 8;
+        if (v & 0x0F0F0F0F) c -= 4;
+        if (v & 0x33333333) c -= 2;
+        if (v & 0x55555555) c -= 1;
+        return c;
+#endif // USE_POPCNT
+    }
+
+    INLINE uint32_t FirstBitSet(uint64_t x)
+    {
+#if defined(USE_POPCNT) && defined(_WIN64)
         unsigned long index;
         _BitScanForward64(&index, x);
         return (uint32_t)index;
@@ -139,9 +178,26 @@
 #endif // USE_POPCNT
     }
 
-    INLINE uint32_t LastBitSet(uint64_t x)
+    INLINE uint32_t LastBitSet(uint32_t x)
     {
 #ifdef USE_POPCNT
+        unsigned long index;
+        _BitScanReverse(&index, x);
+        return (uint32_t)index;
+#else // !USE_POPCNT
+        uint32_t c = 0;
+        if (x <= 0x0000FFFF) c += 16, x <<= 16;
+        if (x <= 0x00FFFFFF) c += 8, x <<= 8;
+        if (x <= 0x0FFFFFFF) c += 4, x <<= 4;
+        if (x <= 0x3FFFFFFF) c += 2, x <<= 2;
+        if (x <= 0x7FFFFFFF) c++;
+        return 31u - c;
+#endif // USE_POPCNT
+    }
+
+    INLINE uint32_t LastBitSet(uint64_t x)
+    {
+#if defined(USE_POPCNT) && defined(_WIN64)
         unsigned long index;
         _BitScanReverse64(&index, x);
         return (uint32_t)index;
@@ -179,6 +235,16 @@
         return (uint32_t)__builtin_popcountll(x);
     }
 
+    INLINE uint32_t FirstBitSet(uint16_t x)
+    {
+        return (uint32_t)__builtin_ctz(x);
+    }
+
+    INLINE uint32_t FirstBitSet(uint32_t x)
+    {
+        return (uint32_t)__builtin_ctz(x);
+    }
+
     INLINE uint32_t FirstBitSet(uint64_t x)
     {
         return (uint32_t)__builtin_ctzll(x);
@@ -206,7 +272,7 @@
 
 inline uint64_t ParallelBitsDeposit(uint64_t src, uint64_t mask)
 {
-#ifdef USE_BMI2
+#if defined(USE_BMI2) && defined(_WIN64)
     return _pdep_u64(src, mask);
 #else
     uint64_t result = 0;
@@ -242,7 +308,7 @@ inline uint32_t ParallelBitsDeposit(uint32_t src, uint32_t mask)
 
 inline uint64_t ParallelBitsExtract(uint64_t src, uint64_t mask)
 {
-#ifdef USE_BMI2
+#if defined(USE_BMI2) && defined(_WIN64)
     return _pext_u64(src, mask);
 #else
     uint64_t result = 0;
