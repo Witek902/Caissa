@@ -2,7 +2,23 @@
 
 #include "Common.hpp"
 
-#include <bit>
+// workaround for GCC
+template <class To, class From>
+inline
+std::enable_if_t<
+    sizeof(To) == sizeof(From) &&
+    std::is_trivially_copyable_v<From> &&
+    std::is_trivially_copyable_v<To>,
+    To>
+BitCast(const From& src) noexcept
+{
+    static_assert(std::is_trivially_constructible_v<To>,
+        "This implementation additionally requires destination type to be trivially constructible");
+
+    To dst;
+    std::memcpy(&dst, &src, sizeof(To));
+    return dst;
+}
 
 template<typename T>
 INLINE constexpr bool IsPowerOfTwo(const T n)
@@ -32,7 +48,8 @@ INLINE constexpr bool IsAscendingOrDescending(const T& a, const T& b, const T& c
 INLINE uint64_t MulHi64(uint64_t a, uint64_t b)
 {
 #if defined(__GNUC__) && defined(ARCHITECTURE_X64)
-    return ((unsigned __int128)a * (unsigned __int128)b) >> 64;
+    __extension__ typedef unsigned __int128 uint128;
+    return ((uint128)a * (uint128)b) >> 64;
 #elif defined(_MSC_VER) && defined(_WIN64)
     return (uint64_t)__umulh(a, b);
 #else
@@ -64,8 +81,8 @@ inline float Log(float x)
     // https://stackoverflow.com/questions/39821367/very-fast-logarithm-natural-log-function-in-c
 
     // range reduction
-    const int32_t e = (std::bit_cast<int32_t>(x) - 0x3f2aaaab) & 0xff800000;
-    const float m = std::bit_cast<float>(std::bit_cast<int32_t>(x) - e);
+    const int32_t e = (BitCast<int32_t>(x) - 0x3f2aaaab) & 0xff800000;
+    const float m = BitCast<float>(BitCast<int32_t>(x) - e);
     const float i = 1.19209290e-7f * (float)e;
 
     const float f = m - 1.0f;

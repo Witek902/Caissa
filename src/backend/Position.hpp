@@ -93,6 +93,10 @@ public:
 
     Position();
     Position(const Position&) = default;
+    Position(Position&&) = default;
+    Position& operator=(const Position&) = default;
+    Position& operator=(Position&&) = default;
+
     explicit Position(const std::string& fenString);
 
     // compare position (not hash)

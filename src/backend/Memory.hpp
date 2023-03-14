@@ -7,7 +7,7 @@
 #include <iostream>
 
 
-inline [[nodiscard]] void* AlignedMalloc(size_t size, size_t alignment)
+inline void* AlignedMalloc(size_t size, size_t alignment)
 {
     void* ptr = nullptr;
 #if defined(PLATFORM_WINDOWS)

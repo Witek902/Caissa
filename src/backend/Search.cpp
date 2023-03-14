@@ -1986,12 +1986,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
 
             bool ttOrKiller = false;
-            for (int32_t i = 0; i < TTEntry::NumMoves; ++i)
-                if (moveScore == MoveOrderer::TTMoveValue - i)
+            for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
+                if (moveScore == MoveOrderer::TTMoveValue - static_cast<int32_t>(i))
                     ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-            for (int32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
-                if (moveScore == MoveOrderer::KillerMoveBonus - i)
+            for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
+                if (moveScore == MoveOrderer::KillerMoveBonus - static_cast<int32_t>(i))
                     ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
 
             if (moveScore == MoveOrderer::CounterMoveBonus)
