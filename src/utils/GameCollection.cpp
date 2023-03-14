@@ -55,16 +55,14 @@ namespace GameCollection
                 return false;
             }
 
-            bool moveSucessful;
             if (header.hasMoveScores)
             {
-                moveSucessful = game.DoMove(move, moves[i].score);
+                VERIFY(game.DoMove(move, moves[i].score));
             }
             else
             {
-                moveSucessful = game.DoMove(move);
+                VERIFY(game.DoMove(move));
             }
-            ASSERT(moveSucessful);
         }
 
         game.SetScore(header.forcedScore);

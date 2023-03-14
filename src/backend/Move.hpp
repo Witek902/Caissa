@@ -53,6 +53,11 @@ struct PackedMove
         return value == rhs.value;
     }
 
+    INLINE constexpr bool operator != (const PackedMove& rhs) const
+    {
+        return value != rhs.value;
+    }
+
     std::string ToString() const;
 };
 

@@ -151,6 +151,4 @@ void AnalyzeGames()
         }
         std::cout << std::endl;
     }
-
-    system("pause");
 }

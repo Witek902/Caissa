@@ -497,7 +497,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
             // clear accumulated gradients
             taskBuilder->ParallelFor("ClearGradients", (uint32_t)m_perThreadData.size(),
-                                     [this, &network, clearGradientsFunc](const TaskContext&, uint32_t threadIdx)
+                                     [clearGradientsFunc](const TaskContext&, uint32_t threadIdx)
             {
                 clearGradientsFunc(threadIdx);
             });
@@ -505,7 +505,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             taskBuilder->Fence();
 
             taskBuilder->ParallelFor("Backpropagate", (uint32_t)params.batchSize,
-                                     [this, &network, &trainingSet, backpropagateFunc, batchIdx, params](const TaskContext& taskCtx, uint32_t indexInBatch)
+                                     [backpropagateFunc](const TaskContext& taskCtx, uint32_t indexInBatch)
             {
                 backpropagateFunc(taskCtx.threadId, indexInBatch);
             });
@@ -513,7 +513,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             taskBuilder->Fence();
 
             taskBuilder->Task("UpdateWeights",
-                              [this, &network, updateWeightsFunc, params](const TaskContext&)
+                              [updateWeightsFunc](const TaskContext&)
             {
                 updateWeightsFunc();
             });

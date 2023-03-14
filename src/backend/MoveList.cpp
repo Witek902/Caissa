@@ -9,7 +9,7 @@
 
 void MoveList::Sort()
 {
-    std::sort(entries, entries + numMoves, [this](const Entry& a, const Entry& b) { return a.score > b.score; });
+    std::sort(entries, entries + numMoves, [](const Entry& a, const Entry& b) { return a.score > b.score; });
 }
 
 void MoveList::Print(const Position& pos) const

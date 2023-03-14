@@ -93,7 +93,6 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     const Square blackKingSq(FirstBitSet(pos.Blacks().king));
     const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
     const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
-    const Bitboard blackPawnsFlipped = pos.Blacks().pawns.MirroredVertically();
 
     const int32_t wp = pos.Whites().pawns.Count();
     const int32_t wn = pos.Whites().knights.Count();
@@ -306,6 +305,8 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
 #ifdef USE_PAWN_STRUCTURE
     {
+        const Bitboard blackPawnsFlipped = pos.Blacks().pawns.MirroredVertically();
+        
         // white pawns vs. white pawns
         pos.Whites().pawns.Iterate([&](uint32_t squareA) INLINE_LAMBDA
         {

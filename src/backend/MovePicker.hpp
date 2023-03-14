@@ -46,7 +46,6 @@ public:
 private:
 
     const Position& m_position;
-    const TTEntry* m_ttEntry;
     const NodeCacheEntry* m_nodeCacheEntry;
     const PackedMove m_ttMove;
     bool m_generateQuiets;

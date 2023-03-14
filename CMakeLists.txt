@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.11)
-project (chess)
+project (caissa)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -std=c99")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g -std=c99")

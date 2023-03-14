@@ -10,7 +10,7 @@ enum class MoveGenerationMode
 };
 
 template<MoveGenerationMode mode, bool isCapture>
-INLINE inline void GeneratePromotionsMoveList(const Square from, const Square to, MoveList& outMoveList)
+INLINE void GeneratePromotionsMoveList(const Square from, const Square to, MoveList& outMoveList)
 {
     if constexpr (mode == MoveGenerationMode::Captures)
     {
@@ -37,12 +37,12 @@ inline void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
 
     constexpr Direction pawnDirection = sideToMove == Color::White ? Direction::North : Direction::South;
     constexpr Direction pawnRevDirection = sideToMove == Color::White ? Direction::South : Direction::North;
-    constexpr Bitboard doublePushesRank = sideToMove == Color::White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
     constexpr Bitboard promotionRank = sideToMove == Color::White ? Bitboard::RankBitboard<7>() : Bitboard::RankBitboard<0>();
     constexpr Bitboard beforePromotionRank = sideToMove == Color::White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>();
 
     if constexpr (mode == MoveGenerationMode::Quiets)
     {
+        constexpr Bitboard doublePushesRank = sideToMove == Color::White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
         const Bitboard singlePushes = currentSide.pawns.Shift<pawnDirection>() & emptySquares & ~promotionRank;
         const Bitboard doublePushes = singlePushes.Shift<pawnDirection>() & (emptySquares & doublePushesRank);
 
@@ -56,7 +56,7 @@ inline void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
         doublePushes.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
         {
             outMoveList.Push(Move::Make(
-                Square(targetIndex).Shift_Unsafe<pawnRevDirection>().Shift_Unsafe<pawnRevDirection>(),
+                Square(targetIndex).Shift_Unsafe<pawnRevDirection>().template Shift_Unsafe<pawnRevDirection>(),
                 targetIndex, Piece::Pawn, Piece::None));
         });
     }
