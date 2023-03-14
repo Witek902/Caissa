@@ -219,3 +219,8 @@ public:
 
     alignas(CACHELINE_SIZE) static uint8_t sDistances[NumSquares * NumSquares];
 };
+
+INLINE const Bitboard operator & (const Bitboard& lhs, const Square& rhs)
+{
+    return lhs & rhs.GetBitboard();
+}

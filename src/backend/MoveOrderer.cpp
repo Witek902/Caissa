@@ -9,6 +9,7 @@
 #include <iomanip>
 
 static constexpr int32_t RecaptureBonus = 100000;
+static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
 MoveOrderer::MoveOrderer()
 {
@@ -423,40 +424,27 @@ void MoveOrderer::ScoreMoves(
             if (const PieceSquareHistory* h = continuationHistories[3]) score += (*h)[piece][to];
             if (const PieceSquareHistory* h = continuationHistories[5]) score += (*h)[piece][to];
 
-            // bonus for moving a piece out of attack
-            if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.FromSquare().GetBitboard()))
+            switch (move.GetPiece())
             {
-                score += 16000;
-            }
-            else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.FromSquare().GetBitboard()))
-            {
-                score += 12000;
-            }
-            else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.FromSquare().GetBitboard()))
-            {
-                score += 8000;
-            }
-
-            // penalty for moving a piece into attack
-            if (move.GetPiece() == Piece::Queen && (attackedByRooks & move.ToSquare().GetBitboard()))
-            {
-                score -= 16000 + 4000;
-            }
-            else if (move.GetPiece() == Piece::Rook && (attackedByMinors & move.ToSquare().GetBitboard()))
-            {
-                score -= 12000 + 4000;
-            }
-            else if ((move.GetPiece() == Piece::Knight || move.GetPiece() == Piece::Bishop) && (attackedByPawns & move.ToSquare().GetBitboard()))
-            {
-                score -= 8000 + 4000;
-            }
-
-            // pawn push bonus
-            if (move.GetPiece() == Piece::Pawn)
-            {
-                constexpr int32_t bonus[] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-                const uint8_t rank = move.ToSquare().RelativeRank(pos.GetSideToMove());
-                score += bonus[rank];
+                case Piece::Pawn:
+                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
+                    break;
+                case Piece::Knight: [[fallthrough]];
+                case Piece::Bishop:
+                    if (attackedByPawns & move.FromSquare())    score += 4000;
+                    if (attackedByPawns & move.ToSquare())      score -= 4000;
+                    break;
+                case Piece::Rook:
+                    if (attackedByMinors & move.FromSquare())   score += 8000;
+                    if (attackedByMinors & move.ToSquare())     score -= 8000;
+                    break;
+                case Piece::Queen:
+                    if (attackedByRooks & move.FromSquare())    score += 12000;
+                    if (attackedByRooks & move.ToSquare())      score -= 12000;
+                    break;
+                case Piece::King:
+                    if (pos.GetOurCastlingRights())             score -= 6000;
+                    break;
             }
 
             // use node cache for scoring moves near the root
