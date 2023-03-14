@@ -214,6 +214,7 @@ public:
 
     INLINE uint8_t GetWhitesCastlingRights() const { return mCastlingRights[0]; }
     INLINE uint8_t GetBlacksCastlingRights() const { return mCastlingRights[1]; }
+    INLINE uint8_t GetOurCastlingRights() const { return mCastlingRights[(uint32_t)mSideToMove]; }
 
     INLINE uint32_t GetNumPiecesExcludingKing() const
     {
