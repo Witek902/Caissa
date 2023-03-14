@@ -142,7 +142,14 @@ struct hash<MaterialKey>
 {
     INLINE std::size_t operator()(const MaterialKey& k) const
     {
-        return k.value;
+        if constexpr (sizeof(std::size_t) == sizeof(MaterialKey))
+        {
+            return k.value;
+        }
+        else
+        {
+            return std::hash<uint64_t>{}(k.value);
+        }
     }
 };
 

@@ -33,7 +33,7 @@ INLINE uint64_t MulHi64(uint64_t a, uint64_t b)
 {
 #if defined(__GNUC__) && defined(ARCHITECTURE_X64)
     return ((unsigned __int128)a * (unsigned __int128)b) >> 64;
-#elif defined(_MSC_VER) && defined(ARCHITECTURE_X64)
+#elif defined(_MSC_VER) && defined(_WIN64)
     return (uint64_t)__umulh(a, b);
 #else
     uint64_t aLow = (uint32_t)a, aHi = a >> 32;
