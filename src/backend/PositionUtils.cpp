@@ -466,7 +466,7 @@ bool Position::FromFEN(const std::string& fenString)
     return true;
 }
 
-std::string Position::ToFEN() const
+std::string Position::ToFEN(bool skipMoveCounts) const
 {
     std::string str;
 
@@ -557,16 +557,19 @@ std::string Position::ToFEN() const
         str += mEnPassantSquare.IsValid() ? mEnPassantSquare.ToString() : "-";
     }
 
-    // half-moves since last pawn move/capture
+    if (!skipMoveCounts)
     {
-        str += ' ';
-        str += std::to_string(mHalfMoveCount);
-    }
+        // half-moves since last pawn move/capture
+        {
+            str += ' ';
+            str += std::to_string(mHalfMoveCount);
+        }
 
-    // full moves
-    {
-        str += ' ';
-        str += std::to_string(mMoveCount);
+        // full moves
+        {
+            str += ' ';
+            str += std::to_string(mMoveCount);
+        }
     }
 
     return str;

@@ -103,7 +103,7 @@ public:
     bool FromFEN(const std::string& fenString);
 
     // save position to Forsyth-Edwards Notation
-    std::string ToFEN() const;
+    std::string ToFEN(bool skipMoveCounts = false) const;
 
     // print board as ASCI art
     std::string Print() const;
