@@ -1705,13 +1705,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             continue;
         }
 
-        childNode.position = position;
-        if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
-            continue;
-        }
-
-        moveIndex++;
         if (move.IsQuiet()) quietMoveIndex++;
 
         if (!node.isInCheck &&
@@ -1766,21 +1759,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 if (node.depth <= 8 &&
                     !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node.depth)) continue;
-            }
-        }
-
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
-
-        childNode.isInCheck = childNode.position.IsInCheck();
-
-        // report current move to UCI
-        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
-        {
-            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
-            if (timeElapsed > CurrentMoveReportDelay)
-            {
-                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
             }
         }
 
@@ -1849,10 +1827,25 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 moveExtension--;
             }
+        }
 
-            // NegaMax can overwrite NN context for child node, so we need to recreate it by doing the move again...
-            childNode.position = position;
-            VERIFY(childNode.position.DoMove(move, childNode.nnContext));
+        // do the move
+        childNode.position = position;
+        if (!childNode.position.DoMove(move, childNode.nnContext))
+            continue;
+        moveIndex++;
+
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
+
+        // report current move to UCI
+        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
+        {
+            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
+            if (timeElapsed > CurrentMoveReportDelay)
+            {
+                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
+            }
         }
 
         // avoid extending search too much (maximum 2x depth at root node)
@@ -1865,6 +1858,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             moveExtension = 0;
         }
 
+        childNode.isInCheck = childNode.position.IsInCheck();
         childNode.previousMove = move;
         childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node.doubleExtensions + (moveExtension >= 2);
