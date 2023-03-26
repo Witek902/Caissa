@@ -32,7 +32,7 @@ static const uint32_t cMinBatchSize = 256;
 static const uint32_t cMaxBatchSize = 8 * 1024;
 //static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
 static const uint32_t cNumNetworkInputs = 704;
-static const uint32_t cNumVariants = 4;
+static const uint32_t cNumVariants = 8;
 
 
 static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outVector)
@@ -143,7 +143,7 @@ void NetworkTrainer::PrintPositionsStats()
 void NetworkTrainer::InitNetwork()
 {
     m_network.Init(cNumNetworkInputs,
-                   { 768, 1 },
+                   { 1280, 1 },
                    nn::ActivationFunction::Sigmoid,
                    { 1, cNumVariants });
 
@@ -164,16 +164,7 @@ void NetworkTrainer::InitNetwork()
 
 static uint32_t GetNetworkVariant(const Position& pos)
 {
-    //(void)pos;
-    //return 0;
-
-    const uint32_t pieceCount = pos.GetNumPieces();
-
-    // manually partitioned
-    if (pieceCount <= 10)   return 0;
-    if (pieceCount <= 17)   return 1;
-    if (pieceCount <= 25)   return 2;
-    return 3;
+    return std::min((pos.GetNumPieces() - 2u) / 4u, 7u);
 }
 
 void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
@@ -436,7 +427,6 @@ void NetworkTrainer::Train()
             const std::string name = "eval";
             m_network.Save((name + ".nn").c_str());
             m_packedNet.Save((name + ".pnn").c_str());
-            m_packedNet.SaveAsImage((name + ".raw").c_str());
         }
     }
 }

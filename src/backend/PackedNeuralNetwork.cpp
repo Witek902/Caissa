@@ -970,36 +970,6 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
     return true;
 }
 
-bool PackedNeuralNetwork::SaveAsImage(const char* filePath) const
-{
-    uint32_t dataSize = GetNumInputs() * GetLayerSize(1);
-
-    FILE* file = fopen(filePath, "wb");
-    if (!file)
-    {
-        std::cout << "Failed to open target image '" << filePath << "': " << stderr << std::endl;
-        return false;
-    }
-
-    const FirstLayerWeightType* weights = GetAccumulatorWeights();
-
-    std::vector<uint8_t> tempValues;
-    for (uint32_t i = 0; i < dataSize; ++i)
-    {
-        tempValues.push_back((uint8_t)std::clamp(weights[i] / 4 + 128, 0, 255));
-    }
-
-    if (fwrite(tempValues.data(), tempValues.size(), 1, file) != 1)
-    {
-        std::cout << "Failed to write bitmap image data: " << stderr << std::endl;
-        fclose(file);
-        return false;
-    }
-
-    fclose(file);
-    return true;
-}
-
 void PackedNeuralNetwork::ReleaseFileMapping()
 {
 #if defined(PLATFORM_WINDOWS)
