@@ -30,7 +30,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 16 * 1024;
-static const uint32_t cMinBatchSize = 32;
+static const uint32_t cMinBatchSize = 64;
 static const uint32_t cMaxBatchSize = 16 * 1024;
 
 static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
@@ -215,7 +215,7 @@ bool TrainEndgame()
     std::string name = "endgame";
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { 1024, 1 });
+    network.Init(numNetworkInputs, { 1536, 1 });
     //network.Load("checkpoint.nn");
 
     nn::NeuralNetworkRunContext networkRunCtx;
@@ -392,7 +392,6 @@ bool TrainEndgame()
             if (packedNetwork)
             {
                 packedNetwork->Save((name + ".pnn").c_str());
-                packedNetwork->SaveAsImage((name + ".raw").c_str());
             }
         }
     }

@@ -75,11 +75,7 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
 
 static uint32_t GetNetworkVariant(const Position& pos)
 {
-    const uint32_t pieceCount = pos.GetNumPieces();
-    if (pieceCount <= 10)   return 0;
-    if (pieceCount <= 17)   return 1;
-    if (pieceCount <= 25)   return 2;
-    return 3;
+    return std::min((pos.GetNumPieces() - 2u) / 4u, 7u);
 }
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
