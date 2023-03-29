@@ -12,14 +12,12 @@ Strong, UCI command-line chess engine written in C++ from scratch in development
 ### Playing strength
 
 * CCRL 40/2 FRC Score: **3695** (#7) (version 1.7)
-* CCRL 40/15 4CPU Score: **3386** (#19) (version 1.5)
-* CCRL FRC 40/2 Score: **3597** (#11) (version 1.5)
-* CCRL 40/15 Score: **3314** (#36) (version 1.5)
-* CCRL 2+1 Score: **3405** (#39) (version 1.5)
-* CEGT 40/4 Score: **3306** (#29) (version 1.3)
-* CEGT 40/20 Score: **3291** (#34) (version 1.3)
-* SPCC Score: **3418** (#30) (version 1.4)
-* Ipman Chess Score: **3283** (#38) (version 1.4)
+* CCRL 40/15 4CPU Score: **3417** (#17) (version 1.7)
+* CCRL 2+1 8CPU Score: **3582** (#18) (version 1.7)
+* CEGT 40/4 Score: **3356** (#24) (version 1.6)
+* CEGT 40/20 Score: **3372** (#24) (version 1.7)
+* SPCC Score: **3518** (#21) (version 1.7)
+* Ipman Chess Score: **3360** (#28) (version 1.7)
 
 ## History / Originality
 
@@ -73,7 +71,7 @@ The games are generated with [SelfPlay.cpp](https://github.com/Witek902/Caissa/b
 
 #### Evaluation
 * Custom neural network
-  * 704&rarr;1536&rarr;1 architecture
+  * 704&rarr;1280&rarr;1 architecture
   * effectively updated first layer, AVX2/SSE accelerated
   * clipped-ReLU activation function
   * 4 variants of last layer weights (selected based on piece count)
