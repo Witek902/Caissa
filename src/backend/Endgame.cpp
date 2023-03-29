@@ -344,6 +344,38 @@ static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
     return true;
 }
 
+// knight(s) vs. knight(s)
+static bool EvaluateEndgame_KNvKN(const Position& pos, int32_t& outScore)
+{
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights != 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    const uint32_t numWhiteKnights = pos.Whites().knights.Count();
+    const uint32_t numBlackKnights = pos.Blacks().knights.Count();
+
+    if (numWhiteKnights <= 2 && numBlackKnights <= 2)
+    {
+        const Square strongKing = pos.Whites().GetKingSquare();
+        const Square weakKing = pos.Blacks().GetKingSquare();
+
+        outScore = 4 * (strongKing.AnyCornerDistance() - weakKing.AnyCornerDistance());
+
+        // push knights towards enemy king
+        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outScore += 4 - Square::Distance(weakKing, Square(square)) / 2; 
+        });
+        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outScore -= 4 - Square::Distance(strongKing, Square(square)) / 2;
+        });
+
+        return true;
+    }
+
+    return false;
+}
+
 // bishop(s) vs. lone king
 static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore)
 {
@@ -453,7 +485,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
     const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
     const int32_t numPawns = pos.Whites().pawns.Count();
-    const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
+    const int32_t blackToMove = pos.GetSideToMove() == Color::Black;
 
     Square strongKingSq = strongKing;
     Square weakKingSq = weakKing;
@@ -623,8 +655,8 @@ static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore)
         const Square whiteQueeningSquare(whitePawn.File(), 7);
         const Square blackQueeningSquare(blackPawn.File(), 0);
 
-        const uint32_t whiteToQueen = 7 - whitePawn.Rank();
-        const uint32_t blackToQueen = blackPawn.Rank();
+        const int32_t whiteToQueen = 7 - whitePawn.Rank();
+        const int32_t blackToQueen = blackPawn.Rank();
 
         // if passed pawn
         if (whitePawn.Rank() >= blackPawn.Rank() || (whitePawn.File() > blackPawn.File() + 1) || (blackPawn.File() > whitePawn.File() + 1))
@@ -658,18 +690,13 @@ static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore)
 // bishop(s) + pawn(s) vs. lone king
 static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
 {
-    ASSERT(pos.Whites().pawns > 0);
-    ASSERT(pos.Whites().bishops > 0);
-    ASSERT(pos.Whites().knights == 0);
-    ASSERT(pos.Whites().rooks == 0);
-    ASSERT(pos.Whites().queens == 0);
-
+    ASSERT(pos.Whites().pawns != 0 && pos.Whites().bishops != 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
     const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
 
-    const uint32_t blackToMove = pos.GetSideToMove() == Color::Black;
+    const int32_t blackToMove = pos.GetSideToMove() == Color::Black;
 
     // if all pawns are on A/H file and we have a wrong bishop, then it's a draw
     // if the weak king is already blocking promotion or will reach promotion square faster than a pawn or oponent's king
@@ -1219,6 +1246,7 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_WhitePawn, EvaluateEndgame_KBPvK);
     RegisterEndgame(MaterialMask_WhiteKnight|MaterialMask_WhitePawn, EvaluateEndgame_KNPvK);
     RegisterEndgame(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);
+    RegisterEndgame(MaterialMask_WhiteKnight|MaterialMask_BlackKnight, EvaluateEndgame_KNvKN);
     RegisterEndgame(MaterialMask_WhitePawn|MaterialMask_BlackPawn, EvaluateEndgame_KPvKP);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackPawn, EvaluateEndgame_KQvKP);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackPawn, EvaluateEndgame_KRvKP);

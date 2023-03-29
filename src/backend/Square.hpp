@@ -167,43 +167,43 @@ public:
         return mIndex == Square_a1 || mIndex == Square_a8 || mIndex == Square_h1 || mIndex == Square_h8;
     }
 
-    uint32_t EdgeDistance() const
+    int32_t EdgeDistance() const
     {
-        const uint32_t r = Rank();
-        const uint32_t f = File();
-        const uint32_t rd = std::min(r, 7u - r);
-        const uint32_t fd = std::min(f, 7u - f);
+        const int32_t r = Rank();
+        const int32_t f = File();
+        const int32_t rd = std::min(r, 7 - r);
+        const int32_t fd = std::min(f, 7 - f);
         return std::min(rd, fd);
     }
 
-    uint32_t DarkCornerDistance() const
+    int32_t DarkCornerDistance() const
     {
         return 7 - std::abs(7 - (int32_t)Rank() - (int32_t)File());
     }
 
-    uint32_t AnyCornerDistance() const
+    int32_t AnyCornerDistance() const
     {
-        const uint32_t r = Rank();
-        const uint32_t f = File();
-        const uint32_t a1 = std::max(r, f);
-        const uint32_t a8 = std::max(7 - r, f);
-        const uint32_t h1 = std::max(r, 7 - f);
-        const uint32_t h8 = std::max(7 - r, 7 - f);
+        const int32_t r = Rank();
+        const int32_t f = File();
+        const int32_t a1 = std::max(r, f);
+        const int32_t a8 = std::max(7 - r, f);
+        const int32_t h1 = std::max(r, 7 - f);
+        const int32_t h8 = std::max(7 - r, 7 - f);
         return std::min(std::min(a1, a8), std::min(h1, h8));
     }
 
-    INLINE static uint32_t Distance(const Square a, const Square b)
+    INLINE static int32_t Distance(const Square a, const Square b)
     {
         return sDistances[64u * a.mIndex + b.mIndex];
     }
 
-    static uint32_t ComputeDistance(const Square a, const Square b)
+    static int32_t ComputeDistance(const Square a, const Square b)
     {
         ASSERT(a.IsValid());
         ASSERT(b.IsValid());
         const int32_t r = std::abs((int32_t)a.Rank() - (int32_t)b.Rank());
         const int32_t f = std::abs((int32_t)a.File() - (int32_t)b.File());
-        return (uint32_t)std::max(r, f);
+        return std::max(r, f);
     }
 
     static Square FromString(const std::string& str);
