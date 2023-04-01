@@ -397,10 +397,9 @@ static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore)
         outScore = 0;
         return true;
     }
-    else if (blackKnights <= 1 && (numLightSquareBishops >= 1 || numDarkSquareBishops >= 1))
+    else if (blackKnights == 0 && (numLightSquareBishops >= 1 || numDarkSquareBishops >= 1))
     {
         outScore = KnownWinValue;
-        if (blackKnights) outScore = 0; // drawish score when opponent have a knight
         outScore += 64 * (whiteBishops - 2); // prefer keeping the bishops on board
         outScore += 8 * (3 - weakKing.AnyCornerDistance()); // push king to corner
         outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
