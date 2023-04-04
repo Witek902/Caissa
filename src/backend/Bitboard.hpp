@@ -88,6 +88,38 @@ struct Bitboard
         return x;
     }
 
+    const Bitboard FlippedDiagonally() const
+    {
+        const uint64_t k1 = 0x5500550055005500ull;
+        const uint64_t k2 = 0x3333000033330000ull;
+        const uint64_t k4 = 0x0f0f0f0f00000000ull;
+        uint64_t t;
+        uint64_t x = value;
+        t = k4 & (x ^ (x << 28));
+        x ^= t ^ (t >> 28);
+        t = k2 & (x ^ (x << 14));
+        x ^= t ^ (t >> 14);
+        t = k1 & (x ^ (x << 7));
+        x ^= t ^ (t >> 7);
+        return x;
+    }
+
+    const Bitboard FlippedAntiDiagonally() const
+    {
+        const uint64_t k1 = 0xaa00aa00aa00aa00ull;
+        const uint64_t k2 = 0xcccc0000cccc0000ull;
+        const uint64_t k4 = 0xf0f0f0f00f0f0f0full;
+        uint64_t t;
+        uint64_t x = value;
+        t = x ^ (x << 36);
+        x ^= k4 & (t ^ (x >> 36));
+        t = k2 & (x ^ (x << 18));
+        x ^= t ^ (t >> 18);
+        t = k1 & (x ^ (x << 9));
+        x ^= t ^ (t >> 9);
+        return x;
+    }
+
     template<Direction dir>
     INLINE constexpr Bitboard Shift() const
     {
