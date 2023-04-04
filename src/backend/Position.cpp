@@ -727,6 +727,28 @@ void Position::MirrorHorizontally()
     mHash = ComputeHash();
 }
 
+void Position::FlipDiagonally()
+{
+    mColors[0].king     = mColors[0].king.FlippedDiagonally();
+    mColors[0].queens   = mColors[0].queens.FlippedDiagonally();
+    mColors[0].rooks    = mColors[0].rooks.FlippedDiagonally();
+    mColors[0].bishops  = mColors[0].bishops.FlippedDiagonally();
+    mColors[0].knights  = mColors[0].knights.FlippedDiagonally();
+    mColors[0].pawns    = mColors[0].pawns.FlippedDiagonally();
+
+    mColors[1].king     = mColors[1].king.FlippedDiagonally();
+    mColors[1].queens   = mColors[1].queens.FlippedDiagonally();
+    mColors[1].rooks    = mColors[1].rooks.FlippedDiagonally();
+    mColors[1].bishops  = mColors[1].bishops.FlippedDiagonally();
+    mColors[1].knights  = mColors[1].knights.FlippedDiagonally();
+    mColors[1].pawns    = mColors[1].pawns.FlippedDiagonally();
+
+    mCastlingRights[0] = 0;
+    mCastlingRights[1] = 0;
+
+    mHash = ComputeHash();
+}
+
 Position Position::MirroredVertically() const
 {
     Position ret = *this;

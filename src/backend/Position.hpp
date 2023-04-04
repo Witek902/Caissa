@@ -203,6 +203,7 @@ public:
 
     void MirrorVertically();
     void MirrorHorizontally();
+    void FlipDiagonally();
 
     Position MirroredVertically() const;
     Position MirroredHorizontally() const;
