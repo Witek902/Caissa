@@ -33,7 +33,12 @@ struct TPieceScore
         return *this;
     }
 
-    INLINE constexpr TPieceScore<int32_t> operator - (const TPieceScore rhs) const
+    INLINE constexpr TPieceScore operator + (const TPieceScore rhs) const
+    {
+        return { mg + rhs.mg, eg + rhs.eg };
+    }
+
+    INLINE constexpr TPieceScore operator - (const TPieceScore rhs) const
     {
         return { mg - rhs.mg, eg - rhs.eg };
     }
@@ -41,6 +46,11 @@ struct TPieceScore
     INLINE constexpr TPieceScore<int32_t> operator * (const int32_t rhs) const
     {
         return { mg * rhs, eg * rhs };
+    }
+
+    INLINE constexpr TPieceScore<int32_t> operator / (const int32_t rhs) const
+    {
+        return { mg / rhs, eg / rhs };
     }
 
     INLINE constexpr T Average() const { return (mg + eg) / 2; }

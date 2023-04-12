@@ -12,6 +12,7 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Waitable.hpp"
+#include "../backend/Time.hpp"
 
 #include <chrono>
 #include <random>
@@ -39,21 +40,24 @@ float GameScoreToWinProbability(const Game::Score score)
 
 void AnalyzeGames()
 {
-    FileInputStream gamesFile("../../data/selfplayGames/selfplay_random5.dat");
-    //FileInputStream gamesFile("selfplay5.dat");
-    GameCollection::Reader reader(gamesFile);
+    FileInputStream gamesFile("../../data/selfplayGames/selfplay_2509102967.dat");
 
     uint64_t numGames = 0;
     uint64_t numPositions = 0;
     uint64_t numPawnlessPositions = 0;
 
-    std::unordered_map<MaterialKey, MaterialConfigInfo> materialConfigurations;
+    //std::unordered_map<MaterialKey, MaterialConfigInfo> materialConfigurations;
     
-    uint64_t whiteKingOccupancy[64] = { 0 };
-    uint64_t blackKingOccupancy[64] = { 0 };
+    uint64_t pieceOccupancy[6][64] = { 0 };
+
+    uint64_t gameResultVsHalfMoveCounter[3][101] = { };
+
+    TimePoint startTime = TimePoint::GetCurrent();
 
     Game game;
-    while (reader.ReadGame(game))
+    std::vector<Move> moves;
+
+    while (GameCollection::ReadGame(gamesFile, game, moves))
     {
         Position pos = game.GetInitialPosition();
 
@@ -70,23 +74,36 @@ void AnalyzeGames()
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            const ScoreType moveScore = game.GetMoveScores()[i];
+            //const ScoreType moveScore = game.GetMoveScores()[i];
 
-            if (!pos.IsInCheck(pos.GetSideToMove()) && !move.IsCapture() && !move.IsPromotion() &&
-                std::abs(game.GetMoveScores()[i]) < KnownWinValue)
+            if (!move.IsQuiet() &&
+                std::abs(game.GetMoveScores()[i]) < KnownWinValue &&
+                !pos.IsInCheck(pos.GetSideToMove()))
             {
                 const MaterialKey matKey = pos.GetMaterialKey();
+
+                if (pos.GetHalfMoveCount() <= 100)
+                {
+                    gameResultVsHalfMoveCounter[(uint32_t)game.GetScore()][pos.GetHalfMoveCount()]++;
+                }
 
                 numPositions++;
                 if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) numPawnlessPositions++;
 
-                whiteKingOccupancy[FirstBitSet(pos.Whites().king)]++;
-                blackKingOccupancy[FirstBitSet(pos.Blacks().king)]++;
+                // piece occupancy
+                for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+                {
+                    const Piece piece = (Piece)(pieceIndex + (uint32_t)Piece::Pawn);
+                    pos.Whites().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
+                        pieceOccupancy[pieceIndex][square]++; });
+                    pos.Blacks().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
+                        pieceOccupancy[pieceIndex][Square(square).FlippedRank().Index()]++; });
+                }
 
-                MaterialConfigInfo& matConfigInfo = materialConfigurations[matKey];
-                matConfigInfo.occurences++;
-                matConfigInfo.evalScore += CentiPawnToWinProbability(moveScore);
-                matConfigInfo.gameScore += GameScoreToWinProbability(game.GetScore());
+                //MaterialConfigInfo& matConfigInfo = materialConfigurations[matKey];
+                //matConfigInfo.occurences++;
+                //matConfigInfo.evalScore += CentiPawnToWinProbability(moveScore);
+                //matConfigInfo.gameScore += GameScoreToWinProbability(game.GetScore());
 
                 //const MaterialKey key = pos.GetMaterialKey();
                 //if (key.numWhitePawns > 1 && key.numWhiteKnights == 0 && key.numWhiteBishops == 0 && key.numWhiteRooks == 0 && key.numWhiteQueens == 0 &&
@@ -97,16 +114,22 @@ void AnalyzeGames()
                 //}
             }
 
-            pos.DoMove(move);
+            if (!pos.DoMove(move))
+            {
+                break;
+            }
         }
 
         numGames++;
     }
 
+    std::cout << "Time: " << (TimePoint::GetCurrent() - startTime).ToSeconds() << " seconds" << std::endl;
+
     std::cout << "Parsed " << numGames << " games" << std::endl;
     std::cout << "Found " << numPositions << " positions" << std::endl;
     std::cout << "Found " << numPawnlessPositions << " pawnless positions" << std::endl;
 
+    /*
     {
         std::cout << "Unique material configurations: " << materialConfigurations.size() << std::endl;
         for (const auto& iter : materialConfigurations)
@@ -125,27 +148,29 @@ void AnalyzeGames()
         }
         std::cout << std::endl;
     }
+    */
 
     {
-        std::cout << "White king occupancy: " << std::endl;
-        for (uint32_t rank = 0; rank < 8; ++rank)
+        std::cout << "WDL vs. half-move counter: " << std::endl;
+        for (uint32_t ply = 0; ply <= 100; ++ply)
         {
-            for (uint32_t file = 0; file < 8; ++file)
-            {
-                std::cout << std::setw(10) << whiteKingOccupancy[8 * rank + file] << " ";
-            }
-            std::cout << std::endl;
+            std::cout
+                << std::setw(5) << ply << " "
+                << std::setw(10) << gameResultVsHalfMoveCounter[0][ply] << " "
+                << std::setw(10) << gameResultVsHalfMoveCounter[1][ply] << " "
+                << std::setw(10) << gameResultVsHalfMoveCounter[2][ply] << std::endl;
         }
-        std::cout << std::endl;
     }
 
+    for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
     {
-        std::cout << "Black king occupancy: " << std::endl;
+        const Piece piece = (Piece)(pieceIndex + (uint32_t)Piece::Pawn);
+        std::cout << PieceToString(piece) << " occupancy: " << std::endl;
         for (uint32_t rank = 0; rank < 8; ++rank)
         {
             for (uint32_t file = 0; file < 8; ++file)
             {
-                std::cout << std::setw(10) << blackKingOccupancy[8 * rank + file] << " ";
+                std::cout << std::setw(10) << pieceOccupancy[pieceIndex][8 * rank + file] << " ";
             }
             std::cout << std::endl;
         }

@@ -26,15 +26,15 @@ static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 64; // print every 64th game
-static const uint32_t c_maxNodes = 20000;
-static const uint32_t c_maxDepth = 12;
-static const int32_t c_maxEval = InfValue;
-static const int32_t c_openingMaxEval = 800;
+static const uint32_t c_maxNodes = 100000;
+static const uint32_t c_maxDepth = 9;
+static const int32_t c_maxEval = 2000;
+static const int32_t c_openingMaxEval = 400;
 static const int32_t c_multiPv = 3;
 static const int32_t c_multiPvMaxPly = 8;
 static const int32_t c_multiPvScoreTreshold = 30;
-static const uint32_t c_minRandomMoves = 2;
-static const uint32_t c_maxRandomMoves = 10;
+static const uint32_t c_minRandomMoves = 4;
+static const uint32_t c_maxRandomMoves = 12;
 
 using namespace threadpool;
 
@@ -316,7 +316,7 @@ void SelfPlay(const std::vector<std::string>& args)
 #endif // USE_EVAL_PROBING
             searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
-            searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 32)(gen);
+            searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 64)(gen);
 
             searchParam.limits.maxNodes *= searchParam.numPvLines;
             if (halfMoveNumber == 0)
@@ -396,7 +396,7 @@ void SelfPlay(const std::vector<std::string>& args)
             (void)moveSuccess;
 
             // adjudicate draw if eval is zero
-            if (std::abs(moveScore) >= 2)
+            if (moveScore != 0)
             {
                 drawScoreCounter = 0;
             }
@@ -405,7 +405,7 @@ void SelfPlay(const std::vector<std::string>& args)
                 drawScoreCounter++;
 
                 if (game.GetPosition().GetNumPieces() < 20 &&
-                    drawScoreCounter > 10 &&
+                    drawScoreCounter > 8 &&
                     halfMoveNumber >= 40 &&
                     game.GetPosition().GetHalfMoveCount() > 10)
                 {
@@ -435,6 +435,16 @@ void SelfPlay(const std::vector<std::string>& args)
                 {
                     blackWinsCounter = 0;
                 }
+            }
+
+            // tablebase adjudication
+            int32_t wdlScore = 0;
+            if (ProbeSyzygy_WDL(game.GetPosition(), &wdlScore))
+            {
+                const auto stm = game.GetPosition().GetSideToMove();
+                if (wdlScore == 1) game.SetScore(stm == Color::White ? Game::Score::WhiteWins : Game::Score::BlackWins);
+                if (wdlScore == 0) game.SetScore(Game::Score::Draw);
+                if (wdlScore == -1) game.SetScore(stm == Color::White ? Game::Score::BlackWins : Game::Score::WhiteWins);
             }
 
             if (game.GetPosition().IsMate())

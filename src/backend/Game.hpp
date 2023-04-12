@@ -3,7 +3,6 @@
 #include "Position.hpp"
 
 #include <vector>
-#include <unordered_map>
 
 namespace std {
 
@@ -81,6 +80,6 @@ private:
     std::vector<Move> mMoves;
     std::vector<ScoreType> mMoveScores;
 
-    // TODO store some simplified position state instead of full struct
-    std::unordered_map<Position, uint16_t> mHistoryGamePositions;
+    static constexpr uint32_t GameHistoryBuckets = 32;
+    std::vector<std::pair<Position, uint32_t>> mHistoryGamePositions[GameHistoryBuckets];
 };

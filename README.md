@@ -70,16 +70,20 @@ The games are generated with [SelfPlay.cpp](https://github.com/Witek902/Caissa/b
 * Multithreaded search via shared transposition table
 
 #### Evaluation
-* Custom neural network
+* Neural network evaluation
   * 704&rarr;1280&rarr;1 architecture
-  * effectively updated first layer, AVX2/SSE accelerated
+  * effectively updated first layer, AVX2/SSE2 accelerated
   * clipped-ReLU activation function
-  * 4 variants of last layer weights (selected based on piece count)
-  * absolute piece coordinates with horizontal symmetry, no king-relative features
-  * custom CPU-based trainer using Adagrad SGD algorithm
-* Classic evaluation function based purely on king-relative piece square tables (PSQT)
-* NN and PSQT trained on data generated during self-play matches (mixture of regular chess, FRC and DFRC games, over 8750M positions in total)
-* Endgame evaluation
+  * 8 variants (aka. buckets) of last layer weights selected based on piece count
+  * input features: absolute piece coordinates with horizontal symmetry, no king-relative features
+* Simple evaluation function based purely on king-relative piece square tables (PSQT)
+* Blending between neural net eval and simple eval based on PSQT value
+* Special endgame evaluation routines
+
+#### Neural net trainer
+* Custom CPU-based trainer using Adam algorithm
+* Heavily optmizized using AVX intstructions, multithreading and exploiting sparsity of first layer input
+* NN and PSQT trained on data generated during self-play matches (mixture of regular chess, FRC and DFRC games, over 1 billion positions in total)
 
 #### Selectivity
 * Null Move Reductions

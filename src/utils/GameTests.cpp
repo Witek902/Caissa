@@ -21,8 +21,8 @@ static void TestGameSerialization(const Game& originalGame)
     Game readGame;
     {
         MemoryInputStream stream(buffer);
-        GameCollection::Reader reader(stream);
-        TEST_EXPECT(reader.ReadGame(readGame));
+        std::vector<Move> moves;
+        TEST_EXPECT(GameCollection::ReadGame(stream, readGame, moves));
     }
 
     TEST_EXPECT(readGame == originalGame);

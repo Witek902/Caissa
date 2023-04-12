@@ -33,17 +33,7 @@ namespace GameCollection
         int16_t score;
     };
 
-    class Reader
-    {
-    public:
-        Reader(InputStream& stream) : mStream(stream) { }
-
-        bool ReadGame(Game& game);
-
-    private:
-        InputStream& mStream;
-        std::mutex mMutex;
-    };
+    bool ReadGame(InputStream& stream, Game& game, std::vector<Move>& decodedMoves);
 
     class Writer
     {

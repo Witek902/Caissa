@@ -128,10 +128,18 @@ public:
     std::vector<Layer> layers;
 };
 
+enum class Optimizer : uint8_t
+{
+    Adadelta,
+    Adam,
+};
+
 struct TrainParams
 {
+    size_t iteration = 0;
     size_t batchSize = 32;
     float learningRate = 0.5f;
+    Optimizer optimizer = Optimizer::Adadelta;
     bool clampWeights = true;
 };
 
@@ -141,7 +149,7 @@ public:
 
     NeuralNetworkTrainer();
 
-    void Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder = nullptr);
+    size_t Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder = nullptr);
 
 private:
 

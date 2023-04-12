@@ -1,0 +1,160 @@
+#include "Common.hpp"
+#include "ThreadPool.hpp"
+#include "TrainerCommon.hpp"
+#include "GameCollection.hpp"
+
+#include "../backend/Math.hpp"
+#include "../backend/Material.hpp"
+#include "../backend/Waitable.hpp"
+#include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
+#include "../backend/Tablebase.hpp"
+
+#include <filesystem>
+
+using namespace threadpool;
+
+static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::string& outputPath)
+{
+    std::vector<PositionEntry> entries;
+    std::vector<Move> moves;
+
+    FileInputStream gamesFile(inputPath.c_str());
+    if (!gamesFile.IsOpen())
+    {
+        std::cout << "ERROR: Failed to load selfplay data file: " << inputPath << std::endl;
+        return false;
+    }
+
+    if (std::filesystem::exists(outputPath))
+    {
+        std::cout << "INFO: Output training data file " << outputPath << " already exists. Skipping" << std::endl;
+        return true;
+    }
+
+    FileOutputStream trainingDataFile(outputPath.c_str());
+    if (!trainingDataFile.IsOpen())
+    {
+        std::cout << "ERROR: Failed to load output training data file: " << outputPath << std::endl;
+        return false;
+    }
+
+    uint32_t numGames = 0;
+    uint32_t numPositions = 0;
+
+    Game game;
+    while (GameCollection::ReadGame(gamesFile, game, moves))
+    {
+        Game::Score gameScore = game.GetScore();
+
+        ASSERT(game.GetMoves().size() == game.GetMoveScores().size());
+
+        if (game.GetScore() == Game::Score::Unknown)
+        {
+            continue;
+        }
+
+        Position pos = game.GetInitialPosition();
+
+        // replay the game
+        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        {
+            const Move move = moves[i];
+            const ScoreType moveScore = game.GetMoveScores()[i];
+
+            if (move.IsQuiet() &&                                   // best move must be quiet
+                (i >= 4 || pos.GetNumPieces() < 32) &&
+                pos.GetNumPieces() >= 4 &&
+                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
+                !pos.IsInCheck())
+            {
+                PositionEntry entry{};
+
+                // reject position that approach fifty-move rule
+                if (gameScore == Game::Score::Draw &&
+                    pos.GetHalfMoveCount() > 50 && std::abs(moveScore) < 5)
+                    break;
+
+                entry.wdlScore = static_cast<uint8_t>(gameScore);
+                entry.tbScore = static_cast<uint8_t>(Game::Score::Unknown);
+                entry.score = moveScore;
+
+                Position normalizedPos = pos;
+                if (pos.GetSideToMove() == Color::Black)
+                {
+                    // make whites side to move
+                    normalizedPos = normalizedPos.SwappedColors();
+
+                    // flip score
+                    entry.score = -entry.score;
+                    if (gameScore == Game::Score::WhiteWins) entry.wdlScore = static_cast<uint8_t>(Game::Score::BlackWins);
+                    if (gameScore == Game::Score::BlackWins) entry.wdlScore = static_cast<uint8_t>(Game::Score::WhiteWins);
+                }
+
+                // tweak score with the help of endgame tablebases
+                int32_t wdl = 0;
+                if (pos.GetNumPieces() <= 7 && ProbeSyzygy_WDL(pos, &wdl))
+                {
+                         if (wdl > 0)   entry.tbScore = static_cast<uint8_t>(Game::Score::WhiteWins);
+                    else if (wdl < 0)   entry.tbScore = static_cast<uint8_t>(Game::Score::BlackWins);
+                    else                entry.tbScore = static_cast<uint8_t>(Game::Score::Draw);
+                }
+
+                ASSERT(normalizedPos.IsValid());
+                VERIFY(PackPosition(normalizedPos, entry.pos));
+                entries.push_back(entry);
+                numPositions++;
+            }
+
+            if (!pos.DoMove(move))
+            {
+                break;
+            }
+        }
+
+        numGames++;
+    }
+
+    std::cout << "Parsed " << numGames << " games from " << inputPath << ", extracted " << numPositions << " positions" << std::endl;
+
+    // shuffle the training data
+    {
+        std::random_device randomDevice;
+        std::mt19937 randomGenerator;
+        std::shuffle(entries.begin(), entries.end(), randomGenerator);
+    }
+
+    if (!trainingDataFile.Write(entries.data(), entries.size() * sizeof(PositionEntry)))
+    {
+        std::cout << "ERROR: Failed to write training data file: " << outputPath << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+void PrepareTrainingData(const std::vector<std::string>& args)
+{
+    (void)args;
+
+    const std::string gamesPath = "../../data/selfplayGames";
+    const std::string trainingDataPath = "../../data/trainingData/";
+
+    Waitable waitable;
+    {
+        TaskBuilder taskBuilder(waitable);
+
+        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        {
+            std::cout << "Loading " << path.path().string() << "..." << std::endl;
+
+            taskBuilder.Task("LoadPositions", [path, &trainingDataPath](const TaskContext&)
+            {
+                const std::string outputPath = trainingDataPath + path.path().stem().string() + ".dat";
+                ConvertGamesToTrainingData(path.path().string().c_str(), outputPath);
+            });
+        }
+    }
+
+    waitable.Wait();
+}

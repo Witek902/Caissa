@@ -17,7 +17,7 @@ void Game::Reset(const Position& pos)
     mForcedScore = Score::Unknown;
     mMoves.clear();
     mMoveScores.clear();
-    mHistoryGamePositions.clear();
+    for (auto& history : mHistoryGamePositions) history.clear();
 
     RecordBoardPosition(pos);
 }
@@ -60,18 +60,27 @@ bool Game::DoMove(const Move& move, ScoreType score)
 
 void Game::RecordBoardPosition(const Position& position)
 {
-    mHistoryGamePositions[position]++;
+    auto& historyPositions = mHistoryGamePositions[position.GetHash() % GameHistoryBuckets];
+    for (auto& iter : historyPositions)
+    {
+        if (iter.first == position)
+        {
+            iter.second++;
+            return;
+        }
+    }
+    historyPositions.emplace_back(position, 1);
 }
 
 uint32_t Game::GetRepetitionCount(const Position& position) const
 {
-    const auto& iter = mHistoryGamePositions.find(position);
-    if (iter == mHistoryGamePositions.end())
+    const auto& historyPositions = mHistoryGamePositions[position.GetHash() % GameHistoryBuckets];
+    for (const auto& iter : historyPositions)
     {
-        return 0;
+        if (iter.first == position)
+            return iter.second;
     }
-
-    return iter->second;
+    return 0;
 }
 
 Game::Score Game::CalculateScore() const

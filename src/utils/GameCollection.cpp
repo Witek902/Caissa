@@ -4,27 +4,32 @@
 namespace GameCollection
 {
 
-    bool Reader::ReadGame(Game& game)
+    bool ReadGame(InputStream& stream, Game& game, std::vector<Move>& decodedMoves)
     {
-        std::vector<MoveAndScore> moves;
         GameHeader header{};
 
+        if (stream.IsEndOfFile())
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            return false;
+        }
 
-            if (!mStream.Read(&header, sizeof(header)))
-            {
-                std::cout << "Failed to read games collection stream" << std::endl;
-                return false;
-            }
+        if (!stream.Read(&header, sizeof(header)))
+        {
+            std::cout << "Failed to read game header" << std::endl;
+            return false;
+        }
 
-            moves.resize(header.numMoves);
+        thread_local std::vector<MoveAndScore> moves;
+        moves.clear();
+        moves.resize(header.numMoves);
 
-            if (!mStream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
-            {
-                std::cout << "Failed to read games collection stream" << std::endl;
-                return false;
-            }
+        decodedMoves.clear();
+        decodedMoves.reserve(header.numMoves);
+
+        if (!stream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
+        {
+            std::cout << "Failed to read game moves" << std::endl;
+            return false;
         }
 
         if (header.forcedScore != Game::Score::Unknown &&
@@ -46,7 +51,6 @@ namespace GameCollection
         for (uint32_t i = 0; i < header.numMoves; ++i)
         {
             const Move move = game.GetPosition().MoveFromPacked(moves[i].move);
-
             if (!move.IsValid())
             {
                 std::cout
@@ -63,6 +67,8 @@ namespace GameCollection
             {
                 VERIFY(game.DoMove(move));
             }
+
+            decodedMoves.push_back(move);
         }
 
         game.SetScore(header.forcedScore);

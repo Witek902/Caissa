@@ -1,7 +1,6 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
-#include "GameCollection.hpp"
 
 #include "../backend/Math.hpp"
 #include "../backend/Material.hpp"
@@ -12,156 +11,166 @@
 
 #include <filesystem>
 
-using namespace threadpool;
+static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 
-static bool LoadPositions(const char* fileName, std::vector<PositionEntry>& entries)
+bool TrainingDataLoader::Init(const std::string& trainingDataPath)
 {
-    FileInputStream gamesFile(fileName);
-    if (!gamesFile.IsOpen())
+    uint64_t totalDataSize = 0;
+
+    mCDF.push_back(0.0);
+
+    for (const auto& path : std::filesystem::directory_iterator(trainingDataPath))
     {
-        std::cout << "ERROR: Failed to load selfplay data file!" << std::endl;
-        return false;
+        const std::string& fileName = path.path().string();
+        auto fileStream = std::make_unique<FileInputStream>(fileName.c_str());
+
+        uint64_t fileSize = fileStream->GetSize();
+        totalDataSize += fileSize;
+
+        if (fileStream->IsOpen() && fileSize > 0)
+        {
+            std::cout << "Using " << fileName << std::endl;
+
+            InputFileContext& ctx = mContexts.emplace_back(std::move(fileStream));
+            ctx.fileName = fileName;
+            ctx.fileSize = fileSize;
+
+            mCDF.push_back((double)totalDataSize);
+        }
+        else
+        {
+            std::cout << "ERROR: Failed to load selfplay data file: " << fileName << std::endl;
+        }
     }
 
-    GameCollection::Reader reader(gamesFile);
-
-    uint32_t numGames = 0;
-    uint32_t numPositions = 0;
-
-    Game game;
-    while (reader.ReadGame(game))
+    if (totalDataSize > 0)
     {
-        Game::Score gameScore = game.GetScore();
+        // normalize
+        for (double& v : mCDF)
+        {
+            v /= static_cast<double>(totalDataSize);
+        }
+    }
 
-        ASSERT(game.GetMoves().size() == game.GetMoveScores().size());
+    return !mContexts.empty();
+}
 
-        if (game.GetScore() == Game::Score::Unknown)
+uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
+{
+    uint32_t low = 0u;
+    uint32_t high = static_cast<uint32_t>(mContexts.size());
+
+    // binary search
+    while (low < high)
+    {
+        uint32_t mid = (low + high) / 2u;
+        if (u >= mCDF[mid])
+        {
+            low = mid + 1u;
+        }
+        else
+        {
+            high = mid;
+        }
+    }
+
+    return low - 1u;
+}
+
+bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition)
+{
+    std::uniform_real_distribution<double> distr;
+    const double u = distr(gen);
+    const uint32_t fileIndex = SampleInputFileIndex(u);
+    ASSERT(fileIndex < mContexts.size());
+
+    if (fileIndex >= mContexts.size())
+        return false;
+
+    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition);
+}
+
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition)
+{
+    for (;;)
+    {
+        if (!fileStream->Read(&outEntry, sizeof(PositionEntry)))
+        {
+            // if read failed, reset to the file beginning and try again
+
+            if (fileStream->GetPosition() > 0)
+            {
+                std::cout << "Resetting stream " << fileName << std::endl;
+                fileStream->SetPosition(0);
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!fileStream->Read(&outEntry, sizeof(PositionEntry)))
+            {
+                return false;
+            }
+        }
+
+        if (outEntry.score == (uint32_t)Game::Score::Unknown)
         {
             continue;
         }
 
-        float score = 0.5f;
-        if (gameScore == Game::Score::WhiteWins) score = 1.0f;
-        if (gameScore == Game::Score::BlackWins) score = 0.0f;
-
-        Position pos = game.GetInitialPosition();
-
-        // replay the game
-        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        // skip based half-move counter
         {
-            const float gamePhase = (float)i / (float)game.GetMoves().size();
-            const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            const ScoreType moveScore = game.GetMoveScores()[i];
+            const float hmcSkipProb = 0.25f + 0.75f * (float)outEntry.pos.halfMoveCount / 100.0f;
+            std::bernoulli_distribution skippingDistr(hmcSkipProb);
+            if (skippingDistr(gen))
+                continue;
+        }
 
-            const bool whitePawnsMoved = (pos.Whites().pawns & Bitboard::RankBitboard(1)) != Bitboard::RankBitboard(1);
-            const bool blackPawnsMoved = (pos.Blacks().pawns & Bitboard::RankBitboard(6)) != Bitboard::RankBitboard(6);
+        // skip based on piece count
+        {
+            const int32_t numPieces = outEntry.pos.occupied.Count();
+            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 20) / 40.0f);
+            std::bernoulli_distribution skippingDistr(pieceCountSkipProb);
+            if (skippingDistr(gen))
+                continue;
+        }
 
-            if (move.IsQuiet() &&                                   // best move must be quiet
-                (i >= 8 || pos.GetNumPieces() < 32) &&
-                pos.GetNumPieces() >= 4 &&
-                whitePawnsMoved && blackPawnsMoved &&
-                std::abs(Evaluate(pos, nullptr, false)) < 1200 &&   // skip unbalanced positions
-                !pos.IsInCheck())
+        VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
+        ASSERT(outPosition.IsValid());
+
+        // skip based on PSQT score
+        {
+            const ScoreType psqtScore = Evaluate(outPosition, nullptr, false);
+
+            const int32_t minRange = 512;
+            const int32_t maxRange = 1024;
+
+            if (std::abs(psqtScore) > maxRange)
             {
-                PositionEntry entry{};
-
-                // blend in future scores into current move score
-                float scoreSum = 0.0f;
-                float weightSum = 0.0f;
-                const size_t maxLookahead = 8;
-                for (size_t j = 0; j < maxLookahead; ++j)
-                {
-                    if (i + j >= game.GetMoves().size()) break;
-                    const float weight = expf(-(float)j * 0.6f);
-                    scoreSum += weight * CentiPawnToWinProbability(game.GetMoveScores()[i + j]);
-                    weightSum += weight;
-                }
-                ASSERT(weightSum > 0.0f);
-                scoreSum /= weightSum;
-
-                // scale position that approach fifty-move rule
-                if (gameScore == Game::Score::Draw)
-                {
-                    scoreSum = std::lerp(0.5f, scoreSum, Sqr(1.0f - pos.GetHalfMoveCount() / 100.0f));
-
-                    if (pos.GetHalfMoveCount() > 50 && std::abs(moveScore) < 5) break;
-                }
-
-                // blend between eval score and actual game score
-                const float lambda = std::lerp(0.95f, 0.8f, gamePhase);
-                entry.score = std::lerp(score, scoreSum, lambda);
-
-                // don't saturate to 0.0 / 1.0
-                const float offset = 0.00001f;
-                entry.score = offset + entry.score * (1.0f - 2.0f * offset);
-
-                Position normalizedPos = pos;
-                if (pos.GetSideToMove() == Color::Black)
-                {
-                    // make whites side to move
-                    normalizedPos = normalizedPos.SwappedColors();
-                    entry.score = 1.0f - entry.score;
-                }
-
-                // tweak score with the help of endgame tablebases
-                int32_t wdl = 0;
-                if (pos.GetNumPieces() <= 7 && ProbeSyzygy_WDL(pos, &wdl))
-                {
-                    if (wdl > 0)        entry.score = std::lerp(entry.score, 1.0f, 0.8f);
-                    else if (wdl < 0)   entry.score = std::lerp(entry.score, 0.0f, 0.8f);
-                    else                entry.score = 0.5f;
-                }
-
-                ASSERT(normalizedPos.IsValid());
-                VERIFY(PackPosition(normalizedPos, entry.pos));
-                entries.push_back(entry);
-                numPositions++;
-
-                if (std::abs(moveScore) >= KnownWinValue)
-                {
-                    break;
-                }
+                continue;
             }
-
-            if (!pos.DoMove(move))
+            if (std::abs(psqtScore) > minRange)
             {
-                break;
+                const float psqtScoreSkipProb = static_cast<float>(std::abs(psqtScore) - minRange) / static_cast<float>(maxRange - minRange);
+                std::bernoulli_distribution skippingDistr(psqtScoreSkipProb);
+                if (skippingDistr(gen))
+                    continue;
             }
         }
 
-        numGames++;
-    }
-
-    std::cout << "Parsed " << numGames << " games from " << fileName << ", extracted " << numPositions << " positions" << std::endl;
-    return true;
-}
-
-void LoadAllPositions(std::vector<PositionEntry>& outEntries)
-{
-    std::mutex mutex;
-
-    const std::string gamesPath = "../../data/selfplayGames";
-
-    Waitable waitable;
-    {
-        TaskBuilder taskBuilder(waitable);
-
-        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        // skip based on kings placement (prefer king on further ranks)
         {
-            std::cout << "Loading " << path.path().string() << "..." << std::endl;
-
-            taskBuilder.Task("LoadPositions", [path, &mutex, &outEntries](const TaskContext&)
-            {
-                std::vector<PositionEntry> tempEntries;
-                LoadPositions(path.path().string().c_str(), tempEntries);
-
-                {
-                    std::unique_lock<std::mutex> lock(mutex);
-                    outEntries.insert(outEntries.end(), tempEntries.begin(), tempEntries.end());
-                }
-            });
+            const float whiteKingProb = 0.5f + 0.5f * (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
+            const float blackKingProb = 0.5f + 0.5f * (7 - (float)outPosition.Blacks().GetKingSquare().Rank()) / 7.0f;
+            std::bernoulli_distribution skippingDistr(std::min(whiteKingProb, blackKingProb));
+            if (skippingDistr(gen))
+                continue;
         }
-    }
 
-    waitable.Wait();
+        // TODO more skipping techniques:
+        // - eval / game outcome match
+
+        return true;
+    }
 }

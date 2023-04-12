@@ -15,7 +15,7 @@
 
 using namespace threadpool;
 
-static constexpr float c_activationEpsilon = 1.0e-10f;
+static constexpr float c_activationEpsilon = 1.0e-15f;
 
 namespace nn {
 
@@ -124,6 +124,14 @@ bool NeuralNetwork::Save(const char* filePath) const
             {
                 goto onError;
             }
+            if (numWeights != fwrite(variant.gradientMoment1.data(), sizeof(float), numWeights, file))
+            {
+                goto onError;
+            }
+            if (numWeights != fwrite(variant.gradientMoment2.data(), sizeof(float), numWeights, file))
+            {
+                goto onError;
+            }
         }
     }
 
@@ -221,6 +229,16 @@ bool NeuralNetwork::Load(const char* filePath)
                 std::cout << "Failed to load neural network weights" << std::endl;
                 goto onError;
             }
+            if (numWeights != fread(variant.gradientMoment1.data(), sizeof(float), numWeights, file))
+            {
+                std::cout << "Failed to load gradient 1st moments" << std::endl;
+                goto onError;
+            }
+            if (numWeights != fread(variant.gradientMoment2.data(), sizeof(float), numWeights, file))
+            {
+                std::cout << "Failed to load gradient 2nd moments" << std::endl;
+                goto onError;
+            }
         }
     }
 
@@ -294,7 +312,7 @@ NeuralNetworkTrainer::NeuralNetworkTrainer()
     m_perThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
 }
 
-void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
+size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
 {
     for (PerThreadData& threadData : m_perThreadData)
     {
@@ -371,7 +389,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
 
             // train last layers
             {
-                const float errorScale = 1.0f;
+                const float errorScale = 2.0f;
 
                 // compute gradient (error derivative)
                 if (vec.outputMode == OutputMode::Single)
@@ -409,21 +427,22 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             }
         };
 
-        const auto updateWeightsFunc = [this, &network, params]() INLINE_LAMBDA
+        const auto updateWeightsFunc = [this, batchIdx, &network, params]() INLINE_LAMBDA
         {
             for (size_t layerIdx = 0; layerIdx < network.layers.size(); ++layerIdx)
             {
                 Layer& layer = network.layers[layerIdx];
 
                 Layer::WeightsUpdateOptions updateOptions;
+                updateOptions.iteration = params.iteration + batchIdx;
                 updateOptions.learningRate = params.learningRate;
-                updateOptions.gradientScale = 1.0f; // (float)params.batchSize;
+                updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
 
                 float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
                 float weightRange = 0.0f, biasRange = 0.0f;
                 if (layerIdx == 0) // input layer
                 {
-                    updateOptions.weightDecay = 1.0e-6f;
+                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = InputLayerWeightQuantizationScale;
                     biasQuantizationScale = InputLayerBiasQuantizationScale;
                     // divide by number of active input features to avoid accumulator overflow
@@ -432,7 +451,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                 }
                 else if (layerIdx + 1 == network.layers.size()) // output layer
                 {
-                    updateOptions.weightDecay = 1.0e-3f;
+                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = OutputLayerWeightQuantizationScale;
                     biasQuantizationScale = OutputLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
@@ -440,7 +459,7 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                 }
                 else // hidden layer
                 {
-                    updateOptions.weightDecay = 1.0e-3f;
+                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = HiddenLayerWeightQuantizationScale;
                     biasQuantizationScale = HiddenLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
@@ -483,12 +502,24 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
                         }
                     }
 
-                    layer.UpdateWeights((uint32_t)variantIdx, m_perThreadData.front().gradients[layerIdx][variantIdx], updateOptions);
+                    const auto& gradients = m_perThreadData.front().gradients[layerIdx][variantIdx];
+                    switch (params.optimizer)
+                    {
+                    case Optimizer::Adadelta:
+                        layer.UpdateWeights_Adadelta((uint32_t)variantIdx, gradients, updateOptions);
+                        break;
+                    case Optimizer::Adam:
+                        layer.UpdateWeights_Adam((uint32_t)variantIdx, gradients, updateOptions);
+                        break;
+                    default:
+                        DEBUG_BREAK();
+                    }
+                    
                 }
             }
         };
 
-        if (taskBuilder) // multi-threaded
+        if (taskBuilder && params.batchSize > 32) // multi-threaded
         {
             if (batchIdx > 0)
             {
@@ -532,6 +563,8 @@ void NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trai
             updateWeightsFunc();
         }
     }
+
+    return numBatches;
 }
 
 template<typename WeightType, typename BiasType>

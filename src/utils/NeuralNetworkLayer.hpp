@@ -70,6 +70,7 @@ public:
         float weightsRange = 10.0f;
         float biasRange = 10.0f;
         float weightDecay = 0.0f;
+        size_t iteration = 0;
     };
 
     void InitWeights();
@@ -77,7 +78,8 @@ public:
     void Run(uint32_t variantIndex, uint32_t numFeatures, const uint16_t* binaryFeatures, LayerRunContext& ctx) const;
     void Run(uint32_t variantIndex, uint32_t numFeatures, const ActiveFeature* features, LayerRunContext& ctx) const;
     void Backpropagate(uint32_t variantIndex, const Values& error, LayerRunContext& ctx, Gradients& gradients) const;
-    void UpdateWeights(uint32_t variantIndex, const Gradients& gradients, const WeightsUpdateOptions& options);
+    void UpdateWeights_Adadelta(uint32_t variantIndex, const Gradients& gradients, const WeightsUpdateOptions& options);
+    void UpdateWeights_Adam(uint32_t variantIndex, const Gradients& gradients, const WeightsUpdateOptions& options);
 
     uint32_t numInputs;
     uint32_t numOutputs;
@@ -87,10 +89,11 @@ public:
     struct Variant
     {
         Values weights;
+        Values weightsMask;
 
         // used for learning
-        Values gradientMean;
-        Values gradientMoment;
+        Values gradientMoment1;
+        Values gradientMoment2;
     };
 
     std::vector<Variant> variants;
