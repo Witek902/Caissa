@@ -25,13 +25,14 @@
 
 using namespace threadpool;
 
-static const uint32_t cMaxIterations = 10000000;
+static const uint32_t cMaxIterations = 1000000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 256;
+static const uint32_t cNumValidationVectorsPerIteration = 32 * 1024;
+static const uint32_t cMinBatchSize = 8 * 1024;
 static const uint32_t cMaxBatchSize = 8 * 1024;
-//static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64;
-static const uint32_t cNumNetworkInputs = 704;
+//static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64; // NetworkInputMapping::KingPiece_Symmetrical
+//static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48; // NetworkInputMapping::Full
+static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // NetworkInputMapping::Full_Symmetrical
 static const uint32_t cNumVariants = 8;
 
 
@@ -67,7 +68,7 @@ public:
 
     void InitNetwork();
 
-    void Train();
+    bool Train();
 
 private:
 
@@ -91,12 +92,13 @@ private:
         uint8_t __padding[CACHELINE_SIZE];
     };
 
+    TrainingDataLoader m_dataLoader;
+
     nn::NeuralNetwork m_network;
     nn::NeuralNetworkRunContext m_runCtx;
     nn::NeuralNetworkTrainer m_trainer;
     nn::PackedNeuralNetwork m_packedNet;
 
-    std::vector<PositionEntry> m_entries;
     std::vector<TrainingEntry> m_trainingSet;
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
@@ -111,34 +113,10 @@ private:
 
     std::ofstream m_trainingLog;
 
-    void PrintPositionsStats();
+    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, float wdlLambda);
 
-    void GenerateTrainingSet(std::vector<TrainingEntry>& outEntries);
-
-    void Validate(uint32_t iteration);
+    void Validate(size_t iteration);
 };
-
-void NetworkTrainer::PrintPositionsStats()
-{
-    std::cout << "Training with " << m_entries.size() << " positions" << std::endl;
-
-    uint64_t pieceCountStats[33];
-    memset(pieceCountStats, 0, sizeof(pieceCountStats));
-    for (const auto& entry : m_entries)
-    {
-        pieceCountStats[std::min(32u, entry.pos.occupied.Count())]++;
-    }
-
-    std::cout << "Piece count stats: " << std::endl;
-    for (uint32_t i = 0; i <= 32; ++i)
-    {
-        std::cout
-            << std::setw(2) << i << " "
-            << std::setw(10) << pieceCountStats[i]
-            << " (" << 100.0f * (float)pieceCountStats[i] / (float)m_entries.size() << "%)"
-            << std::endl;
-    }
-}
 
 void NetworkTrainer::InitNetwork()
 {
@@ -152,7 +130,7 @@ void NetworkTrainer::InitNetwork()
     //               nn::ActivationFunction::Sigmoid,
     //               { 1, cNumVariants, cNumVariants, cNumVariants });
 
-    //m_network.Load("eval-ckpt.nn");
+    m_network.Load("eval-ckpt.nn");
 
     m_runCtx.Init(m_network);
 
@@ -167,31 +145,51 @@ static uint32_t GetNetworkVariant(const Position& pos)
     return std::min((pos.GetNumPieces() - 2u) / 4u, 7u);
 }
 
-void NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
+bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, float wdlLambda)
 {
+    Position pos;
+    PositionEntry entry;
+
     for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
     {
-        const uint64_t index = m_numTrainingVectorsPassed++;
-        const PositionEntry& entry = m_entries[(uint32_t)(index % m_entries.size())];
-        Position pos;
-        VERIFY(UnpackPosition(entry.pos, pos));
-        ASSERT(pos.IsValid());
+        if (!m_dataLoader.FetchNextPosition(m_randomGenerator, entry, pos))
+            return false;
 
         // flip the board randomly in pawnless positions
         if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
         {
             if (std::uniform_int_distribution<>(0, 1)(m_randomGenerator) != 0)
-            {
                 pos.MirrorVertically();
-            }
+            if (std::uniform_int_distribution<>(0, 1)(m_randomGenerator) != 0)
+                pos.FlipDiagonally();
+        }
+
+        const float tbLambda = 0.1f;
+
+        const Game::Score gameScore = (Game::Score)entry.wdlScore;
+        const Game::Score tbScore = (Game::Score)entry.tbScore;
+        float score = CentiPawnToWinProbability(entry.score);
+
+        if (gameScore != Game::Score::Unknown)
+        {
+
+            const float wdlScore = gameScore == Game::Score::WhiteWins ? 1.0f : (gameScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+            score = std::lerp(wdlScore, score, wdlLambda);
+        }
+        if (tbScore != Game::Score::Unknown)
+        {
+            const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+            score = std::lerp(wdlScore, score, tbLambda);
         }
 
         PositionToSparseVector(pos, outEntries[i].trainingVector);
-        outEntries[i].trainingVector.singleOutput = entry.score;
+        outEntries[i].trainingVector.singleOutput = score;
         outEntries[i].trainingVector.networkVariant = GetNetworkVariant(pos);
         //outEntries[i].trainingVector.lastLayerBias = (float)Evaluate(pos, nullptr, false) / (float)c_nnOutputToCentiPawns;
         outEntries[i].pos = pos;
     }
+
+    return true;
 }
 
 static void ParallelFor(const char* debugName, uint32_t arraySize, const threadpool::ParallelForTaskFunction& func, uint32_t maxThreads = 0)
@@ -204,7 +202,7 @@ static void ParallelFor(const char* debugName, uint32_t arraySize, const threadp
     waitable.Wait();
 }
 
-void NetworkTrainer::Validate(uint32_t iteration)
+void NetworkTrainer::Validate(size_t iteration)
 {
     // reset stats
     for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -228,7 +226,7 @@ void NetworkTrainer::Validate(uint32_t iteration)
             const uint32_t variant = m_trainingSet[i].trainingVector.networkVariant;
             const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size(), variant);
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
-            const float nnPackedValue = PawnToWinProbability(scaledPackedNetworkOutput /* + psqtValue / 100.0f*/);
+            const float nnPackedValue = PawnToWinProbability(scaledPackedNetworkOutput /*+ psqtValue / 100.0f*/);
 
             nn::NeuralNetwork::InputDesc inputDesc(features);
             inputDesc.variant = variant;
@@ -328,7 +326,7 @@ void NetworkTrainer::Validate(uint32_t iteration)
             nn::TrainingVector vec;
             PositionToSparseVector(pos, vec);
 
-            // const ScoreType psqtValue = Evaluate(pos, nullptr, false);
+            //const ScoreType psqtValue = Evaluate(pos, nullptr, false);
 
             nn::NeuralNetwork::InputDesc inputDesc(vec.sparseBinaryInputs);
             inputDesc.variant = GetNetworkVariant(pos);
@@ -337,9 +335,9 @@ void NetworkTrainer::Validate(uint32_t iteration)
 
             const int32_t packedNetworkOutput = m_packedNet.Run(vec.sparseBinaryInputs.data(), (uint32_t)vec.sparseBinaryInputs.size(), inputDesc.variant);
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
-            const float nnPackedValue = PawnToWinProbability(scaledPackedNetworkOutput /* + psqtValue / 100.0f*/);
+            const float nnPackedValue = scaledPackedNetworkOutput /* + psqtValue / 100.0f*/;
 
-            std::cout << "TEST " << testPosition << "  " << WinProbabilityToCentiPawns(nnValue) << " " << WinProbabilityToCentiPawns(nnPackedValue) << std::endl;
+            std::cout << "TEST " << testPosition << "  " << WinProbabilityToCentiPawns(nnValue) << " " << nnPackedValue << std::endl;
         }
     }
 
@@ -348,35 +346,31 @@ void NetworkTrainer::Validate(uint32_t iteration)
     m_network.PrintStats();
 }
 
-void NetworkTrainer::Train()
+bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    LoadAllPositions(m_entries);
-
-    // don't need tablebases after positions are loaded
-    UnloadTablebase();
-
-    PrintPositionsStats();
+    if (!m_dataLoader.Init())
+    {
+        std::cout << "ERROR: Failed to initialize data loader" << std::endl;
+        return false;
+    }
 
     std::vector<nn::TrainingVector> batch(cNumTrainingVectorsPerIteration);
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
+    size_t epoch = 0;
+    for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        if ((iteration % 1024) == 0)
-        {
-            std::cout << "Shuffling..." << std::endl;
-            std::shuffle(m_entries.begin(), m_entries.end(), m_randomGenerator);
-        }
+        float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.00001f * epoch));
+        float lambda = std::min(0.9f, 0.5f + 0.00001f * epoch);
 
         if (iteration == 0)
         {
-            GenerateTrainingSet(m_trainingSet);
+            if (!GenerateTrainingSet(m_trainingSet, lambda))
+                return false;
         }
-
-        float learningRate = std::max(0.05f, 1.0f / (1.0f + 0.00002f * iteration));
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
@@ -394,17 +388,18 @@ void NetworkTrainer::Train()
             TaskBuilder taskBuilder{ waitable };
             taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                GenerateTrainingSet(m_trainingSet);
+                GenerateTrainingSet(m_trainingSet, lambda);
             });
 
-            taskBuilder.Task("Train", [this, iteration, &batch, &learningRate](const TaskContext& ctx)
+            taskBuilder.Task("Train", [this, iteration, &epoch, &batch, &learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
-                params.batchSize = std::min(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
+                params.iteration = epoch;
+                params.batchSize = std::min<size_t>(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
                 params.learningRate = learningRate;
 
                 TaskBuilder taskBuilder{ ctx };
-                m_trainer.Train(m_network, batch, params, &taskBuilder);
+                epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);
             });
         }
         waitable.Wait();
@@ -412,8 +407,12 @@ void NetworkTrainer::Train()
         m_network.ToPackedNetwork(m_packedNet);
         ASSERT(m_packedNet.IsValid());
 
+        m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
+
         std::cout
-            << "Epoch:                  " << iteration << std::endl
+            << "Iteration:              " << iteration << std::endl
+            << "Epoch:                  " << epoch << std::endl
+            << "Lambda:                 " << lambda << std::endl
             << "Num training vectors:   " << m_numTrainingVectorsPassed << std::endl
             << "Learning rate:          " << learningRate << std::endl;
 
@@ -429,13 +428,13 @@ void NetworkTrainer::Train()
             m_packedNet.Save((name + ".pnn").c_str());
         }
     }
+
+    return true;
 }
 
 
 bool TrainNetwork()
 {
     NetworkTrainer trainer;
-    trainer.Train();
-
-    return true;
+    return trainer.Train();
 }

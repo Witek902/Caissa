@@ -71,6 +71,7 @@
     <ClCompile Include="NeuralNetworkLayer.cpp" />
     <ClCompile Include="PackedPositionTests.cpp" />
     <ClCompile Include="PieceSquareTablesTrainer.cpp" />
+    <ClCompile Include="PrepareTrainingData.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Stream.cpp" />
     <ClCompile Include="Tests.cpp" />

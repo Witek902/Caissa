@@ -68,7 +68,7 @@ bool PackPosition(const Position& inPos, PackedPosition& outPos)
     return true;
 }
 
-bool UnpackPosition(const PackedPosition& inPos, Position& outPos)
+bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeHash)
 {
     outPos = Position();
 
@@ -118,7 +118,10 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos)
         outPos.SetEnPassantSquare(Square(inPos.enPassantFile, inPos.sideToMove == 0 ? 5 : 2));
     }
 
-    outPos.ComputeHash();
+    if (computeHash)
+    {
+        outPos.ComputeHash();
+    }
 
     return success;
 }

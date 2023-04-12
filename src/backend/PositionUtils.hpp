@@ -19,7 +19,7 @@ struct PackedPosition
 #pragma pack(pop)
 
 bool PackPosition(const Position& inPos, PackedPosition& outPos);
-bool UnpackPosition(const PackedPosition& inPos, Position& outPos);
+bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeHash = true);
 
 struct RandomPosDesc
 {

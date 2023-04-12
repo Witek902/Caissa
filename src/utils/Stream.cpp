@@ -11,6 +11,11 @@ uint64_t MemoryInputStream::GetSize()
     return mBuffer.size();
 }
 
+bool MemoryInputStream::IsEndOfFile() const
+{
+    return mPosition >= mBuffer.size();
+}
+
 bool MemoryInputStream::Read(void* data, size_t size)
 {
     if (size > 0)
@@ -79,10 +84,25 @@ uint64_t FileInputStream::GetSize()
     const long originalPos = ftell(mFile);
 
     fseek(mFile, 0, SEEK_END);
-    const long size = ftell(mFile);
+    const uint64_t size = _ftelli64(mFile);
     fseek(mFile, originalPos, SEEK_SET);
 
     return size;
+}
+
+uint64_t FileInputStream::GetPosition() const
+{
+    return _ftelli64(mFile);
+}
+
+bool FileInputStream::SetPosition(uint64_t offset)
+{
+    return 0 != _fseeki64(mFile, offset, SEEK_SET);
+}
+
+bool FileInputStream::IsEndOfFile() const
+{
+    return feof(mFile);
 }
 
 bool FileInputStream::Read(void* data, size_t size)

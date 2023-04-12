@@ -10,6 +10,7 @@
 extern void RunUnitTests();
 extern bool RunPerformanceTests(const std::vector<std::string>& paths);
 extern void SelfPlay(const std::vector<std::string>& args);
+extern void PrepareTrainingData(const std::vector<std::string>& args);
 extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
 extern void GenerateEndgamePieceSquareTables();
@@ -61,6 +62,10 @@ int main(int argc, const char* argv[])
     else if (args[0] == "selfplay")
     {
         SelfPlay(args);
+    }
+    else if (args[0] == "prepareTrainingData")
+    {
+        PrepareTrainingData(args);
     }
     else if (args[0] == "testNetwork")
     {

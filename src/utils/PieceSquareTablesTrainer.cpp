@@ -24,8 +24,8 @@
 #include <fstream>
 #include <limits.h>
 
-#define USE_PSQT
-#define USE_BISHOP_PAIR
+//#define USE_PSQT
+//#define USE_BISHOP_PAIR
 //#define USE_CASTLING_RIGHTS
 //#define USE_IMBALANCE
 //#define USE_MOBILITY
@@ -35,9 +35,10 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 100000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 1024 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
-static const uint32_t cBatchSize = 8192;
+static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cBatchSizeMin = 64;
+static const uint32_t cBatchSizeMax = 8 * 1024;
 
 static const uint32_t cNumNetworkInputs =
     2 * 5                       // piece values
@@ -48,7 +49,7 @@ static const uint32_t cNumNetworkInputs =
     + 2                         // bishop pair
 #endif
 #ifdef USE_IMBALANCE
-    + 2 * 55
+    + 2 * 30
 #endif
 #ifdef USE_CASTLING_RIGHTS
     + 2
@@ -99,6 +100,7 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
     const int32_t wb = pos.Whites().bishops.Count();
     const int32_t wr = pos.Whites().rooks.Count();
     const int32_t wq = pos.Whites().queens.Count();
+
     const int32_t bp = pos.Blacks().pawns.Count();
     const int32_t bn = pos.Blacks().knights.Count();
     const int32_t bb = pos.Blacks().bishops.Count();
@@ -197,17 +199,30 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
 
 #ifdef USE_IMBALANCE
     {
-        const int32_t matCount[] = { wp, wn, wb, wr, wq, bp, bn, bb, br, bq };
-        for (uint32_t i = 0; i < 10; ++i)
+        const int32_t matCount[] =
         {
-            for (uint32_t j = 0; j < i; ++j)
-            {
-                inputs.push_back(nn::ActiveFeature{offset++, mg * matCount[i] * matCount[j]});
-                inputs.push_back(nn::ActiveFeature{offset++, eg * matCount[i] * matCount[j]});
-            }
+            std::min(8,wp), std::min(2,wn), std::min(2,wb), std::min(2,wr), std::min(1,wq),
+            std::min(8,bp), std::min(2,bn), std::min(2,bb), std::min(2,br), std::min(1,bq),
+        };
 
-            inputs.push_back(nn::ActiveFeature{offset++, mg * matCount[i] * matCount[i]});
-            inputs.push_back(nn::ActiveFeature{offset++, eg * matCount[i] * matCount[i]});
+        // same side
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            for (uint32_t j = 0; j <= i; ++j)
+            {
+                inputs.push_back(nn::ActiveFeature{ offset++, mg * (matCount[i] * matCount[j] - matCount[i + 5] * matCount[j + 5]) });
+                inputs.push_back(nn::ActiveFeature{ offset++, eg * (matCount[i] * matCount[j] - matCount[i + 5] * matCount[j + 5]) });
+            }
+        }
+
+        // opposite sides
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            for (uint32_t j = 0; j <= i; ++j)
+            {
+                inputs.push_back(nn::ActiveFeature{ offset++, mg * (matCount[i] * matCount[j + 5] - matCount[i + 5] * matCount[j]) });
+                inputs.push_back(nn::ActiveFeature{ offset++, eg * (matCount[i] * matCount[j + 5] - matCount[i + 5] * matCount[j]) });
+            }
         }
     }
 #endif // USE_IMBALANCE
@@ -412,11 +427,11 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     std::ofstream psqtFile("generatedPSQT.hpp");
     std::ofstream pawnStructureTableFile("generatedPawnStructureTable.hpp");
 
-    const auto printValue = [&]()
+    const auto printValue = [&](const float scale = 1.0f)
     {
         std::cout << "S(" << std::right
-            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset]) << ","
-            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * weights[offset + 1]) << "), ";
+            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * scale * weights[offset]) << ","
+            << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * scale * weights[offset + 1]) << "), ";
         offset += 2;
     };
 
@@ -452,9 +467,13 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
                 }
                 psqtFile << std::endl;
             }
-
-            psqtFile << "\t}," << std::endl;
+            psqtFile << "\t}," << std::endl << std::endl;
         };
+
+        // prologue
+        psqtFile << "#include \"Evaluate.hpp\"" << std::endl << std::endl;
+        psqtFile << "alignas(CACHELINE_SIZE)" << std::endl;
+        psqtFile << "const int16_t PSQT[Square::NumSquares / 2][10][2 * Square::NumSquares] =\n{" << std::endl << std::endl;
 
         for (uint8_t kingSqIndex = 0; kingSqIndex < 32; ++kingSqIndex)
         {
@@ -478,6 +497,10 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
             psqtFile << "}," << std::endl << std::endl;
         }
 
+        // epilogue
+        psqtFile << "};" << std::endl << std::endl;
+        psqtFile << "static_assert(sizeof(PSQT) == 2 * sizeof(int16_t) * 10 * 32 * 64, \"Invalid PSQT size\");" << std::endl << std::endl;
+
         offset += 10 * 32 * 64 * 2;
     }
 #endif // USE_PSQT
@@ -490,12 +513,23 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 
 #ifdef USE_IMBALANCE
     {
-        std::cout << "Imbalance table:" << std::endl;
-        for (uint32_t i = 0; i < 10; ++i)
+        std::cout << "Imbalance table (same color):" << std::endl;
+        for (uint32_t i = 0; i < 5; ++i)
         {
             for (uint32_t j = 0; j <= i; ++j)
             {
-                printValue();
+                printValue(32);
+                //std::cout << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * 64 * weights[offset++]) << ", ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "Imbalance table (opposite colors):" << std::endl;
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            for (uint32_t j = 0; j <= i; ++j)
+            {
+                printValue(32);
+                //std::cout << std::fixed << std::setw(4) << int32_t(c_nnOutputToCentiPawns * 64 * weights[offset++]) << ", ";
             }
             std::cout << std::endl;
         }
@@ -570,15 +604,15 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
 
 bool TrainPieceSquareTables()
 {
-    std::vector<PositionEntry> entries;
-    LoadAllPositions(entries);
+    g_syzygyProbeLimit = 5;
 
-    if (entries.empty())
+    TrainingDataLoader dataLoader;
+
+    if (!dataLoader.Init())
     {
+        std::cout << "ERROR: Failed to initialize data loader" << std::endl;
         return false;
     }
-
-    std::cout << "Training with " << entries.size() << " positions" << std::endl;
 
     nn::NeuralNetwork materialNetwork;
     materialNetwork.Init(cNumNetworkInputs, { 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
@@ -593,17 +627,11 @@ bool TrainPieceSquareTables()
 
     nn::NeuralNetworkTrainer trainer;
 
-    // clear weights
-    {
-        float* weights = network.layers[0].variants[0].weights.data();
-        memset(weights, 0, sizeof(float) * (cNumNetworkInputs + 1));
-    }
+    auto& firstLayerWeights = network.layers[0].variants[0].weights;
+    std::fill(firstLayerWeights.begin(), firstLayerWeights.end(), 0.0f);
 
-    // reset weights
-    const auto initPieceValueWeights = [&network]()
     {
-        float* weights = network.layers[0].variants[0].weights.data();
-
+        float* weights = firstLayerWeights.data();
         weights[0] = (float)c_pawnValue.mg / c_nnOutputToCentiPawns;
         weights[1] = (float)c_pawnValue.eg / c_nnOutputToCentiPawns;
         weights[2] = (float)c_knightValue.mg / c_nnOutputToCentiPawns;
@@ -614,6 +642,19 @@ bool TrainPieceSquareTables()
         weights[7] = (float)c_rookValue.eg / c_nnOutputToCentiPawns;
         weights[8] = (float)c_queenValue.mg / c_nnOutputToCentiPawns;
         weights[9] = (float)c_queenValue.eg / c_nnOutputToCentiPawns;
+
+        // fixed material weights
+        float* weightsMask = network.layers[0].variants[0].weightsMask.data();
+        weightsMask[0] = 0.0f;
+        weightsMask[1] = 0.0f;
+        weightsMask[2] = 0.0f;
+        weightsMask[3] = 0.0f;
+        weightsMask[4] = 0.0f;
+        weightsMask[5] = 0.0f;
+        weightsMask[6] = 0.0f;
+        weightsMask[7] = 0.0f;
+        weightsMask[8] = 0.0f;
+        weightsMask[9] = 0.0f;
     };
 
     std::random_device rd;
@@ -628,12 +669,10 @@ bool TrainPieceSquareTables()
 
     const auto generateTrainingEntry = [&](TrainingEntry& outEntry)
     {
-        // pick random test entries
-        std::uniform_int_distribution<size_t> distrib(0, entries.size() - 1);
-
-        const PositionEntry& entry = entries[distrib(gen)];
         Position pos;
-        UnpackPosition(entry.pos, pos);
+        PositionEntry entry;
+        if (!dataLoader.FetchNextPosition(gen, entry, pos))
+            return false;
 
         // flip the board randomly
         const bool pawnless = pos.Whites().pawns == 0 && pos.Blacks().pawns == 0;
@@ -653,9 +692,29 @@ bool TrainPieceSquareTables()
             }
         }
 
+        const float wdlLambda = 0.0f;
+        const float tbLambda = 0.2f;
+
+        const Game::Score gameScore = (Game::Score)entry.wdlScore;
+        const Game::Score tbScore = (Game::Score)entry.tbScore;
+        float score = CentiPawnToWinProbability(entry.score);
+
+        if (gameScore != Game::Score::Unknown)
+        {
+            
+            const float wdlScore = gameScore == Game::Score::WhiteWins ? 1.0f : (gameScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+            score = std::lerp(wdlScore, score, wdlLambda);
+        }
+        if (tbScore != Game::Score::Unknown)
+        {
+            const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+            score = std::lerp(wdlScore, score, tbLambda);
+        }
+
         PositionToTrainingVector(pos, outEntry.trainingVector);
-        outEntry.trainingVector.singleOutput = entry.score;
+        outEntry.trainingVector.singleOutput = score;
         outEntry.pos = pos;
+        return true;
     };
 
     const auto generateTrainingSet = [&](std::vector<TrainingEntry>& outEntries)
@@ -668,14 +727,13 @@ bool TrainPieceSquareTables()
 
     generateTrainingSet(validationSet);
 
-    for (uint32_t iteration = 0; iteration < cMaxIterations; ++iteration)
+    uint32_t batchSize = 0;
+    for (size_t iteration = 0; iteration < cMaxIterations; )
     {
         TimePoint startTime = TimePoint::GetCurrent();
 
-        const float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.001f * iteration));
-
-        // force fixed piece values
-        initPieceValueWeights();
+        const float learningRate = std::max(0.0005f, 0.01f / (1.0f + 0.0001f * iteration));
+        batchSize = std::min(cBatchSizeMax, batchSize + cBatchSizeMin);
 
         // use validation set from previous iteration as training set in the current one
         for (size_t i = 0; i < trainingBatch.size(); ++i)
@@ -687,25 +745,33 @@ bool TrainPieceSquareTables()
         Waitable waitable;
         {
             TaskBuilder taskBuilder(waitable);
-            taskBuilder.ParallelFor("GenerateSet", cNumTrainingVectorsPerIteration, [&](const TaskContext&, uint32_t i)
+            taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                generateTrainingEntry(validationSet[i]);
+                generateTrainingSet(validationSet);
             });
 
             taskBuilder.Task("Train", [&](const TaskContext& ctx)
             {
                 nn::TrainParams params;
-                params.batchSize = cBatchSize;
+                params.optimizer = nn::Optimizer::Adam;
+                params.iteration = iteration;
+                params.batchSize = batchSize;
                 params.learningRate = learningRate;
                 params.clampWeights = false;
 
                 TaskBuilder taskBuilder{ ctx };
-                trainer.Train(network, trainingBatch, params, &taskBuilder);
+                iteration += trainer.Train(network, trainingBatch, params, &taskBuilder);
             });
         }
         waitable.Wait();
 
         numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
+
+        std::cout
+            << "Epoch:                  " << iteration << std::endl
+            << "Batch size:             " << batchSize << std::endl
+            << "Num training vectors:   " << numTrainingVectorsPassed << std::endl
+            << "Learning rate:          " << learningRate << std::endl;
 
         float minError = std::numeric_limits<float>::max();
         float maxError = -std::numeric_limits<float>::max();
@@ -733,15 +799,15 @@ bool TrainPieceSquareTables()
         }
         errorSum = sqrtf(errorSum / cNumValidationVectorsPerIteration);
 
-        float epoch = (float)numTrainingVectorsPassed / (float)entries.size();
-        std::cout << std::right << std::fixed << std::setprecision(4) << epoch << " | ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << errorSum << " | ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << minError << " | ";
-        std::cout << std::right << std::fixed << std::setprecision(4) << maxError << " | ";
-        std::cout << std::endl;
+        std::cout
+            << "NN avg/min/max error:   " << std::setprecision(5) << errorSum << " " << std::setprecision(4) << minError << " " << std::setprecision(4) << maxError << std::endl;
+            //<< "PNN avg/min/max error:  " << std::setprecision(5) << stats.nnPackedErrorSum << " " << std::setprecision(4) << stats.nnPackedMinError << " " << std::setprecision(4) << stats.nnPackedMaxError << std::endl
+            //<< "Quantization error:     " << std::setprecision(5) << stats.nnPackedQuantizationErrorSum << std::endl
+            //<< "Eval avg/min/max error: " << std::setprecision(5) << stats.evalErrorSum << " " << std::setprecision(4) << stats.evalMinError << " " << std::setprecision(4) << stats.evalMaxError << std::endl;
 
         const float iterationTime = (TimePoint::GetCurrent() - startTime).ToSeconds();
-        std::cout << "Iteration time:    " << (1000000.0f * iterationTime / cNumTrainingVectorsPerIteration) << " us/pos" << std::endl;
+        std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << std::endl;
+        std::cout << "Training rate :   " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl << std::endl;
     }
 
     return true;
