@@ -22,9 +22,8 @@ namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 10000;
 
-static constexpr PieceScore c_tempoBonus            = S(7, 7);
-static constexpr PieceScore c_bishopPairBonus       = S(25, 40);
-static constexpr PieceScore c_castlingRightsBonus   = S(9, 37);
+static constexpr PieceScore c_tempoBonus            = S(2, 2);
+static constexpr PieceScore c_bishopPairBonus       = S(33, 63);
 
 static constexpr PieceScore c_knightMobilityBonus[9] = {
     S(-28,-112), S(-14, -39), S(-8,  -5), S(-2,  12), S(3,  22), S(5,  34), S(14,  32), S(21,  28), S(27,  17) };
@@ -465,9 +464,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     // bishop pair
     if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) value += c_bishopPairBonus;
     if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) value -= c_bishopPairBonus;
-
-    // castling rights
-    value += c_castlingRightsBonus * ((int8_t)PopCount(pos.GetWhitesCastlingRights()) - (int8_t)PopCount(pos.GetBlacksCastlingRights()));
 
     // 0 - endgame, 64 - opening
     const int32_t gamePhase =

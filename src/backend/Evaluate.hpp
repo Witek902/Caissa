@@ -20,11 +20,11 @@ extern const char* c_DefaultEndgameEvalFile;
 using KingsPerspectivePSQT = int16_t[10][2 * Square::NumSquares];
 extern const KingsPerspectivePSQT PSQT[Square::NumSquares / 2];
 
-static constexpr PieceScore c_pawnValue     = {  73,  141 };
-static constexpr PieceScore c_knightValue   = { 291,  380 };
-static constexpr PieceScore c_bishopValue   = { 322,  391 };
-static constexpr PieceScore c_rookValue     = { 397,  639 };
-static constexpr PieceScore c_queenValue    = { 931, 1139 };
+static constexpr PieceScore c_pawnValue     = {   97, 166 };
+static constexpr PieceScore c_knightValue   = {  455, 371 };
+static constexpr PieceScore c_bishopValue   = {  494, 385 };
+static constexpr PieceScore c_rookValue     = {  607, 656 };
+static constexpr PieceScore c_queenValue    = { 1427,1086 };
 static constexpr PieceScore c_kingValue     = { std::numeric_limits<int16_t>::max(), std::numeric_limits<int16_t>::max() };
 
 static constexpr PieceScore c_pieceValues[] =
