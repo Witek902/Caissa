@@ -24,8 +24,9 @@
 #include <fstream>
 #include <limits.h>
 
-//#define USE_PSQT
-//#define USE_BISHOP_PAIR
+#define USE_TEMPO
+#define USE_BISHOP_PAIR
+#define USE_PSQT
 //#define USE_CASTLING_RIGHTS
 //#define USE_IMBALANCE
 //#define USE_MOBILITY
@@ -37,16 +38,19 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 100000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
-static const uint32_t cBatchSizeMin = 64;
-static const uint32_t cBatchSizeMax = 8 * 1024;
+static const uint32_t cBatchSizeMin = 256;
+static const uint32_t cBatchSizeMax = 16 * 1024;
 
 static const uint32_t cNumNetworkInputs =
     2 * 5                       // piece values
-#ifdef USE_PSQT
-    + 2 * 32 * 64 * 10          // king-relative PSQT
+#ifdef USE_TEMPO
+    + 2
 #endif
 #ifdef USE_BISHOP_PAIR
     + 2                         // bishop pair
+#endif
+#ifdef USE_PSQT
+    + 2 * 32 * 64 * 10          // king-relative PSQT
 #endif
 #ifdef USE_IMBALANCE
     + 2 * 30
@@ -121,6 +125,27 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         inputs.push_back(nn::ActiveFeature{offset++, eg * (wq - bq)});
     }
 
+#ifdef USE_TEMPO
+    {
+        inputs.push_back(nn::ActiveFeature{ offset++, (float)mg });
+        inputs.push_back(nn::ActiveFeature{ offset++, (float)eg });
+    }
+#endif // USE_BISHOP_PAIR
+
+#ifdef USE_BISHOP_PAIR
+    {
+        int32_t bishopPair = 0;
+        if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) bishopPair += 1;
+        if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) bishopPair -= 1;
+        if (bishopPair)
+        {
+            inputs.push_back(nn::ActiveFeature{ offset + 0, (float)bishopPair * mg });
+            inputs.push_back(nn::ActiveFeature{ offset + 1, (float)bishopPair * eg });
+        }
+        offset += 2;
+    }
+#endif // USE_BISHOP_PAIR
+
 #ifdef USE_PSQT
     // piece-square tables
     {
@@ -182,20 +207,6 @@ static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& ou
         offset += 2 * 32 * 64 * 2;
     }
 #endif // USE_PSQT
-
-#ifdef USE_BISHOP_PAIR
-    {
-        int32_t bishopPair = 0;
-        if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) bishopPair += 1;
-        if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) bishopPair -= 1;
-        if (bishopPair)
-        {
-            inputs.push_back(nn::ActiveFeature{offset + 0, (float)bishopPair * mg});
-            inputs.push_back(nn::ActiveFeature{offset + 1, (float)bishopPair * eg});
-        }
-        offset += 2;
-    }
-#endif // USE_BISHOP_PAIR
 
 #ifdef USE_IMBALANCE
     {
@@ -436,14 +447,20 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
     };
 
     // piece values
-    {
-        std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
-        std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
-        std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
-        std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
-        std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
-        std::cout << std::endl;
-    }
+    std::cout << "Pawn value:       "; printValue(); std::cout << std::endl;
+    std::cout << "Knight value:     "; printValue(); std::cout << std::endl;
+    std::cout << "Bishop value:     "; printValue(); std::cout << std::endl;
+    std::cout << "Rook value:       "; printValue(); std::cout << std::endl;
+    std::cout << "Queen value:      "; printValue(); std::cout << std::endl;
+    std::cout << std::endl;
+
+#ifdef USE_TEMPO
+        std::cout << "Tempo bonus:           "; printValue(); std::cout << std::endl;
+#endif // USE_BISHOP_PAIR
+
+#ifdef USE_BISHOP_PAIR
+        std::cout << "Bishop Pair:           "; printValue(); std::cout << std::endl;
+#endif // USE_BISHOP_PAIR
 
 #ifdef USE_PSQT
     {
@@ -504,12 +521,6 @@ static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
         offset += 10 * 32 * 64 * 2;
     }
 #endif // USE_PSQT
-
-#ifdef USE_BISHOP_PAIR
-    {
-        std::cout << "Bishop Pair:           "; printValue(); std::cout << std::endl;
-    }
-#endif // USE_BISHOP_PAIR
 
 #ifdef USE_IMBALANCE
     {
@@ -643,8 +654,9 @@ bool TrainPieceSquareTables()
         weights[8] = (float)c_queenValue.mg / c_nnOutputToCentiPawns;
         weights[9] = (float)c_queenValue.eg / c_nnOutputToCentiPawns;
 
-        // fixed material weights
         float* weightsMask = network.layers[0].variants[0].weightsMask.data();
+
+        // fixed material weights
         weightsMask[0] = 0.0f;
         weightsMask[1] = 0.0f;
         weightsMask[2] = 0.0f;
@@ -655,6 +667,9 @@ bool TrainPieceSquareTables()
         weightsMask[7] = 0.0f;
         weightsMask[8] = 0.0f;
         weightsMask[9] = 0.0f;
+
+        // don't update bias
+        weightsMask[cNumNetworkInputs] = 0.0f;
     };
 
     std::random_device rd;
@@ -732,7 +747,7 @@ bool TrainPieceSquareTables()
     {
         TimePoint startTime = TimePoint::GetCurrent();
 
-        const float learningRate = std::max(0.0005f, 0.01f / (1.0f + 0.0001f * iteration));
+        const float learningRate = std::max(0.0005f, 0.01f / (1.0f + 0.0002f * iteration));
         batchSize = std::min(cBatchSizeMax, batchSize + cBatchSizeMin);
 
         // use validation set from previous iteration as training set in the current one
@@ -754,6 +769,7 @@ bool TrainPieceSquareTables()
             {
                 nn::TrainParams params;
                 params.optimizer = nn::Optimizer::Adam;
+                params.weightDecay = 1.0e-2f;
                 params.iteration = iteration;
                 params.batchSize = batchSize;
                 params.learningRate = learningRate;

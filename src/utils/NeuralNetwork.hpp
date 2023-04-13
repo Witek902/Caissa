@@ -139,6 +139,7 @@ struct TrainParams
     size_t iteration = 0;
     size_t batchSize = 32;
     float learningRate = 0.5f;
+    float weightDecay = 1.0e-5f;
     Optimizer optimizer = Optimizer::Adadelta;
     bool clampWeights = true;
 };
