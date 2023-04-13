@@ -11,8 +11,11 @@
 #include "../backend/Tablebase.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 using namespace threadpool;
+
+// #define OUTPUT_TEXT_FILE
 
 static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::string& outputPath)
 {
@@ -32,12 +35,14 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
         return true;
     }
 
+#ifndef OUTPUT_TEXT_FILE
     FileOutputStream trainingDataFile(outputPath.c_str());
     if (!trainingDataFile.IsOpen())
     {
         std::cout << "ERROR: Failed to load output training data file: " << outputPath << std::endl;
         return false;
     }
+#endif // OUTPUT_TEXT_FILE
 
     uint32_t numGames = 0;
     uint32_t numPositions = 0;
@@ -65,7 +70,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
             if (move.IsQuiet() &&                                   // best move must be quiet
                 (i >= 4 || pos.GetNumPieces() < 32) &&
                 pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
+                (std::abs(moveScore) < 500 || std::abs(Evaluate(pos, nullptr, false)) < 1000) &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};
@@ -124,11 +129,34 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
         std::shuffle(entries.begin(), entries.end(), randomGenerator);
     }
 
+#ifdef OUTPUT_TEXT_FILE
+    {
+        FILE* outputTextFile = fopen(outputPath.c_str(), "w");
+
+        Position pos;
+        for (const PositionEntry& entry : entries)
+        {
+            VERIFY(UnpackPosition(entry.pos, pos, false));
+            ASSERT(pos.GetSideToMove() == Color::White);
+
+            const char* scoreStr = "0.5";
+            if (entry.wdlScore == static_cast<uint8_t>(Game::Score::WhiteWins)) scoreStr = "1";
+            if (entry.wdlScore == static_cast<uint8_t>(Game::Score::BlackWins)) scoreStr = "0";
+
+            fprintf(outputTextFile, "%s | %d | %s\n", pos.ToFEN().c_str(), (int32_t)entry.score, scoreStr);
+        }
+
+        fclose(outputTextFile);
+    }
+#else // !OUTPUT_TEXT_FILE
+
     if (!trainingDataFile.Write(entries.data(), entries.size() * sizeof(PositionEntry)))
     {
         std::cout << "ERROR: Failed to write training data file: " << outputPath << std::endl;
         return false;
     }
+
+#endif // OUTPUT_TEXT_FILE
 
     return true;
 }
