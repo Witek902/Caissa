@@ -283,7 +283,7 @@ uint32_t TranspositionTable::GetHashFull() const
     const uint32_t clusterCount = 1000 / NumEntriesPerCluster;
 
     uint32_t count = 0;
-    if (clusterCount > numClusters)
+    if (clusterCount <= numClusters)
     {
         for (uint32_t i = 0; i < clusterCount; ++i)
         {
