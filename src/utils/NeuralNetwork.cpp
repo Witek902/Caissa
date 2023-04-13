@@ -435,6 +435,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
 
                 Layer::WeightsUpdateOptions updateOptions;
                 updateOptions.iteration = params.iteration + batchIdx;
+                updateOptions.weightDecay = params.weightDecay;
                 updateOptions.learningRate = params.learningRate;
                 updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
 
@@ -442,7 +443,6 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 float weightRange = 0.0f, biasRange = 0.0f;
                 if (layerIdx == 0) // input layer
                 {
-                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = InputLayerWeightQuantizationScale;
                     biasQuantizationScale = InputLayerBiasQuantizationScale;
                     // divide by number of active input features to avoid accumulator overflow
@@ -451,7 +451,6 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 }
                 else if (layerIdx + 1 == network.layers.size()) // output layer
                 {
-                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = OutputLayerWeightQuantizationScale;
                     biasQuantizationScale = OutputLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
@@ -459,7 +458,6 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 }
                 else // hidden layer
                 {
-                    updateOptions.weightDecay = 1.0e-5f;
                     weightQuantizationScale = HiddenLayerWeightQuantizationScale;
                     biasQuantizationScale = HiddenLayerBiasQuantizationScale;
                     weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
