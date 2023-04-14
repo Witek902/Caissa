@@ -609,8 +609,8 @@ void Layer::UpdateWeights_Adam(uint32_t variantIndex, const Gradients& gradients
     const float cEpsilon = 1.0e-9f;
 
     const float cIter = (float)(options.iteration + 1);
-    const float cBeta1Mult = 1.0f / (1.0f - std::powf(cBeta1, cIter));
-    const float cBeta2Mult = 1.0f / (1.0f - std::powf(cBeta2, cIter));
+    const float cBeta1Mult = 1.0f / (1.0f - powf(cBeta1, cIter));
+    const float cBeta2Mult = 1.0f / (1.0f - powf(cBeta2, cIter));
 
 #ifdef USE_AVX
     const __m256 cOneMinusBeta1Vec = _mm256_set1_ps(1.0f - cBeta1);

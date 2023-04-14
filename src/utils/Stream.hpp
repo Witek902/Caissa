@@ -8,7 +8,7 @@
 class InputStream
 {
 public:
-    ~InputStream() = default;
+    virtual ~InputStream() = default;
     virtual uint64_t GetSize() = 0;
     virtual bool IsEndOfFile() const = 0;
     virtual bool Read(void* data, size_t size) = 0;
@@ -53,6 +53,7 @@ class FileInputStream : public InputStream
 {
 public:
     FileInputStream(const char* filePath);
+    virtual ~FileInputStream() = default;
     bool IsOpen() const;
     uint64_t GetPosition() const;
     bool SetPosition(uint64_t offset);

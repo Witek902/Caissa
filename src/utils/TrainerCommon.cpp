@@ -31,7 +31,8 @@ bool TrainingDataLoader::Init(const std::string& trainingDataPath)
         {
             std::cout << "Using " << fileName << std::endl;
 
-            InputFileContext& ctx = mContexts.emplace_back(std::move(fileStream));
+            InputFileContext& ctx = mContexts.emplace_back();
+            ctx.fileStream = std::move(fileStream);
             ctx.fileName = fileName;
             ctx.fileSize = fileSize;
 

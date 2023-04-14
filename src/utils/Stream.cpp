@@ -84,7 +84,11 @@ uint64_t FileInputStream::GetSize()
     const long originalPos = ftell(mFile);
 
     fseek(mFile, 0, SEEK_END);
+#if defined(_MSC_VER)
     const uint64_t size = _ftelli64(mFile);
+#else
+    const uint64_t size = ftello64(mFile);
+#endif
     fseek(mFile, originalPos, SEEK_SET);
 
     return size;
@@ -92,12 +96,20 @@ uint64_t FileInputStream::GetSize()
 
 uint64_t FileInputStream::GetPosition() const
 {
+#if defined(_MSC_VER)
     return _ftelli64(mFile);
+#else
+    return ftello64(mFile);
+#endif
 }
 
 bool FileInputStream::SetPosition(uint64_t offset)
 {
+#if defined(_MSC_VER)
     return 0 != _fseeki64(mFile, offset, SEEK_SET);
+#else
+    return 0 != fseeko64(mFile, offset, SEEK_SET);
+#endif
 }
 
 bool FileInputStream::IsEndOfFile() const

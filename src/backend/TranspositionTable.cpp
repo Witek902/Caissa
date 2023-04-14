@@ -96,7 +96,7 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
 void TranspositionTable::Clear()
 {
-    memset(clusters, 0, numClusters * sizeof(TTCluster));
+    std::fill(clusters, clusters + numClusters, TTCluster{});
     generation = 0;
 }
 
