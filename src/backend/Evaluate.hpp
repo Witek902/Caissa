@@ -41,8 +41,8 @@ static constexpr PieceScore c_pieceValues[] =
 // if abs(simpleEval) > nnTresholdMax, then we don't use NN at all
 // if abs(simpleEval) < nnTresholdMin, then we use NN purely
 // between the two values, the NN eval and simple eval are blended smoothly
-static constexpr int32_t c_nnTresholdMin = 512;
-static constexpr int32_t c_nnTresholdMax = 768;
+static constexpr int32_t c_nnTresholdMin = 768;
+static constexpr int32_t c_nnTresholdMax = 1024;
 
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
