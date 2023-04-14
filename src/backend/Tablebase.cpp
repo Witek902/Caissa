@@ -6,96 +6,60 @@
 
 uint32_t g_syzygyProbeLimit = 7;
 
-#ifdef USE_TABLE_BASES
-
+#ifdef USE_SYZYGY_TABLEBASES
 #include "syzygy/tbprobe.h"
+#endif
+
+#ifdef USE_GAVIOTA_TABLEBASES
 #include "gaviota/gtb-probe.h"
+#endif
 
 #include <iostream>
 #include <mutex>
 
+#ifdef USE_SYZYGY_TABLEBASES
 static std::mutex g_syzygyMutex;
+#endif // USE_SYZYGY_TABLEBASES
+
+#ifdef USE_GAVIOTA_TABLEBASES
 static std::mutex g_gaviotaMutex;
-
 static const uint32_t g_gaviotaWdlFraction = 32; // 25% for WDL information
-
 static size_t g_gaviotaPendingCacheSize = 0;
-
-void LoadSyzygyTablebase(const char* path)
-{
-    std::unique_lock lock(g_syzygyMutex);
-
-    if (syzygy_tb_init(path))
-    {
-        std::cout << "info string Syzygy tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
-    }
-    else
-    {
-        std::cout << "info string Failed to load Syzygy tablebase" << std::endl;
-    }
-}
-
-void LoadGaviotaTablebase(const char* path)
-{
-    std::unique_lock lock(g_gaviotaMutex);
-
-    const int32_t verbosity = 0;
-
-    const char** paths = tbpaths_init();
-    paths = tbpaths_add(paths, path);
-
-    const char* ret = tb_init(verbosity, tb_CP4, paths);
-
-    if (!ret)
-    {
-        std::cout << "info string Gaviota tablebases loaded successfully. Availability = " << tb_availability() << std::endl;
-    }
-    else
-    {
-        std::cout << "info string Failed to load Gaviota tablebase: " << ret << std::endl;
-    }
-
-    if (g_gaviotaPendingCacheSize)
-    {
-        SetGaviotaCacheSize(g_gaviotaPendingCacheSize);
-    }
-}
-
-void SetGaviotaCacheSize(size_t cacheSize)
-{
-    if (tb_availability() != 0)
-    {
-        tbcache_init(cacheSize, g_gaviotaWdlFraction);
-        g_gaviotaPendingCacheSize = 0;
-    }
-    else
-    {
-        g_gaviotaPendingCacheSize = cacheSize;
-    }
-}
+#endif // USE_GAVIOTA_TABLEBASES
 
 void UnloadTablebase()
 {
+#ifdef USE_SYZYGY_TABLEBASES
     {
         std::unique_lock lock(g_syzygyMutex);
         tb_free();
     }
+#endif // USE_SYZYGY_TABLEBASES
 
+#ifdef USE_GAVIOTA_TABLEBASES
     {
         std::unique_lock lock(g_gaviotaMutex);
         tbcache_done();
         tb_done();
     }
+#endif // USE_GAVIOTA_TABLEBASES
+}
+
+
+#ifdef USE_SYZYGY_TABLEBASES
+
+void LoadSyzygyTablebase(const char* path)
+{
+    std::unique_lock lock(g_syzygyMutex);
+    if (syzygy_tb_init(path))
+        std::cout << "info string Syzygy tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
+    else
+        std::cout << "info string Failed to load Syzygy tablebase" << std::endl;
 }
 
 bool HasSyzygyTablebases()
 {
     return TB_LARGEST > 0u;
-}
-
-bool HasGaviotaTablebases()
-{
-    return tb_availability() != 0;
 }
 
 static Piece TranslatePieceType(uint32_t tbPromotes)
@@ -243,6 +207,62 @@ bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL)
     }
 
     return false;
+}
+
+#else
+
+bool HasSyzygyTablebases() { return false; }
+void LoadSyzygyTablebase(const char*) { }
+bool ProbeSyzygy_Root(const Position&, Move&, uint32_t*, int32_t*) { return false; }
+bool ProbeSyzygy_WDL(const Position&, int32_t*) { return false; }
+
+#endif // USE_SYZYGY_TABLEBASES
+
+
+#ifdef USE_GAVIOTA_TABLEBASES
+
+void LoadGaviotaTablebase(const char* path)
+{
+    std::unique_lock lock(g_gaviotaMutex);
+
+    const int32_t verbosity = 0;
+
+    const char** paths = tbpaths_init();
+    paths = tbpaths_add(paths, path);
+
+    const char* ret = tb_init(verbosity, tb_CP4, paths);
+
+    if (!ret)
+    {
+        std::cout << "info string Gaviota tablebases loaded successfully. Availability = " << tb_availability() << std::endl;
+    }
+    else
+    {
+        std::cout << "info string Failed to load Gaviota tablebase: " << ret << std::endl;
+    }
+
+    if (g_gaviotaPendingCacheSize)
+    {
+        SetGaviotaCacheSize(g_gaviotaPendingCacheSize);
+    }
+}
+
+void SetGaviotaCacheSize(size_t cacheSize)
+{
+    if (tb_availability() != 0)
+    {
+        tbcache_init(cacheSize, g_gaviotaWdlFraction);
+        g_gaviotaPendingCacheSize = 0;
+    }
+    else
+    {
+        g_gaviotaPendingCacheSize = cacheSize;
+    }
+}
+
+bool HasGaviotaTablebases()
+{
+    return tb_availability() != 0;
 }
 
 static TB_squares SquareToGaviota(const Square square)
@@ -423,36 +443,12 @@ bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM, int
     return bestScore > -InfValue;
 }
 
-#else // !USE_TABLE_BASES
+#else
 
-bool HasTablebases()
-{
-    return false;
-}
-
-void LoadSyzygyTablebase(const char*) { }
+bool HasGaviotaTablebases() { return false; }
 void LoadGaviotaTablebase(const char*) { }
 void SetGaviotaCacheSize(size_t) { }
-void UnloadTablebase() { }
+bool ProbeGaviota(const Position&, uint32_t*, int32_t*) { return false; }
+bool ProbeGaviota_Root(const Position&, Move&, uint32_t*, int32_t*) { return false; }
 
-bool ProbeSyzygy_Root(const Position&, Move&, uint32_t*, int32_t*)
-{
-    return false;
-}
-
-bool ProbeSyzygy_WDL(const Position&, int32_t*)
-{
-    return false;
-}
-
-bool ProbeGaviota_Root(const Position&, Move&, uint32_t*, int32_t*)
-{
-    return false;
-}
-
-bool ProbeGaviota(const Position&, uint32_t*, int32_t*)
-{
-    return false;
-}
-
-#endif // USE_TABLE_BASES
+#endif // USE_GAVIOTA_TABLEBASES

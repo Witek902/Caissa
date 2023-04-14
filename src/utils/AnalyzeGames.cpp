@@ -48,7 +48,7 @@ void AnalyzeGames()
 
     //std::unordered_map<MaterialKey, MaterialConfigInfo> materialConfigurations;
     
-    uint64_t pieceOccupancy[6][64] = { 0 };
+    uint64_t pieceOccupancy[6][64] = { };
 
     uint64_t gameResultVsHalfMoveCounter[3][101] = { };
 

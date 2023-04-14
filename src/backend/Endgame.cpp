@@ -869,9 +869,9 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
         // win if pawn is not much advanced or the weak king is too far from pawn and the rook
         if ((weakKing.Rank() + 1 >= weakPawn.Rank() && weakPawn.Rank() > 5) ||
             (weakKing.Rank() > weakPawn.Rank() && weakPawn.Rank() > 4) ||
-            (Square::Distance(weakKing, weakPawn) >= 6u && weakPawn.Rank() > 1) ||
-            (Square::Distance(weakKing, weakPawn) >= 4u && weakKing.Rank() >= weakPawn.Rank() && weakPawn.Rank() > 1) ||
-            (Square::Distance(weakKing, weakPawn) >= 3u && weakKing.Rank() >= weakPawn.Rank() && weakPawn.Rank() > 3))
+            (Square::Distance(weakKing, weakPawn) >= 6 && weakPawn.Rank() > 1) ||
+            (Square::Distance(weakKing, weakPawn) >= 4 && weakKing.Rank() >= weakPawn.Rank() && weakPawn.Rank() > 1) ||
+            (Square::Distance(weakKing, weakPawn) >= 3 && weakKing.Rank() >= weakPawn.Rank() && weakPawn.Rank() > 3))
         {
             win = true;
         }

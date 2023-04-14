@@ -35,7 +35,9 @@ static const uint32_t c_DefaultTTSizeInMB = 256;
 static const uint32_t c_DefaultTTSizeInMB = 16;
 #endif
 static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
+#ifdef USE_GAVIOTA_TABLEBASES
 static const uint32_t c_DefaultGaviotaTbCacheInMB = 64;
+#endif // USE_GAVIOTA_TABLEBASES
 static const uint32_t c_MaxNumThreads = 1024;
 
 
@@ -55,8 +57,10 @@ UniversalChessInterface::UniversalChessInterface()
     TryLoadingDefaultEndgameEvalFile();
 #endif // USE_ENDGAME_NEURAL_NETWORK
 
+#ifdef USE_GAVIOTA_TABLEBASES
     // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
     SetGaviotaCacheSize(1024 * 1024 * c_DefaultGaviotaTbCacheInMB);
+#endif // USE_GAVIOTA_TABLEBASES
 }
 
 UniversalChessInterface::~UniversalChessInterface()
@@ -151,12 +155,14 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #ifdef USE_ENDGAME_NEURAL_NETWORK
         std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
 #endif // USE_ENDGAME_NEURAL_NETWORK
-#ifdef USE_TABLE_BASES
+#ifdef USE_SYZYGY_TABLEBASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name SyzygyProbeLimit type spin default 7 min 4 max 7\n";
+#endif // USE_SYZYGY_TABLEBASES
+#ifdef USE_GAVIOTA_TABLEBASES
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
         std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
-#endif // USE_TABLE_BASES
+#endif // USE_GAVIOTA_TABLEBASES
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
@@ -791,7 +797,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
             return false;
         }
     }
-#ifdef USE_TABLE_BASES
+#ifdef USE_SYZYGY_TABLEBASES
     else if (lowerCaseName == "syzygypath")
     {
         LoadSyzygyTablebase(value.c_str());
@@ -800,6 +806,8 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         g_syzygyProbeLimit = std::clamp(atoi(value.c_str()), 4, 7);
     }
+#endif // USE_SYZYGY_TABLEBASES
+#ifdef USE_GAVIOTA_TABLEBASES
     else if (lowerCaseName == "gaviotatbpath")
     {
         LoadGaviotaTablebase(value.c_str());
@@ -809,7 +817,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         const size_t cacheSize = 1024 * 1024 * static_cast<size_t>(std::max(1, atoi(value.c_str())));
         SetGaviotaCacheSize(cacheSize);
     }
-#endif // USE_TABLE_BASES
+#endif // USE_GAVIOTA_TABLEBASES
     else if (lowerCaseName == "evalfile")
     {
         LoadMainNeuralNetwork(value.c_str());
