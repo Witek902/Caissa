@@ -2,7 +2,7 @@ from PIL import Image
 import struct
 import math 
 
-filePath = "../data/neuralNets/eval-9.pnn"
+filePath = "../data/neuralNets/eval-10.pnn"
 marginSize = 1
 headerSize = 64
 
@@ -11,13 +11,12 @@ def lerp(a: float, b: float, t: float) -> float:
 
 
 def weightToColor(w):
-    black = 10
     if w > 0:
-        t = 1.0 - math.exp(-w / 128.0)
-        return (int(lerp(black,255,t)), int(lerp(black,10,t)), int(lerp(black,20,t)))
+        t = math.sqrt(1.0 - math.exp(-w / 256.0))
+        return (int(lerp(0,255,t)), int(lerp(0,0,t)), int(lerp(0,0,t)))
     else:
-        t = 1.0 - math.exp(w / 128.0)
-        return (int(lerp(black,10,t)), int(lerp(black,80,t)), int(lerp(black,255,t)))
+        t = math.sqrt(1.0 - math.exp(w / 256.0))
+        return (int(lerp(0,0,t)), int(lerp(0,80,t)), int(lerp(0,255,t)))
 
 
 def inputIndexToCoords(index):

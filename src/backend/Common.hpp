@@ -391,7 +391,6 @@ class Game;
 class TranspositionTable;
 struct NodeInfo;
 struct NNEvaluatorContext;
-enum class NetworkInputMapping : uint8_t;
 
 using ScoreType = int16_t;
 

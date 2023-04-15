@@ -27,6 +27,85 @@ void NNEvaluator::ResetStats()
 
 #endif // NN_ACCUMULATOR_STATS
 
+uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective)
+{
+    uint32_t numFeatures = 0;
+    uint32_t numInputs = 0;
+
+    const auto writePieceFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask) INLINE_LAMBDA
+    {
+        bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + (square ^ bitFlipMask));
+        });
+        numInputs += 64;
+    };
+
+    const auto writePawnFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask) INLINE_LAMBDA
+    {
+        // pawns cannot stand on first or last rank
+        constexpr Bitboard mask = ~(Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>());
+        (bitboard & mask).Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            outFeatures[numFeatures++] = (uint16_t)(numInputs + (square ^ bitFlipMask) - 8u);
+        });
+        numInputs += 48;
+    };
+
+    const auto& whites = pos.GetSide(perspective);
+    const auto& blacks = pos.GetSide(GetOppositeColor(perspective));
+
+    Square whiteKingSquare = whites.GetKingSquare();
+    Square blackKingSquare = blacks.GetKingSquare();
+
+    uint32_t bitFlipMask = 0;
+
+    if (whiteKingSquare.File() >= 4)
+    {
+        // flip file
+        whiteKingSquare = whiteKingSquare.FlippedFile();
+        blackKingSquare = blackKingSquare.FlippedFile();
+        bitFlipMask = 0b000111;
+    }
+
+    if (perspective == Color::Black)
+    {
+        // flip rank
+        whiteKingSquare = whiteKingSquare.FlippedRank();
+        blackKingSquare = blackKingSquare.FlippedRank();
+        bitFlipMask |= 0b111000;
+    }
+
+    writePawnFeatures(whites.pawns, bitFlipMask);
+    writePieceFeatures(whites.knights, bitFlipMask);
+    writePieceFeatures(whites.bishops, bitFlipMask);
+    writePieceFeatures(whites.rooks, bitFlipMask);
+    writePieceFeatures(whites.queens, bitFlipMask);
+
+    // white king
+    {
+        const uint32_t whiteKingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
+        ASSERT(whiteKingIndex < 32);
+        outFeatures[numFeatures++] = (uint16_t)(numInputs + whiteKingIndex);
+        numInputs += 32;
+    }
+
+    writePawnFeatures(blacks.pawns, bitFlipMask);
+    writePieceFeatures(blacks.knights, bitFlipMask);
+    writePieceFeatures(blacks.bishops, bitFlipMask);
+    writePieceFeatures(blacks.rooks, bitFlipMask);
+    writePieceFeatures(blacks.queens, bitFlipMask);
+
+    // black king
+    {
+        outFeatures[numFeatures++] = (uint16_t)(numInputs + blackKingSquare.Index());
+        numInputs += 64;
+    }
+
+    ASSERT(numInputs == (32 + 64 + 2 * (4 * 64 + 48)));
+
+    return numFeatures;
+}
 
 INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color pieceColor, const Square square, const Position& pos, const Color perspective)
 {
@@ -80,12 +159,9 @@ static uint32_t GetNetworkVariant(const Position& pos)
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
 {
-    Position positionCopy = pos;
-    if (pos.GetSideToMove() == Color::Black) positionCopy = pos.SwappedColors();
-
     const uint32_t maxFeatures = 64;
     uint16_t features[maxFeatures];
-    const uint32_t numFeatures = positionCopy.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
+    const uint32_t numFeatures = PositionToFeaturesVector(pos, features, pos.GetSideToMove());
     ASSERT(numFeatures <= maxFeatures);
 
     return network.Run(features, numFeatures, GetNetworkVariant(pos));
@@ -211,11 +287,9 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 
 #ifdef VALIDATE_NETWORK_OUTPUT
         {
-            Position positionCopy = node.position;
-            if (perspective == Color::Black) positionCopy = node.position.SwappedColors();
             const uint32_t maxFeatures = 64;
             uint16_t referenceFeatures[maxFeatures];
-            const uint32_t numReferenceFeatures = positionCopy.ToFeaturesVector(referenceFeatures, NetworkInputMapping::Full_Symmetrical);
+            const uint32_t numReferenceFeatures = PositionToFeaturesVector(node.position, referenceFeatures, perspective);
 
             for (uint32_t i = 0; i < numAddedFeatures; ++i)
             {
@@ -239,22 +313,26 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 #ifdef NN_ACCUMULATOR_STATS
         s_NumAccumulatorUpdates++;
 #endif // NN_ACCUMULATOR_STATS
-
-        accumulator.Update(
-            prevAccumNode->nnContext->accumulator[(uint32_t)perspective],
-            network.GetAccumulatorWeights(),
-            network.GetNumInputs(), network.GetLayerSize(1),
-            numAddedFeatures, addedFeatures,
-            numRemovedFeatures, removedFeatures);
+        
+        if (numAddedFeatures == 0 && numRemovedFeatures == 0)
+        {
+            accumulator = prevAccumNode->nnContext->accumulator[(uint32_t)perspective];
+        }
+        else
+        {
+            accumulator.Update(
+                prevAccumNode->nnContext->accumulator[(uint32_t)perspective],
+                network.GetAccumulatorWeights(),
+                network.GetNumInputs(), network.GetLayerSize(1),
+                numAddedFeatures, addedFeatures,
+                numRemovedFeatures, removedFeatures);
+        }
     }
     else // refresh accumulator
     {
-        Position positionCopy = node.position;
-        if (perspective == Color::Black) positionCopy = node.position.SwappedColors();
-
         const uint32_t maxFeatures = 64;
         uint16_t features[maxFeatures];
-        const uint32_t numFeatures = positionCopy.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
+        const uint32_t numFeatures = PositionToFeaturesVector(node.position, features, perspective);
         ASSERT(numFeatures <= maxFeatures);
 
 #ifdef NN_ACCUMULATOR_STATS

@@ -54,3 +54,5 @@ private:
 
     uint32_t SampleInputFileIndex(double u) const;
 };
+
+void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector);

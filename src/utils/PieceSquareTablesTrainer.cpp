@@ -81,7 +81,7 @@ static float GetGamePhase(const Position& pos)
     return std::min(1.0f, (float)gamePhase / 64.0f);
 }
 
-static void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
+static void PositionToPsqtTrainingVector(const Position& pos, nn::TrainingVector& outVector)
 {
     ASSERT(pos.GetSideToMove() == Color::White);
 
@@ -726,7 +726,7 @@ bool TrainPieceSquareTables()
             score = std::lerp(wdlScore, score, tbLambda);
         }
 
-        PositionToTrainingVector(pos, outEntry.trainingVector);
+        PositionToPsqtTrainingVector(pos, outEntry.trainingVector);
         outEntry.trainingVector.singleOutput = score;
         outEntry.pos = pos;
         return true;

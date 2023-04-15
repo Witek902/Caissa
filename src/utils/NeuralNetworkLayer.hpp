@@ -1,3 +1,5 @@
+#pragma once
+
 #include "NeuralNetworkCommon.hpp"
 
 namespace nn {
@@ -19,9 +21,9 @@ enum class OutputMode : uint8_t
 enum class ActivationFunction : uint8_t
 {
     Linear,
-    ClippedReLu,
+    ReLU,
+    CReLU,
     Sigmoid,
-    ATan,
 };
 
 class LayerRunContext

@@ -1,6 +1,7 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
 #include "NeuralNetwork.hpp"
+#include "TrainerCommon.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/PositionUtils.hpp"
@@ -27,31 +28,13 @@
 
 using namespace threadpool;
 
+const uint32_t cNumNetworkInputs = 704;
+
 static const uint32_t cMaxIterations = 10000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 16 * 1024;
 static const uint32_t cMinBatchSize = 8 * 1024;
 static const uint32_t cMaxBatchSize = 8 * 1024;
-
-static void PositionToPackedVector(const Position& pos, nn::TrainingVector& outVector)
-{
-    const uint32_t maxFeatures = 64;
-
-    uint16_t features[maxFeatures];
-    //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::MaterialPacked_Symmetrical);
-    //uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::KingPiece_Symmetrical);
-    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
-    ASSERT(numFeatures <= maxFeatures);
-
-    outVector.inputMode = nn::InputMode::SparseBinary;
-    outVector.sparseBinaryInputs.clear();
-    outVector.sparseBinaryInputs.reserve(numFeatures);
-
-    for (uint32_t i = 0; i < numFeatures; ++i)
-    {
-        outVector.sparseBinaryInputs.emplace_back(features[i]);
-    }
-}
 
 static float ScoreFromNN(float score)
 {
@@ -197,7 +180,7 @@ bool TrainEndgame()
 #endif // USE_DTZ
                 }
 
-                PositionToPackedVector(pos, outSet[i].trainingVector);
+                PositionToTrainingVector(pos, outSet[i].trainingVector);
                 outSet[i].trainingVector.singleOutput = score;
                 outSet[i].pos = pos;
 
@@ -206,16 +189,10 @@ bool TrainEndgame()
         });
     };
 
-    //const uint32_t numNetworkInputs = 32 + 64 * 3 + 48 * 2;
-    const uint32_t numNetworkInputs = 704;
-    //const uint32_t numNetworkInputs = materialKey.GetNeuralNetworkInputsNumber();
-    //const uint32_t numNetworkInputs = 2 * 3 * 32 * 64;
-    //const uint32_t numNetworkInputs = 2 * 10 * 32 * 64;
-
     std::string name = "endgame";
 
     nn::NeuralNetwork network;
-    network.Init(numNetworkInputs, { 1280, 1 });
+    network.Init(cNumNetworkInputs, { 1280, 1 });
     //network.Load("checkpoint.nn");
 
     nn::NeuralNetworkRunContext networkRunCtx;

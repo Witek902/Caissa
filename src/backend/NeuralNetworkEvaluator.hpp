@@ -9,31 +9,6 @@
 
 // #define NN_ACCUMULATOR_STATS
 
-// position to NN input mapping mode
-enum class NetworkInputMapping : uint8_t
-{
-    // full, 1-to-1 mapping with no symmetry
-    // always 2*(5*64+48)=736 inputs
-    Full,
-
-    // similar to "Full" but with horizontal symetry (white king is on A-D files)
-    // always 32+64+2*(4*64+48)=704 inputs
-    Full_Symmetrical,
-
-    // material key dependent, vertical and horizontal symmetry exploitation
-    // number of inputs depends on material
-    // horizontal symmetry in case of pawnful positions
-    // horizontal and vertical symmetry in case of pawnless positions
-    // TODO: diagonal symmetry
-    MaterialPacked_Symmetrical,
-
-    // king-relative
-    KingPiece_Symmetrical,
-
-    // king-relative
-    MaterialPacked_KingPiece_Symmetrical,
-};
-
 struct DirtyPiece
 {
     Piece piece;
@@ -98,3 +73,5 @@ public:
     static void ResetStats();
 #endif // NN_ACCUMULATOR_STATS
 };
+
+uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);

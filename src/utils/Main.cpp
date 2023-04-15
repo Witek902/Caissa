@@ -13,7 +13,6 @@ extern void SelfPlay(const std::vector<std::string>& args);
 extern void PrepareTrainingData(const std::vector<std::string>& args);
 extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
-extern void GenerateEndgamePieceSquareTables();
 extern bool TestNetwork();
 extern bool TrainNetwork();
 extern void ValidateEndgame();
@@ -78,10 +77,6 @@ int main(int argc, const char* argv[])
     else if (args[0] == "trainEndgame")
     {
         TrainEndgame();
-    }
-    else if (args[0] == "generateEndgamePST")
-    {
-        GenerateEndgamePieceSquareTables();
     }
     else if (args[0] == "validateEndgame")
     {

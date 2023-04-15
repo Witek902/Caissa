@@ -3,11 +3,8 @@
 #include "TrainerCommon.hpp"
 
 #include "../backend/Math.hpp"
-#include "../backend/Material.hpp"
-#include "../backend/Waitable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
-#include "../backend/Tablebase.hpp"
+#include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
 
@@ -174,4 +171,40 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         return true;
     }
+}
+
+void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
+{
+    const uint32_t maxFeatures = 64;
+
+    /*
+    uint16_t whiteFeatures[maxFeatures];
+    uint32_t numWhiteFeatures = PositionToFeaturesVector(pos, whiteFeatures, pos.GetSideToMove());
+    ASSERT(numWhiteFeatures <= 64);
+
+    uint16_t blackFeatures[maxFeatures];
+    uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, Color::Black);
+    ASSERT(numBlackFeatures == numWhiteFeatures);
+
+    outVector.inputMode = nn::InputMode::SparseBinary;
+    outVector.sparseBinaryInputs.clear();
+    outVector.sparseBinaryInputs.reserve(numWhiteFeatures + numBlackFeatures);
+
+    for (uint32_t i = 0; i < numWhiteFeatures; ++i)
+        outVector.sparseBinaryInputs.emplace_back(whiteFeatures[i]);
+
+    for (uint32_t i = 0; i < numBlackFeatures; ++i)
+        outVector.sparseBinaryInputs.emplace_back(704 + blackFeatures[i]);
+    */
+
+    uint16_t features[maxFeatures];
+    uint32_t numFeatures = PositionToFeaturesVector(pos, features, pos.GetSideToMove());
+    ASSERT(numFeatures <= maxFeatures);
+
+    outVector.inputMode = nn::InputMode::SparseBinary;
+    outVector.sparseBinaryInputs.clear();
+    outVector.sparseBinaryInputs.reserve(numFeatures);
+
+    for (uint32_t i = 0; i < numFeatures; ++i)
+        outVector.sparseBinaryInputs.emplace_back(features[i]);
 }
