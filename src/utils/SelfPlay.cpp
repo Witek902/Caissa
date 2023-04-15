@@ -26,8 +26,8 @@ static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 64; // print every 64th game
-static const uint32_t c_maxNodes = 100000;
-static const uint32_t c_maxDepth = 9;
+static const uint32_t c_maxNodes = 10000;
+static const uint32_t c_maxDepth = 12;
 static const int32_t c_maxEval = 2000;
 static const int32_t c_openingMaxEval = 400;
 static const int32_t c_multiPv = 3;
@@ -283,9 +283,8 @@ void SelfPlay(const std::vector<std::string>& args)
         const uint32_t numRandomMoves = std::uniform_int_distribution<uint32_t>(c_minRandomMoves, c_maxRandomMoves)(gen);
         for (uint32_t i = 0; i < numRandomMoves; ++i)
         {
-            const bool preferKingMove = false;// (i + 1) >= c_numRandomMoves;
-            ApplyRandomMove(gen, openingPos, preferKingMove);
-            ApplyRandomMove(gen, openingPos, preferKingMove);
+            ApplyRandomMove(gen, openingPos, false);
+            ApplyRandomMove(gen, openingPos, false);
         }
 
         if (openingPos.IsMate() || openingPos.IsStalemate())

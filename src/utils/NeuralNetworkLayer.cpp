@@ -27,7 +27,7 @@ Layer::Layer(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants)
 {
     ASSERT(numOutputs <= MaxLayerOutputs);
     ASSERT(numVariants > 0);
-    activationFunc = ActivationFunction::ClippedReLu;
+    activationFunc = ActivationFunction::CReLU;
 
     variants.resize(numVariants);
     for (Variant& variant : variants)
@@ -82,9 +82,9 @@ INLINE static float ApplyActivationFunction(float x, ActivationFunction func)
 {
     switch (func)
     {
-    case ActivationFunction::ClippedReLu:   return ClippedReLu(x);
-    case ActivationFunction::Sigmoid:       return Sigmoid(x);
-    case ActivationFunction::ATan:          return InvTan(x);
+    case ActivationFunction::ReLU:      return ReLU(x);
+    case ActivationFunction::CReLU:     return CReLU(x);
+    case ActivationFunction::Sigmoid:   return Sigmoid(x);
     }
     return x;
 }
@@ -93,9 +93,9 @@ INLINE static float GetActivationFunctionDerivative(float x, ActivationFunction 
 {
     switch (func)
     {
-    case ActivationFunction::ClippedReLu:   return ClippedReLuDerivative(x);
-    case ActivationFunction::Sigmoid:       return SigmoidDerivative(x);
-    case ActivationFunction::ATan:          return InvTanDerivative(x);
+    case ActivationFunction::ReLU:      return ReLUDerivative(x);
+    case ActivationFunction::CReLU:     return CReLUDerivative(x);
+    case ActivationFunction::Sigmoid:   return SigmoidDerivative(x);
     }
     return 1.0f;
 }
@@ -315,13 +315,13 @@ void LayerRunContext::ComputeOutput(ActivationFunction activationFunc)
 
     size_t i = 0;
 #ifdef USE_AVX
-    if (activationFunc == ActivationFunction::ClippedReLu)
+    if (activationFunc == ActivationFunction::CReLU)
     {
         float* outputsPtr = output.data();
         const float* valuesPtr = linearValue.data();
         for (; i + 8 <= numOutputs; i += 8)
         {
-            _mm256_store_ps(outputsPtr + i, ClippedReLu(_mm256_load_ps(valuesPtr + i)));
+            _mm256_store_ps(outputsPtr + i, CReLU(_mm256_load_ps(valuesPtr + i)));
         }
     }
 #endif // USE_AVX
@@ -344,14 +344,14 @@ void Layer::Backpropagate(uint32_t variantIndex, const Values& error, LayerRunCo
     {
         size_t i = 0;
 #ifdef USE_AVX
-        if (activationFunc == ActivationFunction::ClippedReLu)
+        if (activationFunc == ActivationFunction::CReLU)
         {
             const float* errorsPtr = error.data();
             const float* valuesPtr = ctx.linearValue.data();
             for (; i + 8 <= numOutputs; i += 8)
             {
                 _mm256_store_ps(activationErrors + i,
-                                ClippedReLuDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
+                                CReLUDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
             }
         }
 #endif // USE_AVX

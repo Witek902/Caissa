@@ -257,10 +257,6 @@ public:
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;
 
-    // convert position to neural network input features (active indices list)
-    // returns number of active features
-    uint32_t ToFeaturesVector(uint16_t* outFeatures, const NetworkInputMapping mapping) const;
-
     static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
     static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
 

@@ -27,32 +27,12 @@ using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 32 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
 static const uint32_t cMinBatchSize = 8 * 1024;
 static const uint32_t cMaxBatchSize = 8 * 1024;
-//static const uint32_t cNumNetworkInputs = 2 * 10 * 32 * 64; // NetworkInputMapping::KingPiece_Symmetrical
-//static const uint32_t cNumNetworkInputs = 10 * 64 + 2 * 48; // NetworkInputMapping::Full
-static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // NetworkInputMapping::Full_Symmetrical
+static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // 704
 static const uint32_t cNumVariants = 8;
 
-
-static void PositionToSparseVector(const Position& pos, nn::TrainingVector& outVector)
-{
-    const uint32_t maxFeatures = 124;
-
-    uint16_t features[maxFeatures];
-    uint32_t numFeatures = pos.ToFeaturesVector(features, NetworkInputMapping::Full_Symmetrical);
-    ASSERT(numFeatures <= maxFeatures);
-
-    outVector.inputMode = nn::InputMode::SparseBinary;
-    outVector.sparseBinaryInputs.clear();
-    outVector.sparseBinaryInputs.reserve(numFeatures);
-
-    for (uint32_t i = 0; i < numFeatures; ++i)
-    {
-        outVector.sparseBinaryInputs.push_back(features[i]);
-    }
-}
 
 class NetworkTrainer
 {
@@ -182,7 +162,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
             score = std::lerp(wdlScore, score, tbLambda);
         }
 
-        PositionToSparseVector(pos, outEntries[i].trainingVector);
+        PositionToTrainingVector(pos, outEntries[i].trainingVector);
         outEntries[i].trainingVector.singleOutput = score;
         outEntries[i].trainingVector.networkVariant = GetNetworkVariant(pos);
         //outEntries[i].trainingVector.lastLayerBias = (float)Evaluate(pos, nullptr, false) / (float)c_nnOutputToCentiPawns;
@@ -324,7 +304,7 @@ void NetworkTrainer::Validate(size_t iteration)
         {
             Position pos(testPosition);
             nn::TrainingVector vec;
-            PositionToSparseVector(pos, vec);
+            PositionToTrainingVector(pos, vec);
 
             //const ScoreType psqtValue = Evaluate(pos, nullptr, false);
 
@@ -363,8 +343,8 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.1f, 1.0f / (1.0f + 0.00001f * epoch));
-        float lambda = std::min(0.9f, 0.5f + 0.00001f * epoch);
+        float learningRate = std::max(0.2f, 1.0f / (1.0f + 0.000001f * epoch));
+        float lambda = 0.9f; // std::min(0.9f, 0.5f + 0.00001f * epoch);
 
         if (iteration == 0)
         {
@@ -397,6 +377,7 @@ bool NetworkTrainer::Train()
                 params.iteration = epoch;
                 params.batchSize = std::min<size_t>(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
                 params.learningRate = learningRate;
+                params.weightDecay = 1.0e-4f;
 
                 TaskBuilder taskBuilder{ ctx };
                 epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);

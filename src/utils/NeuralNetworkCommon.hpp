@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Common.hpp"
 #include "../backend/Memory.hpp"
 
@@ -17,16 +19,6 @@ struct ActiveFeature
 };
 
 
-inline float InvTan(float x)
-{
-    return atanf(x);
-}
-inline float InvTanDerivative(float x)
-{
-    return 1.0f / (1.0f + x * x);
-}
-
-
 inline float Sigmoid(float x)
 {
     return 1.0f / (1.0f + expf(-x));
@@ -38,26 +30,50 @@ inline float SigmoidDerivative(float x)
 }
 
 
-inline float ClippedReLu(float x)
+inline float ReLU(float x)
+{
+    if (x <= 0.0f) return 0.0f;
+    return x;
+}
+inline float ReLUDerivative(float x)
+{
+    if (x <= 0.0f) return 0.0f;
+    return 1.0f;
+}
+
+
+inline float CReLU(float x)
 {
     if (x <= 0.0f) return 0.0f;
     if (x >= 1.0f) return 1.0f;
     return x;
 }
-inline float ClippedReLuDerivative(float x)
+inline float CReLUDerivative(float x)
 {
     if (x <= 0.0f) return 0.0f;
     if (x >= 1.0f) return 0.0f;
     return 1.0f;
 }
 
+
 #ifdef USE_AVX
 
-inline __m256 ClippedReLu(const __m256 x)
+inline __m256 ReLU(const __m256 x)
+{
+    return _mm256_max_ps(_mm256_setzero_ps(), x);
+}
+inline __m256 ReLUDerivative(const __m256 x, const __m256 coeff)
+{
+    return _mm256_and_ps(coeff,
+                         _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_GT_OQ));
+}
+
+
+inline __m256 CReLU(const __m256 x)
 {
     return _mm256_min_ps(_mm256_set1_ps(1.0f), _mm256_max_ps(_mm256_setzero_ps(), x));
 }
-inline __m256 ClippedReLuDerivative(const __m256 x, const __m256 coeff)
+inline __m256 CReLUDerivative(const __m256 x, const __m256 coeff)
 {
     return _mm256_and_ps(coeff,
                          _mm256_and_ps(_mm256_cmp_ps(x, _mm256_setzero_ps(),  _CMP_GT_OQ),
