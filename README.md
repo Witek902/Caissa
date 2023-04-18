@@ -116,3 +116,30 @@ The projects comprises following modules:
   * _backend_ (library) - engine's core
   * _frontend_ (executable) - UCI wrapper for the backend
   * _utils_ (executable) - various utilities, such as unit tests, neural network trainer, self-play data generator, etc.
+
+
+## Compilation
+
+### Linux
+
+To compile for Linux use CMake:
+```
+mkdir build; cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+```
+
+**NOTE:** Currently, by default project compiles with AVX2/BMI2 support. If your CPU does not support these instructions you need to modify main CMakeLists.txt file manually.
+
+There are three configurations supported:
+* **Release** - final version, without asserts, etc.
+* **RelWithDebInfo** - development version with asserts enabled and with optimizations enabled for better performance
+* **Debug** - development version with asserts enabled and optimizations disabled
+
+### Windows
+
+To compile for Windows, use Visual Studio solution located in `src/Caissa.sln`. The only tested Visual Studio version is 2022. Using CMake to compile for Windows was not tested.
+
+Simillary as in CMake, there are three configurations defined, but with different names: **Final**, **Release**, **Debug**.
+
+After compilation make sure you copy appropriate neural net file from `data/neuralNets` directory to location where executable file is generated (`build/bin` on Linux or `bin\x64\<Configuration>` on Windows).
