@@ -20,7 +20,7 @@ const char* c_DefaultEndgameEvalFile = "endgame-2.pnn";
 
 namespace {
 
-static constexpr int32_t c_evalSaturationTreshold   = 10000;
+static constexpr int32_t c_evalSaturationTreshold   = 8000;
 
 static constexpr PieceScore c_tempoBonus            = S(2, 2);
 static constexpr PieceScore c_bishopPairBonus       = S(33, 63);
