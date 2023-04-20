@@ -294,7 +294,7 @@ bool TrainEndgame()
             const float expectedValue = ScoreFromNN(trainingSet[i].trainingVector.singleOutput);
             const float nnValue = ScoreFromNN(networkOutput[0]);
             const float nnPackedValue = ScoreFromNN(nn::Sigmoid((float)packedNetworkOutput / (float)nn::OutputScale));
-            const float evalValue = PawnToWinProbability((float)Evaluate(trainingSet[i].pos) / 100.0f);
+            const float evalValue = EvalToExpectedGameScore((float)Evaluate(trainingSet[i].pos) / 100.0f);
 
             nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
 
@@ -309,10 +309,10 @@ bool TrainEndgame()
             {
                 std::cout
                     << trainingSet[i].pos.ToFEN() << std::endl << trainingSet[i].pos.Print() << std::endl
-                    << "True Score:     " << expectedValue << " (" << WinProbabilityToCentiPawns(expectedValue) << ")" << std::endl
-                    << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
-                    << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
-                    << "Static eval:    " << evalValue << " (" << WinProbabilityToCentiPawns(evalValue) << ")" << std::endl
+                    << "True Score:     " << expectedValue << " (" << ExpectedGameScoreToInternalEval(expectedValue) << ")" << std::endl
+                    << "NN eval:        " << nnValue << " (" << ExpectedGameScoreToInternalEval(nnValue) << ")" << std::endl
+                    << "Packed NN eval: " << nnPackedValue << " (" << ExpectedGameScoreToInternalEval(nnPackedValue) << ")" << std::endl
+                    << "Static eval:    " << evalValue << " (" << ExpectedGameScoreToInternalEval(evalValue) << ")" << std::endl
                     << std::endl;
             }
 

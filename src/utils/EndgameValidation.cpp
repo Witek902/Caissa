@@ -123,7 +123,7 @@ struct EndgameValidationStats
                         const int64_t score = pieceSquareScores[square][pieceIdx + color * 6];
                         const int64_t counter = pieceSquareCounters[square][pieceIdx + color * 6];
                         
-                        const float weight = counter > 0 ? WinProbabilityToPawns(0.5f + 0.5f * (float)score / (float)counter) : 0.0f;
+                        const float weight = counter > 0 ? ExpectedGameScoreToEval(0.5f + 0.5f * (float)score / (float)counter) : 0.0f;
                         const int32_t cp = (counter > 0 && score >= counter) ? 9999 : int32_t(roundf(100.0f * weight));
 
                         averageCP += counter > 0 ? cp : 0;
@@ -255,7 +255,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
             int32_t evalScore = 0;
             if (EvaluateEndgame(pos, evalScore))
             {
-                const float error = trueScore - CentiPawnToWinProbability(evalScore);
+                const float error = trueScore - InternalEvalToExpectedGameScore(evalScore);
                 stats.totalErrorSqr += error * error;
 
                 if (wdl > 0) // win

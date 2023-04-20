@@ -28,8 +28,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1000000000;
 static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 8 * 1024;
-static const uint32_t cMaxBatchSize = 8 * 1024;
+static const uint32_t cMinBatchSize = 32 * 1024;
+static const uint32_t cMaxBatchSize = 32 * 1024;
 static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // 704
 static const uint32_t cNumVariants = 8;
 
@@ -93,7 +93,7 @@ private:
 
     std::ofstream m_trainingLog;
 
-    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, float wdlLambda);
+    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries);
 
     void Validate(size_t iteration);
 };
@@ -101,7 +101,7 @@ private:
 void NetworkTrainer::InitNetwork()
 {
     m_network.Init(cNumNetworkInputs,
-                   { 1280, 1 },
+                   { 1536, 1 },
                    nn::ActivationFunction::Sigmoid,
                    { 1, cNumVariants });
 
@@ -125,7 +125,7 @@ static uint32_t GetNetworkVariant(const Position& pos)
     return std::min((pos.GetNumPieces() - 2u) / 4u, 7u);
 }
 
-bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, float wdlLambda)
+bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
 {
     Position pos;
     PositionEntry entry;
@@ -144,11 +144,13 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
                 pos.FlipDiagonally();
         }
 
-        const float tbLambda = 0.1f;
+        const float tbLambda = 0.2f;
+        // make game score more important for high move count
+        const float wdlLambda = std::lerp(0.8f, 0.2f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
-        float score = CentiPawnToWinProbability(entry.score);
+        float score = InternalEvalToExpectedGameScore(entry.score);
 
         if (gameScore != Game::Score::Unknown)
         {
@@ -206,7 +208,7 @@ void NetworkTrainer::Validate(size_t iteration)
             const uint32_t variant = m_trainingSet[i].trainingVector.networkVariant;
             const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size(), variant);
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
-            const float nnPackedValue = PawnToWinProbability(scaledPackedNetworkOutput /*+ psqtValue / 100.0f*/);
+            const float nnPackedValue = EvalToExpectedGameScore(scaledPackedNetworkOutput /*+ psqtValue / 100.0f*/);
 
             nn::NeuralNetwork::InputDesc inputDesc(features);
             inputDesc.variant = variant;
@@ -218,11 +220,11 @@ void NetworkTrainer::Validate(size_t iteration)
             {
                 std::cout
                     << m_trainingSet[i].pos.ToFEN() << std::endl << m_trainingSet[i].pos.Print() << std::endl
-                    << "True Score:     " << expectedValue << " (" << WinProbabilityToCentiPawns(expectedValue) << ")" << std::endl
-                    << "NN eval:        " << nnValue << " (" << WinProbabilityToCentiPawns(nnValue) << ")" << std::endl
-                    << "Packed NN eval: " << nnPackedValue << " (" << WinProbabilityToCentiPawns(nnPackedValue) << ")" << std::endl
-                    << "Static eval:    " << CentiPawnToWinProbability(evalValue) << " (" << evalValue << ")" << std::endl
-                    << "PSQT eval:      " << CentiPawnToWinProbability(psqtValue) << " (" << psqtValue << ")" << std::endl
+                    << "True Score:     " << expectedValue << " (" << ExpectedGameScoreToInternalEval(expectedValue) << ")" << std::endl
+                    << "NN eval:        " << nnValue << " (" << ExpectedGameScoreToInternalEval(nnValue) << ")" << std::endl
+                    << "Packed NN eval: " << nnPackedValue << " (" << ExpectedGameScoreToInternalEval(nnPackedValue) << ")" << std::endl
+                    << "Static eval:    " << InternalEvalToExpectedGameScore(evalValue) << " (" << evalValue << ")" << std::endl
+                    << "PSQT eval:      " << InternalEvalToExpectedGameScore(psqtValue) << " (" << psqtValue << ")" << std::endl
                     << std::endl;
             }
 
@@ -247,7 +249,7 @@ void NetworkTrainer::Validate(size_t iteration)
             }
 
             {
-                const float error = expectedValue - CentiPawnToWinProbability(evalValue);
+                const float error = expectedValue - InternalEvalToExpectedGameScore(evalValue);
                 const float errorDiff = std::abs(error);
                 stats.evalErrorSum += error * error;
                 stats.evalMinError = std::min(stats.evalMinError, errorDiff);
@@ -317,7 +319,7 @@ void NetworkTrainer::Validate(size_t iteration)
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
             const float nnPackedValue = scaledPackedNetworkOutput /* + psqtValue / 100.0f*/;
 
-            std::cout << "TEST " << testPosition << "  " << WinProbabilityToCentiPawns(nnValue) << " " << nnPackedValue << std::endl;
+            std::cout << "TEST " << testPosition << "  " << ExpectedGameScoreToInternalEval(nnValue) << " " << nnPackedValue << std::endl;
         }
     }
 
@@ -343,12 +345,11 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.2f, 1.0f / (1.0f + 0.000001f * epoch));
-        float lambda = 0.9f; // std::min(0.9f, 0.5f + 0.00001f * epoch);
+        float learningRate = std::max(0.01f, 0.05f / (1.0f + 0.000001f * epoch));
 
         if (iteration == 0)
         {
-            if (!GenerateTrainingSet(m_trainingSet, lambda))
+            if (!GenerateTrainingSet(m_trainingSet))
                 return false;
         }
 
@@ -368,14 +369,14 @@ bool NetworkTrainer::Train()
             TaskBuilder taskBuilder{ waitable };
             taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                GenerateTrainingSet(m_trainingSet, lambda);
+                GenerateTrainingSet(m_trainingSet);
             });
 
             taskBuilder.Task("Train", [this, iteration, &epoch, &batch, &learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
                 params.iteration = epoch;
-                params.batchSize = std::min<size_t>(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
+                params.batchSize = std::min<size_t>(cMinBatchSize + (iteration / 16) * cMinBatchSize, cMaxBatchSize);
                 params.learningRate = learningRate;
                 params.weightDecay = 1.0e-4f;
 
@@ -393,7 +394,6 @@ bool NetworkTrainer::Train()
         std::cout
             << "Iteration:              " << iteration << std::endl
             << "Epoch:                  " << epoch << std::endl
-            << "Lambda:                 " << lambda << std::endl
             << "Num training vectors:   " << m_numTrainingVectorsPassed << std::endl
             << "Learning rate:          " << learningRate << std::endl;
 

@@ -712,7 +712,7 @@ bool TrainPieceSquareTables()
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
-        float score = CentiPawnToWinProbability(entry.score);
+        float score = InternalEvalToExpectedGameScore(entry.score);
 
         if (gameScore != Game::Score::Unknown)
         {

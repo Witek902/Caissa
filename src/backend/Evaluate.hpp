@@ -56,35 +56,45 @@ bool LoadEndgameNeuralNetwork(const char* path);
 // equal to 400/ln(10) = 173.7177...
 static constexpr int32_t c_nnOutputToCentiPawns = 174;
 
-// convert evaluation score (in pawns) to win probability
-inline float PawnToWinProbability(float pawnsDifference)
+
+inline float EvalToWinProbability(float eval)
 {
-    return 1.0f / (1.0f + powf(10.0, -pawnsDifference / 4.0f));
+    // TODO better model
+    const float a = 1.5f;
+    const float b = 0.75f;
+    return 1.0f / (1.0f + expf((a - eval) / b));
 }
 
-// convert evaluation score (in centipawns) to win probability
-inline float CentiPawnToWinProbability(int32_t centiPawnsDifference)
+// convert evaluation score (in pawns) to expected game score
+inline float EvalToExpectedGameScore(float eval)
 {
-    return PawnToWinProbability(static_cast<float>(centiPawnsDifference) * 0.01f);
+    return 1.0f / (1.0f + powf(10.0, -eval / 4.0f));
 }
 
-// convert win probability to evaluation score (in pawns)
-inline float WinProbabilityToPawns(float w)
+// convert evaluation score (in centipawns) to expected game score
+inline float InternalEvalToExpectedGameScore(int32_t eval)
 {
-    ASSERT(w >= 0.0f && w <= 1.0f);
-    w = std::clamp(w, 0.0f, 1.0f);
-    return 4.0f * log10f(w / (1.0f - w));
+    return EvalToExpectedGameScore(static_cast<float>(eval) * 0.01f);
 }
 
-// convert win probability to evaluation score (in pawns)
-inline int32_t WinProbabilityToCentiPawns(float w)
+// convert expected game score to evaluation score (in pawns)
+inline float ExpectedGameScoreToEval(float score)
 {
-    if (w > 0.99999f)
-        return INT32_MAX;
-    else if (w < 0.00001f)
-        return -INT32_MAX;
+    ASSERT(score >= 0.0f && score <= 1.0f);
+    score = std::clamp(score, 0.0f, 1.0f);
+    return 4.0f * log10f(score / (1.0f - score));
+}
+
+// convert expected game score to evaluation score
+inline ScoreType ExpectedGameScoreToInternalEval(float score)
+{
+    if (score > 0.99999f)
+        return KnownWinValue - 1;
+    else if (score < 0.00001f)
+        return -KnownWinValue + 1;
     else
-        return (int32_t)std::round(100.0f * WinProbabilityToPawns(w));
+        return (ScoreType)std::clamp((int32_t)std::round(100.0f * ExpectedGameScoreToEval(score)),
+            -KnownWinValue + 1, KnownWinValue - 1);
 }
 
 const TPieceScore<int32_t> ComputePSQT(const Position& pos);

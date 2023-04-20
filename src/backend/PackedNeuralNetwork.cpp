@@ -622,36 +622,39 @@ INLINE static void ClippedReLU_32(uint32_t size, IntermediateType* output, const
 #endif
 
 #if defined(NN_USE_SSE4)
-    constexpr uint32_t inRegisterWidth = 128 / 32;
-    constexpr uint32_t outRegisterWidth = 128 / 8;
-    ASSERT(size % outRegisterWidth == 0);
-    const uint32_t numOutChunks = size / outRegisterWidth;
-    ASSERT((size_t)output % 16 == 0);
-    ASSERT((size_t)input % 16 == 0);
-
-    for (uint32_t i = 0; i < numOutChunks; ++i)
+    if (size >= 16)
     {
-        __m128i in0 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
-        __m128i in1 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
-        __m128i in2 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
-        __m128i in3 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+        constexpr uint32_t inRegisterWidth = 128 / 32;
+        constexpr uint32_t outRegisterWidth = 128 / 8;
+        ASSERT(size % outRegisterWidth == 0);
+        const uint32_t numOutChunks = size / outRegisterWidth;
+        ASSERT((size_t)output % 16 == 0);
+        ASSERT((size_t)input % 16 == 0);
 
-        in0 = _mm_packs_epi32(in0, in1);
-        in1 = _mm_packs_epi32(in2, in3);
+        for (uint32_t i = 0; i < numOutChunks; ++i)
+        {
+            __m128i in0 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+            __m128i in1 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+            __m128i in2 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
+            __m128i in3 = _mm_load_si128(reinterpret_cast<const __m128i*>(input)); input += inRegisterWidth;
 
-        // packs saturates to 127, so we only need to clamp from below
-        const __m128i result = _mm_max_epi8(_mm_packs_epi16(in0, in1), _mm_setzero_si128());
+            in0 = _mm_packs_epi32(in0, in1);
+            in1 = _mm_packs_epi32(in2, in3);
 
-        _mm_store_si128(reinterpret_cast<__m128i*>(output), result);
-        output += outRegisterWidth;
+            // packs saturates to 127, so we only need to clamp from below
+            const __m128i result = _mm_max_epi8(_mm_packs_epi16(in0, in1), _mm_setzero_si128());
+
+            _mm_store_si128(reinterpret_cast<__m128i*>(output), result);
+            output += outRegisterWidth;
+        }
+        return;
     }
+#endif
 
-#else // no SIMD support
     for (uint32_t i = 0; i < size; ++i)
     {
         output[i] = (IntermediateType)std::clamp<int32_t>(input[i], 0, std::numeric_limits<IntermediateType>::max());
     }
-#endif
 }
 
 INLINE static int32_t LinearLayer_SingleOutput(
@@ -661,25 +664,33 @@ INLINE static int32_t LinearLayer_SingleOutput(
     int32_t val = biases[0];
 
 #if defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 16;
-    ASSERT((size_t)weights % 32 == 0);
-    ASSERT((size_t)biases % 32 == 0);
-
-    __m256i sum = _mm256_setzero_si256();
-    for (uint32_t j = 0; j < numInputs; j += registerWidth)
+    if (numInputs >= 16)
     {
-        // load 8bit inputs and expand to 16bit values
-        const __m256i in = _mm256_cvtepi8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(input + j)));
+        constexpr uint32_t registerWidth = 16;
+        ASSERT(numInputs % registerWidth == 0);
+        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)biases % 32 == 0);
 
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m256i w = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
-        sum = _mm256_add_epi32(sum, _mm256_madd_epi16(in, w));
+        __m256i sum = _mm256_setzero_si256();
+        for (uint32_t j = 0; j < numInputs; j += registerWidth)
+        {
+            // load 8bit inputs and expand to 16bit values
+            const __m256i in = _mm256_cvtepi8_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(input + j)));
+
+            // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+            const __m256i w = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
+            sum = _mm256_add_epi32(sum, _mm256_madd_epi16(in, w));
+        }
+
+        // add 8 int32s horizontally
+        val += m256_hadd(sum);
+
+        // divide with rounding to nearest
+        return (val + (WeightScale / 2)) >> WeightScaleShift;
     }
+#endif
 
-    // add 8 int32s horizontally
-    val += m256_hadd(sum);
-
-#elif defined(NN_USE_SSE4)
+#if defined(NN_USE_SSE4)
     constexpr uint32_t registerWidth = 8;
     ASSERT(numInputs % registerWidth == 0);
     ASSERT((size_t)weights % 16 == 0);
@@ -699,13 +710,11 @@ INLINE static int32_t LinearLayer_SingleOutput(
 
     // add 4 int32s horizontally
     val += m128_hadd(sum);
-
 #else
     for (uint32_t i = 0; i < numInputs; ++i)
     {
         val += (int32_t)input[i] * (int32_t)weights[i];
     }
-
 #endif
 
     // divide with rounding to nearest
