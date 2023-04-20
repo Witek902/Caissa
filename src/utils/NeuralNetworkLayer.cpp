@@ -84,6 +84,7 @@ INLINE static float ApplyActivationFunction(float x, ActivationFunction func)
     {
     case ActivationFunction::ReLU:      return ReLU(x);
     case ActivationFunction::CReLU:     return CReLU(x);
+    case ActivationFunction::SqrCReLU:  return SqrCReLU(x);
     case ActivationFunction::Sigmoid:   return Sigmoid(x);
     }
     return x;
@@ -95,6 +96,7 @@ INLINE static float GetActivationFunctionDerivative(float x, ActivationFunction 
     {
     case ActivationFunction::ReLU:      return ReLUDerivative(x);
     case ActivationFunction::CReLU:     return CReLUDerivative(x);
+    case ActivationFunction::SqrCReLU:  return SqrCReLUDerivative(x);
     case ActivationFunction::Sigmoid:   return SigmoidDerivative(x);
     }
     return 1.0f;
@@ -315,10 +317,17 @@ void LayerRunContext::ComputeOutput(ActivationFunction activationFunc)
 
     size_t i = 0;
 #ifdef USE_AVX
-    if (activationFunc == ActivationFunction::CReLU)
+    float* outputsPtr = output.data();
+    const float* valuesPtr = linearValue.data();
+    if (activationFunc == ActivationFunction::ReLU)
     {
-        float* outputsPtr = output.data();
-        const float* valuesPtr = linearValue.data();
+        for (; i + 8 <= numOutputs; i += 8)
+        {
+            _mm256_store_ps(outputsPtr + i, ReLU(_mm256_load_ps(valuesPtr + i)));
+        }
+    }
+    else if (activationFunc == ActivationFunction::CReLU)
+    {
         for (; i + 8 <= numOutputs; i += 8)
         {
             _mm256_store_ps(outputsPtr + i, CReLU(_mm256_load_ps(valuesPtr + i)));
@@ -344,15 +353,19 @@ void Layer::Backpropagate(uint32_t variantIndex, const Values& error, LayerRunCo
     {
         size_t i = 0;
 #ifdef USE_AVX
-        if (activationFunc == ActivationFunction::CReLU)
+        const float* errorsPtr = error.data();
+        const float* valuesPtr = ctx.linearValue.data();
+        if (activationFunc == ActivationFunction::ReLU)
         {
-            const float* errorsPtr = error.data();
-            const float* valuesPtr = ctx.linearValue.data();
             for (; i + 8 <= numOutputs; i += 8)
-            {
+                _mm256_store_ps(activationErrors + i,
+                    ReLUDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
+        }
+        else if (activationFunc == ActivationFunction::CReLU)
+        {
+            for (; i + 8 <= numOutputs; i += 8)
                 _mm256_store_ps(activationErrors + i,
                                 CReLUDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
-            }
         }
 #endif // USE_AVX
         for (; i < numOutputs; i++)
@@ -460,20 +473,36 @@ void Layer::Backpropagate(uint32_t variantIndex, const Values& error, LayerRunCo
             const float activationError = activationErrors[0];
             if (std::abs(activationError) > c_activationEpsilon)
             {
-                for (size_t j = 0; j < numInputs; j++)
+                size_t j = 0;
+#ifdef USE_AVX
+                float* gradientPtr = gradients.m_values.data();
+                float* inputGradientPtr = ctx.inputGradient.data();
+                const float* inputPtr = ctx.inputs.data();
+                const float* weightsPtr = weights.data();
+                const __m256 activationErrorV = _mm256_set1_ps(activationError);
+                for (; j + 8 <= numInputs; j += 8)
                 {
-                    ctx.inputGradient[j] += weights[j] * activationError;
-                }
-            }
+                    // compute input gradient
+                    _mm256_store_ps(inputGradientPtr + j,
+                        _mm256_mul_ps(
+                            _mm256_load_ps(weightsPtr + j),
+                            activationErrorV));
 
-            for (size_t j = 0; j < numInputs; j++)
-            {
-                // compute weights gradient
-                const float inputValue = ctx.inputs[j];
-                if (std::abs(inputValue) > c_activationEpsilon)
+                    // compute weights gradient
+                    _mm256_store_ps(gradientPtr + j,
+                        _mm256_fmadd_ps(activationErrorV,
+                            _mm256_load_ps(inputPtr + j),
+                            _mm256_load_ps(gradientPtr + j)));
+                }
+#endif // USE_AVX
+                for (; j < numInputs; j++)
                 {
-                    gradients.m_values[j * numOutputs] += inputValue * activationError;
-                    gradients.m_dirty[j] = true;
+                    // compute input gradient
+                    ctx.inputGradient[j] += weights[j] * activationError;
+                    // compute weights gradient
+                    gradients.m_values[j] += ctx.inputs[j] * activationError;
+
+                    // gradients.m_dirty[j] = true; // dense layers gradients are always accumulated
                 }
             }
         }

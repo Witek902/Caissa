@@ -28,7 +28,7 @@ struct MaterialConfigInfo
     double gameScore = 0.0;
 };
 
-float GameScoreToWinProbability(const Game::Score score)
+float GameScoreToExpectedGameScore(const Game::Score score)
 {
     switch (score)
     {
@@ -102,8 +102,8 @@ void AnalyzeGames()
 
                 //MaterialConfigInfo& matConfigInfo = materialConfigurations[matKey];
                 //matConfigInfo.occurences++;
-                //matConfigInfo.evalScore += CentiPawnToWinProbability(moveScore);
-                //matConfigInfo.gameScore += GameScoreToWinProbability(game.GetScore());
+                //matConfigInfo.evalScore += CentiPawnToExpectedGameScore(moveScore);
+                //matConfigInfo.gameScore += GameScoreToExpectedGameScore(game.GetScore());
 
                 //const MaterialKey key = pos.GetMaterialKey();
                 //if (key.numWhitePawns > 1 && key.numWhiteKnights == 0 && key.numWhiteBishops == 0 && key.numWhiteRooks == 0 && key.numWhiteQueens == 0 &&
@@ -141,8 +141,8 @@ void AnalyzeGames()
 
                 std::cout
                     << std::setw(33) << iter.first.ToString() << " "
-                    << std::showpos << std::fixed << std::setprecision(2) << WinProbabilityToPawns(averageEvalScore) << " "
-                    << std::showpos << std::fixed << std::setprecision(2) << WinProbabilityToPawns(averageGameScore) << std::endl;
+                    << std::showpos << std::fixed << std::setprecision(2) << ExpectedGameScoreToPawns(averageEvalScore) << " "
+                    << std::showpos << std::fixed << std::setprecision(2) << ExpectedGameScoreToPawns(averageGameScore) << std::endl;
                 std::cout << std::resetiosflags(std::ios_base::showpos);
             }
         }

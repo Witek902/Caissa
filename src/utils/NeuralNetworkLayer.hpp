@@ -23,6 +23,7 @@ enum class ActivationFunction : uint8_t
     Linear,
     ReLU,
     CReLU,
+    SqrCReLU,
     Sigmoid,
 };
 

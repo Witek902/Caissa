@@ -254,6 +254,8 @@ void NeuralNetwork::Init(uint32_t inputSize, const std::vector<uint32_t>& layers
                          ActivationFunction outputLayerActivationFunc,
                          const std::vector<uint32_t>& layerVariants)
 {
+    ASSERT(layersSizes.size() == layerVariants.size());
+
     layers.reserve(layersSizes.size());
     uint32_t prevLayerSize = inputSize;
 
@@ -607,6 +609,7 @@ static void PackLayerWeights(const Layer& layer, uint32_t variantIdx, WeightType
             }
         }
 #endif // USE_AVX2
+
         for (; i < layer.numOutputs; i++)
         {
             const float weight = variant.weights[j * layer.numOutputs + i];

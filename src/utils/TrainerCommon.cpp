@@ -119,7 +119,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         // skip based half-move counter
         {
-            const float hmcSkipProb = 0.25f + 0.75f * (float)outEntry.pos.halfMoveCount / 100.0f;
+            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 100.0f;
             std::bernoulli_distribution skippingDistr(hmcSkipProb);
             if (skippingDistr(gen))
                 continue;
@@ -128,7 +128,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         // skip based on piece count
         {
             const int32_t numPieces = outEntry.pos.occupied.Count();
-            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 20) / 40.0f);
+            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 50.0f);
             std::bernoulli_distribution skippingDistr(pieceCountSkipProb);
             if (skippingDistr(gen))
                 continue;
@@ -142,7 +142,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const ScoreType psqtScore = Evaluate(outPosition, nullptr, false);
 
             const int32_t minRange = 512;
-            const int32_t maxRange = 1024;
+            const int32_t maxRange = 2048;
 
             if (std::abs(psqtScore) > maxRange)
             {
@@ -159,15 +159,29 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         // skip based on kings placement (prefer king on further ranks)
         {
-            const float whiteKingProb = 0.5f + 0.5f * (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
-            const float blackKingProb = 0.5f + 0.5f * (7 - (float)outPosition.Blacks().GetKingSquare().Rank()) / 7.0f;
-            std::bernoulli_distribution skippingDistr(std::min(whiteKingProb, blackKingProb));
+            const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
+            const float blackKingProb =        (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
+            std::bernoulli_distribution skippingDistr(0.75f * Sqr(std::min(whiteKingProb, blackKingProb)));
             if (skippingDistr(gen))
                 continue;
         }
 
-        // TODO more skipping techniques:
-        // - eval / game outcome match
+        // skip based on WDL
+        // the idea is to skip positions where for instance eval is high, but game result is loss
+        {
+            const float w = EvalToWinProbability(outEntry.score / 100.0f);
+            const float l = EvalToWinProbability(-outEntry.score / 100.0f);
+            const float d = 1.0f - w - l;
+
+            float prob = d;
+            if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
+            if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
+
+            const float maxSkippingProb = 0.95f;
+            std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
+            if (skippingDistr(gen))
+                continue;
+        }
 
         return true;
     }
