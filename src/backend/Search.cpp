@@ -1550,9 +1550,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // Null Move Reductions
-        if (node.staticEval >= beta &&
+        if (node.staticEval >= beta + (node.depth < 4 ? 20 : 0) &&
             node.depth >= NullMoveReductionsStartDepth &&
-            (!ttEntry.IsValid() || (ttEntry.bounds != TTEntry::Bounds::Upper) || (ttScore >= beta)) &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
             // don't allow null move if parent or grandparent node was null move
