@@ -47,10 +47,10 @@ DEFINE_PARAM(LateMovePruningBase, 3);
 DEFINE_PARAM(HistoryPruningLinearFactor, 256);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 64);
 
-DEFINE_PARAM(AspirationWindowDepthStart, 6);
+DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
 DEFINE_PARAM(AspirationWindowStart, 40);
-DEFINE_PARAM(AspirationWindowEnd, 20);
+DEFINE_PARAM(AspirationWindowEnd, 15);
 DEFINE_PARAM(AspirationWindowStep, 4);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
@@ -855,8 +855,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         // flush pending per-thread stats
         param.searchContext.stats.Append(thread.stats, true);
 
-        // increase window, fallback to full window after some treshold
-        window = 2 * window + 5;
+        // increase window, fallback to full window after some threshold
+        window += window / 2;
         if (window > AspirationWindowMaxSize) window = CheckmateValue;
 
         BoundsType boundsType = BoundsType::Exact;
