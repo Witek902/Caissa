@@ -20,7 +20,7 @@ class NeuralNetwork;
 static constexpr uint32_t CurrentVersion = 3;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t FirstLayerMaxSize = 1536;
+static constexpr uint32_t AccumulatorSize = 1536;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
@@ -52,17 +52,17 @@ using LastLayerBiasType = int32_t;
 
 struct alignas(CACHELINE_SIZE) Accumulator
 {
-    AccumulatorType values[FirstLayerMaxSize];
+    AccumulatorType values[AccumulatorSize];
 
     void Refresh(
         const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
-        uint32_t numInputs, uint32_t numOutputs,
+        uint32_t numInputs,
         uint32_t numActiveFeatures, const uint16_t* activeFeatures);
 
     void Update(
         const Accumulator& source,
         const FirstLayerWeightType* weights,
-        uint32_t numInputs, uint32_t numOutputs,
+        uint32_t numInputs,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,
         uint32_t numRemovedFeatures, const uint16_t* removedFeatures);
 };
@@ -74,7 +74,6 @@ public:
     friend class NeuralNetwork;
 
     static constexpr uint32_t MaxInputs = 262144;
-    static constexpr uint32_t MaxNeuronsInFirstLayer = FirstLayerMaxSize;
     static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
     static constexpr uint32_t MinNeuronsInHiddenLayers = 8;
     static constexpr uint32_t MaxNumLayers = 4;

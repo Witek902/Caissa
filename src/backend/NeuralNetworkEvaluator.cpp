@@ -323,7 +323,7 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
             accumulator.Update(
                 prevAccumNode->nnContext->accumulator[(uint32_t)perspective],
                 network.GetAccumulatorWeights(),
-                network.GetNumInputs(), network.GetLayerSize(1),
+                network.GetNumInputs(),
                 numAddedFeatures, addedFeatures,
                 numRemovedFeatures, removedFeatures);
         }
@@ -341,7 +341,7 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 
         accumulator.Refresh(
             network.GetAccumulatorWeights(), network.GetAccumulatorBiases(),
-            network.GetNumInputs(), network.GetLayerSize(1),
+            network.GetNumInputs(),
             numFeatures, features);
     }
 

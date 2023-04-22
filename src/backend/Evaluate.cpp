@@ -406,9 +406,23 @@ static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 
 ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 {
-    const MaterialKey materialKey = pos.GetMaterialKey();
+    const int32_t whiteQueens   = pos.Whites().queens.Count();
+    const int32_t whiteRooks    = pos.Whites().rooks.Count();
+    const int32_t whiteBishops  = pos.Whites().bishops.Count();
+    const int32_t whiteKnights  = pos.Whites().knights.Count();
+    const int32_t whitePawns    = pos.Whites().pawns.Count();
+    const int32_t blackQueens   = pos.Blacks().queens.Count();
+    const int32_t blackRooks    = pos.Blacks().rooks.Count();
+    const int32_t blackBishops  = pos.Blacks().bishops.Count();
+    const int32_t blackKnights  = pos.Blacks().knights.Count();
+    const int32_t blackPawns    = pos.Blacks().pawns.Count();
+
+    const int32_t pieceCount =
+        whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns +
+        blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
 
     // check endgame evaluation first
+    if (pieceCount <= 6)
     {
         int32_t endgameScore;
         if (EvaluateEndgame(pos, endgameScore))
@@ -429,18 +443,6 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     {
         value = ComputePSQT(pos);
     }
-
-    const int32_t whiteQueens   = materialKey.numWhiteQueens;
-    const int32_t whiteRooks    = materialKey.numWhiteRooks;
-    const int32_t whiteBishops  = materialKey.numWhiteBishops;
-    const int32_t whiteKnights  = materialKey.numWhiteKnights;
-    const int32_t whitePawns    = materialKey.numWhitePawns;
-
-    const int32_t blackQueens   = materialKey.numBlackQueens;
-    const int32_t blackRooks    = materialKey.numBlackRooks;
-    const int32_t blackBishops  = materialKey.numBlackBishops;
-    const int32_t blackKnights  = materialKey.numBlackKnights;
-    const int32_t blackPawns    = materialKey.numBlackPawns;
 
     value += c_queenValue * (whiteQueens - blackQueens);
     value += c_rookValue * (whiteRooks - blackRooks);
