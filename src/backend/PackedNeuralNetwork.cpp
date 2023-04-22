@@ -42,7 +42,7 @@ using IntermediateType = int8_t;
 
 void Accumulator::Refresh(
     const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
-    uint32_t numInputs, uint32_t numOutputs,
+    uint32_t numInputs,
     uint32_t numActiveFeatures, const uint16_t* activeFeatures)
 {
     (void)numInputs;
@@ -61,15 +61,14 @@ void Accumulator::Refresh(
 #if defined(NN_USE_AVX2)
 
     constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    ASSERT(numOutputs % registerWidth == 0);
-    ASSERT(numOutputs <= FirstLayerMaxSize);
+    static_assert(AccumulatorSize % registerWidth == 0, "");
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)biases % 32 == 0);
     ASSERT((size_t)values % 32 == 0);
 
-    const uint32_t numChunks = numOutputs / registerWidth;
-    ASSERT(numChunks % OptimalRegisterCount == 0);
-    const uint32_t numTiles = numChunks / OptimalRegisterCount;
+    constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0, "");
+    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
 
     AccumulatorType* valuesStart = values;
 
@@ -90,7 +89,7 @@ void Accumulator::Refresh(
         for (uint32_t j = 0; j < numActiveFeatures; ++j)
         {
             ASSERT(activeFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * AccumulatorSize);
             ASSERT((size_t)weightsStart % 32 == 0); // make sure loads are aligned
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
@@ -114,13 +113,12 @@ void Accumulator::Refresh(
 #elif defined(NN_USE_SSE2)
 
     constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
-    ASSERT(numOutputs % registerWidth == 0);
-    ASSERT(numOutputs <= FirstLayerMaxSize);
+    static_assert(AccumulatorSize % registerWidth == 0, "");
     ASSERT((size_t)weights % 16 == 0);
     ASSERT((size_t)biases % 16 == 0);
 
-    const uint32_t numChunks = numOutputs / registerWidth;
-    ASSERT(numChunks % OptimalRegisterCount == 0);
+    const uint32_t numChunks = AccumulatorSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0, "");
     const uint32_t numTiles = numChunks / OptimalRegisterCount;
 
     __m128i regs[OptimalRegisterCount];
@@ -140,7 +138,7 @@ void Accumulator::Refresh(
         for (uint32_t j = 0; j < numActiveFeatures; ++j)
         {
             ASSERT(activeFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + activeFeatures[j] * AccumulatorSize);
 
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
@@ -162,9 +160,9 @@ void Accumulator::Refresh(
 
 #else // no SIMD support
 
-    int16_t regs[FirstLayerMaxSize];
+    int16_t regs[AccumulatorSize];
 
-    for (uint32_t i = 0; i < numOutputs; ++i)
+    for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
         regs[i] = biases[i];
     }
@@ -172,9 +170,9 @@ void Accumulator::Refresh(
     for (uint32_t j = 0; j < numActiveFeatures; ++j)
     {
         ASSERT(activeFeatures[j] < numInputs);
-        const uint32_t weightsDataOffset = activeFeatures[j] * numOutputs;
+        const uint32_t weightsDataOffset = activeFeatures[j] * AccumulatorSize;
 
-        for (uint32_t i = 0; i < numOutputs; ++i)
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
         {
             ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) <= std::numeric_limits<AccumulatorType>::max());
             ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) >= std::numeric_limits<AccumulatorType>::min());
@@ -183,7 +181,7 @@ void Accumulator::Refresh(
         }
     }
 
-    for (uint32_t i = 0; i < numOutputs; ++i)
+    for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
         values[i] = static_cast<AccumulatorType>(regs[i]);
     }
@@ -193,18 +191,17 @@ void Accumulator::Refresh(
 void Accumulator::Update(
     const Accumulator& source,
     const FirstLayerWeightType* weights,
-    uint32_t numInputs, uint32_t numOutputs,
+    uint32_t numInputs,
     uint32_t numAddedFeatures, const uint16_t* addedFeatures,
     uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
 {
     (void)numInputs;
-    ASSERT(numOutputs <= FirstLayerMaxSize);
 
 #if defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 256 / (8 * sizeof(AccumulatorType));
-    ASSERT(numOutputs % registerWidth == 0);
-    const uint32_t numChunks = numOutputs / registerWidth;
-    ASSERT(numChunks % OptimalRegisterCount == 0);
+    static_assert(AccumulatorSize % registerWidth == 0, "");
+    constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0, "");
     const uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 32 == 0);
     ASSERT((size_t)source.values % 32 == 0);
@@ -226,7 +223,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numRemovedFeatures; ++j)
         {
             ASSERT(removedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm256_sub_epi16(
@@ -239,7 +236,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numAddedFeatures; ++j)
         {
             ASSERT(addedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm256_add_epi16(
@@ -260,10 +257,10 @@ void Accumulator::Update(
 
 #elif defined(NN_USE_SSE2)
     constexpr uint32_t registerWidth = 128 / (8 * sizeof(AccumulatorType));
-    ASSERT(numOutputs % registerWidth == 0);
-    const uint32_t numChunks = numOutputs / registerWidth;
-    ASSERT(numChunks % OptimalRegisterCount == 0);
-    const uint32_t numTiles = numChunks / OptimalRegisterCount;
+    static_assert(AccumulatorSize % registerWidth == 0, "");
+    constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
+    static_assert(numChunks % OptimalRegisterCount == 0, "");
+    constexpr uint32_t numTiles = AccumulatorSize / OptimalRegisterCount;
     ASSERT((size_t)weights % 16 == 0);
     ASSERT((size_t)source.values % 16 == 0);
     ASSERT((size_t)values % 16 == 0);
@@ -284,7 +281,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numRemovedFeatures; ++j)
         {
             ASSERT(removedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm_sub_epi16(
@@ -297,7 +294,7 @@ void Accumulator::Update(
         for (uint32_t j = 0; j < numAddedFeatures; ++j)
         {
             ASSERT(addedFeatures[j] < numInputs);
-            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * numOutputs);
+            const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * AccumulatorSize);
             for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
             {
                 regs[i] = _mm_add_epi16(
@@ -316,16 +313,16 @@ void Accumulator::Update(
         }
     }
 #else // no SIMD support
-    for (uint32_t i = 0; i < numOutputs; ++i)
+    for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
         values[i] = source.values[i];
     }
     for (uint32_t j = 0; j < numRemovedFeatures; ++j)
     {
         ASSERT(removedFeatures[j] < numInputs);
-        const uint32_t weightsDataOffset = removedFeatures[j] * numOutputs;
+        const uint32_t weightsDataOffset = removedFeatures[j] * AccumulatorSize;
 
-        for (uint32_t i = 0; i < numOutputs; ++i)
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
         {
             values[i] -= weights[weightsDataOffset + i];
         }
@@ -333,9 +330,9 @@ void Accumulator::Update(
     for (uint32_t j = 0; j < numAddedFeatures; ++j)
     {
         ASSERT(addedFeatures[j] < numInputs);
-        const uint32_t weightsDataOffset = addedFeatures[j] * numOutputs;
+        const uint32_t weightsDataOffset = addedFeatures[j] * AccumulatorSize;
 
-        for (uint32_t i = 0; i < numOutputs; ++i)
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
         {
             values[i] += weights[weightsDataOffset + i];
         }
@@ -721,9 +718,9 @@ INLINE static int32_t LinearLayer_SingleOutput(
     return (val + (WeightScale / 2)) >> WeightScaleShift;
 }
 
-NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
+INLINE static int32_t LinearLayer_Accum_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
-    uint32_t numInputs, const AccumulatorType* input)
+    const AccumulatorType* input)
 {
     int32_t val = biases[0];
 
@@ -735,7 +732,7 @@ NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
     // unroll 2x so two sums can be calculated independently
     __m256i sumA = _mm256_setzero_si256();
     __m256i sumB = _mm256_setzero_si256();
-    for (uint32_t j = 0; j < numInputs; j += 2 * registerWidth)
+    for (uint32_t j = 0; j < AccumulatorSize; j += 2 * registerWidth)
     {
         __m256i inA = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j));
         __m256i inB = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j + registerWidth));
@@ -756,14 +753,14 @@ NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
 #elif defined(NN_USE_SSE4)
     constexpr uint32_t registerWidth = 8;
-    ASSERT(numInputs % registerWidth == 0);
+    static_assert(AccumulatorSize % registerWidth == 0, "");
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
     ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     // unroll 2x so two sums can be calculated independently
     __m128i sumA = _mm_setzero_si128();
     __m128i sumB = _mm_setzero_si128();
-    for (uint32_t j = 0; j < numInputs; j += 2 * registerWidth)
+    for (uint32_t j = 0; j < AccumulatorSize; j += 2 * registerWidth)
     {
         __m128i inA = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j));
         __m128i inB = _mm_load_si128(reinterpret_cast<const __m128i*>(input + j + registerWidth));
@@ -783,7 +780,7 @@ NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
     val += m128_hadd(_mm_add_epi32(sumA, sumB));
 
 #else
-    for (uint32_t i = 0; i < numInputs; ++i)
+    for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
         const AccumulatorType in = std::clamp<AccumulatorType>(input[i], 0, std::numeric_limits<IntermediateType>::max());
         val += (int32_t)in * (int32_t)weights[i];
@@ -1101,7 +1098,7 @@ bool PackedNeuralNetwork::Load(const char* filePath)
         goto onError;
     }
 
-    if (header.layerSizes[1] == 0 || header.layerSizes[1] > FirstLayerMaxSize)
+    if (header.layerSizes[1] == 0 || header.layerSizes[1] != AccumulatorSize)
     {
         std::cerr << "Failed to load neural network: " << "invalid first layer size" << std::endl;
         goto onError;
@@ -1114,7 +1111,7 @@ bool PackedNeuralNetwork::Load(const char* filePath)
 
         if (i > 0)
         {
-            const uint32_t maxNeurons = i > 1 ? MaxNeuronsInHiddenLayers : MaxNeuronsInFirstLayer;
+            const uint32_t maxNeurons = i > 1 ? MaxNeuronsInHiddenLayers : AccumulatorSize;
             if ((header.layerSizes[i] % MinNeuronsInHiddenLayers != 0) || (header.layerSizes[i] > maxNeurons))
             {
                 std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
@@ -1161,20 +1158,27 @@ onError:
 int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator, uint32_t variant) const
 {
     ASSERT(numActiveLayers > 1);
-    ASSERT(GetLayerSize(1) <= MaxNeuronsInFirstLayer);
+    ASSERT(GetLayerSize(1) == AccumulatorSize);
     ASSERT(GetLayerSize(2) <= MaxNeuronsInHiddenLayers);
     ASSERT(GetLayerSize(3) <= MaxNeuronsInHiddenLayers);
 
-    if (numActiveLayers == 2)
+    //if (numActiveLayers == 2)
     {
         constexpr uint32_t lastLayerIdx = 1;
-        const LastLayerWeightType* weights = GetLayerWeights<LastLayerWeightType>(lastLayerIdx, variant);
-        const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
-        return LinearLayer_Accum_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), accumulator.values);
+
+        const void* weights;
+        const void* biases;
+        GetLayerWeightsAndBiases(lastLayerIdx, variant, weights, biases);
+
+        return LinearLayer_Accum_SingleOutput(
+            reinterpret_cast<const LastLayerWeightType*>(weights),
+            reinterpret_cast<const LastLayerBiasType*>(biases),
+            accumulator.values);
     }
+    /*
     else
     {
-        alignas(CACHELINE_SIZE) IntermediateType tempA[MaxNeuronsInFirstLayer];
+        alignas(CACHELINE_SIZE) IntermediateType tempA[AccumulatorSize];
         alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInHiddenLayers];
 
         // apply activation function on the accumulator
@@ -1198,12 +1202,13 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& accumulator, uint32_t varian
         const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
         return LinearLayer_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), tempA);
     }
+    */
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs, uint32_t variant) const
 {
     Accumulator accumulator;
-    accumulator.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), GetNumInputs(), GetLayerSize(1), numActiveInputs, activeInputIndices);
+    accumulator.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), GetNumInputs(), numActiveInputs, activeInputIndices);
 
     return Run(accumulator, variant);
 }

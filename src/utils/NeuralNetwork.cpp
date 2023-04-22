@@ -642,8 +642,8 @@ static void PackLayerWeights(const Layer& layer, uint32_t variantIdx, WeightType
 bool NeuralNetwork::ToPackedNetwork(PackedNeuralNetwork& outNetwork) const
 {
     ASSERT(layers.size() <= PackedNeuralNetwork::MaxNumLayers);
-    ASSERT(layers[0].numOutputs <= FirstLayerMaxSize);
-    ASSERT(layers[1].numInputs <= FirstLayerMaxSize);
+    ASSERT(layers[0].numOutputs == AccumulatorSize);
+    ASSERT(layers[1].numInputs == AccumulatorSize);
     ASSERT(layers.back().numOutputs == 1);
     ASSERT(layers.front().variants.size() == 1);
 
