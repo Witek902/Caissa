@@ -19,6 +19,10 @@
     #include <sys/stat.h>
 #endif // PLATFORM_LINUX
 
+#ifdef USE_VNNI
+#define NN_USE_VNNI
+#endif // USE_VNNI
+
 #ifdef USE_AVX2
     #define NN_USE_AVX2
 #endif // USE_AVX2
@@ -405,7 +409,7 @@ INLINE static void ClippedReLU_Accum(uint32_t size, IntermediateType* output, co
 
 INLINE static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
 {
-#if defined (USE_VNNI)
+#if defined (NN_USE_VNNI)
     acc = _mm256_dpbusd_epi32(acc, a, b);
 #else
     __m256i product0 = _mm256_maddubs_epi16(a, b);
@@ -676,7 +680,11 @@ INLINE static int32_t LinearLayer_SingleOutput(
 
             // perform 16bit x 16bit multiplication and accumulate to 32bit registers
             const __m256i w = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
+#ifdef NN_USE_VNNI
+            sum = _mm256_dpwssd_epi32(sum, in, w);
+#else
             sum = _mm256_add_epi32(sum, _mm256_madd_epi16(in, w));
+#endif // NN_USE_VNNI
         }
 
         // add 8 int32s horizontally
@@ -685,7 +693,7 @@ INLINE static int32_t LinearLayer_SingleOutput(
         // divide with rounding to nearest
         return (val + (WeightScale / 2)) >> WeightScaleShift;
     }
-#endif
+#endif // NN_USE_AVX2
 
 #if defined(NN_USE_SSE4)
     constexpr uint32_t registerWidth = 8;
@@ -744,8 +752,13 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
         const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + registerWidth));
+#ifdef NN_USE_VNNI
+        sumA = _mm256_dpwssd_epi32(sumA, inA, wA);
+        sumB = _mm256_dpwssd_epi32(sumB, inB, wB);
+#else
         sumA = _mm256_add_epi32(sumA, _mm256_madd_epi16(inA, wA));
         sumB = _mm256_add_epi32(sumB, _mm256_madd_epi16(inB, wB));
+#endif // NN_USE_VNNI
     }
 
     // add 8 int32s horizontally
