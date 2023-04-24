@@ -167,21 +167,6 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     return network.Run(features, numFeatures, GetNetworkVariant(pos));
 }
 
-INLINE static void AppendFeatureIndex(uint16_t featureIndex, uint16_t addedFeatures[], uint32_t& numAddedFeatures, uint16_t removedFeatures[], uint32_t& numRemovedFeatures)
-{
-    for (uint32_t j = 0; j < numRemovedFeatures; ++j)
-    {
-        // if a feature to add is on list to remove, the addition and removal cancel each other
-        if (featureIndex == removedFeatures[j])
-        {
-            removedFeatures[j] = removedFeatures[--numRemovedFeatures];
-            return;
-        }
-    }
-    
-    addedFeatures[numAddedFeatures++] = featureIndex;
-}
-
 
 #ifdef USE_ACCUMULATOR_CACHE
 
@@ -247,16 +232,18 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 {
     ASSERT(prevAccumNode != &node);
     nn::Accumulator& accumulator = node.nnContext->accumulator[(uint32_t)perspective];
+    ASSERT(node.nnContext->accumDirty[(uint32_t)perspective]);
 
     if (prevAccumNode)
     {
         ASSERT(prevAccumNode->nnContext);
         ASSERT(!prevAccumNode->nnContext->accumDirty[(uint32_t)perspective]);
 
+        constexpr uint32_t maxChangedFeatures = 64;
         uint32_t numAddedFeatures = 0;
         uint32_t numRemovedFeatures = 0;
-        uint16_t addedFeatures[64];
-        uint16_t removedFeatures[64];
+        uint16_t addedFeatures[maxChangedFeatures];
+        uint16_t removedFeatures[maxChangedFeatures];
 
         // build a list of features to be updated
         for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; nodePtr = nodePtr->parentNode)
@@ -274,13 +261,15 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 
                 if (dirtyPiece.toSquare.IsValid())
                 {
+                    ASSERT(numAddedFeatures < maxChangedFeatures);
                     const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.toSquare, node.position, perspective);
-                    AppendFeatureIndex(featureIdx, addedFeatures, numAddedFeatures, removedFeatures, numRemovedFeatures);
+                    addedFeatures[numAddedFeatures++] = featureIdx;
                 }
                 if (dirtyPiece.fromSquare.IsValid())
                 {
+                    ASSERT(numRemovedFeatures < maxChangedFeatures);
                     const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.fromSquare, node.position, perspective);
-                    AppendFeatureIndex(featureIdx, removedFeatures, numRemovedFeatures, addedFeatures, numAddedFeatures);
+                    removedFeatures[numRemovedFeatures++] = featureIdx;
                 }
             }
         }
