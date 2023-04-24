@@ -89,8 +89,8 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
         // go up the tree, abort on any null move or capture
         if (!parentNode || !parentNode->parentNode) break;
         if (currNode->isNullMove || parentNode->isNullMove) break;
-        if (currNode->previousMove.IsCapture() || currNode->previousMove.IsPromotion()) break;
-        if (parentNode->previousMove.IsCapture() || parentNode->previousMove.IsPromotion()) break;
+        if (currNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
+        if (parentNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
         currNode = parentNode->parentNode;
 
         const uint64_t moveKey = originalKey ^ currNode->position.GetHash();
@@ -101,10 +101,15 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
 
         if (index < CuckooTableSize)
         {
+            ASSERT(node.position.GetSideToMove() != currNode->position.GetSideToMove());
             const PackedMove move = gCuckooMoves[index];
             if (!(Bitboard::GetBetween(move.FromSquare(), move.ToSquare()) & node.position.Occupied()))
             {
-                return true;
+                const Bitboard occupied = node.position.GetCurrentSide().Occupied();
+                if (occupied & (move.FromSquare().GetBitboard() | move.ToSquare().GetBitboard()))
+                {
+                    return true;
+                }
             }
         }
     }
