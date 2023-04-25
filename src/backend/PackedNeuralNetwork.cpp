@@ -264,7 +264,7 @@ void Accumulator::Update(
     static_assert(AccumulatorSize % registerWidth == 0, "");
     constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
     static_assert(numChunks % OptimalRegisterCount == 0, "");
-    constexpr uint32_t numTiles = AccumulatorSize / OptimalRegisterCount;
+    constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
     ASSERT((size_t)weights % 16 == 0);
     ASSERT((size_t)source.values % 16 == 0);
     ASSERT((size_t)values % 16 == 0);
