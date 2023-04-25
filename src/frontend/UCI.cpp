@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.7.14"
+#define VersionNumber "1.8"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
