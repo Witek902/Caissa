@@ -73,11 +73,11 @@ int main(int argc, const char* argv[])
     }
     else if (args[0] == "trainPieceSquareTables")
     {
-        TrainPieceSquareTables();
+        //TrainPieceSquareTables();
     }
     else if (args[0] == "trainEndgame")
     {
-        TrainEndgame();
+        //TrainEndgame();
     }
     else if (args[0] == "validateEndgame")
     {

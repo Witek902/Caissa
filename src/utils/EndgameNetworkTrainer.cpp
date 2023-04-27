@@ -1,6 +1,6 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
-#include "NeuralNetwork.hpp"
+#include "net/Network.hpp"
 #include "TrainerCommon.hpp"
 
 #include "../backend/Position.hpp"

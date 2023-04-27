@@ -1,5 +1,5 @@
 #include "Common.hpp"
-#include "NeuralNetwork.hpp"
+#include "net/Network.hpp"
 #include "GameCollection.hpp"
 
 #include "../backend/Position.hpp"

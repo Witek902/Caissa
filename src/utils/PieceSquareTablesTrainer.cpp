@@ -429,9 +429,9 @@ static void PositionToPsqtTrainingVector(const Position& pos, nn::TrainingVector
     ASSERT(offset == cNumNetworkInputs);
 }
 
-static void PrintPieceSquareTableWeigts(const nn::NeuralNetwork& nn)
+static void PrintPieceSquareTableWeigts(const nn::ITrainableNode& node)
 {
-    const float* weights = nn.layers[0].variants[0].weights.data();
+    const float* weights = node.GetConstVariant(0).weights.data();
 
     uint32_t offset = 0;
 
@@ -628,16 +628,13 @@ bool TrainPieceSquareTables()
         return false;
     }
 
-    nn::NeuralNetwork materialNetwork;
-    materialNetwork.Init(cNumNetworkInputs, { 32, 32, 1 }, nn::ActivationFunction::Sigmoid);
-
     nn::NeuralNetwork network;
+    nn::NodePtr inputNode = std::make_unique<nn::SparseInputNode>(cNumNetworkInputs, 1);
+    nn::NodePtr outputNode = std::make_unique<nn::ActivationNode>(inputNode.get(), nn::ActivationFunction::Sigmoid);
     network.Init(cNumNetworkInputs, { 1 }, nn::ActivationFunction::Sigmoid);
 
     nn::NeuralNetworkRunContext networkRunCtx;
-    nn::NeuralNetworkRunContext materialNetworkRunCtx;
     networkRunCtx.Init(network);
-    materialNetworkRunCtx.Init(materialNetwork);
 
     nn::NeuralNetworkTrainer trainer;
 
