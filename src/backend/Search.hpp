@@ -157,6 +157,66 @@ struct NodeInfo
     INLINE bool IsPV() const { return (beta - alpha) != 1; }
 };
 
+struct SearchThreadStats
+{
+    uint64_t nodesTemp = 0;     // flushed to global stats
+    uint64_t nodesTotal = 0;
+    uint64_t quiescenceNodes = 0;
+    uint32_t maxDepth = 0;
+    uint64_t tbHits = 0;
+
+    void OnNodeEnter(uint32_t height)
+    {
+        nodesTemp++;
+        nodesTotal++;
+        maxDepth = std::max(maxDepth, height);
+    }
+};
+
+struct SearchStats
+{
+    std::atomic<uint64_t> nodes = 0;
+    std::atomic<uint64_t> quiescenceNodes = 0;
+    std::atomic<uint32_t> maxDepth = 0;
+    std::atomic<uint64_t> tbHits = 0;
+
+#ifdef COLLECT_SEARCH_STATS
+    static const int32_t EvalHistogramMaxValue = 1600;
+    static const int32_t EvalHistogramBins = 100;
+    uint64_t ttHits = 0;
+    uint64_t ttWrites = 0;
+
+    uint64_t numPvNodes = 0;
+    uint64_t numCutNodes = 0;
+    uint64_t numAllNodes = 0;
+
+    uint64_t expectedCutNodesSuccess = 0;
+    uint64_t expectedCutNodesFailure = 0;
+
+    uint64_t totalBetaCutoffs = 0;
+    uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
+    uint64_t ttMoveBetaCutoffs[TTEntry::NumMoves] = { };
+    uint64_t goodCaptureCutoffs = 0;
+    uint64_t badCaptureCutoffs = 0;
+    uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
+    uint64_t counterMoveCutoffs = 0;
+    uint64_t quietCutoffs = 0;
+
+    uint64_t evalHistogram[EvalHistogramBins] = { 0 };
+#endif // COLLECT_SEARCH_STATS
+
+    void Append(SearchThreadStats& threadStats, bool flush = false);
+
+    SearchStats& operator = (const SearchStats& other)
+    {
+        nodes = other.nodes.load();
+        quiescenceNodes = other.quiescenceNodes.load();
+        maxDepth = other.maxDepth.load();
+        tbHits = other.tbHits.load();
+        return *this;
+    }
+};
+
 class Search
 {
 public:
@@ -167,7 +227,7 @@ public:
     void Clear();
     void StopWorkerThreads();
 
-    void DoSearch(const Game& game, SearchParam& param, SearchResult& outResult);
+    void DoSearch(const Game& game, SearchParam& param, SearchResult& outResult, SearchStats* outStats = nullptr);
 
     const MoveOrderer& GetMoveOrderer() const;
     const NodeCache& GetNodeCache() const;
@@ -183,62 +243,11 @@ private:
         UpperBound = 2,
     };
 
-    struct ThreadStats
-    {
-        uint64_t nodesTemp = 0;     // flushed to global stats
-        uint64_t nodesTotal = 0;
-        uint64_t quiescenceNodes = 0;
-        uint32_t maxDepth = 0;
-        uint64_t tbHits = 0;
-
-        void OnNodeEnter(uint32_t height)
-        {
-            nodesTemp++;
-            nodesTotal++;
-            maxDepth = std::max(maxDepth, height);
-        }
-    };
-
-    struct Stats
-    {
-        std::atomic<uint64_t> nodes = 0;
-        std::atomic<uint64_t> quiescenceNodes = 0;
-        std::atomic<uint32_t> maxDepth = 0;
-        std::atomic<uint64_t> tbHits = 0;
-
-#ifdef COLLECT_SEARCH_STATS
-        static const int32_t EvalHistogramMaxValue = 1600;
-        static const int32_t EvalHistogramBins = 100;
-        uint64_t ttHits = 0;
-        uint64_t ttWrites = 0;
-
-        uint64_t numPvNodes = 0;
-        uint64_t numCutNodes = 0;
-        uint64_t numAllNodes = 0;
-
-        uint64_t expectedCutNodesSuccess = 0;
-        uint64_t expectedCutNodesFailure = 0;
-
-        uint64_t totalBetaCutoffs = 0;
-        uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
-        uint64_t ttMoveBetaCutoffs[TTEntry::NumMoves] = { };
-        uint64_t goodCaptureCutoffs = 0;
-        uint64_t badCaptureCutoffs = 0;
-        uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
-        uint64_t counterMoveCutoffs = 0;
-        uint64_t quietCutoffs = 0;
-
-        uint64_t evalHistogram[EvalHistogramBins] = { 0 };
-#endif // COLLECT_SEARCH_STATS
-
-        void Append(ThreadStats& threadStats, bool flush = false);
-    };
-
     struct SearchContext
     {
         const Game& game;
         SearchParam& searchParam;
-        Stats& stats;
+        SearchStats& stats;
         std::vector<Move> excludedRootMoves;
     };
 
@@ -271,7 +280,7 @@ private:
         uint16_t rootDepth = 0;         // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;    // recently completed search depth
         SearchResult pvLines;           // principal variation lines from recently completed search iteration
-        ThreadStats stats;              // per-thread search stats
+        SearchThreadStats stats;              // per-thread search stats
         uint32_t randomSeed;            // seed for random number generator
 
         // per-thread move orderer
@@ -314,7 +323,7 @@ private:
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
-    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats);
+    void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;

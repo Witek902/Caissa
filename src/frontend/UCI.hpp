@@ -51,6 +51,7 @@ private:
     bool Command_TranspositionTableProbe();
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
+    bool Command_Benchmark();
 
     void StopSearchThread();
     void DoSearch();

@@ -152,7 +152,7 @@ INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
     return 0 - HistoryPruningLinearFactor * depth - HistoryPruningQuadraticFactor * depth * depth;
 }
 
-void Search::Stats::Append(ThreadStats& threadStats, bool flush)
+void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
 {
     if (threadStats.nodesTemp >= 64 || flush)
     {
@@ -229,7 +229,7 @@ void Search::Clear()
     {
         ASSERT(threadData);
         threadData->moveOrderer.Clear();
-        threadData->stats = ThreadStats{};
+        threadData->stats = SearchThreadStats{};
     }
 }
 
@@ -279,7 +279,7 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
     return false;
 }
 
-void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outResult)
+void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outResult, SearchStats* outStats)
 {
     ASSERT(!param.stopSearch);
 
@@ -353,7 +353,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     BuildMoveReductionTable();
 #endif // ENABLE_TUNING
 
-    Stats globalStats;
+    SearchStats globalStats;
 
     // Quiescence search debugging 
     if (param.limits.maxDepth == 0)
@@ -462,6 +462,11 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
         outResult = std::move(mThreadData[bestThreadIndex]->pvLines);
     }
+
+    if (outStats)
+    {
+        *outStats = globalStats;
+    }
 }
 
 void Search::WorkerThreadCallback(ThreadData* threadData)
@@ -546,7 +551,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 #ifdef COLLECT_SEARCH_STATS
     if (param.searchParam.verboseStats)
     {
-        const Stats& stats = param.searchContext.stats;
+        const SearchStats& stats = param.searchContext.stats;
 
         {
             const float sum = float(stats.numPvNodes + stats.numAllNodes + stats.numCutNodes);
@@ -595,10 +600,10 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
         {
             printf("Eval value histogram\n");
-            for (uint32_t i = 0; i < Stats::EvalHistogramBins; ++i)
+            for (uint32_t i = 0; i < SearchStats::EvalHistogramBins; ++i)
             {
-                const int32_t lowEval = -Stats::EvalHistogramMaxValue + i * 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
-                const int32_t highEval = lowEval + 2 * Stats::EvalHistogramMaxValue / Stats::EvalHistogramBins;
+                const int32_t lowEval = -SearchStats::EvalHistogramMaxValue + i * 2 * SearchStats::EvalHistogramMaxValue / SearchStats::EvalHistogramBins;
+                const int32_t highEval = lowEval + 2 * SearchStats::EvalHistogramMaxValue / SearchStats::EvalHistogramBins;
                 const uint64_t value = stats.evalHistogram[i];
 
                 printf("    %4d...%4d %" PRIu64 "\n", lowEval, highEval, value);
@@ -621,13 +626,13 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
     std::cout << std::move(ss.str()) << std::endl;
 }
 
-void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, Stats& outStats)
+void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats)
 {
     const bool isMainThread = threadID == 0;
     ThreadData& thread = *(mThreadData[threadID]);
 
     // clear per-thread data for new search
-    thread.stats = ThreadStats{};
+    thread.stats = SearchThreadStats{};
     thread.depthCompleted = 0;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
@@ -1073,8 +1078,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
 
 #ifdef COLLECT_SEARCH_STATS
-            int32_t binIndex = (evalScore + Stats::EvalHistogramMaxValue) * Stats::EvalHistogramBins / (2 * Stats::EvalHistogramMaxValue);
-            binIndex = std::clamp<int32_t>(binIndex, 0, Stats::EvalHistogramBins - 1);
+            int32_t binIndex = (evalScore + SearchStats::EvalHistogramMaxValue) * SearchStats::EvalHistogramBins / (2 * SearchStats::EvalHistogramMaxValue);
+            binIndex = std::clamp<int32_t>(binIndex, 0, SearchStats::EvalHistogramBins - 1);
             ctx.stats.evalHistogram[binIndex]++;
 #endif // COLLECT_SEARCH_STATS
         }
