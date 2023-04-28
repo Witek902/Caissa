@@ -2,14 +2,19 @@
 
 #include "Game.hpp"
 #include "Evaluate.hpp"
+#include "Tuning.hpp"
 
 #include <algorithm>
 
+DEFINE_PARAM(MovesLeftMidpoint, 50);
+DEFINE_PARAM(MovesLeftSteepness, 45);
+DEFINE_PARAM(IdealTimeFactor, 79);
+
 static float EstimateMovesLeft(const uint32_t moves)
 {
-    // based on LeelaChessZero 
-    const float midpoint = 60.0f;
-    const float steepness = 2.5f;
+    // based on LeelaChessZero
+    const float midpoint = static_cast<float>(MovesLeftMidpoint);
+    const float steepness = static_cast<float>(MovesLeftSteepness) / 10.0f;
     return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
@@ -42,8 +47,12 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         const float marigin = 0.98f;
         const float increment = marigin * (float)data.timeIncrement;
 
-        const float idealTime = std::clamp(0.85f * factor * (data.remainingTime - moveOverhead) / movesLeft + increment, 0.0f, marigin * (float)data.remainingTime);
-        const float maxTime = std::clamp(factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment, 0.0f, marigin * (float)data.remainingTime);
+        const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
+        const float idealTime = std::clamp(idealTimeFactor * factor * (data.remainingTime - moveOverhead) / movesLeft + increment,
+            0.0f, marigin * (float)data.remainingTime);
+
+        const float maxTime = std::clamp(factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment,
+            0.0f, marigin * (float)data.remainingTime);
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
