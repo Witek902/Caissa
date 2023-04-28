@@ -221,7 +221,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_Stop();
     }
-    else if (command == "quit")
+    else if (command == "quit" || command == "exit")
     {
         Command_Stop();
         return false;
@@ -279,6 +279,29 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         PrintEndgameStatistics();
     }
 #endif // COLLECT_ENDGAME_STATISTICS
+    else if (command == "help")
+    {
+        // print all available commands
+        std::cout << "Available UCI commands:" << std::endl;
+        std::cout << " * uci - print available UCI options list" << std::endl;
+        std::cout << " * isready - print 'readyok' when the engine is ready" << std::endl;
+        std::cout << " * ucinewgame - prepare for new game by clearing transposition table and search data" << std::endl;
+        std::cout << " * setoption name <name> value <value> - set an UCI option" << std::endl;
+        std::cout << " * position [startpos | fen <fenstring> ] moves <move1> ... <movei> - set position" << std::endl;
+        std::cout << " * go [depth <depth> | movetime <time> | wtime <time> | btime <time> | winc <time> | binc <time> | movestogo <moves> | infinite] - start search" << std::endl;
+        std::cout << " * ponderhit - start searching in pondering mode" << std::endl;
+        std::cout << " * stop - stop searching" << std::endl;
+        std::cout << " * quit|exit - quit the engine" << std::endl;
+        std::cout << " * perft <depth> - run perft test on current position" << std::endl;
+        std::cout << " * print - print current position" << std::endl;
+        std::cout << " * eval - evaluate current position" << std::endl;
+        std::cout << " * scoremoves - print all legal moves with their move orderer scores" << std::endl;
+        std::cout << " * ttinfo - print transposition table info" << std::endl;
+        std::cout << " * ttprobe - probe transposition table with current position" << std::endl;
+        std::cout << " * tbprobe - probe tablebases with current position" << std::endl;
+        std::cout << " * cacheprobe - probe node cache" << std::endl;
+        std::cout << " * bench|benchmark - run benchmark" << std::endl;
+    }
     else
     {
         std::cout << "Invalid command" << std::endl;
