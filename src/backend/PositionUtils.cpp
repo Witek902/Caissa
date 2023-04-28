@@ -824,49 +824,31 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
 
         case Piece::King:
         {
-            // TODO generate king move directly
+            Bitboard attackBitboard = Bitboard::GetKingAttacks(packedMove.FromSquare());
+            attackBitboard &= ~occupiedByCurrent; // can't capture own piece
+            attackBitboard &= ~Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()); // can't move to square controlled by opponent's king
 
-            Square fromSquare = packedMove.FromSquare();
-            Square toSquare = packedMove.ToSquare();
+            if (packedMove.ToSquare().GetBitboard() & attackBitboard)
+            {
+                return Move::Make(packedMove.FromSquare(), packedMove.ToSquare(), movedPiece, Piece::None, isCapture);
+            }
 
+            // check castlings
             if (!isCapture)
             {
-                const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
-                const Square longCastleRookSquare = GetLongCastleRookSquare(fromSquare, currentSideCastlingRights);
-                const Square shortCastleRookSquare = GetShortCastleRookSquare(fromSquare, currentSideCastlingRights);
+                TMoveList<2> moves;
+                if (GetSideToMove() == Color::White)
+                    GenerateCastlingMoveList<Color::White>(*this, moves);
+                else
+                    GenerateCastlingMoveList<Color::Black>(*this, moves);
 
-                if ((toSquare == longCastleRookSquare) ||
-                    (fromSquare == Square_e1 && toSquare == Square_c1 && longCastleRookSquare == Square_a1) ||
-                    (fromSquare == Square_e8 && toSquare == Square_c8 && longCastleRookSquare == Square_a8))
+                for (uint32_t i = 0; i < moves.Size(); ++i)
                 {
-                    toSquare = longCastleRookSquare;
-                }
-                else if ((toSquare == shortCastleRookSquare) ||
-                    (fromSquare == Square_e1 && toSquare == Square_g1 && shortCastleRookSquare == Square_h1) ||
-                    (fromSquare == Square_e8 && toSquare == Square_g8 && shortCastleRookSquare == Square_h8))
-                {
-                    toSquare = shortCastleRookSquare;
-                }
-            }
-
-            MoveList moves;
-            if (GetSideToMove() == Color::White)
-            {
-                if (isCapture) GenerateKingMoveList<MoveGenerationMode::Captures, Color::White>(*this, moves);
-                else GenerateKingMoveList<MoveGenerationMode::Quiets, Color::White>(*this, moves);
-            }
-            else
-            {
-                if (isCapture) GenerateKingMoveList<MoveGenerationMode::Captures, Color::Black>(*this, moves);
-                else GenerateKingMoveList<MoveGenerationMode::Quiets, Color::Black>(*this, moves);
-            }
-
-            for (uint32_t i = 0; i < moves.Size(); ++i)
-            {
-                const Move move = moves.GetMove(i);
-                if (move.FromSquare() == fromSquare && move.ToSquare() == toSquare)
-                {
-                    return move;
+                    const Move move = moves.GetMove(i);
+                    if (move == packedMove)
+                    {
+                        return move;
+                    }
                 }
             }
 
@@ -1472,67 +1454,4 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
 
     ASSERT(outPosition.IsValid());
     ASSERT(!outPosition.IsInCheck(Color::Black));
-}
-
-void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position& outPosition)
-{
-    /*
-    std::vector<Piece> pieces = { Piece::Rook, Piece::Knight, Piece::Bishop, Piece::Queen, Piece::King, Piece::Bishop, Piece::Knight, Piece::Rook };
-
-    const auto randomizePieces = [&]()
-    {
-        for (;;)
-        {
-            std::shuffle(pieces.begin(), pieces.end(), randomGenerator);
-
-            size_t bishopIndex = 0;
-            size_t bishopPos[2];
-
-            for (size_t i = 0; i < 8; ++i)
-            {
-                if (pieces[i] == Piece::Bishop)
-                {
-                    bishopPos[bishopIndex++] = i;
-                }
-            }
-            ASSERT(bishopIndex == 2);
-
-            if ((bishopPos[1] - bishopPos[0]) % 2 == 1)
-            {
-                return;
-            }
-        }
-    };
-
-    outPosition = Position();
-
-    randomizePieces();
-    */
-
-    outPosition = Position();
-
-    std::uniform_int_distribution<uint32_t> pieceDistr((uint32_t)Piece::Knight, (uint32_t)Piece::Queen);
-    std::uniform_int_distribution<uint32_t> kingPosDistr(0, 7);
-
-    const uint32_t whiteKingRank = kingPosDistr(randomGenerator);
-    const uint32_t blackKingRank = kingPosDistr(randomGenerator);
-
-    for (uint8_t i = 0; i < 8; ++i)
-    {
-        const Piece piece = i == whiteKingRank ? Piece::King : (Piece)(pieceDistr(randomGenerator));
-        outPosition.SetPiece(Square(i, 0), piece, Color::White);
-        outPosition.SetPiece(Square(i, 1), Piece::Pawn, Color::White);
-    }
-
-    //randomizePieces();
-
-    for (uint8_t i = 0; i < 8; ++i)
-    {
-        const Piece piece = i == blackKingRank ? Piece::King : (Piece)(pieceDistr(randomGenerator));
-        outPosition.SetPiece(Square(i, 7), piece, Color::Black);
-        outPosition.SetPiece(Square(i, 6), Piece::Pawn, Color::Black);
-    }
-
-    outPosition.SetCastlingRights(Color::White, 0);
-    outPosition.SetCastlingRights(Color::Black, 0);
 }

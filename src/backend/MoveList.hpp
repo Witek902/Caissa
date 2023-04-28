@@ -4,15 +4,17 @@
 
 #include <algorithm>
 
-class MoveList
+template<uint32_t MaxSize>
+class TMoveList
 {
     friend class Search;
     friend class MovePicker;
     friend class MoveOrderer;
+    friend void PrintMoveList(const Position& pos, const MoveList& moves);
 
 public:
 
-    static constexpr uint32_t MaxMoves = 240;
+    static constexpr uint32_t MaxMoves = MaxSize;
 
     INLINE uint32_t Size() const { return numMoves; }
     INLINE const Move GetMove(uint32_t index) const { ASSERT(index < numMoves); return entries[index].move; }
@@ -93,9 +95,10 @@ public:
         return false;
     }
 
-    void Sort();
-
-    void Print(const Position& pos) const;
+    void Sort()
+    {
+        std::sort(entries, entries + numMoves, [](const Entry& a, const Entry& b) { return a.score > b.score; });
+    }
 
 private:
 
@@ -108,3 +111,5 @@ private:
     uint32_t numMoves = 0;
     Entry entries[MaxMoves];
 };
+
+void PrintMoveList(const Position& pos, const MoveList& moves);

@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.8.1"
+#define VersionNumber "1.8.2"
 
 #if defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
@@ -332,17 +332,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         std::random_device rd;
         std::mt19937 mt(rd());
         GenerateRandomPosition(mt, RandomPosDesc{ matKey }, pos);
-
-        if (args.size() >= 4 && args[2] == "moves")
-        {
-            extraMovesStart = 2;
-        }
-    }
-    else if (args.size() >= 2 && args[1] == "randomstartpos")
-    {
-        std::random_device rd;
-        std::mt19937 mt(rd());
-        GenerateTranscendentalChessPosition(mt, pos);
 
         if (args.size() >= 4 && args[2] == "moves")
         {
@@ -982,7 +971,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
     mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves, true, nodeCacheEntry);
 
     moves.Sort();
-    moves.Print(mGame.GetPosition());
+    PrintMoveList(mGame.GetPosition(), moves);
 
     return true;
 }
