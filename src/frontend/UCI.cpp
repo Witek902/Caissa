@@ -263,6 +263,10 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_NodeCacheProbe();
     }
+    else if (command == "bench" || command == "benchmark")
+    {
+        Command_Benchmark();
+    }
 #ifndef CONFIGURATION_FINAL
     else if (command == "moveordererstats")
     {
@@ -956,6 +960,185 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     moves.Sort();
     moves.Print(mGame.GetPosition());
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_Benchmark()
+{
+    const char* testPositions[] =
+    {
+        "1brr2k1/1p3p2/p7/P2N2p1/1P2p2p/2P1P2P/1Q2KPq1/R2R4 w - - 0 32",
+        "1k2r3/1p2r2q/2b2b2/1pPpNp2/pP1P1Ppn/P2QP1Bp/7P/K1R1N1R1 w - - 10 35",
+        "1k6/1pp1r2p/1n6/p1b1PQ2/P1P5/1q3NP1/3B2KP/4R3 w - - 1 36",
+        "1k6/5R2/1pn1q1p1/2p3p1/3p4/1P1P1Q2/1KP2P2/8 w - - 6 33",
+        "1kr5/1pp4R/3bNq2/3P4/1r4pP/6P1/2Q2PK1/3R4 w - - 13 39",
+        "1r1qkbnr/2pppppp/pp6/8/P1PP4/N6N/1P1PBPbP/R1BQK2R w KQk - 0 3",
+        "1r4k1/1b1np2p/p1q1pbp1/R1Pr4/2QB4/2P2N2/4BPPP/1R4K1 w - - 11 23",
+        "1r4k1/1pNb1p1p/5b2/2pBnp2/p1P2p2/2P5/PP1R2PP/3R2K1 w - - 0 22",
+        "1r4k1/1q4p1/3rpb1p/p1p1Np1b/2P2P2/RnBPRN2/1PQ3PP/7K w - - 2 27",
+        "1r4k1/5bpp/8/2b1p3/8/2Nr4/1P4PP/R1B2R1K w - - 2 25",
+        "1R6/1p3r2/1P1p2p1/3N2k1/3K2Pp/5P2/2b3P1/8 w - - 1 60",
+        "1r6/6k1/2n1p1p1/p1Ppr1q1/P6p/2P4Q/KPB3P1/3R1R2 w - - 0 39",
+        "1R6/8/5p1k/p3nB1P/6P1/8/5K2/r7 w - - 0 59",
+        "1R6/8/8/1p5k/1P4p1/n1P5/2r2BK1/8 w - - 33 67",
+        "1rbqkbnr/ppn1pppp/8/2p5/P1pP4/2N3PP/1P2PP2/R1BQKBNR w KQk - 0 2",
+        "1rbr3k/2N1b1pp/p3P3/p4p2/1P6/6P1/4PKBP/3R3R w - - 0 24",
+        "2b1k3/4b1p1/1pp1pn2/q2n1p2/3B1P2/1P1QPBP1/2NP1N2/4K3 w - - 0 17",
+        "2k5/2p2p2/2n1p1p1/1pPrP3/p4P1p/P3n1rP/PB2R1P1/2R1N1K1 w - - 0 32",
+        "2k5/2p3pp/1p2b3/p3Pp2/2P1rP2/1P1r3P/P1R1NKP1/5R2 w - - 6 27",
+        "2r1k2r/1p2bp2/4pn1p/pN1pN1p1/3P4/2P3P1/P3PPqP/1R1QKR2 w k - 3 12",
+        "2r3k1/7p/1P1B1R2/2Ppp3/pr6/4P3/P5P1/6K1 w - - 0 43",
+        "2r3k1/pp2q1pn/7p/2PRpr2/2P1p3/2B1P2P/4QPP1/5RK1 w - - 3 19",
+        "2r4k/8/7p/1PNpR3/3r2b1/P5Qq/6RP/7K w - - 1 39",
+        "2r5/r1Pq1ppk/4p2p/P1R5/5Q2/4P2P/5PK1/2R5 w - - 3 44",
+        "3b4/3qk3/p5p1/4P2p/3Q4/P7/5K2/8 w - - 0 54",
+        "3k4/5p1p/2bp2pP/2p1p1P1/2P1P3/1K1P2P1/8/R7 w - - 16 89",
+        "3q3k/r4bp1/5p1p/2pPp3/pr1nB3/3PN1P1/PP4QP/4RRK1 w - - 8 30",
+        "3r2k1/4npp1/1pqrp2p/p1p4P/P1P2PP1/1PBP4/3RQ3/5RK1 w - - 1 26",
+        "3r2k1/6b1/8/p4p2/N1p2P1p/2PpK2P/6P1/1R6 w - - 0 37",
+        "3r4/4kp2/4p1p1/4P2p/1p2n3/1B1R2PP/1PK2P2/8 w - - 0 38",
+        "3R4/8/8/3pn1P1/4bk2/8/8/3K4 w - - 0 77",
+        "3rk2r/1bpqbp2/np1ppn1p/p5p1/2PPP3/P1N2NP1/1PQ2PBP/R1BR2K1 w k - 4 15",
+        "4B3/8/3b2p1/4kp2/6rp/4B3/3R1KP1/8 w - - 2 64",
+        "4Bb2/5P2/1p3K2/1P2P3/8/5k2/8/8 w - - 3 113",
+        "4k3/p6Q/2p5/2P2rP1/3Pq3/4p2K/P5R1/8 w - - 13 48",
+        "4r1k1/P2R4/5p2/3K1P2/5P2/8/8/8 w - - 1 64",
+        "4r3/5p2/3pp3/pPkp1p1p/P4PrP/K1PRR1P1/8/8 w - - 54 100",
+        "4rk2/3n1p2/3r3p/q1pPpB1n/1pP1P2B/p5Q1/P4PP1/2RR2K1 w - - 1 36",
+        "4rrk1/1R3pb1/p2p2p1/3nn1B1/6qP/6P1/3NNP2/3Q1RK1 w - - 5 21",
+        "5k2/1p2b1p1/p1pn1p1p/P6P/1P2PPN1/2PQ2P1/q3B1K1/8 w - - 2 44",
+        "5k2/3np3/3p1n2/7p/7P/1Q6/6P1/6K1 w - - 35 58",
+        "5n2/4kp2/NR2p1p1/4P3/b1B2P2/4K1P1/8/8 w - - 3 40",
+        "5qk1/1pn3bp/1n1p2p1/r3p3/2PPPPb1/p2BQNP1/P1P1N3/1K1R3R w - - 0 19",
+        "5rk1/R4ppp/3p1b2/1r1n4/2pp4/6P1/1P2PPBP/2B2RK1 w - - 1 25",
+        "6B1/8/7p/1pk1p1p1/4KbP1/5P2/8/8 w - - 4 46",
+        "6k1/5pp1/4p2p/8/3PqP2/4P2P/6P1/3Q2K1 w - - 0 29",
+        "6k1/6p1/8/5P2/4K3/R3B2r/8/5r2 w - - 36 70",
+        "6k1/6p1/8/P5q1/1P6/7Q/3r2B1/6K1 w - - 11 45",
+        "6k1/BBn2p1p/6p1/p7/P2R4/1bP1K3/6PP/5r2 w - - 6 27",
+        "6k1/p3b2p/1p4p1/1Ppp2P1/3P4/P2RP3/2r3r1/1K1N3R w - - 0 33",
+        "6R1/2p5/1p3p2/1P6/6pk/2BP1r2/4K3/8 w - - 3 59",
+        "7k/7P/8/P1b3p1/2P1B1P1/1K3P2/8/8 w - - 1 80",
+        "7r/1p1rqpk1/pR2p3/P2pP2p/1P3QpP/2pBP3/2Pn1PP1/3R2K1 w - - 3 25",
+        "8/1k6/3R1p1p/2P1n3/3N1r2/8/4K3/8 w - - 4 88",
+        "8/1N3kp1/5p1p/4n3/6P1/3P4/5K2/8 w - - 5 48",
+        "8/1p3k2/1b1r1pp1/7p/4pP1B/PRP5/4K1PP/8 w - - 0 29",
+        "8/1p4r1/p2P3p/P1R3p1/6P1/5k1P/5P2/5K2 w - - 0 52",
+        "8/1p5p/p1p1kpp1/P7/1P1R1PP1/4P2P/6K1/1r6 w - - 8 40",
+        "8/1p6/p4pk1/P2p2p1/1Pq1b2p/2P1P2P/3Qn1PK/3R4 w - - 4 39",
+        "8/1q4k1/5pp1/8/1N3P2/pQ4P1/1b1K4/8 w - - 6 73",
+        "8/1r2pk2/3p3R/1p1P3P/P5P1/1P6/6K1/8 w - - 0 37",
+        "8/2B2p2/4bP2/7p/p3k2P/3p2P1/1P1K4/8 w - - 21 108",
+        "8/2R5/6k1/3N4/4Ppb1/3p2p1/3Nn1P1/4K3 w - - 0 47",
+        "8/3k4/5PP1/5K2/3p4/r7/4P3/8 w - - 0 62",
+        "8/3q1pkp/1p3p2/2pr4/1p1p1P1P/1P1Q2P1/P3RP2/6K1 w - - 5 25",
+        "8/4kpp1/6p1/2br2P1/1p2pP2/pP2P2P/K1P1R3/2B5 w - - 4 33",
+        "8/4p1k1/3p4/3P4/5P1p/2b2K1B/8/8 w - - 32 102",
+        "8/4p1k1/4Q1p1/p3P2p/1b3P2/6PP/P5K1/3r4 w - - 7 46",
+        "8/4R3/P1Bk4/1P6/r7/3K4/8/6b1 w - - 15 78",
+        "8/5k2/p5p1/P2p4/2nB1PP1/4P1KP/8/8 w - - 3 50",
+        "8/5p2/8/4pk2/6R1/4P2P/n2PKP1P/1r6 w - - 4 36",
+        "8/6p1/2k4p/4p1PP/4N3/b3PK2/1p1N4/2n5 w - - 0 56",
+        "8/6pk/4p1q1/r1n4p/2R5/6P1/3NQ2K/8 w - - 2 32",
+        "8/8/1R6/1p6/1bk2B2/8/5p2/3n1K2 w - - 3 114",
+        "8/8/3r4/p3n3/4k3/1P5Q/P7/2K5 w - - 1 55",
+        "8/8/4k1p1/1R6/4r1pP/6P1/5P2/5K2 w - - 76 100",
+        "8/8/5k2/1R4p1/4Kn2/7b/2B4P/8 w - - 26 70",
+        "8/8/6b1/6k1/3r2p1/4K3/p7/7R w - - 0 94",
+        "8/8/7P/5NK1/5PP1/3k1q2/4p3/8 w - - 0 107",
+        "8/8/8/1Rp1r3/P1r2PK1/1N1k4/8/8 w - - 1 79",
+        "N1b2k1r/pp1pqpp1/5n2/3P2p1/1b2p2n/4P3/PPPB1PP1/R2QKB1R w KQ - 0 12",
+        "r1b1k2r/1pq1n1pp/p4n2/3p1p2/Pb1Pp3/1PN1P2P/2Q1BPP1/RNB1K2R w KQkq - 5 14",
+        "r1b2rk1/1pq1p1b1/2p1p1pn/p2p2Np/N2P4/6PP/PPPQ1PB1/4RRK1 w - - 0 17",
+        "r1bqk2r/1p2pnbp/2p3p1/3p1p2/p2PnP2/P1PN2P1/1P1NP1BP/R1BQ1RK1 w kq - 2 7",
+        "r1bqkb1r/1p4pp/2p2n2/p2n1p2/5P2/2N1P2P/PP2N1P1/R1BQKB1R w KQkq - 0 8",
+        "r1bqkb1r/pp3ppp/2n1pn2/2Pp4/3P1B2/5N2/PP1N1PPP/R2QKB1R w KQkq - 1 9",
+        "r1br2k1/1p3ppp/5n2/2p5/1R2P3/P4NP1/4PPBP/4K2R w K - 0 17",
+        "r1br4/2p2pk1/P1R3pn/3Pp2p/n3P3/8/P2NBPPP/3R2K1 w - - 3 25",
+        "r1q2bk1/1b3ppp/2p1p3/pp6/3PPP2/8/PP3PBP/R2Q1RK1 w - - 0 19",
+        "r2q1rk1/1bpp1pp1/1p2pn1p/p7/PbPP1P2/1P2PN2/R3B1PP/2BQ1RK1 w - - 1 8",
+        "r2q1rk1/p2nbpp1/2n1b2p/1p2p3/1P1pP3/P2P1NPP/3N1PB1/1RBQ1RK1 w - - 0 14",
+        "r2q2k1/1pp1br2/2n1bpp1/3Np2p/2PpP1nP/PN1P2P1/5PB1/1RBQ1RK1 w - - 1 16",
+        "r2qk1nr/pp2b1pp/6n1/2pB3Q/P3N1b1/1P6/2PP1PPP/1RB1K2R w Kkq - 1 7",
+        "r2qk1nr/ppp3b1/3pp1pp/8/b1P1P3/4B2P/PP2NPP1/R1Q1KB1R w KQkq - 0 9",
+        "r2qkb1r/1bpn1p1p/pp4n1/3p4/3QNB2/7P/PPP2PP1/2KR1BNR w kq - 1 8",
+        "r2qkbnr/3n1ppp/ppbp4/4p3/1P6/P1N1P2P/1BPQ1PP1/R3KBNR w KQkq - 2 7",
+        "r3k1nr/ppbb2pp/4p3/2Bp4/P2P1q1P/2PB4/1P3P2/RN1QK2R w KQkq - 0 11",
+        "r3k2r/1p2q1p1/2p2n1p/p2p4/Nb1PpBbP/1Q4P1/PP2PP2/R2K1BR1 w kq - 6 16",
+        "r3k2r/pp2qppp/2p1b3/2b1P3/4B3/2P5/PPP3PP/R1BQR2K w kq - 0 15",
+        "r3k2r/ppp1q1pp/2nbbp2/3p4/8/2PQ1N2/PPP2BPP/2KR1B1R w kq - 6 12",
+        "r3kb1r/ppp1qp1p/2npbnp1/8/4PP2/2N1Q3/PPPB2PP/2KR1BNR w kq - 0 9",
+        "r4bk1/2p2p1p/4p1p1/2nnP1NP/8/P1q3P1/2B2PK1/2BQR3 w - - 5 28",
+        "r4rk1/1pp2p1p/6p1/n3q3/1pB1P1b1/8/P1QN1PPP/R4RK1 w - - 0 17",
+        "r4rk1/2qn1pbp/3Npnp1/p1Pb2B1/1p1P4/1P3NP1/2Q2PBP/R2R2K1 w - - 2 18",
+        "r4rk1/p1pq2bp/2pp2p1/4p1B1/4P3/2NP2PP/PPPQ4/R3K2b w Q - 0 14",
+        "r5k1/1p3pp1/2p4p/3n1b2/2Nb4/P7/5PPP/2RBR1K1 w - - 4 24",
+        "r5kr/ppB2ppp/8/2n5/5Pb1/3B4/PPP3PP/R3K2R w KQ - 1 20",
+        "r6k/2p2q2/2n2p1p/2Np1bp1/3P3n/2B1P2P/4BPP1/3Q1RK1 w - - 5 24",
+        "r7/1p4k1/3Prnpp/pP6/3B4/6P1/4P2P/5QK1 w - - 1 26",
+        "r7/3r4/k2p1p2/2pPp1p1/p1N1PnPp/Pp3P1P/1P1K4/3R3R w - - 48 60",
+        "rn1qk1nr/1p1b1p2/p2p2pb/2pPp2p/P1P1P2P/2NB1P2/1P1BN1P1/R2QK2R w KQkq - 5 13",
+        "rn1qr1k1/2pb1ppp/1p3n2/p2pN3/Pb1P1P2/2NB4/1PPQ2PP/R1B2RK1 w - - 7 8",
+        "rn2k1nr/1b3ppp/1p1qp3/1P1p4/1p6/3PPN2/P3BPPP/RN1Q1RK1 w kq - 2 7",
+        "rn2k2r/pp2b1p1/2p1bq1p/3p1p2/3Pp3/PN2P1P1/2P1BP1P/RN1QK2R w KQkq - 3 12",
+        "rn2kbnr/1p1bqp2/p1pp2p1/7p/P2P4/2N3N1/1PP1BPPP/R1BQK2R w KQkq - 0 5",
+        "rn2r1k1/pb2bppp/1p1p1n2/3P1q2/1PP5/P4B2/1B1N1PPP/R2Q1RK1 w - - 5 9",
+        "rn3rk1/p5p1/2P2ppp/8/1bpq2P1/7P/1P1NPPB1/R2QK2R w KQ - 0 15",
+        "rnb1k2r/pp1pbpp1/2p1p2p/7B/4P2n/3P3P/q1PN1PPB/1R1QK1NR w Kkq - 4 5",
+        "rnbq1rk1/ppp1bppp/4p3/3n4/2B1N3/5N2/PPPP1PPP/R1BQR1K1 w - - 8 9",
+        "rnbqkb1r/1p3p2/p3p1p1/2ppP1P1/3P2P1/2P4p/PP5P/RNBQKB1R w KQkq - 0 6",
+    };
+
+    const uint32_t maxDepth = 11;
+
+    Search search;
+    TranspositionTable tt(4 * 1024 * 1024);
+
+    uint64_t totalNodes = 0;
+    double totalTime = 0.0;
+
+    for (const char* testPosition : testPositions)
+    {
+        printf("Benchmarking position: %s ...", testPosition);
+
+        Position pos;
+        VERIFY(pos.FromFEN(testPosition));
+
+        Game game;
+        game.Reset(pos);
+
+        search.Clear();
+        tt.Clear();
+
+        SearchParam searchParam{ tt };
+        searchParam.debugLog = false;
+        searchParam.limits.maxDepth = maxDepth;
+
+        const TimePoint startTimePoint = TimePoint::GetCurrent();
+
+        SearchStats stats;
+        SearchResult searchResult;
+        search.DoSearch(game, searchParam, searchResult, &stats);
+
+        const TimePoint endTimePoint = TimePoint::GetCurrent();
+
+        totalNodes += stats.nodes;
+        totalTime += (endTimePoint - startTimePoint).ToSeconds();
+
+        // print best move and stats
+        printf("Move: %s, Nodes: %llu, Time: %.2f MNPS: %.2f\n",
+            searchResult[0].moves.front().ToString().c_str(),
+            stats.nodes.load(),
+            (endTimePoint - startTimePoint).ToSeconds(),
+            stats.nodes.load() / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
+
+    }
+
+    std::cout << std::endl;
+    std::cout << "Total time: " << totalTime << " seconds" << std::endl;
+    std::cout << "Total nodes: " << totalNodes << std::endl;
+    std::cout << "MNPS: " << totalNodes / totalTime / 1000000.0 << std::endl;
 
     return true;
 }
