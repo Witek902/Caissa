@@ -40,6 +40,3 @@ struct RandomPosDesc
 };
 
 void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition);
-
-// generate random starting position for Transcendental Chess variant
-void GenerateTranscendentalChessPosition(std::mt19937& randomGenerator, Position& outPosition);

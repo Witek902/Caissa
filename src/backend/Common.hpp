@@ -386,11 +386,14 @@ class Position;
 struct TTEntry;
 struct Move;
 struct PackedMove;
-class MoveList;
 class Game;
 class TranspositionTable;
 struct NodeInfo;
 struct NNEvaluatorContext;
+
+template<uint32_t MaxSize> class TMoveList;
+// max number of chess moves is 218, setting to 240 just in case
+using MoveList = TMoveList<240>;
 
 using ScoreType = int16_t;
 

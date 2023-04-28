@@ -124,6 +124,79 @@ inline void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
     }
 }
 
+template<Color sideToMove, uint32_t MaxSize>
+inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& outMoveList)
+{
+    const uint8_t currentSideCastlingRights = sideToMove == Color::White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
+
+    if (currentSideCastlingRights == 0u)
+    {
+        return;
+    }
+
+    const SidePosition& currentSide = pos.GetSide(sideToMove);
+    const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
+
+    ASSERT(currentSide.king);
+    const Square kingSquare = currentSide.GetKingSquare();
+
+    const Bitboard occupiedByOpponent = opponentSide.Occupied();
+    const Bitboard opponentAttacks = pos.GetAttackedSquares(GetOppositeColor(sideToMove));
+
+    // king can't be in check
+    if ((currentSide.king & opponentAttacks) == 0u)
+    {
+        const Square longCastleRookSquare = pos.GetLongCastleRookSquare(kingSquare, currentSideCastlingRights);
+        const Square shortCastleRookSquare = pos.GetShortCastleRookSquare(kingSquare, currentSideCastlingRights);
+
+        if (longCastleRookSquare.IsValid() && shortCastleRookSquare.IsValid())
+        {
+            ASSERT(longCastleRookSquare.File() < shortCastleRookSquare.File());
+        }
+
+        // "long" castle
+        if (longCastleRookSquare.IsValid())
+        {
+            ASSERT(longCastleRookSquare.File() < kingSquare.File());
+            ASSERT(currentSide.rooks & longCastleRookSquare.GetBitboard());
+
+            const Square targetKingSquare(2u, kingSquare.Rank());
+            const Square targetRookSquare(3u, kingSquare.Rank());
+
+            const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
+            const Bitboard rookCrossedSquares = Bitboard::GetBetween(longCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
+            const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~longCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
+
+            if (0u == (opponentAttacks & kingCrossedSquares) &&
+                0u == (kingCrossedSquares & occupiedSquares) &&
+                0u == (rookCrossedSquares & occupiedSquares))
+            {
+                outMoveList.Push(Move::Make(kingSquare, longCastleRookSquare, Piece::King, Piece::None, false, false, true, false));
+            }
+        }
+
+        if (shortCastleRookSquare.IsValid())
+        {
+            ASSERT(kingSquare.File() < shortCastleRookSquare.File());
+            ASSERT(currentSide.rooks & shortCastleRookSquare.GetBitboard());
+
+            const Square targetKingSquare(6u, kingSquare.Rank());
+            const Square targetRookSquare(5u, kingSquare.Rank());
+
+            const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
+            const Bitboard rookCrossedSquares = Bitboard::GetBetween(shortCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
+            const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~shortCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
+
+            if (0u == (opponentAttacks & kingCrossedSquares) &&
+                0u == (kingCrossedSquares & occupiedSquares) &&
+                0u == (rookCrossedSquares & occupiedSquares))
+            {
+                outMoveList.Push(Move::Make(kingSquare, shortCastleRookSquare, Piece::King, Piece::None, false, false, false, true));
+            }
+        }
+    }
+}
+
 template<MoveGenerationMode mode, Color sideToMove>
 inline void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 {
@@ -146,68 +219,9 @@ inline void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
         outMoveList.Push(Move::Make(kingSquare, Square(toIndex), Piece::King, Piece::None, mode == MoveGenerationMode::Captures));
     });
 
-    // castling
     if constexpr (mode == MoveGenerationMode::Quiets)
     {
-        const uint8_t currentSideCastlingRights = sideToMove == Color::White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
-
-        if (0 != currentSideCastlingRights)
-        {
-            const Bitboard opponentAttacks = pos.GetAttackedSquares(GetOppositeColor(sideToMove));
-
-            // king can't be in check
-            if ((currentSide.king & opponentAttacks) == 0u)
-            {
-                const Square longCastleRookSquare = pos.GetLongCastleRookSquare(kingSquare, currentSideCastlingRights);
-                const Square shortCastleRookSquare = pos.GetShortCastleRookSquare(kingSquare, currentSideCastlingRights);
-
-                if (longCastleRookSquare.IsValid() && shortCastleRookSquare.IsValid())
-                {
-                    ASSERT(longCastleRookSquare.File() < shortCastleRookSquare.File());
-                }
-
-                // "long" castle
-                if (longCastleRookSquare.IsValid())
-                {
-                    ASSERT(longCastleRookSquare.File() < kingSquare.File());
-                    ASSERT(currentSide.rooks & longCastleRookSquare.GetBitboard());
-
-                    const Square targetKingSquare(2u, kingSquare.Rank());
-                    const Square targetRookSquare(3u, kingSquare.Rank());
-
-                    const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
-                    const Bitboard rookCrossedSquares = Bitboard::GetBetween(longCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
-                    const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~longCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
-
-                    if (0u == (opponentAttacks & kingCrossedSquares) &&
-                        0u == (kingCrossedSquares & occupiedSquares) &&
-                        0u == (rookCrossedSquares & occupiedSquares))
-                    {
-                        outMoveList.Push(Move::Make(kingSquare, longCastleRookSquare, Piece::King, Piece::None, false, false, true, false));
-                    }
-                }
-
-                if (shortCastleRookSquare.IsValid())
-                {
-                    ASSERT(kingSquare.File() < shortCastleRookSquare.File());
-                    ASSERT(currentSide.rooks & shortCastleRookSquare.GetBitboard());
-
-                    const Square targetKingSquare(6u, kingSquare.Rank());
-                    const Square targetRookSquare(5u, kingSquare.Rank());
-
-                    const Bitboard kingCrossedSquares = Bitboard::GetBetween(kingSquare, targetKingSquare) | targetKingSquare.GetBitboard();
-                    const Bitboard rookCrossedSquares = Bitboard::GetBetween(shortCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
-                    const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~shortCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
-
-                    if (0u == (opponentAttacks & kingCrossedSquares) &&
-                        0u == (kingCrossedSquares & occupiedSquares) &&
-                        0u == (rookCrossedSquares & occupiedSquares))
-                    {
-                        outMoveList.Push(Move::Make(kingSquare, shortCastleRookSquare, Piece::King, Piece::None, false, false, false, true));
-                    }
-                }
-            }
-        }
+        GenerateCastlingMoveList<sideToMove>(pos, outMoveList);
     }
 }
 
