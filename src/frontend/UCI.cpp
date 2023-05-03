@@ -1138,7 +1138,7 @@ bool UniversalChessInterface::Command_Benchmark()
         totalTime += (endTimePoint - startTimePoint).ToSeconds();
 
         // print best move and stats
-        printf("Move: %s, Nodes: %llu, Time: %.2f MNPS: %.2f\n",
+        printf("Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
             searchResult[0].moves.front().ToString().c_str(),
             stats.nodes.load(),
             (endTimePoint - startTimePoint).ToSeconds(),
