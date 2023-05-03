@@ -27,22 +27,33 @@
 #define NN_USE_VNNI
 #endif // USE_VNNI
 
-#ifdef USE_AVX2
+#if defined(USE_AVX512)
+    #define NN_USE_AVX512
+    using Int16VecType = __m512i;
+    constexpr const uint32_t VectorRegSize = 512;
+    #define Int16VecLoad(ptr) _mm512_load_si512(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm512_store_si512(reinterpret_cast<Int16VecType*>(ptr), (val))
+    #define Int16VecAdd _mm512_add_epi16
+    #define Int16VecSub _mm512_sub_epi16
+
+#elif defined(USE_AVX2)
     #define NN_USE_AVX2
     using Int16VecType = __m256i;
     constexpr const uint32_t VectorRegSize = 256;
-    #define Int16VecLoad(ptr) _mm256_load_si256(reinterpret_cast<const __m256i*>(ptr))
-    #define Int16VecStore(ptr,val) _mm256_store_si256(reinterpret_cast<__m256i*>(ptr), (val))
+    #define Int16VecLoad(ptr) _mm256_load_si256(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm256_store_si256(reinterpret_cast<Int16VecType*>(ptr), (val))
     #define Int16VecAdd _mm256_add_epi16
     #define Int16VecSub _mm256_sub_epi16
-#elif defined(USE_AVX2)
+
+#elif defined(USE_SSE2)
     #define NN_USE_SSE2
     using Int16VecType = __m128i;
     constexpr const uint32_t VectorRegSize = 128;
-    #define Int16VecLoad(ptr) _mm_load_si128(reinterpret_cast<const __m128i*>(ptr))
-    #define Int16VecStore(ptr,val) _mm_store_si128(reinterpret_cast<__m128i*>(ptr), (val))
+    #define Int16VecLoad(ptr) _mm_load_si128(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm_store_si128(reinterpret_cast<Int16VecType*>(ptr), (val))
     #define Int16VecAdd _mm128_add_epi16
     #define Int16VecSub _mm128_sub_epi16
+
 #elif defined(USE_ARM_NEON)
     #define NN_USE_ARM_NEON
     using Int16VecType = int16x8_t;
@@ -57,9 +68,9 @@
     #define NN_USE_SSE4
 #endif // USE_SSE
 
-#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 constexpr uint32_t OptimalRegisterCount = 8;
-#endif // NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
+#endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
 
 namespace nn {
 
@@ -85,7 +96,7 @@ void Accumulator::Refresh(
     }
 #endif // CONFIGURATION_FINAL
 
-#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 
     constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
     static_assert(AccumulatorSize % registerWidth == 0);
@@ -168,7 +179,7 @@ void Accumulator::Update(
 {
     (void)numInputs;
 
-#if defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 
     constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
     static_assert(AccumulatorSize % registerWidth == 0);
@@ -631,13 +642,35 @@ INLINE static int32_t LinearLayer_SingleOutput(
     return (val + (WeightScale / 2)) >> WeightScaleShift;
 }
 
-NO_INLINE static int32_t LinearLayer_Accum_SingleOutput(
+INLINE static int32_t LinearLayer_Accum_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
     const AccumulatorType* input)
 {
     int32_t val = biases[0];
 
-#if defined(NN_USE_AVX2)
+#if defined(NN_USE_AVX512)
+    constexpr uint32_t registerWidth = 32;
+    ASSERT((size_t)weights % (2 * registerWidth) == 0);
+    ASSERT((size_t)biases % (2 * registerWidth) == 0);
+
+    // unroll 2x so two sums can be calculated independently
+    __m512i sum = _mm512_setzero_si512();
+    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    {
+        __m512i in = Int16VecLoad(input + j);
+
+        // apply clipped-ReLU
+        in = _mm512_min_epi16(_mm512_max_epi16(in, _mm512_setzero_si512()), _mm512_set1_epi16(127));
+
+        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
+        const __m512i w = Int16VecLoad(weights + j);
+        sum = _mm512_add_epi32(sum, _mm512_madd_epi16(in, w));
+    }
+
+    // add 8 int32s horizontally
+    val += _mm512_reduce_add_epi32(sum);
+
+#elif defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 16;
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
     ASSERT((size_t)biases % (2 * registerWidth) == 0);

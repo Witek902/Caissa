@@ -12,9 +12,11 @@
 
 #include <math.h>
 
-#define VersionNumber "1.8.3"
+#define VersionNumber "1.8.4"
 
-#if defined(USE_BMI2) && defined(USE_AVX2) 
+#if defined(USE_AVX512)
+#define ArchitectureStr "AVX-512"
+#elif defined(USE_BMI2) && defined(USE_AVX2) 
 #define ArchitectureStr "AVX2/BMI2"
 #elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
 #define ArchitectureStr "POPCNT/SSE4"
