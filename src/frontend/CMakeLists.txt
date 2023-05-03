@@ -6,4 +6,6 @@ add_dependencies(caissa backend)
 
 target_link_libraries(caissa backend)
 
-set_target_properties(caissa PROPERTIES LINK_FLAGS "-pthread")
+if (NOT MSVC)
+	set_target_properties(caissa PROPERTIES LINK_FLAGS "-pthread")
+endif()

@@ -22,7 +22,7 @@ bool EnableLargePagesSupport()
     }
 
     // get the luid
-    if (!LookupPrivilegeValue(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
+    if (!LookupPrivilegeValueW(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
     {
         std::cerr << "LookupPrivilegeValue failed, error code: " << GetLastError() << std::endl;
         return false;

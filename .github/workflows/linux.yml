@@ -9,6 +9,7 @@ jobs:
     strategy:
       matrix:
         configs: [Debug, RelWithDebInfo, Release]
+        architectures: [x64-sse4-popcnt, x64-avx2-bmi2]
 
     steps:
     - name: Checkout
@@ -16,7 +17,7 @@ jobs:
 
     - name: Configure CMake
       working-directory: ${{github.workspace}}
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.configs}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.configs}} -DTARGET_ARCH=${{matrix.architectures}}
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build -j

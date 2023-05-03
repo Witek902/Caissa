@@ -42,10 +42,9 @@
 #define CACHELINE_SIZE 64u
 
 #define USE_SYZYGY_TABLEBASES
+// #define USE_GAVIOTA_TABLEBASES
 
 #if defined(_MSC_VER)
-
-    #define USE_GAVIOTA_TABLEBASES
 
     // "C++ nonstandard extension: nameless struct"
     #pragma warning(disable : 4201)
