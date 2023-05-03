@@ -6,4 +6,6 @@ add_dependencies(utils backend)
 
 target_link_libraries(utils backend)
 
-set_target_properties(utils PROPERTIES LINK_FLAGS "-pthread")
+if (NOT MSVC)
+	set_target_properties(utils PROPERTIES LINK_FLAGS "-pthread")
+endif()

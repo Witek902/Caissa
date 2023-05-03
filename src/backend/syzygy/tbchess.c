@@ -982,10 +982,10 @@ static bool do_move(Pos *pos, const Pos *pos0, TbMove move)
         pos->rule50 = 0;                // Pawn move
         if (rank(from) == 1 && rank(to) == 3 &&
             (pawn_attacks(from+8, true) & pos0->pawns & pos0->black) != 0)
-            pos->ep = from+8;
+            pos->ep = (uint8_t)from+8;
         else if (rank(from) == 6 && rank(to) == 4 &&
             (pawn_attacks(from-8, false) & pos0->pawns & pos0->white) != 0)
-            pos->ep = from-8;
+            pos->ep = (uint8_t)from-8;
         else if (to == pos0->ep)
         {
             unsigned ep_to = (pos0->turn? to-8: to+8);

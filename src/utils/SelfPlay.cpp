@@ -33,8 +33,8 @@ static const int32_t c_openingMaxEval = 400;
 static const int32_t c_multiPv = 3;
 static const int32_t c_multiPvMaxPly = 8;
 static const int32_t c_multiPvScoreTreshold = 30;
-static const uint32_t c_minRandomMoves = 4;
-static const uint32_t c_maxRandomMoves = 12;
+static const uint32_t c_minRandomMoves = 0;
+static const uint32_t c_maxRandomMoves = 0;
 
 using namespace threadpool;
 
@@ -279,12 +279,15 @@ void SelfPlay(const std::vector<std::string>& args)
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
-        // play few random moves in the opening
-        const uint32_t numRandomMoves = std::uniform_int_distribution<uint32_t>(c_minRandomMoves, c_maxRandomMoves)(gen);
-        for (uint32_t i = 0; i < numRandomMoves; ++i)
+        if constexpr (c_maxRandomMoves > 0)
         {
-            ApplyRandomMove(gen, openingPos, false);
-            ApplyRandomMove(gen, openingPos, false);
+            // play few random moves in the opening
+            const uint32_t numRandomMoves = std::uniform_int_distribution<uint32_t>(c_minRandomMoves, c_maxRandomMoves)(gen);
+            for (uint32_t i = 0; i < numRandomMoves; ++i)
+            {
+                ApplyRandomMove(gen, openingPos, false);
+                ApplyRandomMove(gen, openingPos, false);
+            }
         }
 
         if (openingPos.IsMate() || openingPos.IsStalemate())

@@ -5,4 +5,4 @@ x64/
 *.args.json
 build/
 bin/
-
+releases/

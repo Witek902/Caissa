@@ -10,7 +10,8 @@
 #include <string.h>
 
 #ifdef _WIN32
-#pragma warning (disable:4996)
+#pragma warning (disable:4996) // _CRT_SECURE_NO_WARNINGS
+#pragma warning (disable:4702) // unreachable code
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define __thread __declspec(thread)
@@ -333,13 +334,13 @@ void mtr_flush_with_state(int is_last) {
 		// On Windows, we often end up with backslashes in category.
 		char temp[256];
 		{
-			int len = (int)strlen(cat);
-			int i;
-			if (len > 255) len = 255;
-			for (i = 0; i < len; i++) {
-				temp[i] = cat[i] == '\\' ? '/' : cat[i];
+			int len2 = (int)strlen(cat);
+			int j;
+			if (len2 > 255) len2 = 255;
+			for (j = 0; j < len2; j++) {
+				temp[j] = cat[j] == '\\' ? '/' : cat[j];
 			}
-			temp[len] = 0;
+			temp[len2] = 0;
 			cat = temp;
 		}
 #endif
