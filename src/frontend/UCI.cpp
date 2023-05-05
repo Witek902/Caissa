@@ -166,6 +166,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #endif // USE_GAVIOTA_TABLEBASES
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UCI_Chess960 type check default false\n";
+        std::cout << "option name UCI_ShowWDL type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
 #ifdef ENABLE_TUNING
@@ -576,6 +577,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
     mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
+    mSearchCtx->searchParam.showWDL = mOptions.showWDL;
 
     {
         std::unique_lock<std::mutex> lock(mSearchThreadMutex);
@@ -809,6 +811,14 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "uci_chess960")
     {
         if (!ParseBool(lowerCaseValue, Position::s_enableChess960))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
+    }
+    else if (lowerCaseName == "uci_showwdl")
+    {
+        if (!ParseBool(lowerCaseValue, mOptions.showWDL))
         {
             std::cout << "Invalid value" << std::endl;
             return false;

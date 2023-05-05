@@ -520,6 +520,18 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)  ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
     else                                                                ss << " score cp " << pvLine.score;
 
+    if (param.searchParam.showWDL)
+    {
+        const uint32_t ply = 2 * param.searchContext.game.GetPosition().GetMoveCount();
+        const float w = EvalToWinProbability(pvLine.score / 100.0f, ply);
+        const float l = EvalToWinProbability(-pvLine.score / 100.0f, ply);
+        const float d = 1.0f - w - l;
+        ss << " wdl "
+            << (int32_t)roundf(w * 1000.0f) << " "
+            << (int32_t)roundf(d * 1000.0f) << " "
+            << (int32_t)roundf(l * 1000.0f);
+    }
+
     if (boundsType == BoundsType::LowerBound) ss << " lowerbound";
     if (boundsType == BoundsType::UpperBound) ss << " upperbound";
 

@@ -56,13 +56,21 @@ bool LoadEndgameNeuralNetwork(const char* path);
 // equal to 400/ln(10) = 173.7177...
 static constexpr int32_t c_nnOutputToCentiPawns = 174;
 
-
-inline float EvalToWinProbability(float eval)
+// convert evaluation score (in pawns) to win probability
+inline float EvalToWinProbability(float eval, uint32_t ply)
 {
     // TODO better model
-    const float a = 1.5f;
-    const float b = 0.75f;
+    const float a = 2.0f + ply / 240.0f;
+    const float b = 0.5f;
     return 1.0f / (1.0f + expf((a - eval) / b));
+}
+
+// convert evaluation score (in pawns) to draw probability
+inline float EvalToDrawProbability(float eval, uint32_t ply)
+{
+    const float winProb = EvalToWinProbability(eval, ply);
+    const float lossProb = EvalToWinProbability(-eval, ply);
+    return 1.0f - winProb - lossProb;
 }
 
 // convert evaluation score (in pawns) to expected game score

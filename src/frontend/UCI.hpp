@@ -17,6 +17,7 @@ struct Options
     bool analysisMode = false;
     bool useStandardAlgebraicNotation = false;
     bool colorConsoleOutput = false;
+    bool showWDL = false;
 };
 
 struct SearchTaskContext

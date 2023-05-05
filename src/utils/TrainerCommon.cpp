@@ -169,8 +169,9 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         // skip based on WDL
         // the idea is to skip positions where for instance eval is high, but game result is loss
         {
-            const float w = EvalToWinProbability(outEntry.score / 100.0f);
-            const float l = EvalToWinProbability(-outEntry.score / 100.0f);
+            const uint32_t ply = 2 * outEntry.pos.moveCount;
+            const float w = EvalToWinProbability(outEntry.score / 100.0f, ply);
+            const float l = EvalToWinProbability(-outEntry.score / 100.0f, ply);
             const float d = 1.0f - w - l;
 
             float prob = d;
