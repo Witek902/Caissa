@@ -100,6 +100,9 @@ struct SearchParam
     // print verbose debug stats (not UCI compatible)
     bool verboseStats = false;
 
+    // show win/draw/loss probabilities along with classic cp score
+    bool showWDL = false;
+
 #ifdef USE_EVAL_PROBING
     // optional eval probing interface
     EvalProbingInterface* evalProbingInterface = nullptr;
