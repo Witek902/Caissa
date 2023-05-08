@@ -291,7 +291,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     }
 
     // clamp number of PV lines (there can't be more than number of max moves)
-    static_assert(MoveList::MaxMoves <= UINT8_MAX, "Max move count must fit uint8");
     std::vector<Move> legalMoves;
     const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves(&legalMoves);
     const uint32_t numPvLines = std::min(param.numPvLines, numLegalMoves);
