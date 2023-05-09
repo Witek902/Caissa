@@ -1684,16 +1684,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     Move bestMove = Move::Invalid();
 
-    uint8_t moveIndex = 0;
-    uint8_t quietMoveIndex = 0;
+    uint32_t moveIndex = 0;
+    uint32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
     constexpr uint32_t maxMovesTried = 32;
     Move quietMovesTried[maxMovesTried];
     Move captureMovesTried[maxMovesTried];
-    uint8_t numQuietMovesTried = 0;
-    uint8_t numCaptureMovesTried = 0;
+    uint32_t numQuietMovesTried = 0;
+    uint32_t numCaptureMovesTried = 0;
 
 #ifdef VALIDATE_MOVE_PICKER
     uint32_t numGeneratedMoves = 0;
