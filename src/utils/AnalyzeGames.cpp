@@ -40,7 +40,7 @@ float GameScoreToExpectedGameScore(const Game::Score score)
 
 void AnalyzeGames()
 {
-    FileInputStream gamesFile("../../data/selfplayGames/selfplay_2509102967.dat");
+    FileInputStream gamesFile(DATA_PATH "selfplayGames/selfplay_2509102967.dat");
 
     uint64_t numGames = 0;
     uint64_t numPositions = 0;

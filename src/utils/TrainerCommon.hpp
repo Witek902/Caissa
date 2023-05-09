@@ -26,7 +26,7 @@ class TrainingDataLoader
 public:
 
     // initialize the loader at given directory
-    bool Init(const std::string& trainingDataPath = "../../data/trainingData");
+    bool Init(const std::string& trainingDataPath = "../../../data/trainingData");
 
     // sample new position from the training set
     bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition);
