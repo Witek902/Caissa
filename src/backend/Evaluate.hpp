@@ -59,10 +59,15 @@ static constexpr int32_t c_nnOutputToCentiPawns = 174;
 // convert evaluation score (in pawns) to win probability
 inline float EvalToWinProbability(float eval, uint32_t ply)
 {
-    // TODO better model
-    const float a = 2.0f + ply / 240.0f;
-    const float b = 0.5f;
-    return 1.0f / (1.0f + expf((a - eval) / b));
+    // WLD model by Vondele
+    // coefficients computed with https://github.com/vondele/WLD_model on 40+0.4s games
+    constexpr float as[] = { -2.75620963f,   23.36150241f,  -16.44238914f,  145.42527562f };
+    constexpr float bs[] = { -3.64843596f,   30.76831543f,  -64.62008085f,   89.99394988f };
+    
+    const float m = std::min(240u, ply) / 64.0f;
+    const float a = ((as[0] * m + as[1]) * m + as[2]) * m + as[3];
+    const float b = ((bs[0] * m + bs[1]) * m + bs[2]) * m + bs[3];
+    return 1.0f / (1.0f + expf((a - 100.0f * eval) / b));
 }
 
 // convert evaluation score (in pawns) to draw probability
