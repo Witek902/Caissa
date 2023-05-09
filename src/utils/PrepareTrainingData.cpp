@@ -165,8 +165,8 @@ void PrepareTrainingData(const std::vector<std::string>& args)
 {
     (void)args;
 
-    const std::string gamesPath = "../../data/selfplayGames";
-    const std::string trainingDataPath = "../../data/trainingData/";
+    const std::string gamesPath = DATA_PATH "selfplayGames/";
+    const std::string trainingDataPath = DATA_PATH "trainingData/";
 
     Waitable waitable;
     {

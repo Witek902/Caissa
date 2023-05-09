@@ -186,12 +186,12 @@ void SelfPlay(const std::vector<std::string>& args)
 {
     g_syzygyProbeLimit = 5;
 
-    std::string outputFileName = "../../data/selfplayGames/selfplay";
+    std::string outputFileName;
     {
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> distrib;
-        outputFileName = "../../data/selfplayGames/selfplay_" + std::to_string(distrib(gen)) + ".dat";
+        outputFileName = DATA_PATH "selfplayGames/selfplay_" + std::to_string(distrib(gen)) + ".dat";
     }
 
     FileOutputStream gamesFile(outputFileName.c_str());
