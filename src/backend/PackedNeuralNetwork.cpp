@@ -51,8 +51,8 @@
     constexpr const uint32_t VectorRegSize = 128;
     #define Int16VecLoad(ptr) _mm_load_si128(reinterpret_cast<const Int16VecType*>(ptr))
     #define Int16VecStore(ptr,val) _mm_store_si128(reinterpret_cast<Int16VecType*>(ptr), (val))
-    #define Int16VecAdd _mm128_add_epi16
-    #define Int16VecSub _mm128_sub_epi16
+    #define Int16VecAdd _mm_add_epi16
+    #define Int16VecSub _mm_sub_epi16
 
 #elif defined(USE_ARM_NEON)
     #define NN_USE_ARM_NEON
