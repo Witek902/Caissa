@@ -44,15 +44,18 @@ public:
 
     void Push(const Move move)
     {
-        ASSERT(numMoves < MaxMoves);
-        for (uint32_t i = 0; i < numMoves; ++i)
+        if (numMoves < MaxMoves)
         {
-            ASSERT(move != entries[i].move);
-        }
+            // check for duplicate moves
+            for (uint32_t i = 0; i < numMoves; ++i)
+            {
+                ASSERT(move != entries[i].move);
+            }
 
-        uint32_t index = numMoves++;
-        entries[index].move = move;
-        entries[index].score = INT32_MIN;
+            uint32_t index = numMoves++;
+            entries[index].move = move;
+            entries[index].score = INT32_MIN;
+        }
     }
 
     INLINE void RemoveByIndex(uint32_t index)

@@ -252,8 +252,9 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
 
             stats.count++;
 
+            int32_t scale = 0;
             int32_t evalScore = 0;
-            if (EvaluateEndgame(pos, evalScore))
+            if (EvaluateEndgame(pos, evalScore, scale))
             {
                 const float error = trueScore - InternalEvalToExpectedGameScore(evalScore);
                 stats.totalErrorSqr += error * error;
