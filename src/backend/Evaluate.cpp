@@ -421,11 +421,13 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns +
         blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
 
+    int32_t scale = c_endgameScaleMax;
+
     // check endgame evaluation first
     if (pieceCount <= 6)
     {
         int32_t endgameScore;
-        if (EvaluateEndgame(pos, endgameScore))
+        if (EvaluateEndgame(pos, endgameScore, scale))
         {
             ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
             return (ScoreType)endgameScore;
@@ -524,5 +526,5 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
-    return (ScoreType)finalValue;
+    return (ScoreType)(finalValue * scale / c_endgameScaleMax);
 }

@@ -30,6 +30,7 @@
     #define DEBUG_BREAK() std::raise(SIGINT)
 #endif
 
+#define UNUSED(x) (void)(x)
 
 #ifndef CONFIGURATION_FINAL
     #define ASSERT(x) do { if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
@@ -391,7 +392,6 @@ struct NodeInfo;
 struct NNEvaluatorContext;
 
 template<uint32_t MaxSize> class TMoveList;
-// max number of chess moves is 218, setting to 240 just in case
 using MoveList = TMoveList<280>;
 
 using ScoreType = int16_t;
@@ -403,9 +403,6 @@ static constexpr ScoreType TablebaseWinValue    = 31000;
 static constexpr ScoreType KnownWinValue        = 20000;
 
 static constexpr uint16_t MaxSearchDepth    = 256;
-
-// maximum number of pieces in "normal" chess position
-static constexpr uint32_t MaxNumPieces      = 32;
 
 static constexpr ScoreType DrawScoreRandomness = 2;
 

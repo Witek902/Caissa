@@ -1716,6 +1716,7 @@ static void RunEvalTests()
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/R7/8/8/8/8/8/7k w - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
+    TEST_EXPECT(KnownWinValue <= Evaluate(Position("8/8/8/8/8/8/6k1/KRR5 b - - 0 1")));
 
     // KvQ
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/Q7/8/8/8/8/8/7k w - - 0 1")));
@@ -1807,6 +1808,7 @@ static void RunEvalTests()
     // KPPvK
     TEST_EXPECT(Evaluate(Position("K7/8/8/8/7k/7P/6P1/8 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("K7/8/8/3PP3/4k3/8/8/8 w - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("8/8/8/8/8/6P1/5Pk1/K7 b - - 0 1")) >= KnownWinValue);
 
     // extreme disbalance
     {
@@ -2018,6 +2020,17 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result.size() == 1);
     }
 
+    // search explosion test 3
+    {
+        param.limits.maxDepth = 1;
+        param.numPvLines = 1;
+
+        game.Reset(Position("q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+    }
+
     // mate in 1 with huge material disadvantage
     {
         param.limits.maxDepth = 5;
@@ -2030,6 +2043,18 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result[0].score == CheckmateValue - 1);
         TEST_EXPECT(result[0].moves.front() == PackedMove(Square_c6, Square_a5) ||
                     result[0].moves.front() == PackedMove(Square_c6, Square_d8));
+    }
+
+    // mate in 1, more than 218 moves possible
+    {
+        param.limits.maxDepth = 5;
+        param.numPvLines = 1;
+
+        game.Reset(Position("QQQQQQBk/Q6B/Q6Q/Q6Q/Q6Q/Q6Q/Q6Q/KQQQQQQQ w - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score == CheckmateValue - 1);
     }
 
     ASSERT(param.numThreads == numThreads); // don't modify number of threads!
