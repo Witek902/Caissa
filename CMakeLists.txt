@@ -1,27 +1,23 @@
 cmake_minimum_required(VERSION 3.15)
+
 project (caissa)
 
+# set supported configurations
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Final" CACHE STRING "" FORCE)
 
-if (NOT DEFINED CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Release")
-endif()
+IF(NOT CMAKE_BUILD_TYPE)
+   SET(CMAKE_BUILD_TYPE Final
+       CACHE STRING "Choose one of build types: Debug Release Final."
+       FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+message("* Current build type: ${CMAKE_BUILD_TYPE}")
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message("Building in Debug configuration")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCONFIGURATION_DEBUG")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONFIGURATION_DEBUG")
-elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    message("Building in Rlease configuration")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCONFIGURATION_RELEASE")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONFIGURATION_RELEASE")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    message("Building in Final configuration")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCONFIGURATION_FINAL")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONFIGURATION_FINAL")
-else()
-    message(FATAL_ERROR "Unknown build configuration")
-endif()
-
+# set definitions for each configuration
+set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
+    $<$<CONFIG:Debug>:CONFIGURATION_DEBUG>
+    $<$<CONFIG:Release>:CONFIGURATION_RELEASE>
+    $<$<CONFIG:Final>:CONFIGURATION_FINAL>
+)
 
 # detect target architecture if not defined
 if (NOT DEFINED TARGET_ARCH)
@@ -37,6 +33,7 @@ endif()
 # set target architecture compiler flags and definitions
 if (TARGET_ARCH STREQUAL "x64-legacy")
     add_definitions(-DARCHITECTURE_X64)
+    add_definitions(-DUSE_SSE -DUSE_SSE2)
 elseif (TARGET_ARCH STREQUAL "x64-sse4-popcnt")
     add_definitions(-DARCHITECTURE_X64)
     add_definitions(-DUSE_SSE -DUSE_SSE2 -DUSE_SSE4 -DUSE_POPCNT)
@@ -73,7 +70,7 @@ else()
     message(FATAL_ERROR "Unknown target architecture: ${TARGET_ARCH}")
 endif()
 
-message("Target architecture: ${TARGET_ARCH}")
+message("* Current architecture: ${TARGET_ARCH}")
 
 
 # set C/C++ standards
@@ -83,14 +80,14 @@ set(CMAKE_C_STANDARD 11)
 
 # optimization flags
 if (MSVC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2 /Oy /GS-")
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /DEBUG /Od")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 /Oy /GS-")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /DEBUG /Od")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2 /Oy /GS- /Ob2 /Oi /Zi")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /DDEBUG /Od /Zi")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 /Oy /GS- /Ob2 /Oi /Zi")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /DDEBUG /Od /Zi")
 else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 endif()
 
@@ -99,8 +96,8 @@ endif()
 if (MSVC)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /GL")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GL")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /LTCG")
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /LTCG")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG /LTCG /INCREMENTAL:NO")
+	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DEBUG /LTCG /INCREMENTAL:NO")
 	set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /LTCG")
 elseif (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
@@ -146,10 +143,13 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-four-char-constants")
 endif()
 
-
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# copy neural net file to build directory
+set (DEFAULT_NEURAL_NET_FILE_NAME eval-12.pnn)
+file(COPY ${CMAKE_SOURCE_DIR}/data/neuralNets/${DEFAULT_NEURAL_NET_FILE_NAME}
+    DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 
 add_subdirectory("src")
