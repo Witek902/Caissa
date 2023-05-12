@@ -1,0 +1,15 @@
+buildType:
+  default: Final
+  choices:
+    Debug:
+      short: Debug
+      long: No optimizations, slowest build
+      buildType: Debug
+    Release:
+      short: Release
+      long: Optimized, with asserts enabled
+      buildType: Release
+    Final:
+      short: Final
+      long: Optimized, with asserts disabled
+      buildType: Final

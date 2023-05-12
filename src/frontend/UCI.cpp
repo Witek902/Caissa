@@ -26,7 +26,17 @@
 #define ArchitectureStr "legacy"
 #endif
 
-static const char* c_EngineName = "Caissa " VersionNumber " (" ArchitectureStr  ")";
+#if defined(CONFIGURATION_FINAL)
+#define ConfigurationStr ""
+#elif defined(CONFIGURATION_RELEASE)
+#define ConfigurationStr " RELEASE"
+#elif defined(CONFIGURATION_DEBUG)
+#define ConfigurationStr " DEBUG"
+#else
+#error "Unknown configuration"
+#endif
+
+static const char* c_EngineName = "Caissa " VersionNumber " (" ArchitectureStr ConfigurationStr ")";
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size

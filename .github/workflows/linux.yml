@@ -8,8 +8,8 @@ jobs:
 
     strategy:
       matrix:
-        configs: [Debug, RelWithDebInfo, Release]
-        architectures: [x64-sse4-popcnt, x64-avx2-bmi2]
+        configs: [Debug, Release, Final]
+        architectures: [x64-legacy, x64-sse4-popcnt, x64-avx2-bmi2]
 
     steps:
     - name: Checkout
@@ -28,4 +28,4 @@ jobs:
 
     - name: SmokeTest
       working-directory: ${{github.workspace}}/build
-      run: bin/caissa "go wait depth 12" "quit"      
+      run: bin/caissa "go wait depth 10" "quit"      
