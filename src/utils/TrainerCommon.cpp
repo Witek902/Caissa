@@ -10,7 +10,7 @@
 
 static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 
-bool TrainingDataLoader::Init(const std::string& trainingDataPath)
+bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingDataPath)
 {
     uint64_t totalDataSize = 0;
 
@@ -24,7 +24,7 @@ bool TrainingDataLoader::Init(const std::string& trainingDataPath)
         uint64_t fileSize = fileStream->GetSize();
         totalDataSize += fileSize;
 
-        if (fileStream->IsOpen() && fileSize > 0)
+        if (fileStream->IsOpen() && fileSize > sizeof(PositionEntry))
         {
             std::cout << "Using " << fileName << std::endl;
 
@@ -32,6 +32,14 @@ bool TrainingDataLoader::Init(const std::string& trainingDataPath)
             ctx.fileStream = std::move(fileStream);
             ctx.fileName = fileName;
             ctx.fileSize = fileSize;
+
+            // seek to random location
+            {
+                const uint64_t numEntries = fileSize / sizeof(PositionEntry);
+                std::uniform_int_distribution<uint64_t> distr(0, numEntries - 1);
+                const uint64_t entryIndex = distr(gen);
+                ctx.fileStream->SetPosition(entryIndex * sizeof(PositionEntry));
+            }
 
             mCDF.push_back((double)totalDataSize);
         }
@@ -119,7 +127,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         // skip based half-move counter
         {
-            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 100.0f;
+            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
             std::bernoulli_distribution skippingDistr(hmcSkipProb);
             if (skippingDistr(gen))
                 continue;
@@ -178,7 +186,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
             if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
 
-            const float maxSkippingProb = 0.95f;
+            const float maxSkippingProb = 0.8f;
             std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
             if (skippingDistr(gen))
                 continue;

@@ -617,9 +617,12 @@ bool TrainPieceSquareTables()
 {
     g_syzygyProbeLimit = 5;
 
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
     TrainingDataLoader dataLoader;
 
-    if (!dataLoader.Init())
+    if (!dataLoader.Init(gen))
     {
         std::cout << "ERROR: Failed to initialize data loader" << std::endl;
         return false;
@@ -671,9 +674,6 @@ bool TrainPieceSquareTables()
         // don't update bias
         weightsMask[cNumNetworkInputs] = 0.0f;
     };
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
 
     std::vector<TrainingEntry> validationSet;
     std::vector<nn::TrainingVector> trainingBatch;
