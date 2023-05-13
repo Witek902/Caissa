@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.8.6"
+#define VersionNumber "1.8.7"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -158,7 +158,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "id name " << c_EngineName << "\n";
         std::cout << "id author " << c_Author << "\n";
         std::cout << "option name Hash type spin default " << c_DefaultTTSizeInMB  << " min 1 max 1048576\n";
-        std::cout << "option name MultiPV type spin default 1 min 1 max 255\n";
+        std::cout << "option name MultiPV type spin default 1 min 1 max " << MaxAllowedMoves << "\n";
         std::cout << "option name MoveOverhead type spin default " << mOptions.moveOverhead << " min 0 max 10000\n";
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
@@ -779,7 +779,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     if (lowerCaseName == "multipv")
     {
         mOptions.multiPV = atoi(value.c_str());
-        mOptions.multiPV = std::max(1u, mOptions.multiPV);
+        mOptions.multiPV = std::clamp(mOptions.multiPV, 1u, MaxAllowedMoves);
     }
     else if (lowerCaseName == "threads")
     {

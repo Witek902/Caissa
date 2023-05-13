@@ -392,8 +392,10 @@ class TranspositionTable;
 struct NodeInfo;
 struct NNEvaluatorContext;
 
+static constexpr uint32_t MaxAllowedMoves = 280;
+
 template<uint32_t MaxSize> class TMoveList;
-using MoveList = TMoveList<280>;
+using MoveList = TMoveList<MaxAllowedMoves>;
 
 using ScoreType = int16_t;
 
