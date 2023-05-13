@@ -63,8 +63,6 @@ void AnalyzeGames(const char* path, GamesStats& stats)
 
     uint64_t gameResultVsHalfMoveCounter[3][101] = { };
 
-    TimePoint startTime = TimePoint::GetCurrent();
-
     Game game;
     std::vector<Move> moves;
 
