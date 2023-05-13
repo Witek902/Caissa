@@ -246,15 +246,27 @@ bool Position::FromFEN(const std::string& fenString)
                 if (skipCount > 0 && skipCount <= 9)
                 {
                     file += skipCount;
+
+                    if (file > 8)
+                    {
+                        fprintf(stderr, "Invalid FEN: failed to parse board state\n");
+                        return false;
+                    }
                 }
                 else
                 {
-                    fprintf(stderr, "Invalid FEN: failed to parse board state\n");
+                    fprintf(stderr, "Invalid FEN: Too many pieces in rank %u\n", (uint32_t)(rank + 1));
                     return false;
                 }
             }
             else if (ch == '/')
             {
+                if (file != 8)
+                {
+                    fprintf(stderr, "Invalid FEN: Not enough pieces in rank %u\n", (uint32_t)(rank + 1));
+                    return false;
+                }
+
                 file = 0;
                 rank--;
             }
@@ -273,6 +285,12 @@ bool Position::FromFEN(const std::string& fenString)
                 SetPiece(square, piece, color);
 
                 file++;
+
+                if (file > 8)
+                {
+                    fprintf(stderr, "Invalid FEN: Too many pieces in rank %u\n", (uint32_t)(rank + 1));
+                    return false;
+                }
             }
         }
     }
