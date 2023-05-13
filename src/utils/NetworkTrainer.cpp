@@ -22,6 +22,7 @@
 #include <mutex>
 #include <fstream>
 #include <limits.h>
+#include <cmath>
 
 using namespace threadpool;
 
@@ -105,11 +106,6 @@ void NetworkTrainer::InitNetwork()
                    nn::ActivationFunction::Sigmoid,
                    { 1, cNumVariants });
 
-    //m_network.Init(cNumNetworkInputs,
-    //               { 512, 16, 32, 1 },
-    //               nn::ActivationFunction::Sigmoid,
-    //               { 1, cNumVariants, cNumVariants, cNumVariants });
-
     m_network.Load("eval-ckpt.nn");
 
     m_runCtx.Init(m_network);
@@ -144,9 +140,8 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
                 pos.FlipDiagonally();
         }
 
-        const float tbLambda = 0.2f;
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.8f, 0.2f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
+        const float wdlLambda = std::lerp(0.9f, 0.5f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -158,8 +153,15 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
             const float wdlScore = gameScore == Game::Score::WhiteWins ? 1.0f : (gameScore == Game::Score::BlackWins ? 0.0f : 0.5f);
             score = std::lerp(wdlScore, score, wdlLambda);
         }
-        if (tbScore != Game::Score::Unknown)
+
+        if (tbScore == Game::Score::Draw)
         {
+            const float tbDrawLambda = 0.1f;
+            score = std::lerp(0.5f, score, tbDrawLambda);
+        }
+        else if (tbScore != Game::Score::Unknown)
+        {
+            const float tbLambda = 0.25f;
             const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
             score = std::lerp(wdlScore, score, tbLambda);
         }
@@ -300,6 +302,13 @@ void NetworkTrainer::Validate(size_t iteration)
             "7k/pp6/8/8/8/8/PP6/7K w - - 0 1",   // should be 0
             "k7/pp6/8/8/8/8/P7/K7 w - - 0 1",   // should be 0
             "r6k/7p/8/8/8/8/7P/1R5K w - - 0 1", // should be 0
+            "8/7p/8/6k1/3q3p/4R3/5PK1/8 w - - 0 1", // should be 0
+            "8/1k6/1p6/1R6/2P5/1P6/1K6/4q3 w - - 0 1", // should be 0
+            "8/8/5k2/6p1/8/1P2R3/2q2P2/6K1 w - - 0 1", // should be 0
+            "4k3/5p2/2K1p3/1Q1rP3/8/8/8/8 w - - 0 1", // should be 0
+            "8/8/8/5B1p/5p1r/4kP2/6K1/8 w - - 0 1", // should be 0
+            "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
+            "3k4/3B4/8/8/7p/7P/8/5K1B w - - 0 1", // should be 0
         };
 
         for (const char* testPosition : s_testPositions)
@@ -328,11 +337,19 @@ void NetworkTrainer::Validate(size_t iteration)
     m_network.PrintStats();
 }
 
+static float CosineAnnealingLR(float phase, float baseLR)
+{
+    float maxLR = baseLR;
+    float minLR = baseLR / 100.0f;
+    float annealingFactor = (1.0f - cosf(phase)) / 2.0f;
+    return minLR + annealingFactor * (maxLR - minLR);
+}
+
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_dataLoader.Init())
+    if (!m_dataLoader.Init(m_randomGenerator))
     {
         std::cout << "ERROR: Failed to initialize data loader" << std::endl;
         return false;
@@ -345,7 +362,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        float learningRate = std::max(0.01f, 0.05f / (1.0f + 0.000001f * epoch));
+        const float learningRate = CosineAnnealingLR((float)iteration / (float)100.0f, 0.5f);
 
         if (iteration == 0)
         {
@@ -378,7 +395,7 @@ bool NetworkTrainer::Train()
                 params.iteration = epoch;
                 params.batchSize = std::min<size_t>(cMinBatchSize + (iteration / 16) * cMinBatchSize, cMaxBatchSize);
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-4f;
+                params.weightDecay = 1.0e-5f;
 
                 TaskBuilder taskBuilder{ ctx };
                 epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);
