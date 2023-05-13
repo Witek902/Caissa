@@ -75,6 +75,11 @@ static void RunPositionTests()
         // not enough kings
         TEST_EXPECT(!Position().FromFEN("k7/8/8/8/8/8/8/8 w - - 0 1"));
         TEST_EXPECT(!Position().FromFEN("K7/8/8/8/8/8/8/8 w - - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("rnbq1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1BNR w HAha - 0 1"));
+
+        // too many kings
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNKQKBNR w HAkq - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("rnkqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQha - 0 1"));
 
         // black pawn at invalid position
         {
@@ -94,6 +99,7 @@ static void RunPositionTests()
 
         // opponent side can't be in check
         TEST_EXPECT(!Position().FromFEN("k6Q/8/8/8/8/8/8/K7 w - - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("8/8/2Q3k1/8/8/8/2K3q1/8 w - - 0 1"));
 
         // valid en passant square
         {
@@ -102,8 +108,11 @@ static void RunPositionTests()
             TEST_EXPECT(p.GetEnPassantSquare() == Square_d6);
         }
 
-        // invalid en passant sqaure
+        // invalid en passant square
         TEST_EXPECT(!Position().FromFEN("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq e6 0 3"));
+
+        // invalid syntax
+        TEST_EXPECT(!Position().FromFEN("4k3/8/8/9/8/8/8/4K3 w - - 0 1"));
     }
 
     // FEN printing
