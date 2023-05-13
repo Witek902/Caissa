@@ -997,6 +997,7 @@ static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
     return static_cast<ScoreType>(adjustedScore);
 }
 
+#ifdef EVAL_USE_PSQT
 static void RefreshPsqtScore(NodeInfo& node)
 {
     // refresh PSQT score (incrementally, if possible)
@@ -1013,6 +1014,7 @@ static void RefreshPsqtScore(NodeInfo& node)
         ComputeIncrementalPSQT(node.psqtScore, node.position, node.nnContext->dirtyPieces, node.nnContext->numDirtyPieces);
     }
 }
+#endif // EVAL_USE_PSQT
 
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
@@ -1066,8 +1068,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         }
     }
 
+#ifdef EVAL_USE_PSQT
     // make sure PSQT score is up to date before calling Evaluate()
     RefreshPsqtScore(node);
+#endif // EVAL_USE_PSQT
 
     const bool maxDepthReached = false; // node.height + 1 >= MaxSearchDepth;
 
@@ -1456,8 +1460,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
     }
 
+#ifdef EVAL_USE_PSQT
     // make sure PSQT score is up to date before calling Evaluate()
     RefreshPsqtScore(node);
+#endif // EVAL_USE_PSQT
 
     // evaluate position if it wasn't evaluated
     if (!node.isInCheck)

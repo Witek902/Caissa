@@ -7,7 +7,6 @@
 #include "Pawns.hpp"
 #include "Search.hpp"
 
-#include <unordered_map>
 #include <fstream>
 #include <memory>
 
@@ -240,6 +239,8 @@ bool CheckInsufficientMaterial(const Position& pos)
     return false;
 }
 
+#ifdef EVAL_USE_PSQT
+
 const TPieceScore<int32_t> ComputePSQT(const Position& pos)
 {
     const Square whiteKingSq = pos.Whites().GetKingSquare();
@@ -341,6 +342,8 @@ void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, co
     ASSERT(score == ComputePSQT(pos));
 }
 
+#endif // EVAL_USE_PSQT
+
 static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 {
     const Bitboard whitesOccupied = pos.Whites().Occupied();
@@ -435,7 +438,8 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     }
 
     TPieceScore<int32_t> value;
-    
+   
+#ifdef EVAL_USE_PSQT
     if (nodeInfo)
     {
         value = nodeInfo->psqtScore;
@@ -445,6 +449,9 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     {
         value = ComputePSQT(pos);
     }
+#else // !EVAL_USE_PSQT
+    value = {};
+#endif // EVAL_USE_PSQT
 
     value += c_queenValue * (whiteQueens - blackQueens);
     value += c_rookValue * (whiteRooks - blackRooks);
