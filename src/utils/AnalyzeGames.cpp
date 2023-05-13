@@ -1,6 +1,6 @@
 #include "Common.hpp"
 #include "GameCollection.hpp"
-#include "NeuralNetwork.hpp"
+#include "ThreadPool.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/Material.hpp"
@@ -14,6 +14,7 @@
 #include "../backend/Waitable.hpp"
 #include "../backend/Time.hpp"
 
+#include <filesystem>
 #include <chrono>
 #include <random>
 #include <mutex>
@@ -38,9 +39,19 @@ float GameScoreToExpectedGameScore(const Game::Score score)
     }
 }
 
-void AnalyzeGames()
+struct GamesStats
 {
-    FileInputStream gamesFile(DATA_PATH "selfplayGames/selfplay_2509102967.dat");
+    std::mutex mutex;
+    std::ofstream fortressPosition;
+
+    uint64_t numGames = 0;
+    uint64_t numPositions = 0;
+    uint64_t numPawnlessPositions = 0;
+};
+
+void AnalyzeGames(const char* path, GamesStats& stats)
+{
+    FileInputStream gamesFile(path);
 
     uint64_t numGames = 0;
     uint64_t numPositions = 0;
@@ -74,10 +85,10 @@ void AnalyzeGames()
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
-            //const ScoreType moveScore = game.GetMoveScores()[i];
+            const ScoreType moveScore = game.GetMoveScores()[i];
 
             if (!move.IsQuiet() &&
-                std::abs(game.GetMoveScores()[i]) < KnownWinValue &&
+                std::abs(moveScore) < KnownWinValue &&
                 !pos.IsInCheck(pos.GetSideToMove()))
             {
                 const MaterialKey matKey = pos.GetMaterialKey();
@@ -114,6 +125,29 @@ void AnalyzeGames()
                 //}
             }
 
+            // dump potential fortress positions
+            {
+                const int32_t fortressTreshold = 200;
+                int32_t wdl = 0;
+
+                if (move.IsQuiet() &&
+                    pos.GetNumPieces() <= 7 && pos.GetNumPieces() >= 4 &&
+                    pos.GetHalfMoveCount() > 20)
+                {
+                    const ScoreType eval = Evaluate(pos);
+                    if ((eval > fortressTreshold && moveScore > fortressTreshold) ||
+                        (eval < -fortressTreshold && moveScore < -fortressTreshold))
+                    {
+                        if (ProbeSyzygy_WDL(pos, &wdl) && wdl == 0)
+                        {
+                            std::unique_lock<std::mutex> lock(stats.mutex);
+                            stats.fortressPosition << pos.ToFEN() << std::endl;
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (!pos.DoMove(move))
             {
                 break;
@@ -123,11 +157,17 @@ void AnalyzeGames()
         numGames++;
     }
 
-    std::cout << "Time: " << (TimePoint::GetCurrent() - startTime).ToSeconds() << " seconds" << std::endl;
+    {
+        std::unique_lock<std::mutex> lock(stats.mutex);
 
-    std::cout << "Parsed " << numGames << " games" << std::endl;
-    std::cout << "Found " << numPositions << " positions" << std::endl;
-    std::cout << "Found " << numPawnlessPositions << " pawnless positions" << std::endl;
+        std::cout << "Parsed " << numGames << " games" << std::endl;
+        std::cout << "Found " << numPositions << " positions" << std::endl;
+        std::cout << "Found " << numPawnlessPositions << " pawnless positions" << std::endl;
+
+        stats.numGames += numGames;
+        stats.numPositions += numPositions;
+        stats.numPawnlessPositions += numPawnlessPositions;
+    }
 
     /*
     {
@@ -148,7 +188,6 @@ void AnalyzeGames()
         }
         std::cout << std::endl;
     }
-    */
 
     {
         std::cout << "WDL vs. half-move counter: " << std::endl;
@@ -176,4 +215,30 @@ void AnalyzeGames()
         }
         std::cout << std::endl;
     }
+    */
+}
+
+void AnalyzeGames()
+{
+    GamesStats stats;
+    stats.fortressPosition.open("fortress.epd");
+
+    const std::string gamesPath = DATA_PATH "selfplayGames/";
+
+    Waitable waitable;
+    {
+        threadpool::TaskBuilder taskBuilder(waitable);
+
+        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        {
+            std::cout << "Loading " << path.path().string() << "..." << std::endl;
+
+            taskBuilder.Task("LoadPositions", [path, &stats](const threadpool::TaskContext&)
+            {
+                AnalyzeGames(path.path().string().c_str(), stats);
+            });
+        }
+    }
+
+    waitable.Wait();
 }
