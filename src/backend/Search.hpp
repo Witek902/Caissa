@@ -127,7 +127,7 @@ struct NodeInfo
     // ignore given moves in search, used for singular extensions
     PackedMove filteredMove = PackedMove::Invalid();
 
-    uint8_t pvIndex = 0;
+    uint16_t pvIndex = 0;
 
     uint8_t doubleExtensions = 0;
 
@@ -261,7 +261,7 @@ private:
         const Position& position;
         SearchParam& searchParam;
         uint32_t depth;
-        uint8_t pvIndex;
+        uint32_t pvIndex;
         SearchContext& searchContext;
         ScoreType previousScore = 0;                  // score in previous ID iteration
         uint32_t threadID = 0;

@@ -691,7 +691,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 game.GetPosition(),
                 param,
                 depth,
-                (uint8_t)pvIndex,
+                pvIndex,
                 searchContext,
                 prevScore,
                 threadID,
@@ -854,7 +854,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.isInCheck = param.position.IsInCheck();
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.depth = static_cast<int16_t>(depth);
-        rootNode.pvIndex = param.pvIndex;
+        rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
         rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
