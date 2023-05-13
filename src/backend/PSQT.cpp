@@ -1,5 +1,7 @@
 #include "Evaluate.hpp"
 
+#ifdef EVAL_USE_PSQT
+
 alignas(CACHELINE_SIZE)
 const int16_t PSQT[Square::NumSquares / 2][10][2 * Square::NumSquares] =
 {
@@ -3976,3 +3978,4 @@ const int16_t PSQT[Square::NumSquares / 2][10][2 * Square::NumSquares] =
 
 static_assert(sizeof(PSQT) == 2 * sizeof(int16_t) * 10 * 32 * 64, "Invalid PSQT size");
 
+#endif // EVAL_USE_PSQT

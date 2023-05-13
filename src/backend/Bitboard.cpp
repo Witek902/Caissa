@@ -2,8 +2,6 @@
 #include "Square.hpp"
 #include "Common.hpp"
 
-#include <iostream>
-
 static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
