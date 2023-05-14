@@ -849,7 +849,6 @@ static bool EvaluateEndgame_KQvKP(const Position& pos, int32_t& outScore, int32_
 static bool EvaluateEndgame_KQvKNP(const Position& pos, int32_t& outScore, int32_t& outScale)
 {
     UNUSED(outScore);
-    UNUSED(outScale);
 
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
@@ -870,6 +869,58 @@ static bool EvaluateEndgame_KQvKNP(const Position& pos, int32_t& outScore, int32
             Square::Distance(knightSquare, pawnSquare) <= 2)
         {
             outScale = c_endgameScaleMax / 4;
+        }
+    }
+
+    return false;
+}
+
+// Queen vs. Knight+Bishop
+static bool EvaluateEndgame_KQvKBN(const Position& pos, int32_t& outScore, int32_t& outScale)
+{
+    UNUSED(outScore);
+
+    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
+    ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops != 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
+
+    // rare Q vs. BN fortress
+    // for example: 2Q5/8/8/8/3n4/8/1b6/k2K4 b - - 0 1
+    if (pos.Whites().queens.Count() == 1 && pos.Blacks().bishops.Count() == 1 && pos.Blacks().knights.Count() == 1)
+    {
+        Square strongKing = pos.Whites().GetKingSquare();
+        Square weakKing = pos.Blacks().GetKingSquare();
+        Square queenSquare(FirstBitSet(pos.Whites().queens));
+        Square bishopSquare(FirstBitSet(pos.Blacks().bishops));
+        Square knightSquare(FirstBitSet(pos.Blacks().knights));
+
+        // normalize position so the weak king is in left-bottom quadrant
+        if (weakKing.Rank() >= 4)
+        {
+            strongKing = strongKing.FlippedRank();
+            weakKing = weakKing.FlippedRank();
+            queenSquare = queenSquare.FlippedRank();
+            bishopSquare = bishopSquare.FlippedRank();
+            knightSquare = knightSquare.FlippedRank();
+        }
+        if (weakKing.File() >= 4)
+        {
+            strongKing = strongKing.FlippedFile();
+            weakKing = weakKing.FlippedFile();
+            queenSquare = queenSquare.FlippedFile();
+            bishopSquare = bishopSquare.FlippedFile();
+            knightSquare = knightSquare.FlippedFile();
+        }
+
+        if (knightSquare == Square_d4 &&
+            (weakKing == Square_a1 || weakKing == Square_b1 || weakKing == Square_a2) &&
+            (bishopSquare == Square_a1 || bishopSquare == Square_b2))
+        {
+            outScale = c_endgameScaleMax / 4;
+            if (Square::Distance(weakKing, strongKing) > 2)
+            {
+                outScore = 0;
+                return true;
+            }
         }
     }
 
@@ -1314,6 +1365,7 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackRook, EvaluateEndgame_KQvKR);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackKnight, EvaluateEndgame_KQvKN);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackKnight|MaterialMask_BlackPawn, EvaluateEndgame_KQvKNP);
+    RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackBishop|MaterialMask_BlackKnight, EvaluateEndgame_KQvKBN);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackRook, EvaluateEndgame_KRvKR);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackQueen, EvaluateEndgame_KQvKQ);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_WhitePawn|MaterialMask_BlackRook, EvaluateEndgame_KRPvKR);

@@ -1853,6 +1853,8 @@ static void RunEvalTests()
     TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
 
+    TEST_EXPECT(Evaluate(Position("2Q5/8/8/8/3n4/8/1b6/k2K4 b - - 0 1")) == 0);
+    TEST_EXPECT(Evaluate(Position("2Q3b1/6n1/8/8/8/8/3K4/k7 w - - 0 1")) > 0);
 }
 
 // this test suite runs full search on well known/easy positions
