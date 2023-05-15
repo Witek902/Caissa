@@ -113,6 +113,15 @@ void NodeCacheEntry::AddMoveStats(const Move& move, uint64_t numNodes)
     }
 }
 
+void NodeCache::Reset()
+{
+    generation = 0;
+    for (NodeCacheEntry& entry : entries)
+    {
+        entry.ClearMoves();
+    }
+}
+
 void NodeCache::OnNewSearch()
 {
     generation++;

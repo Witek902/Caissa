@@ -35,6 +35,7 @@ class NodeCache
 {
 public:
 
+    void Reset();
     void OnNewSearch();
 
     const NodeCacheEntry* TryGetEntry(const Position& pos) const;

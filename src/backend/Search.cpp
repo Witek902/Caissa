@@ -229,6 +229,7 @@ void Search::Clear()
     {
         ASSERT(threadData);
         threadData->moveOrderer.Clear();
+        threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
     }
 }
@@ -399,7 +400,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         }
 
         const ThreadDataPtr& threadData = mThreadData[i];
-        threadData->nodeCache.OnNewSearch();
         {
             std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
             ASSERT(!threadData->callback);
@@ -412,10 +412,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     }
         
     // do search on main thread
-    {
-        mThreadData.front()->nodeCache.OnNewSearch();
-        Search_Internal(0, numPvLines, game, param, globalStats);
-    }
+    Search_Internal(0, numPvLines, game, param, globalStats);
 
     // wait for worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
@@ -648,6 +645,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
     thread.moveOrderer.NewSearch();
+    thread.nodeCache.OnNewSearch();
 
     uint32_t mateCounter = 0;
 
