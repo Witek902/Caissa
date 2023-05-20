@@ -22,7 +22,7 @@ Caissa is listed on many chess engines ranking lists:
 * [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) - **3401** (#22) (version 1.8)
 * [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) - **3399** (#20) (version 1.7)
 * [CEGT 5+3](http://www.cegt.net/5Plus3Rating/BestVersionsNEW/rangliste.html) - **3382** (#21) (version 1.6.3)
-* [FGRL](www.fastgm.de/60-0.60.html) - **3253** (#18) (version 1.5)
+* [FGRL](http://www.fastgm.de/60-0.60.html) - **3253** (#18) (version 1.5)
 
 ## History / Originality
 
