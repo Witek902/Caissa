@@ -782,8 +782,8 @@ static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore, int32_
     ASSERT(pos.Whites().pawns > 0 && pos.Whites().bishops == 0 && pos.Whites().knights > 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
-    //const Square strongKing(FirstBitSet(pos.Whites().king));
-    const Square weakKing(FirstBitSet(pos.Blacks().king));
+    const Square strongKingSq(FirstBitSet(pos.Whites().king));
+    const Square weakKingSq(FirstBitSet(pos.Blacks().king));
 
     // a knight protecting a rook pawn on the seventh rank is a draw 
     if (pos.Whites().pawns.Count() == 1 && pos.Whites().knights.Count() == 1)
@@ -792,10 +792,25 @@ static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore, int32_
         const Square knightSquare(FirstBitSet(pos.Whites().knights));
 
         if ((pawnSquare == Square_a7 || pawnSquare == Square_h7) &&
-            Square::Distance(pawnSquare, weakKing) == 1 &&
+            Square::Distance(pawnSquare, weakKingSq) == 1 &&
             (Bitboard::GetKnightAttacks(knightSquare) & pawnSquare.GetBitboard()))
         {
             outScore = 0;
+            return true;
+        }
+
+        if ((pawnSquare.File() != knightSquare.File() || pawnSquare.Rank() > knightSquare.Rank()) &&
+            KPKEndgame::Probe(strongKingSq, pawnSquare, weakKingSq, pos.GetSideToMove()))
+        {
+            ASSERT(pawnSquare.Rank() < 7);
+            Square keySquare = Square(pawnSquare.File(), pawnSquare.Rank() + 1);
+            if (pawnSquare.Rank() < 6) keySquare = Square(pawnSquare.Rank() + 2, pawnSquare.File());
+
+            outScore = KnownWinValue + c_pawnValue.eg + c_knightValue.eg;
+            outScore += 8 * pawnSquare.Rank();
+            outScore -= (int32_t)Square::Distance(keySquare, strongKingSq); // put strong king in front of pawn
+            outScore += (int32_t)Square::Distance(pawnSquare, weakKingSq); // try to capture pawn
+            outScore -= (int32_t)Square::Distance(pawnSquare, knightSquare); // move knight towards pawn
             return true;
         }
     }
