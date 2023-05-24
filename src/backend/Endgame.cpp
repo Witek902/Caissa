@@ -359,7 +359,12 @@ static bool EvaluateEndgame_KNvKN(const Position& pos, int32_t& outScore, int32_
     const uint32_t numWhiteKnights = pos.Whites().knights.Count();
     const uint32_t numBlackKnights = pos.Blacks().knights.Count();
 
-    if (numWhiteKnights <= 2 && numBlackKnights <= 2)
+    if (numWhiteKnights == 1 && numBlackKnights == 1)
+    {
+        outScore = 0;
+        return true;
+    }
+    else if (numWhiteKnights <= 2 && numBlackKnights <= 2)
     {
         const Square strongKing = pos.Whites().GetKingSquare();
         const Square weakKing = pos.Blacks().GetKingSquare();
