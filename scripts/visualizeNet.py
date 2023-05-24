@@ -1,8 +1,9 @@
 from PIL import Image
 import struct
 import math 
+from math import ceil
 
-filePath = "../data/neuralNets/eval-10.pnn"
+filePath = "../build/src/utils/eval.pnn"
 marginSize = 1
 headerSize = 64
 
@@ -76,19 +77,26 @@ def inputIndexToCoords(index):
     return (0,0)
 
 
+def roundUpToMultiple(number, multiple):
+    return multiple * ceil(number / multiple)
+
+
 def main():
     data = open(filePath, "rb").read()
 
-    (magic, version, layerSize0, layerSize1) = struct.unpack("IIII", data[0:16])
+    (magic, version,
+     layerSize0, layerSize1, layerSize2, layerSize3,
+     layerVariants0, layerVariants1, layerVariants2, layerVariants3) = struct.unpack("IIIIIIIIII", data[0:40])
 
     print("File version: " + str(version))
     print("Layer 0 size: " + str(layerSize0))
     print("Layer 1 size: " + str(layerSize1))
+    print("Layer 1 variants: " + str(layerVariants1))
 
     rawViewImg = Image.new('RGB', (layerSize1,layerSize0), color='black')
     rawViewPixels = rawViewImg.load()
 
-    imgWidth = 13 * (8 + marginSize) + marginSize
+    imgWidth = (12 + layerVariants1) * (8 + marginSize) + marginSize
     imgHeight = layerSize1 * (8 + marginSize) + marginSize
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
@@ -103,13 +111,18 @@ def main():
             boardViewPixels[marginSize + x, marginSize + j * (8 + marginSize) + y] = color
 
     # last layer weights
-    for j in range(layerSize1):
-        dataOffset = headerSize + 2 * (layerSize1 * (layerSize0 + 1)) + 2 * j
-        (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
-        color = weightToColor(weight)
-        for x in range(8):
-            for y in range(8):
-                boardViewPixels[marginSize + 12 * (8 + marginSize) + x, marginSize + j * (8 + marginSize) + y] = color
+    lastLayerWeightsDataOffset = dataOffset = headerSize + roundUpToMultiple(2 * (layerSize1 * (layerSize0 + 1)), 64)
+    for variant in range(layerVariants1):
+        for j in range(layerSize1):
+            dataOffset = lastLayerWeightsDataOffset + variant * roundUpToMultiple(2 * layerSize1 + 4, 64) + 2 * j
+            (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
+            color = weightToColor(weight)
+
+            xOffset = marginSize + (12 + variant) * (8 + marginSize)
+            yOffset = marginSize + j * (8 + marginSize)
+            for x in range(8):
+                for y in range(8):
+                    boardViewPixels[xOffset + x, yOffset + y] = color
 
     rawViewImg.save('rawView.png')
     boardViewImg.save('boardView.png')
