@@ -77,7 +77,7 @@ public:
     static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
     static constexpr uint32_t MinNeuronsInHiddenLayers = 8;
     static constexpr uint32_t MaxNumLayers = 4;
-    static constexpr uint32_t NumVariants = 8;
+    static constexpr uint32_t NumVariants = 16;
 
     struct Header
     {

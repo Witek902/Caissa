@@ -120,10 +120,9 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             }
         }
 
-        if (outEntry.score == (uint32_t)Game::Score::Unknown)
-        {
+        // skip invalid scores
+        if (outEntry.score >= CheckmateValue || outEntry.score <= -CheckmateValue)
             continue;
-        }
 
         // skip based half-move counter
         {
@@ -136,9 +135,12 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         // skip based on piece count
         {
             const int32_t numPieces = outEntry.pos.occupied.Count();
-            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 50.0f);
-            std::bernoulli_distribution skippingDistr(pieceCountSkipProb);
-            if (skippingDistr(gen))
+
+            if (numPieces <= 4 && std::bernoulli_distribution(0.5f)(gen))
+                continue;
+
+            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 100.0f);
+            if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
                 continue;
         }
 
@@ -149,7 +151,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         {
             const ScoreType psqtScore = Evaluate(outPosition, nullptr, false);
 
-            const int32_t minRange = 512;
+            const int32_t minRange = 1024;
             const int32_t maxRange = 2048;
 
             if (std::abs(psqtScore) > maxRange)
@@ -169,7 +171,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         {
             const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
             const float blackKingProb =        (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
-            std::bernoulli_distribution skippingDistr(0.75f * Sqr(std::min(whiteKingProb, blackKingProb)));
+            std::bernoulli_distribution skippingDistr(0.5f * Sqr(std::min(whiteKingProb, blackKingProb)));
             if (skippingDistr(gen))
                 continue;
         }
@@ -186,7 +188,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
             if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
 
-            const float maxSkippingProb = 0.8f;
+            const float maxSkippingProb = 0.5f;
             std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
             if (skippingDistr(gen))
                 continue;

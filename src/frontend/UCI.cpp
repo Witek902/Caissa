@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.8.10"
+#define VersionNumber "1.8.11"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"

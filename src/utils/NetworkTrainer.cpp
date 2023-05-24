@@ -27,12 +27,12 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 32 * 1024;
-static const uint32_t cMaxBatchSize = 32 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cMinBatchSize = 16 * 1024;
+static const uint32_t cMaxBatchSize = 16 * 1024;
 static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // 704
-static const uint32_t cNumVariants = 8;
+static const uint32_t cNumVariants = 16;
 
 
 class NetworkTrainer
@@ -118,7 +118,10 @@ void NetworkTrainer::InitNetwork()
 
 static uint32_t GetNetworkVariant(const Position& pos)
 {
-    return std::min((pos.GetNumPieces() - 2u) / 4u, 7u);
+    const uint32_t numPieceCountBuckets = 8;
+    const uint32_t pieceCountBucket = std::min(pos.GetNumPiecesExcludingKing() / 4u, numPieceCountBuckets - 1u);
+    const uint32_t queenPresenceBucket = pos.Whites().queens || pos.Blacks().queens;
+    return queenPresenceBucket * numPieceCountBuckets + pieceCountBucket;
 }
 
 bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
@@ -141,7 +144,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.9f, 0.5f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
+        const float wdlLambda = std::lerp(0.9f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -340,8 +343,8 @@ void NetworkTrainer::Validate(size_t iteration)
 static float CosineAnnealingLR(float phase, float baseLR)
 {
     float maxLR = baseLR;
-    float minLR = baseLR / 100.0f;
-    float annealingFactor = (1.0f - cosf(phase)) / 2.0f;
+    float minLR = baseLR / 10.0f;
+    float annealingFactor = (1.0f + cosf(phase)) / 2.0f;
     return minLR + annealingFactor * (maxLR - minLR);
 }
 
@@ -362,7 +365,9 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float learningRate = CosineAnnealingLR((float)iteration / (float)100.0f, 0.5f);
+        const float baseLearningRate = 0.75f * expf(-0.00005f * (float)iteration);
+        //const float learningRate = CosineAnnealingLR((float)iteration / (float)200.0f, baseLearningRate);
+        const float learningRate = baseLearningRate;
 
         if (iteration == 0)
         {
@@ -393,9 +398,9 @@ bool NetworkTrainer::Train()
             {
                 nn::TrainParams params;
                 params.iteration = epoch;
-                params.batchSize = std::min<size_t>(cMinBatchSize + (iteration / 16) * cMinBatchSize, cMaxBatchSize);
+                params.batchSize = std::min<size_t>(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-5f;
+                params.weightDecay = 1.0e-6f;
 
                 TaskBuilder taskBuilder{ ctx };
                 epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);
@@ -412,7 +417,7 @@ bool NetworkTrainer::Train()
             << "Iteration:              " << iteration << std::endl
             << "Epoch:                  " << epoch << std::endl
             << "Num training vectors:   " << m_numTrainingVectorsPassed << std::endl
-            << "Learning rate:          " << learningRate << std::endl;
+            << "Learning rate:          " << learningRate << " (" << baseLearningRate << " base)" << std::endl;
 
         Validate(iteration);
 
