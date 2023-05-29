@@ -185,14 +185,10 @@ bool TryLoadingDefaultEndgameEvalFile()
 }
 #endif // USE_ENDGAME_NEURAL_NETWORK
 
-static int32_t InterpolateScore(const int32_t phase, const TPieceScore<int32_t>& score)
+static int32_t InterpolateScore(const int32_t mgPhase, const TPieceScore<int32_t>& score)
 {
-    const int32_t mgPhase = std::min(64, phase);
-    const int32_t egPhase = 64 - mgPhase;
-
     ASSERT(mgPhase >= 0 && mgPhase <= 64);
-    ASSERT(egPhase >= 0 && egPhase <= 64);
-
+    const int32_t egPhase = 64 - mgPhase;
     return (score.mg * mgPhase + score.eg * egPhase) / 64;
 }
 
@@ -477,12 +473,12 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) value -= c_bishopPairBonus;
 
     // 0 - endgame, 64 - opening
-    const int32_t gamePhase =
+    const int32_t gamePhase = std::min(64,
         1 * (whitePawns + blackPawns) +
         2 * (whiteKnights + blackKnights) +
         2 * (whiteBishops + blackBishops) +
         4 * (whiteRooks + blackRooks) +
-        8 * (whiteQueens + blackQueens);
+        8 * (whiteQueens + blackQueens));
 
     // accumulate middle/end game scores
     int32_t finalValue = InterpolateScore(gamePhase, value);
@@ -521,15 +517,14 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         }
     }
 
+    // apply scaling based on game phase
+    finalValue = finalValue * (192 + gamePhase) / 256;
+
     // saturate eval value so it doesn't exceed KnownWinValue
     if (finalValue > c_evalSaturationTreshold)
-    {
         finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 8;
-    }
     else if (finalValue < -c_evalSaturationTreshold)
-    {
         finalValue = -c_evalSaturationTreshold - (c_evalSaturationTreshold - finalValue) / 8;
-    }
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
