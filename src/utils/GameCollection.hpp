@@ -11,10 +11,6 @@
 
 namespace GameCollection
 {
-    struct Header
-    {
-        uint32_t magic;
-    };
 
 #pragma pack(push, 1)
     struct GameHeader
@@ -32,6 +28,8 @@ namespace GameCollection
         PackedMove move;
         int16_t score;
     };
+
+    static_assert(sizeof(MoveAndScore) == 4, "MoveAndScore size mismatch");
 
     bool ReadGame(InputStream& stream, Game& game, std::vector<Move>& decodedMoves);
 

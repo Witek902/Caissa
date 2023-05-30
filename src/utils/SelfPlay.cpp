@@ -27,14 +27,14 @@ static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 64; // print every 64th game
 static const uint32_t c_maxNodes = 10000;
-static const uint32_t c_maxDepth = 12;
+static const uint32_t c_maxDepth = 15;
 static const int32_t c_maxEval = 2000;
 static const int32_t c_openingMaxEval = 400;
-static const int32_t c_multiPv = 3;
-static const int32_t c_multiPvMaxPly = 8;
-static const int32_t c_multiPvScoreTreshold = 30;
-static const uint32_t c_minRandomMoves = 0;
-static const uint32_t c_maxRandomMoves = 0;
+static const int32_t c_multiPv = 1;
+static const int32_t c_multiPvMaxPly = 6;
+static const int32_t c_multiPvScoreTreshold = 25;
+static const uint32_t c_minRandomMoves = 4;
+static const uint32_t c_maxRandomMoves = 8;
 
 using namespace threadpool;
 
@@ -279,6 +279,18 @@ void SelfPlay(const std::vector<std::string>& args)
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
+        // remove queens from the opening position
+        //{
+        //    openingPos.Whites().queens.Iterate([&](uint32_t square)
+        //    {
+        //        openingPos.RemovePiece(Square(square), Piece::Queen, Color::White);
+        //    });
+        //    openingPos.Blacks().queens.Iterate([&](uint32_t square)
+        //    {
+        //        openingPos.RemovePiece(Square(square), Piece::Queen, Color::Black);
+        //    });
+        //}
+
         if constexpr (c_maxRandomMoves > 0)
         {
             // play few random moves in the opening
@@ -397,28 +409,26 @@ void SelfPlay(const std::vector<std::string>& args)
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
+            const ScoreType eval = Evaluate(game.GetPosition());
+
             // adjudicate draw if eval is zero
-            if (moveScore != 0)
+            if (moveScore == 0 &&
+                std::abs(eval) < 400 &&
+                drawScoreCounter++ > 8 &&
+                halfMoveNumber >= 40 &&
+                game.GetPosition().GetHalfMoveCount() > 10)
             {
-                drawScoreCounter = 0;
+                game.SetScore(Game::Score::Draw);
             }
             else
             {
-                drawScoreCounter++;
-
-                if (game.GetPosition().GetNumPieces() < 20 &&
-                    drawScoreCounter > 8 &&
-                    halfMoveNumber >= 40 &&
-                    game.GetPosition().GetHalfMoveCount() > 10)
-                {
-                    game.SetScore(Game::Score::Draw);
-                }
+                drawScoreCounter = 0;
             }
 
             // adjudicate win
             if (game.GetPosition().GetNumPieces() < 24 && halfMoveNumber >= 20)
             {
-                if (moveScore > c_maxEval)
+                if (moveScore > c_maxEval && eval > c_maxEval)
                 {
                     whiteWinsCounter++;
                     if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
@@ -428,7 +438,7 @@ void SelfPlay(const std::vector<std::string>& args)
                     whiteWinsCounter = 0;
                 }
 
-                if (moveScore < -c_maxEval)
+                if (moveScore < -c_maxEval && eval < c_maxEval)
                 {
                     blackWinsCounter++;
                     if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);

@@ -1708,6 +1708,12 @@ static void RunEvalTests()
     TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/5nnk w - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/5nnk b - - 0 1")));
 
+    // KNvKN
+    TEST_EXPECT(0 == Evaluate(Position("n6k/8/8/8/3NK3/8/8/8 w - - 0 1")));
+    TEST_EXPECT(0 == Evaluate(Position("N6K/8/8/8/3nk3/8/8/8 w - - 0 1")));
+    TEST_EXPECT(0 == Evaluate(Position("n6k/8/8/8/3NK3/8/8/8 b - - 0 1")));
+    TEST_EXPECT(0 == Evaluate(Position("N6K/8/8/8/3nk3/8/8/8 b - - 0 1")));
+
     // KvBB (same color)
     TEST_EXPECT(0 == Evaluate(Position("KB6/B7/8/8/8/8/8/7k w - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("KB6/B7/8/8/8/8/8/7k b - - 0 1")));

@@ -56,6 +56,7 @@ int main(int argc, const char* argv[])
     }
     else if (args[0] == "perftest")
     {
+        args.erase(args.begin());
         RunPerformanceTests(args);
     }
     else if (args[0] == "selfplay")
