@@ -1016,6 +1016,7 @@ static void RefreshPsqtScore(NodeInfo& node)
 
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
+    ASSERT(node.height < MaxSearchDepth);
     ASSERT(node.alpha < node.beta);
     ASSERT(!node.filteredMove.IsValid());
 
@@ -1292,6 +1293,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
+    ASSERT(node.height < MaxSearchDepth);
     ASSERT(node.alpha < node.beta);
 
 #ifdef ENABLE_SEARCH_TRACE
@@ -1358,6 +1360,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     ASSERT(node.isInCheck == position.IsInCheck(position.GetSideToMove()));
+
+    // clear killer moves for next ply
+    thread.moveOrderer.ClearKillerMoves(node.height + 1);
 
     const ScoreType oldAlpha = node.alpha;
     ScoreType bestValue = -InfValue;
@@ -1672,8 +1677,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (node.isNullMove) globalDepthReduction++;
         if (node.isCutNode) globalDepthReduction++;
     }
-
-    thread.moveOrderer.ClearKillerMoves(node.height + 1);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
     if (node.height < 3)
