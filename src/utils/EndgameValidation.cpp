@@ -231,6 +231,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         if (!pos.IsValid(true)) continue;
         if (pos.IsInCheck(GetOppositeColor(param.sideToMove))) continue;
         if (!pos.IsQuiet()) continue;
+        if (pos.IsStalemate()) continue;
 
         int32_t wdl = 0;
         bool probeResult = ProbeSyzygy_WDL(pos, &wdl);

@@ -3,4 +3,9 @@ file(GLOB CHESS_BACKEND_SOURCES
      syzygy/tbprobe.cpp
 )
 
-add_library(backend ${CHESS_BACKEND_SOURCES})
+file(GLOB CHESS_BACKEND_HEADERS
+     *.hpp
+     syzygy/tbprobe.h
+)
+
+add_library(backend ${CHESS_BACKEND_SOURCES} ${CHESS_BACKEND_HEADERS})
