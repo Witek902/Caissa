@@ -22,12 +22,8 @@
 #include <limits.h>
 #include <iomanip>
 
-struct MaterialConfigInfo
-{
-    uint64_t occurences = 0;
-    double evalScore = 0.0;
-    double gameScore = 0.0;
-};
+static const bool c_collectMaterialStats = false;
+static const bool c_dumpFortressPositions = false;
 
 float GameScoreToExpectedGameScore(const Game::Score score)
 {
@@ -39,29 +35,42 @@ float GameScoreToExpectedGameScore(const Game::Score score)
     }
 }
 
+struct MaterialStats
+{
+    uint64_t wins;
+    uint64_t draws;
+    uint64_t losses;
+
+    double avgEvalScore = 0.0;
+
+    uint64_t NumPositions() const { return wins + draws + losses; }
+};
+
 struct GamesStats
 {
     std::mutex mutex;
+
     std::ofstream fortressPosition;
+
+    std::unordered_map<MaterialKey, MaterialStats> materialStats;
 
     uint64_t numGames = 0;
     uint64_t numPositions = 0;
     uint64_t numPawnlessPositions = 0;
+
+    uint64_t pieceOccupancy[6][64] = { };
+    uint64_t gameResultVsHalfMoveCounter[3][101] = { };
+
+    // sum of squared eval errors (relative to WDL and search score)
+    double evalErrorSum_WDL = 0.0;
+    double evalErrorSum_Score = 0.0;
 };
 
-void AnalyzeGames(const char* path, GamesStats& stats)
+void AnalyzeGames(const char* path, GamesStats& outStats)
 {
     FileInputStream gamesFile(path);
 
-    uint64_t numGames = 0;
-    uint64_t numPositions = 0;
-    uint64_t numPawnlessPositions = 0;
-
-    //std::unordered_map<MaterialKey, MaterialConfigInfo> materialConfigurations;
-    
-    uint64_t pieceOccupancy[6][64] = { };
-
-    uint64_t gameResultVsHalfMoveCounter[3][101] = { };
+    GamesStats localStats;
 
     Game game;
     std::vector<Move> moves;
@@ -70,15 +79,9 @@ void AnalyzeGames(const char* path, GamesStats& stats)
     {
         Position pos = game.GetInitialPosition();
 
+        if (game.GetScore() == Game::Score::Unknown) continue;
+
         ASSERT(game.GetMoves().size() == game.GetMoveScores().size());
-
-        if (game.GetScore() == Game::Score::Unknown)
-        {
-            continue;
-        }
-
-        //std::cout << game.ToPGN(true);
-        //std::cout << std::endl << std::endl;
 
         for (size_t i = 0; i < game.GetMoves().size(); ++i)
         {
@@ -93,39 +96,43 @@ void AnalyzeGames(const char* path, GamesStats& stats)
 
                 if (pos.GetHalfMoveCount() <= 100)
                 {
-                    gameResultVsHalfMoveCounter[(uint32_t)game.GetScore()][pos.GetHalfMoveCount()]++;
+                    localStats.gameResultVsHalfMoveCounter[(uint32_t)game.GetScore()][pos.GetHalfMoveCount()]++;
                 }
 
-                numPositions++;
-                if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) numPawnlessPositions++;
+                const float moveScoreAsGameScore = InternalEvalToExpectedGameScore(moveScore);
+                const ScoreType staticEval = Evaluate(pos);
+                const float staticEvalAsGameScore = InternalEvalToExpectedGameScore(staticEval);
+
+                if (c_collectMaterialStats)
+                {
+                    MaterialStats& matStats = localStats.materialStats[matKey];
+                    matStats.wins += (game.GetScore() == Game::Score::WhiteWins ? 1 : 0);
+                    matStats.draws += (game.GetScore() == Game::Score::Draw ? 1 : 0);
+                    matStats.losses += (game.GetScore() == Game::Score::BlackWins ? 1 : 0);
+                    matStats.avgEvalScore += moveScoreAsGameScore;
+                }
+
+                localStats.evalErrorSum_Score += Sqr(staticEvalAsGameScore - moveScoreAsGameScore);
+                localStats.evalErrorSum_WDL += Sqr(staticEvalAsGameScore - GameScoreToExpectedGameScore(game.GetScore()));
+
+                localStats.numPositions++;
+                if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) localStats.numPawnlessPositions++;
 
                 // piece occupancy
                 for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
                 {
                     const Piece piece = (Piece)(pieceIndex + (uint32_t)Piece::Pawn);
                     pos.Whites().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
-                        pieceOccupancy[pieceIndex][square]++; });
+                        localStats.pieceOccupancy[pieceIndex][square]++; });
                     pos.Blacks().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
-                        pieceOccupancy[pieceIndex][Square(square).FlippedRank().Index()]++; });
+                        localStats.pieceOccupancy[pieceIndex][Square(square).FlippedRank().Index()]++; });
                 }
-
-                //MaterialConfigInfo& matConfigInfo = materialConfigurations[matKey];
-                //matConfigInfo.occurences++;
-                //matConfigInfo.evalScore += CentiPawnToExpectedGameScore(moveScore);
-                //matConfigInfo.gameScore += GameScoreToExpectedGameScore(game.GetScore());
-
-                //const MaterialKey key = pos.GetMaterialKey();
-                //if (key.numWhitePawns > 1 && key.numWhiteKnights == 0 && key.numWhiteBishops == 0 && key.numWhiteRooks == 0 && key.numWhiteQueens == 0 &&
-                //    key.numBlackPawns > 1 && key.numBlackKnights == 0 && key.numBlackBishops == 0 && key.numBlackRooks == 0 && key.numBlackQueens == 0)
-                //{
-                //    std::cout << pos.ToFEN() << " score: " << game.GetMoveScores()[i] << std::endl;
-                //    break;
-                //}
             }
 
             // dump potential fortress positions
+            if (c_dumpFortressPositions)
             {
-                const int32_t fortressTreshold = 200;
+                const int32_t fortressTreshold = 300;
                 int32_t wdl = 0;
 
                 if (move.IsQuiet() &&
@@ -138,8 +145,8 @@ void AnalyzeGames(const char* path, GamesStats& stats)
                     {
                         if (ProbeSyzygy_WDL(pos, &wdl) && wdl == 0)
                         {
-                            std::unique_lock<std::mutex> lock(stats.mutex);
-                            stats.fortressPosition << pos.ToFEN() << std::endl;
+                            std::unique_lock<std::mutex> lock(outStats.mutex);
+                            outStats.fortressPosition << pos.ToFEN() << std::endl;
                             break;
                         }
                     }
@@ -152,19 +159,114 @@ void AnalyzeGames(const char* path, GamesStats& stats)
             }
         }
 
-        numGames++;
+        localStats.numGames++;
     }
 
     {
-        std::unique_lock<std::mutex> lock(stats.mutex);
+        std::unique_lock<std::mutex> lock(outStats.mutex);
 
-        std::cout << "Parsed " << numGames << " games" << std::endl;
-        std::cout << "Found " << numPositions << " positions" << std::endl;
-        std::cout << "Found " << numPawnlessPositions << " pawnless positions" << std::endl;
+        outStats.numGames += localStats.numGames;
+        outStats.numPositions += localStats.numPositions;
+        outStats.numPawnlessPositions += localStats.numPawnlessPositions;
 
-        stats.numGames += numGames;
-        stats.numPositions += numPositions;
-        stats.numPawnlessPositions += numPawnlessPositions;
+        outStats.evalErrorSum_Score += localStats.evalErrorSum_Score;
+        outStats.evalErrorSum_WDL += localStats.evalErrorSum_WDL;
+
+        // accumulate WDL stats
+        for (const auto& iter : localStats.materialStats)
+        {
+            MaterialStats& outMaterialStats = outStats.materialStats[iter.first];
+
+            outMaterialStats.wins += iter.second.wins;
+            outMaterialStats.draws += iter.second.draws;
+            outMaterialStats.losses += iter.second.losses;
+            outMaterialStats.avgEvalScore += iter.second.avgEvalScore / static_cast<double>(iter.second.NumPositions());
+        }
+    }
+}
+
+void AnalyzeGames()
+{
+    GamesStats stats;
+    stats.fortressPosition.open("fortress.epd");
+
+    const std::string gamesPath = DATA_PATH "selfplayGames/";
+
+    Waitable waitable;
+    {
+        threadpool::TaskBuilder taskBuilder(waitable);
+
+        std::vector<std::filesystem::path> paths;
+        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        {
+            paths.push_back(path.path());
+        }
+
+        // sort paths by file size
+        std::sort(paths.begin(), paths.end(), [](const std::filesystem::path& a, const std::filesystem::path& b)
+        {
+            return std::filesystem::file_size(a) > std::filesystem::file_size(b);
+        });
+
+        for (const std::filesystem::path& path : paths)
+        {
+            std::cout << "Loading " << path.string() << "..." << std::endl;
+            taskBuilder.Task("LoadPositions", [path, &stats](const threadpool::TaskContext&)
+            {
+                AnalyzeGames(path.string().c_str(), stats);
+            });
+        }
+    }
+
+    waitable.Wait();
+
+    // piece-count distribution (no queens)
+    {
+        uint64_t numPositions[31] = { 0 };
+        for (const auto& iter : stats.materialStats)
+        {
+            const MaterialKey& key = iter.first;
+            if (key.numWhiteQueens == 0 && key.numBlackQueens == 0)
+            {
+                numPositions[std::min(30u, key.CountAll())] += iter.second.NumPositions();
+            }
+        }
+
+        std::cout << "Piece-count distribution (no queens): " << std::endl;
+        for (uint32_t i = 1; i <= 31; ++i)
+        {
+            std::cout << i << " : " << numPositions[i] << std::endl;
+        }
+
+        std::cout << std::endl;
+    }
+
+    // piece-count distribution (with queens)
+    {
+        uint64_t numPositions[31] = { 0 };
+        for (const auto& iter : stats.materialStats)
+        {
+            const MaterialKey& key = iter.first;
+            if (key.numWhiteQueens != 0 || key.numBlackQueens != 0)
+            {
+                numPositions[std::min(30u, key.CountAll())] += iter.second.NumPositions();
+            }
+        }
+
+        std::cout << "Piece-count distribution (with queens): " << std::endl;
+        for (uint32_t i = 1; i <= 30; ++i)
+        {
+            std::cout << i << " : " << numPositions[i] << std::endl;
+        }
+
+        std::cout << std::endl;
+    }
+
+    // static eval error
+    {
+        std::cout << "Static eval error (WDL):          " << sqrt(stats.evalErrorSum_WDL / stats.numPositions) << std::endl;
+        std::cout << "Static eval error (Search Score): " << sqrt(stats.evalErrorSum_Score / stats.numPositions) << std::endl;
+        std::cout << std::endl;
     }
 
     /*
@@ -214,29 +316,17 @@ void AnalyzeGames(const char* path, GamesStats& stats)
         std::cout << std::endl;
     }
     */
-}
 
-void AnalyzeGames()
-{
-    GamesStats stats;
-    stats.fortressPosition.open("fortress.epd");
-
-    const std::string gamesPath = DATA_PATH "selfplayGames/";
-
-    Waitable waitable;
     {
-        threadpool::TaskBuilder taskBuilder(waitable);
-
-        for (const auto& path : std::filesystem::directory_iterator(gamesPath))
+        std::ofstream wdlStatsFile("wdlStats.csv");
+        for (const auto& iter : stats.materialStats)
         {
-            std::cout << "Loading " << path.path().string() << "..." << std::endl;
-
-            taskBuilder.Task("LoadPositions", [path, &stats](const threadpool::TaskContext&)
+            if (iter.second.NumPositions() < 5)
             {
-                AnalyzeGames(path.path().string().c_str(), stats);
-            });
+                continue;
+            }
+
+            wdlStatsFile << iter.first.ToString() << ";" << iter.second.wins << ";" << iter.second.draws << ";" << iter.second.losses << std::endl;
         }
     }
-
-    waitable.Wait();
 }
