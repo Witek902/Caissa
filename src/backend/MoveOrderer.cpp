@@ -276,14 +276,6 @@ void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
     }
 }
 
-void MoveOrderer::ClearKillerMoves(uint32_t depth)
-{
-    if (depth < MaxSearchDepth)
-    {
-        killerMoves[depth].Clear();
-    }
-}
-
 void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
     const Game& game,
