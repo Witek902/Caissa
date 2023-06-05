@@ -49,9 +49,9 @@ DEFINE_PARAM(HistoryPruningQuadraticFactor, 97);
 
 DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
-DEFINE_PARAM(AspirationWindowStart, 40);
-DEFINE_PARAM(AspirationWindowEnd, 15);
-DEFINE_PARAM(AspirationWindowStep, 4);
+DEFINE_PARAM(AspirationWindowStart, 30);
+DEFINE_PARAM(AspirationWindowEnd, 12);
+DEFINE_PARAM(AspirationWindowStep, 3);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
 DEFINE_PARAM(SingularExtensionScoreMarigin, 4);
@@ -869,10 +869,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         // flush pending per-thread stats
         param.searchContext.stats.Append(thread.stats, true);
 
-        // increase window, fallback to full window after some threshold
-        window += window / 2;
-        if (window > AspirationWindowMaxSize) window = CheckmateValue;
-
         BoundsType boundsType = BoundsType::Exact;
 
         // out of aspiration window, redo the search in wider score range
@@ -880,20 +876,18 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         {
             pvLine.score = ScoreType(alpha);
             beta = (alpha + beta + 1) / 2;
-            alpha = pvLine.score - window;
-            alpha = std::max<int32_t>(alpha, -CheckmateValue);
+            alpha = std::max<int32_t>(alpha - window, -CheckmateValue);
+            depth = param.depth;
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
         {
             pvLine.score = ScoreType(beta);
-            beta += window;
-            beta = std::min<int32_t>(beta, CheckmateValue);
+            beta = std::min<int32_t>(beta + window, CheckmateValue);
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
-            if (depth > static_cast<uint32_t>(AspirationWindowDepthStart) &&
-                depth + 3 > param.depth)
+            if (depth + 3 > param.depth)
             {
                 depth--;
             }
@@ -922,6 +916,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         {
             break;
         }
+
+        // increase window, fallback to full window after some threshold
+        window += window / 3;
+        if (window > AspirationWindowMaxSize) window = CheckmateValue;
     }
 
     return finalPvLine;
