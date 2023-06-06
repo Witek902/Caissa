@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.15)
 
 project (caissa)
 
+
+# enable IPO (interprocedural optimization) if supported
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+
+
 # set supported configurations
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Final" CACHE STRING "" FORCE)
 
@@ -22,6 +28,8 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
 # detect target architecture if not defined
 if (NOT DEFINED TARGET_ARCH)
     if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+        set(TARGET_ARCH "x64-avx2-bmi2")
+    elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
         set(TARGET_ARCH "x64-avx2-bmi2")
     elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
         set(TARGET_ARCH "aarch64-neon")
@@ -92,18 +100,15 @@ else()
 endif()
 
 
-# enable link time code generation
 if (MSVC)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /GL")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GL")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG:FULL /LTCG /INCREMENTAL:NO")
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DEBUG:FULL /LTCG /INCREMENTAL:NO")
-	set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /LTCG")
-elseif (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+	set(CMAKE_EXE_LINKER_FLAGS "/DEBUG:FULL")
+	set(CMAKE_SHARED_LINKER_FLAGS "/DEBUG:FULL")
 endif()
 
+
+set(CMAKE_EXE_LINKER_FLAGS_FINAL "${CMAKE_EXE_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS_FINAL "${CMAKE_SHARED_LINKER_FLAGS}")
+set(CMAKE_STATIC_LINKER_FLAGS_FINAL "${CMAKE_STATIC_LINKER_FLAGS}")
 
 # set max warning level
 if (MSVC)
@@ -124,11 +129,10 @@ endif()
 
 
 # enable multiprocess compilation
-if(MSVC)
+if(MSVC AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
 endif()
-
 
 # warning exceptions
 if (MSVC)
@@ -139,7 +143,8 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-switch")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-gnu-anonymous-struct -Wno-nested-anon-types")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-gnu-anonymous-struct")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nested-anon-types")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-four-char-constants")
 endif()
 
@@ -148,7 +153,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # copy neural net file to build directory
-set (DEFAULT_NEURAL_NET_FILE_NAME eval-12.pnn)
+set (DEFAULT_NEURAL_NET_FILE_NAME eval-13.pnn)
 file(COPY ${CMAKE_SOURCE_DIR}/data/neuralNets/${DEFAULT_NEURAL_NET_FILE_NAME}
     DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 

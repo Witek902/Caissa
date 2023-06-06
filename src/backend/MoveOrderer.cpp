@@ -297,9 +297,7 @@ void MoveOrderer::ScoreMoves(
         const SidePosition& opponentSide = pos.GetOpponentSide();
         const Bitboard occupied = pos.Occupied();
 
-        attackedByPawns = (pos.GetSideToMove() == Color::White) ?
-            Bitboard::GetPawnAttacks<Color::Black>(opponentSide.pawns) :
-            Bitboard::GetPawnAttacks<Color::White>(opponentSide.pawns);
+        attackedByPawns = Bitboard::GetPawnsAttacks(opponentSide.pawns, pos.GetSideToMove());
 
         if (currentSide.rooks | currentSide.queens)
         {

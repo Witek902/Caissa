@@ -64,6 +64,7 @@ void SearchUtils::Init()
         }
     }
     ASSERT(count == 3668);
+    UNUSED(count);
 }
 
 bool SearchUtils::CanReachGameCycle(const NodeInfo& node)

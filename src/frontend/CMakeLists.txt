@@ -2,6 +2,9 @@ file(GLOB CAISSA_SOURCES *.cpp)
 
 add_executable(caissa ${CAISSA_SOURCES})
 
+set_property(TARGET caissa PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+
 add_dependencies(caissa backend)
 
 target_link_libraries(caissa backend)

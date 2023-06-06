@@ -179,11 +179,11 @@ Bitboard Position::GetAttackedSquares(Color side) const
     {
         if (side == Color::White)
         {
-            bitboard |= Bitboard::GetPawnAttacks<Color::White>(currentSide.pawns);
+            bitboard |= Bitboard::GetPawnsAttacks<Color::White>(currentSide.pawns);
         }
         else
         {
-            bitboard |= Bitboard::GetPawnAttacks<Color::Black>(currentSide.pawns);
+            bitboard |= Bitboard::GetPawnsAttacks<Color::Black>(currentSide.pawns);
         }
     }
 
