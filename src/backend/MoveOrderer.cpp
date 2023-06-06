@@ -418,6 +418,19 @@ void MoveOrderer::ScoreMoves(
             {
                 case Piece::Pawn:
                     score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
+                    // check if pushed pawn is protected by other pawn
+                    if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
+                    {
+                        // bonus for creating threats
+                        const Bitboard pawnAttacks = Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove());
+                        const auto& opponentSide = pos.GetOpponentSide();
+                             if (pawnAttacks & opponentSide.king)       score += 10000;
+                        else if (pawnAttacks & opponentSide.pawns)      score += 1000;
+                        else if (pawnAttacks & opponentSide.queens)     score += 8000;
+                        else if (pawnAttacks & opponentSide.rooks)      score += 6000;
+                        else if (pawnAttacks & opponentSide.bishops)    score += 4000;
+                        else if (pawnAttacks & opponentSide.knights)    score += 4000;
+                    }
                     break;
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
