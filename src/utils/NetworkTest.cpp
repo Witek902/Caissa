@@ -50,7 +50,7 @@ bool TestNetwork()
         trainingSet[3].singleOutput = 0.0f;
     }
 
-    for (uint32_t iteration = 0; ; ++iteration)
+    for (;;)
     {
         nn::TrainParams params;
         params.batchSize = cBatchSize;

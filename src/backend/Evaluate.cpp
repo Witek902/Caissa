@@ -24,22 +24,21 @@ static constexpr int32_t c_evalSaturationTreshold   = 8000;
 static constexpr PieceScore c_tempoBonus            = S(2, 2);
 static constexpr PieceScore c_bishopPairBonus       = S(33, 63);
 
+#ifdef USE_MOBILITY
 static constexpr PieceScore c_knightMobilityBonus[9] = {
     S(-28,-112), S(-14, -39), S(-8,  -5), S(-2,  12), S(3,  22), S(5,  34), S(14,  32), S(21,  28), S(27,  17) };
-
 static constexpr PieceScore c_bishopMobilityBonus[14] ={
     S( -29,-105), S( -22, -49), S( -10, -29), S(  -6,  -6), S(  -1,   2), S(   0,   8), S(   4,  16),
     S(  10,  22), S(  12,  20), S(  17,  22), S(  25,  14), S(  36,  18), S(  32,  20), S(  37,  17) };
-
 static constexpr PieceScore c_rookMobilityBonus[15] = {
     S( -28, -75), S( -21, -39), S( -17, -21), S( -13, -14), S( -15,   4), S( -10,   7), S(  -4,  17),
     S(   1,  14), S(   3,  13), S(   8,  17), S(  15,  20), S(  27,  15), S(  36,  11), S(  41,   1), S(  75, -16) };
-
 static constexpr PieceScore c_queenMobilityBonus[28] = {
     S( -34, -70), S( -23, -80), S( -16, -78), S( -13, -72), S( -10, -56), S(  -7, -44), S(  -7, -22),
     S(  -3, -21), S(  -5, -11), S(   0,   6), S(   1,  10), S(   2,  20), S(   0,  26), S(   0,  32),
     S(   2,  40), S(   5,  38), S(   4,  33), S(   8,  34), S(  19,  35), S(  28,  32), S(  34,  16),
     S(  45,  11), S(  40,  17), S(  35,  10), S(  31,   9), S(  28,   3), S(  25,   6), S(  20,   1) };
+#endif // USE_MOBILITY
 
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 static PackedNeuralNetworkPtr g_mainNeuralNetwork;
@@ -340,6 +339,7 @@ void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, co
 
 #endif // EVAL_USE_PSQT
 
+#ifdef USE_MOBILITY
 static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 {
     const Bitboard whitesOccupied = pos.Whites().Occupied();
@@ -402,6 +402,7 @@ static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 
     return value;
 }
+#endif // USE_MOBILITY
 
 ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 {

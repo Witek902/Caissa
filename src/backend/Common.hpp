@@ -46,7 +46,7 @@
 #define USE_SYZYGY_TABLEBASES
 // #define USE_GAVIOTA_TABLEBASES
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
 
     // "C++ nonstandard extension: nameless struct"
     #pragma warning(disable : 4201)
@@ -257,6 +257,10 @@
     {
         return 63u ^ (uint32_t)__builtin_clzll(x);
     }
+
+#else //  defined(__GNUC__) || defined(__clang__)
+
+#error "Unsupported compiler"
 
 #endif
 

@@ -119,6 +119,7 @@ void Init()
 
     // number of winning KPK positions is known exactly
     ASSERT(numWinPositions == 111282);
+    UNUSED(numWinPositions);
 }
 
 KPKPosition::KPKPosition(uint32_t idx)
