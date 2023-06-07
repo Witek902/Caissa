@@ -1060,8 +1060,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         if (!isPvNode)
         {
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return alpha;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return beta;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
         }
     }
 
@@ -1274,10 +1274,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             return bestValue;
         }
 
-        const TTEntry::Bounds bounds =
-            bestValue >= beta ? TTEntry::Bounds::Lower :
-            bestValue > oldAlpha ? TTEntry::Bounds::Exact :
-            TTEntry::Bounds::Upper;
+        const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
 
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, 0, bounds, bestMove);
 
@@ -1391,8 +1388,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // transposition table cutoff
             ScoreType ttCutoffValue = InvalidValue;
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = alpha;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = beta;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
 
             if (ttCutoffValue != InvalidValue)
             {
