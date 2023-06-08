@@ -1825,16 +1825,26 @@ static void RunEvalTests()
     TEST_EXPECT(Evaluate(Position("K7/8/8/3PP3/4k3/8/8/8 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("8/8/8/8/8/6P1/5Pk1/K7 b - - 0 1")) >= KnownWinValue);
 
-    // extreme disbalance
+    // extreme imbalance
     {
         {
             const ScoreType score = Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1"));
-            TEST_EXPECT(score > 10000);
+            TEST_EXPECT(score > 6000);
             TEST_EXPECT(score < KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("qqqqkqqq/qqqqqqqq/qqqqqqqq/qqqqqqqq/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
-            TEST_EXPECT(score < -10000);
+            TEST_EXPECT(score < -6000);
+            TEST_EXPECT(score > -KnownWinValue);
+        }
+        {
+            const ScoreType score = Evaluate(Position("RRRRRRpk/RRRRRRpp/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/KRRRRRRR w - - 0 1"));
+            TEST_EXPECT(score > 4000);
+            TEST_EXPECT(score < KnownWinValue);
+        }
+        {
+            const ScoreType score = Evaluate(Position("rrrrkrrr/rrrrrrrr/rrrrrrrr/rrrrrrrr/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
+            TEST_EXPECT(score < -4000);
             TEST_EXPECT(score > -KnownWinValue);
         }
     }

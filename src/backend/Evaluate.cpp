@@ -22,7 +22,6 @@ namespace {
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
 
 static constexpr PieceScore c_tempoBonus            = S(2, 2);
-static constexpr PieceScore c_bishopPairBonus       = S(33, 63);
 
 #ifdef USE_MOBILITY
 static constexpr PieceScore c_knightMobilityBonus[9] = {
@@ -417,14 +416,13 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     const int32_t blackKnights  = pos.Blacks().knights.Count();
     const int32_t blackPawns    = pos.Blacks().pawns.Count();
 
-    const int32_t pieceCount =
-        whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns +
-        blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
+    const int32_t whitePieceCount = whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns;
+    const int32_t blackPieceCount = blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
 
     int32_t scale = c_endgameScaleMax;
 
     // check endgame evaluation first
-    if (pieceCount <= 6)
+    if (whitePieceCount + blackPieceCount <= 6 || blackPieceCount == 0 || whitePieceCount == 0)
     {
         int32_t endgameScore;
         if (EvaluateEndgame(pos, endgameScore, scale))
@@ -434,88 +432,63 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
         }
     }
 
-    TPieceScore<int32_t> value;
-   
-#ifdef EVAL_USE_PSQT
-    if (nodeInfo)
-    {
-        value = nodeInfo->psqtScore;
-        ASSERT(value.mg != INT32_MIN && value.eg != INT32_MIN);
-    }
-    else
-    {
-        value = ComputePSQT(pos);
-    }
-#else // !EVAL_USE_PSQT
-    value = {};
-#endif // EVAL_USE_PSQT
-
-    value += c_queenValue * (whiteQueens - blackQueens);
-    value += c_rookValue * (whiteRooks - blackRooks);
-    value += c_bishopValue * (whiteBishops - blackBishops);
-    value += c_knightValue * (whiteKnights - blackKnights);
-    value += c_pawnValue * (whitePawns - blackPawns);
-
-    // tempo bonus
-    if (pos.GetSideToMove() == Color::White)
-    {
-        value += c_tempoBonus;
-    }
-    else
-    {
-        value -= c_tempoBonus;
-    }
-
-    // mobility
-    //value += EvaluateMobility(pos);
-
-    // bishop pair
-    if ((pos.Whites().bishops & Bitboard::LightSquares()) && (pos.Whites().bishops & Bitboard::DarkSquares())) value += c_bishopPairBonus;
-    if ((pos.Blacks().bishops & Bitboard::LightSquares()) && (pos.Blacks().bishops & Bitboard::DarkSquares())) value -= c_bishopPairBonus;
-
     // 0 - endgame, 64 - opening
     const int32_t gamePhase = std::min(64,
-        1 * (whitePawns + blackPawns) +
+            (whitePawns   + blackPawns) +
         2 * (whiteKnights + blackKnights) +
         2 * (whiteBishops + blackBishops) +
-        4 * (whiteRooks + blackRooks) +
-        8 * (whiteQueens + blackQueens));
+        4 * (whiteRooks   + blackRooks) +
+        8 * (whiteQueens  + blackQueens));
 
-    // accumulate middle/end game scores
-    int32_t finalValue = InterpolateScore(gamePhase, value);
+    int32_t finalValue = 0;
 
-    if (useNN)
+    if (useNN && g_mainNeuralNetwork)
     {
-        const nn::PackedNeuralNetwork* networkToUse = g_mainNeuralNetwork.get();
-        bool useIncrementalUpdate = true;
+        int32_t nnValue = nodeInfo ?
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo) :
+            NNEvaluator::Evaluate(*g_mainNeuralNetwork, pos);
 
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-        const uint32_t numPieces = pos.GetNumPieces();
-        if (numPieces >= 4 && numPieces <= 6 && g_endgameNeuralNetwork)
+        // convert to centipawn range
+        nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+
+        // NN output is side-to-move relative
+        if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
+
+        finalValue = nnValue;
+    }
+    else // fallback to simple evaluation
+    {
+        TPieceScore<int32_t> value;
+
+#ifdef EVAL_USE_PSQT
+        if (nodeInfo)
         {
-            networkToUse = g_endgameNeuralNetwork.get();
-            useIncrementalUpdate = false;
+            value = nodeInfo->psqtScore;
+            ASSERT(value.mg != INT32_MIN && value.eg != INT32_MIN);
         }
-#endif // USE_ENDGAME_NEURAL_NETWORK
-
-        // use neural network for balanced positions
-        if (networkToUse && std::abs(finalValue) < c_nnTresholdMax)
+        else
         {
-            int32_t nnValue = (nodeInfo && useIncrementalUpdate) ?
-                NNEvaluator::Evaluate(*networkToUse, *nodeInfo) :
-                NNEvaluator::Evaluate(*networkToUse, pos);
-
-            // convert to centipawn range
-            nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
-
-            // NN output is side-to-move relative
-            if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
-
-            const int32_t nnBlendRange = c_nnTresholdMax - c_nnTresholdMin;
-            const int32_t nnFactor = std::max(0, std::abs(finalValue) - c_nnTresholdMin);
-            ASSERT(nnFactor <= nnBlendRange);
-            finalValue = (nnFactor * finalValue + nnValue * (nnBlendRange - nnFactor)) / nnBlendRange;
+            value = ComputePSQT(pos);
         }
+#else // !EVAL_USE_PSQT
+        value = {};
+#endif // EVAL_USE_PSQT
+
+        value += c_queenValue * (whiteQueens - blackQueens);
+        value += c_rookValue * (whiteRooks - blackRooks);
+        value += c_bishopValue * (whiteBishops - blackBishops);
+        value += c_knightValue * (whiteKnights - blackKnights);
+        value += c_pawnValue * (whitePawns - blackPawns);
+
+        // tempo bonus
+        value += (pos.GetSideToMove() == Color::White) ? c_tempoBonus : -c_tempoBonus;
+
+#ifdef USE_MOBILITY
+        value += EvaluateMobility(pos);
+#endif // USE_MOBILITY
+
+        // accumulate middle/end game scores
+        finalValue = InterpolateScore(gamePhase, value);
     }
 
     // apply scaling based on game phase
