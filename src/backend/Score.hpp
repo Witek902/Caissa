@@ -33,6 +33,11 @@ struct TPieceScore
         return *this;
     }
 
+    INLINE constexpr TPieceScore operator - () const
+    {
+        return { static_cast<T>(-mg), static_cast<T>(-eg) };
+    }
+
     INLINE constexpr TPieceScore operator + (const TPieceScore rhs) const
     {
         return { mg + rhs.mg, eg + rhs.eg };
