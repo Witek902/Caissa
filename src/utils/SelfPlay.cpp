@@ -28,13 +28,14 @@ static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 64; // print every 64th game
 static const uint32_t c_maxNodes = 10000;
 static const uint32_t c_maxDepth = 15;
-static const int32_t c_maxEval = 2000;
-static const int32_t c_openingMaxEval = 400;
+static const int32_t c_maxEval = 1500;
+static const int32_t c_openingMaxEval = 900;
 static const int32_t c_multiPv = 1;
 static const int32_t c_multiPvMaxPly = 6;
 static const int32_t c_multiPvScoreTreshold = 25;
 static const uint32_t c_minRandomMoves = 4;
 static const uint32_t c_maxRandomMoves = 8;
+static const float c_randomMoveProbability = 0.01f;
 
 using namespace threadpool;
 
@@ -138,7 +139,7 @@ bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& 
     return true;
 }
 
-bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos, bool preferKingMove = false)
+static Move GetRandomMove(std::mt19937& randomGenerator, const Position& pos)
 {
     std::vector<Move> moves;
     pos.GetNumLegalMoves(&moves);
@@ -149,28 +150,8 @@ bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos, bool preferKi
         [&](const Move& move) { return !pos.StaticExchangeEvaluation(move); }),
         moves.end());
 
-    if (moves.empty()) return false;
-
-    if (preferKingMove)
-    {
-        bool hasAnyKingMove = false;
-        for (const Move& move : moves)
-        {
-            if (move.GetPiece() == Piece::King)
-            {
-                hasAnyKingMove = true;
-                break;
-            }
-        }
-
-        if (hasAnyKingMove)
-        {
-            moves.erase(std::remove_if(moves.begin(),
-                                       moves.end(),
-                                       [](const Move& move) { return move.GetPiece() != Piece::King; }),
-                        moves.end());
-        }
-    }
+    if (moves.empty())
+        return Move::Invalid();
 
     Move move = moves.front();
     if (moves.size() > 1)
@@ -179,7 +160,7 @@ bool ApplyRandomMove(std::mt19937& randomGenerator, Position& pos, bool preferKi
         move = moves[distr(randomGenerator)];
     }
 
-    return pos.DoMove(move);
+    return move;
 }
 
 void SelfPlay(const std::vector<std::string>& args)
@@ -279,26 +260,19 @@ void SelfPlay(const std::vector<std::string>& args)
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
-        // remove queens from the opening position
-        //{
-        //    openingPos.Whites().queens.Iterate([&](uint32_t square)
-        //    {
-        //        openingPos.RemovePiece(Square(square), Piece::Queen, Color::White);
-        //    });
-        //    openingPos.Blacks().queens.Iterate([&](uint32_t square)
-        //    {
-        //        openingPos.RemovePiece(Square(square), Piece::Queen, Color::Black);
-        //    });
-        //}
-
         if constexpr (c_maxRandomMoves > 0)
         {
             // play few random moves in the opening
             const uint32_t numRandomMoves = std::uniform_int_distribution<uint32_t>(c_minRandomMoves, c_maxRandomMoves)(gen);
             for (uint32_t i = 0; i < numRandomMoves; ++i)
             {
-                ApplyRandomMove(gen, openingPos, false);
-                ApplyRandomMove(gen, openingPos, false);
+                Move move = GetRandomMove(gen, openingPos);
+                if (!move.IsValid())
+                    break;
+                
+                const bool moveSuccess = openingPos.DoMove(move);
+                ASSERT(moveSuccess);
+                (void)moveSuccess;
             }
         }
 
@@ -377,7 +351,7 @@ void SelfPlay(const std::vector<std::string>& args)
             std::uniform_int_distribution<size_t> distrib(0, searchResult.size() - 1);
             const size_t moveIndex = distrib(gen);
             ASSERT(!searchResult[moveIndex].moves.empty());
-            const Move move = searchResult[moveIndex].moves.front();
+            Move move = searchResult[moveIndex].moves.front();
 
             ScoreType moveScore = searchResult[moveIndex].score;
             if (game.GetSideToMove() == Color::Black)
@@ -405,15 +379,26 @@ void SelfPlay(const std::vector<std::string>& args)
             // this way the game will be more random at the beginning and there will be less blunders later in the game
             multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 2);
 
+            const ScoreType eval = Evaluate(game.GetPosition());
+            const bool isCheck = game.GetPosition().IsInCheck();
+
+            // play random move
+            if (move.IsQuiet() &&
+                std::bernoulli_distribution(c_randomMoveProbability)(gen))
+            {
+                const Move randomMove = GetRandomMove(gen, game.GetPosition());
+                if (randomMove.IsValid())
+                    move = randomMove;
+            }
+
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
-            const ScoreType eval = Evaluate(game.GetPosition());
-
             // adjudicate draw if eval is zero
-            if (moveScore == 0 &&
-                std::abs(eval) < 400 &&
+            if (!isCheck &&
+                moveScore == 0 &&
+                std::abs(eval) < 200 &&
                 drawScoreCounter++ > 8 &&
                 halfMoveNumber >= 40 &&
                 game.GetPosition().GetHalfMoveCount() > 10)
@@ -426,7 +411,9 @@ void SelfPlay(const std::vector<std::string>& args)
             }
 
             // adjudicate win
-            if (game.GetPosition().GetNumPieces() < 24 && halfMoveNumber >= 20)
+            if (!isCheck &&
+                game.GetPosition().GetNumPieces() < 20 &&
+                halfMoveNumber >= 20)
             {
                 if (moveScore > c_maxEval && eval > c_maxEval)
                 {
@@ -451,7 +438,7 @@ void SelfPlay(const std::vector<std::string>& args)
 
             // tablebase adjudication
             int32_t wdlScore = 0;
-            if (ProbeSyzygy_WDL(game.GetPosition(), &wdlScore))
+            if (!isCheck && ProbeSyzygy_WDL(game.GetPosition(), &wdlScore))
             {
                 const auto stm = game.GetPosition().GetSideToMove();
                 if (wdlScore == 1) game.SetScore(stm == Color::White ? Game::Score::WhiteWins : Game::Score::BlackWins);
