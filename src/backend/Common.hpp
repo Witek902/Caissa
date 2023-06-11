@@ -12,7 +12,7 @@
     #include <immintrin.h>
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     #define PLATFORM_WINDOWS
     #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
