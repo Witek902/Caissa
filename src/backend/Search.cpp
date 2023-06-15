@@ -1982,8 +1982,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         if (score > bestValue) // new best move found
         {
-            bestMove = move;
             bestValue = score;
+
+            // make sure we have any best move in root node
+            if (isRootNode) bestMove = move;
 
             // update PV line
             if (isPvNode)
@@ -1994,42 +1996,43 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (score >= beta)
+        if (score > alpha)
         {
-            ASSERT(moveIndex > 0);
-            ASSERT(moveIndex <= MoveList::MaxMoves);
+            alpha = score;
+            bestMove = move;
+
+            if (score >= beta)
+            {
+                ASSERT(moveIndex > 0);
+                ASSERT(moveIndex <= MoveList::MaxMoves);
 
 #ifdef COLLECT_SEARCH_STATS
-            ctx.stats.totalBetaCutoffs++;
-            ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
+                ctx.stats.totalBetaCutoffs++;
+                ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
 
-            bool ttOrKiller = false;
-            for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
-                if (moveScore == MoveOrderer::TTMoveValue - static_cast<int32_t>(i))
-                    ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
+                bool ttOrKiller = false;
+                for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
+                    if (moveScore == MoveOrderer::TTMoveValue - static_cast<int32_t>(i))
+                        ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-            for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
-                if (moveScore == MoveOrderer::KillerMoveBonus - static_cast<int32_t>(i))
-                    ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
+                for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
+                    if (moveScore == MoveOrderer::KillerMoveBonus - static_cast<int32_t>(i))
+                        ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-            if (moveScore == MoveOrderer::CounterMoveBonus)
-                ctx.stats.counterMoveCutoffs++;
+                if (moveScore == MoveOrderer::CounterMoveBonus)
+                    ctx.stats.counterMoveCutoffs++;
 
-            if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue)
-                ctx.stats.goodCaptureCutoffs++;
-            if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue)
-                ctx.stats.badCaptureCutoffs++;
-            if (!ttOrKiller && move.IsQuiet())
-                ctx.stats.quietCutoffs++;
+                if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue)
+                    ctx.stats.goodCaptureCutoffs++;
+                if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue)
+                    ctx.stats.badCaptureCutoffs++;
+                if (!ttOrKiller && move.IsQuiet())
+                    ctx.stats.quietCutoffs++;
 
 #endif // COLLECT_SEARCH_STATS
 
-            break;
-        }
-
-        if (score > alpha)
-        {
-            ASSERT(isPvNode);
+                break;
+            }
 
             // reduce remaining moves more if we managed to find new best move
             int32_t reducedDepth = node.depth - globalDepthReduction;
@@ -2039,8 +2042,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 globalDepthReduction++;
             }
-
-            alpha = score;
         }
 
         if (!isRootNode && CheckStopCondition(thread, ctx, false))
@@ -2117,8 +2118,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
     if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
     {
-        ASSERT(bestMove.IsValid());
-
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
             bestValue > oldAlpha ? TTEntry::Bounds::Exact :
