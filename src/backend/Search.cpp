@@ -1571,6 +1571,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         // Null Move Reductions
         if (node.staticEval >= beta + (node.depth < 4 ? 20 : 0) &&
+            staticEval >= beta &&
             node.depth >= NullMoveReductionsStartDepth &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
