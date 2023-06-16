@@ -803,7 +803,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.nnContext = thread.nnContextStack[0].get();
             rootNode.nnContext->MarkAsDirty();
 
-            ScoreType score = NegaMax(thread, rootNode, searchContext);
+            ScoreType score = NegaMax<true>(thread, rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
             if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
@@ -862,7 +862,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         SearchTrace::OnRootSearchBegin();
 #endif
 
-        pvLine.score = NegaMax(thread, rootNode, param.searchContext);
+        pvLine.score = NegaMax<true>(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
 
@@ -1286,6 +1286,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     return bestValue;
 }
 
+template<bool isRootNode>
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.height < MaxSearchDepth);
@@ -1303,22 +1304,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ctx.stats.Append(thread.stats);
 
     const Position& position = node.position;
-    const bool isRootNode = node.height == 0; // root node is the first node in the chain (best move)
     const bool isPvNode = node.IsPV();
 
     ScoreType alpha = node.alpha;
     ScoreType beta = node.beta;
 
     // check if we can draw by repetition in losing position
-    if (!isRootNode && alpha < 0 && SearchUtils::CanReachGameCycle(node))
+    if constexpr (!isRootNode)
     {
-        alpha = 0;
-        if (alpha >= beta)
+        if (alpha < 0 && SearchUtils::CanReachGameCycle(node))
         {
+            alpha = 0;
+            if (alpha >= beta)
+            {
 #ifdef ENABLE_SEARCH_TRACE
-            trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
+                trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
 #endif // ENABLE_SEARCH_TRACE
-            return alpha;
+                return alpha;
+            }
         }
     }
 
@@ -1328,7 +1331,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         return QuiescenceNegaMax(thread, node, ctx);
     }
 
-    if (!isRootNode)
+    if constexpr (!isRootNode)
     {
         // Check for draw
         // Skip root node as we need some move to be reported in PV
@@ -1402,10 +1405,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     // try probing Win-Draw-Loose endgame tables
+    if constexpr (!isRootNode)
     {
         int32_t wdl = 0;
-        if (!isRootNode &&
-            (node.depth >= WdlTablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
+        if ((node.depth >= WdlTablebaseProbeDepth || !node.previousMove.IsQuiet()) &&
             position.GetNumPieces() <= g_syzygyProbeLimit &&
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
@@ -1715,68 +1718,76 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // VALIDATE_MOVE_PICKER
 
         // apply move filter (multi-PV search, singularity search, etc.)
-        if (move == node.filteredMove ||
-            (isRootNode && ctx.excludedRootMoves.end() != std::find(
-                ctx.excludedRootMoves.begin(), ctx.excludedRootMoves.end(), move)))
+        if (move == node.filteredMove)
         {
             filteredSomeMove = true;
             continue;
         }
+        else if constexpr (isRootNode)
+        {
+            if (ctx.excludedRootMoves.end() != std::find(ctx.excludedRootMoves.begin(), ctx.excludedRootMoves.end(), move))
+            {
+                filteredSomeMove = true;
+                continue;
+            }
+        }
 
         if (move.IsQuiet()) quietMoveIndex++;
 
-        if (!node.isInCheck &&
-            !isRootNode &&
-            bestValue > -KnownWinValue &&
-            position.HasNonPawnMaterial(position.GetSideToMove()))
+        if constexpr (!isRootNode)
         {
-            if (move.IsQuiet() || move.IsUnderpromotion())
+            if (!node.isInCheck &&
+                bestValue > -KnownWinValue &&
+                position.HasNonPawnMaterial(position.GetSideToMove()))
             {
-                //const int32_t historyScore = thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
+                if (move.IsQuiet() || move.IsUnderpromotion())
+                {
+                    //const int32_t historyScore = thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
 
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
+                    // Late Move Pruning
+                    // skip quiet moves that are far in the list
+                    // the higher depth is, the less aggressive pruning is
+                    if (quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
+                    {
+                        // if we're in quiets stage, skip everything
+                        if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
+
+                        continue;
+                    }
+
+                    // History Pruning
+                    // if a move score is really bad, do not consider this move at low depth
+                    if (quietMoveIndex > 1 &&
+                        node.depth < 9 &&
+                        moveScore < GetHistoryPruningTreshold(node.depth))
+                    {
+                        continue;
+                    }
+
+                    // Futility Pruning
+                    // skip quiet move that have low chance to beat alpha
+                    if (node.depth < 9 &&
+                        node.staticEval + 32 * node.depth * node.depth + moveScore / 256 < alpha)
+                    {
+                        movePicker.SkipQuiets();
+                        if (quietMoveIndex > 1) continue;
+                    }
+                }
+
+                // Static Exchange Evaluation pruning
+                // skip all moves that are bad according to SEE
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node.depth) + isImproving + isPvNode)
+                if (move.IsCapture())
                 {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
+                    if (node.depth <= 4 &&
+                        moveScore < MoveOrderer::GoodCaptureValue &&
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node.depth)) continue;
                 }
-
-                // History Pruning
-                // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
-                    node.depth < 9 &&
-                    moveScore < GetHistoryPruningTreshold(node.depth))
+                else
                 {
-                    continue;
+                    if (node.depth <= 8 &&
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node.depth)) continue;
                 }
-
-                // Futility Pruning
-                // skip quiet move that have low chance to beat alpha
-                if (node.depth < 9 &&
-                    node.staticEval + 32 * node.depth * node.depth + moveScore / 256 < alpha)
-                {
-                    movePicker.SkipQuiets();
-                    if (quietMoveIndex > 1) continue;
-                }
-            }
-
-            // Static Exchange Evaluation pruning
-            // skip all moves that are bad according to SEE
-            // the higher depth is, the less aggressive pruning is
-            if (move.IsCapture())
-            {
-                if (node.depth <= 4 &&
-                    moveScore < MoveOrderer::GoodCaptureValue &&
-                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node.depth)) continue;
-            }
-            else
-            {
-                if (node.depth <= 8 &&
-                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node.depth)) continue;
             }
         }
 
@@ -1797,53 +1808,55 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         }
 
         // Singular move detection
-        if (!isRootNode &&
-            !node.filteredMove.IsValid() &&
-            move == ttMove &&
-            node.depth >= SingularExtensionMinDepth &&
-            std::abs(ttScore) < KnownWinValue &&
-            ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-            ttEntry.depth >= node.depth - 2)
+        if constexpr (!isRootNode)
         {
-            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node.depth);
-
-            NodeInfo singularChildNode = node;
-            singularChildNode.isPvNodeFromPrevIteration = false;
-            singularChildNode.isSingularSearch = true;
-            singularChildNode.depth = node.depth / 2 - 1;
-            singularChildNode.alpha = singularBeta - 1;
-            singularChildNode.beta = singularBeta;
-            singularChildNode.filteredMove = move;
-
-            const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
-
-            if (singularScore < singularBeta)
+            if (!node.filteredMove.IsValid() &&
+                move == ttMove &&
+                node.depth >= SingularExtensionMinDepth &&
+                std::abs(ttScore) < KnownWinValue &&
+                ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
+                ttEntry.depth >= node.depth - 2)
             {
-                if (node.height < 2 * thread.rootDepth)
-                {
-                    moveExtension++;
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node.depth);
 
-                    // double extension if singular score is way below beta
-                    if (!isPvNode &&
-                        node.doubleExtensions < 8 &&
-                        singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                NodeInfo singularChildNode = node;
+                singularChildNode.isPvNodeFromPrevIteration = false;
+                singularChildNode.isSingularSearch = true;
+                singularChildNode.depth = node.depth / 2 - 1;
+                singularChildNode.alpha = singularBeta - 1;
+                singularChildNode.beta = singularBeta;
+                singularChildNode.filteredMove = move;
+
+                const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
+
+                if (singularScore < singularBeta)
+                {
+                    if (node.height < 2 * thread.rootDepth)
                     {
                         moveExtension++;
+
+                        // double extension if singular score is way below beta
+                        if (!isPvNode &&
+                            node.doubleExtensions < 8 &&
+                            singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                        {
+                            moveExtension++;
+                        }
                     }
                 }
-            }
-            else if (singularScore >= beta)
-            {
-                // if second best move beats current beta, there most likely would be beta cutoff
-                // when searching it at full depth
+                else if (singularScore >= beta)
+                {
+                    // if second best move beats current beta, there most likely would be beta cutoff
+                    // when searching it at full depth
 #ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
+                    trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
 #endif // ENABLE_SEARCH_TRACE
-                return singularScore;
-            }
-            else if (ttScore >= beta)
-            {
-                moveExtension--;
+                    return singularScore;
+                }
+                else if (ttScore >= beta)
+                {
+                    moveExtension--;
+                }
             }
         }
 
@@ -1857,12 +1870,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         // report current move to UCI
-        if (isRootNode && thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
+        if constexpr (isRootNode)
         {
-            const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
-            if (timeElapsed > CurrentMoveReportDelay)
+            if (thread.isMainThread && ctx.searchParam.debugLog && node.pvIndex == 0)
             {
-                ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
+                const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
+                if (timeElapsed > CurrentMoveReportDelay)
+                {
+                    ReportCurrentMove(move, node.depth, moveIndex + node.pvIndex);
+                }
             }
         }
 
@@ -2044,11 +2060,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (!isRootNode && CheckStopCondition(thread, ctx, false))
+        if constexpr (!isRootNode)
         {
-            // abort search of further moves
-            searchAborted = true;
-            break;
+            if (CheckStopCondition(thread, ctx, false))
+            {
+                // abort search of further moves
+                searchAborted = true;
+                break;
+            }
         }
     }
 
@@ -2102,7 +2121,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
 
-    if (isRootNode)
+    if constexpr (isRootNode)
     {
         ASSERT(bestMove.IsValid());
         ASSERT(!isPvNode || node.pvLength > 0);
