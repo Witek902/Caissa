@@ -51,6 +51,7 @@ bool TestNetwork()
     networkRunCtx.Init(network);
 
     nn::NeuralNetworkTrainer trainer;
+    trainer.Init(network);
 
 #ifdef USE_PACKED_NET
     nn::PackedNeuralNetwork packedNetwork;
@@ -63,22 +64,31 @@ bool TestNetwork()
 
     uint32_t numTrainingVectorsPassed = 0;
 
+    const uint16_t features[] = {0, 1};
+
     {
-        trainingSet[0].inputMode = nn::InputMode::SparseBinary;
-        trainingSet[0].sparseBinaryInputs = {};
-        trainingSet[0].singleOutput = 0.0f;
+        trainingSet[0].input.inputs[0].mode = nn::InputMode::SparseBinary;
+        trainingSet[0].input.inputs[0].numFeatures = 0;
+        trainingSet[0].output.mode = nn::OutputMode::Single;
+        trainingSet[0].output.singleValue = 0.0f;
 
-        trainingSet[1].inputMode = nn::InputMode::SparseBinary;
-        trainingSet[1].sparseBinaryInputs = { 0 };
-        trainingSet[1].singleOutput = 1.0f;
+        trainingSet[1].input.inputs[0].mode = nn::InputMode::SparseBinary;
+        trainingSet[1].input.inputs[0].numFeatures = 1;
+        trainingSet[1].input.inputs[0].binaryFeatures = features; // 0
+        trainingSet[1].output.mode = nn::OutputMode::Single;
+        trainingSet[1].output.singleValue = 1.0f;
 
-        trainingSet[2].inputMode = nn::InputMode::SparseBinary;
-        trainingSet[2].sparseBinaryInputs = { 1 };
-        trainingSet[2].singleOutput = 0.0f;
+        trainingSet[2].input.inputs[0].mode = nn::InputMode::SparseBinary;
+        trainingSet[2].input.inputs[0].numFeatures = 1;
+        trainingSet[2].input.inputs[0].binaryFeatures = features + 1; // 1
+        trainingSet[2].output.mode = nn::OutputMode::Single;
+        trainingSet[2].output.singleValue = 0.0f;
 
-        trainingSet[3].inputMode = nn::InputMode::SparseBinary;
-        trainingSet[3].sparseBinaryInputs = { 0, 1 };
-        trainingSet[3].singleOutput = 0.0f;
+        trainingSet[3].input.inputs[0].mode = nn::InputMode::SparseBinary;
+        trainingSet[3].input.inputs[0].numFeatures = 2;
+        trainingSet[3].input.inputs[0].binaryFeatures = features; // 0, 1
+        trainingSet[3].output.mode = nn::OutputMode::Single;
+        trainingSet[3].output.singleValue = 0.0f;
     }
 
     for (;;)
@@ -104,24 +114,34 @@ bool TestNetwork()
 
         for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
         {
-            std::vector<uint16_t> features;
-
-            if (i == 1)
+            nn::InputDesc inputDesc;
+            inputDesc.inputs[0].mode = nn::InputMode::SparseBinary;
+            if (i == 0)
             {
-                features.push_back(0);
+                inputDesc.inputs[0].numFeatures = 0;
+            }
+            else if (i == 1)
+            {
+                inputDesc.inputs[0].numFeatures = 1;
+                inputDesc.inputs[0].binaryFeatures = features; // 0
             }
             else if (i == 2)
             {
-                features.push_back(1);
+                inputDesc.inputs[0].numFeatures = 1;
+                inputDesc.inputs[0].binaryFeatures = features + 1; // 1
             }
             else if (i == 3)
             {
-                features.push_back(0);
-                features.push_back(1);
+                inputDesc.inputs[0].numFeatures = 2;
+                inputDesc.inputs[0].binaryFeatures = features; // 0, 1
+            }
+            else
+            {
+                ASSERT(false);
             }
 
-            const auto& networkOutput = network.Run(nn::NeuralNetwork::InputDesc(features), networkRunCtx);
-            const float expectedValue = trainingSet[i].singleOutput;
+            const auto& networkOutput = network.Run(inputDesc, networkRunCtx);
+            const float expectedValue = trainingSet[i].output.singleValue;
             const float nnValue = networkOutput[0];
 
             {

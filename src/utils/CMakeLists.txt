@@ -1,6 +1,6 @@
 file(
     GLOB_RECURSE CAISSA_UTILS_SOURCES
-    *.cpp* *.h* *.hpp*
+    *.cpp *.hpp *.c *.h
 )
 
 foreach(_source IN ITEMS ${CAISSA_UTILS_SOURCES})

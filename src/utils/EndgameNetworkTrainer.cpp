@@ -23,6 +23,8 @@
 #include <fstream>
 #include <limits.h>
 
+#if 0
+
 // #define USE_DTZ
 // #define USE_DTM
 
@@ -375,3 +377,5 @@ bool TrainEndgame()
 
     return true;
 }
+
+#endif

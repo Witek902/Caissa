@@ -4,6 +4,8 @@
 
 namespace nn {
 
+struct Gradients;
+
 struct WeightsStorage
 {
 public:
@@ -15,8 +17,6 @@ public:
     {
         float learningRate = 1.0f;
         float gradientScale = 1.0f;
-        float weightsRange = 10.0f;
-        float biasRange = 10.0f;
         float weightDecay = 0.0f;
         size_t iteration = 0;
     };
@@ -26,9 +26,13 @@ public:
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;
+    bool m_isSparse = false;
 
     Values m_weights;
     Values m_weightsMask;
+
+    float m_weightsRange = 10.0f;
+    float m_biasRange = 10.0f;
 
     // used for learning
     Values m_gradientMoment1;

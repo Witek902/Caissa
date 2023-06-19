@@ -35,11 +35,11 @@ ActivationNode::ActivationNode(const NodePtr& previousNode, ActivationFunction f
 
 void ActivationNode::Run(INodeContext& ctx) const
 {
-    ASSERT(ctx.outputs.size() == numOutputs);
-    ASSERT(ctx.inputs.size() == numInputs);
+    ASSERT(ctx.outputs.size() == m_numOutputs);
+    ASSERT(ctx.inputs.size() == m_numInputs);
 
 #ifndef CONFIGURATION_FINAL
-    for (size_t i = 0; i < numOutputs; i++)
+    for (size_t i = 0; i < m_numOutputs; i++)
     {
         const float x = ctx.inputs[i];
         ASSERT(!std::isnan(x));
@@ -54,21 +54,21 @@ void ActivationNode::Run(INodeContext& ctx) const
     const float* valuesPtr = ctx.inputs.data();
     if (mActivationFunc == ActivationFunction::ReLU)
     {
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(outputsPtr + i, ReLU(_mm256_load_ps(valuesPtr + i)));
         }
     }
     else if (mActivationFunc == ActivationFunction::CReLU)
     {
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(outputsPtr + i, CReLU(_mm256_load_ps(valuesPtr + i)));
         }
     }
 #endif // USE_AVX
 
-    for (; i < numOutputs; i++)
+    for (; i < m_numOutputs; i++)
     {
         ctx.outputs[i] = ApplyActivationFunction(ctx.inputs[i], mActivationFunc);
     }
@@ -86,18 +86,18 @@ void ActivationNode::Backpropagate(const Values& error, INodeContext& ctx, Gradi
     const float* valuesPtr = ctx.inputs.data();
     if (mActivationFunc == ActivationFunction::ReLU)
     {
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
             _mm256_store_ps(ctx.inputError.data() + i,
                 ReLUDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
     }
     else if (mActivationFunc == ActivationFunction::CReLU)
     {
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
             _mm256_store_ps(ctx.inputError.data() + i,
                 CReLUDerivative(_mm256_load_ps(valuesPtr + i), _mm256_load_ps(errorsPtr + i)));
     }
 #endif // USE_AVX
-    for (; i < numOutputs; i++)
+    for (; i < m_numOutputs; i++)
     {
         ctx.inputError[i] = error[i] * GetActivationFunctionDerivative(ctx.inputs[i], mActivationFunc);
     }

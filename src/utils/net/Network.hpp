@@ -2,6 +2,7 @@
 
 #include "Common.hpp"
 #include "Node.hpp"
+#include "Gradient.hpp"
 
 #include <vector>
 #include <deque>
@@ -19,25 +20,78 @@ class TaskBuilder;
 namespace nn {
 
 class NeuralNetwork;
+struct WeightsStorage;
+
+struct NodeInput
+{
+    InputMode mode = InputMode::Unknown;
+    uint32_t numFeatures = 0;
+
+    union
+    {
+        const float* floatValues;
+        const ActiveFeature* floatFeatures;
+        const uint16_t* binaryFeatures;
+    };
+
+    INLINE NodeInput() = default;
+
+    INLINE NodeInput(const std::vector<float>& features)
+        : mode(InputMode::Full)
+        , numFeatures(static_cast<uint32_t>(features.size()))
+        , floatValues(features.data())
+    {}
+
+    INLINE NodeInput(const std::vector<ActiveFeature>& features)
+        : mode(InputMode::Sparse)
+        , numFeatures(static_cast<uint32_t>(features.size()))
+        , floatFeatures(features.data())
+    {}
+
+    INLINE NodeInput(const std::vector<uint16_t>& features)
+        : mode(InputMode::SparseBinary)
+        , numFeatures(static_cast<uint32_t>(features.size()))
+        , binaryFeatures(features.data())
+    {}
+
+    void Validate() const;
+};
+
+struct NodeOutput
+{
+    OutputMode mode = OutputMode::Unknown;
+    uint32_t numValues = 0;
+
+    union
+    {
+        float singleValue;
+        const float* floatValues;
+    };
+
+    INLINE NodeOutput() = default;
+
+    INLINE NodeOutput(const float value)
+        : mode(OutputMode::Single)
+        , singleValue(value)
+    {}
+
+    INLINE NodeOutput(const std::vector<float>& values)
+        : mode(OutputMode::Full)
+        , numValues(static_cast<uint32_t>(values.size()))
+        , floatValues(values.data())
+    {}
+};
+
+struct InputDesc
+{
+    NodeInput inputs[MaxInputNodes];
+    uint32_t variant; // used to select weights variant in deeper layers
+};
 
 struct TrainingVector
 {
-    InputMode inputMode = InputMode::Unknown;
-    OutputMode outputMode = OutputMode::Single;
-
-    // depends on 'inputMode'
-    Values inputs;
-    std::vector<uint16_t> sparseBinaryInputs;
-    std::vector<ActiveFeature> sparseInputs;
-
-    // depends on 'outputMode'
-    Values outputs;
-    float singleOutput;
-
-    uint32_t networkVariant = 0;
-
-    void CombineSparseInputs();
-    void Validate() const;
+    InputDesc input;
+    NodeOutput output;
 };
 
 using TrainingSet = std::vector<TrainingVector>;
@@ -46,9 +100,8 @@ class NeuralNetworkRunContext
 {
 public:
     std::vector<NodeContextPtr> nodeContexts;
-    
-    // used for learning
-    Values tempValues;
+    std::vector<const Values*> inputErrors;     // input error for each node
+    Values tempValues;                          // used for last node output
 
     void Init(const NeuralNetwork& network);
 };
@@ -59,42 +112,6 @@ class NeuralNetwork
     friend class NeuralNetworkRunContext;
 
 public:
-
-    struct InputDesc
-    {
-        InputMode mode = InputMode::Unknown;
-        uint32_t numFeatures = 0;
-
-        union
-        {
-            const float* floatValues;
-            const ActiveFeature* floatFeatures;
-            const uint16_t* binaryFeatures;
-        };
-
-        // used to select weights variant in deeper layers
-        uint32_t variant = 0;
-
-        InputDesc() = default;
-
-        InputDesc(const std::vector<float>& features)
-            : mode(InputMode::Full)
-            , numFeatures(static_cast<uint32_t>(features.size()))
-            , floatValues(features.data())
-        {}
-
-        InputDesc(const std::vector<ActiveFeature>& features)
-            : mode(InputMode::Sparse)
-            , numFeatures(static_cast<uint32_t>(features.size()))
-            , floatFeatures(features.data())
-        {}
-
-        InputDesc(const std::vector<uint16_t>& features)
-            : mode(InputMode::SparseBinary)
-            , numFeatures(static_cast<uint32_t>(features.size()))
-            , binaryFeatures(features.data())
-        {}
-    };
 
     // create network from nodes
     // last node must be output node
@@ -107,7 +124,7 @@ public:
     bool Load(const char* filePath);
 
     // Calculate neural network output based on input
-    const Values& Run(const InputDesc& input, NeuralNetworkRunContext& ctx) const;
+    const Values& Run(const InputDesc& inputDesc, NeuralNetworkRunContext& ctx) const;
 
     void PrintStats() const;
 
@@ -138,16 +155,19 @@ public:
 
     NeuralNetworkTrainer();
 
+    void Init(NeuralNetwork& network);
     size_t Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder = nullptr);
 
 private:
 
     struct PerThreadData
     {
-        std::vector<Gradients>  gradients;      // per-node gradients
+        std::vector<Gradients*> perNodeGradients;
+        std::vector<Gradients>  perWeightsStorageGradients;
         NeuralNetworkRunContext runContext;
     };
 
+    std::vector<WeightsStorage*> m_weightsStorages;
     std::vector<PerThreadData> m_perThreadData;
 };
 
