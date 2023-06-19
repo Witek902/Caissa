@@ -1,5 +1,6 @@
 #include "SparseInputNode.hpp"
 #include "WeightsStorage.hpp"
+#include "Gradient.hpp"
 
 namespace nn {
 
@@ -8,27 +9,27 @@ void SparseInputNode::Run(INodeContext& ctx) const
     Context& context = static_cast<Context&>(ctx);
     const Values& weights = m_weightsStorage->m_weights;
 
-    ASSERT(ctx.outputs.size() == numOutputs);
+    ASSERT(ctx.outputs.size() == m_numOutputs);
 
     // apply biases
     std::copy(
-        weights.data() + numOutputs * numInputs,
-        weights.data() + numOutputs * (numInputs + 1),
+        weights.data() + m_numOutputs * m_numInputs,
+        weights.data() + m_numOutputs * (m_numInputs + 1),
         ctx.outputs.data());
 
     // accumulate active feature weights
     for (const ActiveFeature& feature : context.sparseInputs)
     {
-        ASSERT(feature.index < numInputs);
+        ASSERT(feature.index < m_numInputs);
         ASSERT(!std::isnan(feature.value));
 
         size_t i = 0;
 
 #ifdef USE_AVX
         const __m256 vInputValue = _mm256_set1_ps(feature.value);
-        const float* weightsPtr = weights.data() + feature.index * numOutputs;
+        const float* weightsPtr = weights.data() + feature.index * m_numOutputs;
         float* valuesPtr = ctx.outputs.data();
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(valuesPtr + i,
                             _mm256_fmadd_ps(vInputValue,
@@ -37,9 +38,9 @@ void SparseInputNode::Run(INodeContext& ctx) const
         }
 #endif // USE_AVX
 
-        for (; i < numOutputs; i++)
+        for (; i < m_numOutputs; i++)
         {
-            ctx.outputs[i] += weights[feature.index * numOutputs + i] * feature.value;
+            ctx.outputs[i] += weights[feature.index * m_numOutputs + i] * feature.value;
         }
     }
 }
@@ -48,22 +49,24 @@ void SparseInputNode::Backpropagate(const Values& error, INodeContext& ctx, Grad
 {
     const Context& context = static_cast<const Context&>(ctx);
 
+    ASSERT(gradients.m_isSparse);
+
     // update gradient of active features
     for (const ActiveFeature& feature : context.sparseInputs)
     {
         size_t i = 0;
 #ifdef USE_AVX
-        float* gradientPtr = gradients.m_values.data() + feature.index * numOutputs;
+        float* gradientPtr = gradients.m_values.data() + feature.index * m_numOutputs;
         const __m256 vInputValue = _mm256_set1_ps(feature.value);
-        for (; i + 8 <= numOutputs; i += 8)
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(gradientPtr + i,
                 _mm256_fmadd_ps(vInputValue, _mm256_load_ps(error.data() + i), _mm256_load_ps(gradientPtr + i)));
         }
 #endif // USE_AVX
-        for (; i < numOutputs; i++)
+        for (; i < m_numOutputs; i++)
         {
-            gradients.m_values[feature.index * numOutputs + i] += feature.value * error[i];
+            gradients.m_values[feature.index * m_numOutputs + i] += feature.value * error[i];
         }
         gradients.m_dirty[feature.index] = true;
     }
@@ -72,19 +75,19 @@ void SparseInputNode::Backpropagate(const Values& error, INodeContext& ctx, Grad
     {
         size_t i = 0;
 #ifdef USE_AVX
-        float* gradientPtr = gradients.m_values.data() + numInputs * numOutputs;
-        for (; i + 8 <= numOutputs; i += 8)
+        float* gradientPtr = gradients.m_values.data() + m_numInputs * m_numOutputs;
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(gradientPtr + i,
                 _mm256_add_ps(_mm256_load_ps(error.data() + i),
                     _mm256_load_ps(gradientPtr + i)));
         }
 #endif // USE_AVX
-        for (; i < numOutputs; i++)
+        for (; i < m_numOutputs; i++)
         {
-            gradients.m_values[numInputs * numOutputs + i] += error[i];
+            gradients.m_values[m_numInputs * m_numOutputs + i] += error[i];
         }
-        gradients.m_dirty[numInputs] = true;
+        gradients.m_dirty[m_numInputs] = true;
     }
 }
 

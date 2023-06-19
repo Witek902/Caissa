@@ -198,38 +198,37 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
     }
 }
 
-void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector)
+void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
 {
     const uint32_t maxFeatures = 64;
 
-    /*
     uint16_t whiteFeatures[maxFeatures];
     uint32_t numWhiteFeatures = PositionToFeaturesVector(pos, whiteFeatures, pos.GetSideToMove());
     ASSERT(numWhiteFeatures <= 64);
 
     uint16_t blackFeatures[maxFeatures];
-    uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, Color::Black);
+    uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, GetOppositeColor(pos.GetSideToMove()));
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
-    outVector.inputMode = nn::InputMode::SparseBinary;
-    outVector.sparseBinaryInputs.clear();
-    outVector.sparseBinaryInputs.reserve(numWhiteFeatures + numBlackFeatures);
-
+    outEntry.whiteFeatures.clear();
+    outEntry.whiteFeatures.reserve(numWhiteFeatures + numBlackFeatures);
     for (uint32_t i = 0; i < numWhiteFeatures; ++i)
-        outVector.sparseBinaryInputs.emplace_back(whiteFeatures[i]);
+        outEntry.whiteFeatures.emplace_back(whiteFeatures[i]);
 
+    outEntry.blackFeatures.clear();
+    outEntry.blackFeatures.reserve(numWhiteFeatures + numBlackFeatures);
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
-        outVector.sparseBinaryInputs.emplace_back(704 + blackFeatures[i]);
-    */
+        outEntry.blackFeatures.emplace_back(blackFeatures[i]);
 
+    /*
     uint16_t features[maxFeatures];
     uint32_t numFeatures = PositionToFeaturesVector(pos, features, pos.GetSideToMove());
     ASSERT(numFeatures <= maxFeatures);
 
-    outVector.inputMode = nn::InputMode::SparseBinary;
-    outVector.sparseBinaryInputs.clear();
-    outVector.sparseBinaryInputs.reserve(numFeatures);
+    outEntry.whiteFeatures.clear();
+    outEntry.whiteFeatures.reserve(numFeatures);
 
     for (uint32_t i = 0; i < numFeatures; ++i)
-        outVector.sparseBinaryInputs.emplace_back(features[i]);
+        outEntry.whiteFeatures.emplace_back(features[i]);
+    */
 }

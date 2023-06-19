@@ -18,7 +18,10 @@ struct PositionEntry
 struct TrainingEntry
 {
     Position pos;
-    nn::TrainingVector trainingVector;
+    std::vector<uint16_t> whiteFeatures;
+    std::vector<uint16_t> blackFeatures;
+    float output = 0.0f;
+    uint32_t networkVariant = 0;
 };
 
 class TrainingDataLoader
@@ -57,4 +60,4 @@ private:
     uint32_t SampleInputFileIndex(double u) const;
 };
 
-void PositionToTrainingVector(const Position& pos, nn::TrainingVector& outVector);
+void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry);

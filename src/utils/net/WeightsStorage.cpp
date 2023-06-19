@@ -1,4 +1,5 @@
 #include "WeightsStorage.hpp"
+#include "Gradient.hpp"
 #include "../minitrace/minitrace.h"
 
 #include <random>
@@ -61,7 +62,7 @@ void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUp
 
     for (size_t j = 0; j <= m_inputSize; j++)
     {
-        const float maxWeightValue = j < m_inputSize ? options.weightsRange : options.biasRange;
+        const float maxWeightValue = j < m_inputSize ? m_weightsRange : m_biasRange;
 
         size_t i = 0;
 
@@ -159,7 +160,7 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdate
 
     for (size_t j = 0; j <= m_inputSize; j++)
     {
-        const float maxWeightValue = j < m_inputSize ? options.weightsRange : options.biasRange;
+        const float maxWeightValue = j < m_inputSize ? m_weightsRange : m_biasRange;
 
         size_t i = 0;
 

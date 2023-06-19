@@ -1,5 +1,6 @@
 #include "FullyConnectedNode.hpp"
 #include "WeightsStorage.hpp"
+#include "Gradient.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -41,23 +42,23 @@ void FullyConnectedNode::Run(INodeContext& ctx) const
     Context& context = static_cast<Context&>(ctx);
     const Values& weights = m_weightsStorage->m_weights;
 
-    ASSERT(ctx.outputs.size() == numOutputs);
-    ASSERT(ctx.inputs.size() == numInputs);
+    ASSERT(ctx.outputs.size() == m_numOutputs);
+    ASSERT(ctx.inputs.size() == m_numInputs);
 
     // apply biases
     std::copy(
-        weights.data() + numOutputs * numInputs,
-        weights.data() + numOutputs * (numInputs + 1),
+        weights.data() + m_numOutputs * m_numInputs,
+        weights.data() + m_numOutputs * (m_numInputs + 1),
         ctx.outputs.data());
 
     // TODO dedicated node with single output
-    if (numOutputs == 1)
+    if (m_numOutputs == 1)
     {
         size_t i = 0;
 #ifdef USE_AVX
         const float* weightsPtr = weights.data();
         __m256 sum = _mm256_setzero_ps();
-        for (; i + 8 <= numInputs; i += 8)
+        for (; i + 8 <= m_numInputs; i += 8)
         {
             const __m256 inputs = _mm256_loadu_ps(context.inputs.data() + i);
             sum = _mm256_fmadd_ps(_mm256_load_ps(weightsPtr + i),
@@ -67,7 +68,7 @@ void FullyConnectedNode::Run(INodeContext& ctx) const
         ctx.outputs[0] += m256_hadd(sum);
 #endif // USE_AVX
 
-        for (; i < numInputs; i++)
+        for (; i < m_numInputs; i++)
         {
             ctx.outputs[0] += weights[i] * context.inputs[i];
         }
@@ -75,17 +76,17 @@ void FullyConnectedNode::Run(INodeContext& ctx) const
     else
     {
         // accumulate weights
-        for (uint32_t j = 0; j < numInputs; j++)
+        for (uint32_t j = 0; j < m_numInputs; j++)
         {
             const float inputValue = context.inputs[j];
             if (std::abs(inputValue) > c_activationEpsilon)
             {
                 uint32_t i = 0;
 #ifdef USE_AVX
-                const float* weightsPtr = weights.data() + j * numOutputs;
+                const float* weightsPtr = weights.data() + j * m_numOutputs;
                 float* valuesPtr = ctx.outputs.data();
                 const __m256 vInputValue = _mm256_set1_ps(inputValue);
-                for (; i + 8 <= numOutputs; i += 8)
+                for (; i + 8 <= m_numOutputs; i += 8)
                 {
                     _mm256_store_ps(valuesPtr + i,
                                     _mm256_fmadd_ps(vInputValue,
@@ -94,9 +95,9 @@ void FullyConnectedNode::Run(INodeContext& ctx) const
                 }
 #endif // USE_AVX
 
-                for (; i < numOutputs; i++)
+                for (; i < m_numOutputs; i++)
                 {
-                    ctx.outputs[i] += weights[j * numOutputs + i] * inputValue;
+                    ctx.outputs[i] += weights[j * m_numOutputs + i] * inputValue;
                 }
             }
         }
@@ -108,27 +109,28 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
     const Context& context = static_cast<const Context&>(ctx);
     const Values& weights = m_weightsStorage->m_weights;
 
+    ASSERT(!gradients.m_isSparse);
     ASSERT(ctx.outputs.size() == GetNumOutputs());
     ASSERT(ctx.inputs.size() == GetNumInputs());
     ASSERT(ctx.inputError.size() == GetNumInputs());
 
     std::fill(ctx.inputError.begin(), ctx.inputError.end(), 0.0f);
 
-    if (numOutputs > 1)
+    if (m_numOutputs > 1)
     {
-        for (size_t i = 0; i < numOutputs; i++)
+        for (size_t i = 0; i < m_numOutputs; i++)
         {
             const float activationError = error[i];
             if (std::abs(activationError) > c_activationEpsilon)
             {
-                for (size_t j = 0; j < numInputs; j++)
+                for (size_t j = 0; j < m_numInputs; j++)
                 {
-                    ctx.inputError[j] += weights[j * numOutputs + i] * activationError;
+                    ctx.inputError[j] += weights[j * m_numOutputs + i] * activationError;
                 }
             }
         }
 
-        for (size_t j = 0; j < numInputs; j++)
+        for (size_t j = 0; j < m_numInputs; j++)
         {
             // compute weights gradient
             const float inputValue = context.inputs[j];
@@ -136,8 +138,8 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
             {
                 size_t i = 0;
 #ifdef USE_AVX
-                float* gradientPtr = gradients.m_values.data() + j * numOutputs;
-                for (; i + 8 <= numOutputs; i += 8)
+                float* gradientPtr = gradients.m_values.data() + j * m_numOutputs;
+                for (; i + 8 <= m_numOutputs; i += 8)
                 {
                     _mm256_store_ps(gradientPtr + i,
                         _mm256_fmadd_ps(_mm256_set1_ps(inputValue),
@@ -145,9 +147,9 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
                             _mm256_load_ps(gradientPtr + i)));
                 }
 #endif // USE_AVX
-                for (; i < numOutputs; i++)
+                for (; i < m_numOutputs; i++)
                 {
-                    gradients.m_values[j * numOutputs + i] += inputValue * error[i];
+                    gradients.m_values[j * m_numOutputs + i] += inputValue * error[i];
                 }
                 gradients.m_dirty[j] = true;
             }
@@ -165,7 +167,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
             const float* inputPtr = context.inputs.data();
             const float* weightsPtr = weights.data();
             const __m256 activationErrorV = _mm256_set1_ps(activationError);
-            for (; j + 8 <= numInputs; j += 8)
+            for (; j + 8 <= m_numInputs; j += 8)
             {
                 // compute input gradient
                 _mm256_store_ps(inputGradientPtr + j,
@@ -180,7 +182,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
                         _mm256_load_ps(gradientPtr + j)));
             }
 #endif // USE_AVX
-            for (; j < numInputs; j++)
+            for (; j < m_numInputs; j++)
             {
                 // compute input gradient
                 ctx.inputError[j] += weights[j] * activationError;
@@ -196,19 +198,19 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
     {
         size_t i = 0;
 #ifdef USE_AVX
-        float* gradientPtr = gradients.m_values.data() + numInputs * numOutputs;
-        for (; i + 8 <= numOutputs; i += 8)
+        float* gradientPtr = gradients.m_values.data() + m_numInputs * m_numOutputs;
+        for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(gradientPtr + i,
                 _mm256_add_ps(_mm256_load_ps(error.data() + i),
                     _mm256_load_ps(gradientPtr + i)));
         }
 #endif // USE_AVX
-        for (; i < numOutputs; i++)
+        for (; i < m_numOutputs; i++)
         {
-            gradients.m_values[numInputs * numOutputs + i] += error[i];
+            gradients.m_values[m_numInputs * m_numOutputs + i] += error[i];
         }
-        gradients.m_dirty[numInputs] = true;
+        gradients.m_dirty[m_numInputs] = true;
     }
 }
 

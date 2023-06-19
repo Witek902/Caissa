@@ -1,8 +1,10 @@
 #include "Network.hpp"
 #include "WeightsStorage.hpp"
+#include "Gradient.hpp"
 #include "FullyConnectedNode.hpp"
 #include "SparseBinaryInputNode.hpp"
 #include "SparseInputNode.hpp"
+#include "ConcatenationNode.hpp"
 #include "../ThreadPool.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"
 #include "../../backend/Waitable.hpp"
@@ -23,48 +25,41 @@ static constexpr float c_activationEpsilon = 1.0e-15f;
 
 namespace nn {
 
-void TrainingVector::CombineSparseInputs()
+void NodeInput::Validate() const
 {
-    std::sort(sparseInputs.begin(), sparseInputs.end(),
-              [](const ActiveFeature& a, const ActiveFeature& b) { return a.index < b.index; });
-
-    // TODO this is O(N^2)
-    for (size_t i = 0; ; )
+    if (mode == InputMode::Full)
     {
-        if (i + 1 >= sparseInputs.size()) break;
-
-        if (sparseInputs[i].index == sparseInputs[i + 1].index)
+        for (uint32_t i = 0; i < numFeatures; ++i)
         {
-            // combine with next and erase
-            sparseInputs[i].value += sparseInputs[i + 1].value;
-            sparseInputs.erase(sparseInputs.begin() + i + 1);
-        }
-        else if (std::abs(sparseInputs[i].value) < c_activationEpsilon)
-        {
-            // remove zero inputs
-            sparseInputs.erase(sparseInputs.begin() + i);
-        }
-        else
-        {
-            i++;
+            ASSERT(!std::isnan(floatValues[i]));
         }
     }
-}
-
-void TrainingVector::Validate() const
-{
-    if (inputMode == InputMode::Full)
+    else if (mode == InputMode::SparseBinary)
     {
+        // check for duplicates
+        for (uint32_t i = 0; i < numFeatures; ++i)
+        {
+            for (uint32_t j = i + 1; j < numFeatures; ++j)
+            {
+                ASSERT(binaryFeatures[i] != binaryFeatures[j]);
+            }
+        }
     }
-    else if (inputMode == InputMode::SparseBinary)
+    else if (mode == InputMode::Sparse)
     {
-        std::vector<uint16_t> sortedInputs = sparseBinaryInputs;
-        std::sort(sortedInputs.begin(), sortedInputs.end());
-        ASSERT(std::adjacent_find(sortedInputs.begin(), sortedInputs.end()) == sortedInputs.end());
-    }
-    else if (inputMode == InputMode::Sparse)
-    {
+        // check for duplicates
+        for (uint32_t i = 0; i < numFeatures; ++i)
+        {
+            for (uint32_t j = i + 1; j < numFeatures; ++j)
+            {
+                ASSERT(floatFeatures[i].index != floatFeatures[j].index);
+            }
+        }
 
+        for (uint32_t i = 0; i < numFeatures; ++i)
+        {
+            ASSERT(!std::isnan(floatFeatures[i].value));
+        }
     }
     else
     {
@@ -77,11 +72,57 @@ void NeuralNetworkRunContext::Init(const NeuralNetwork& network)
     ASSERT(network.m_nodes.size() > 0);
 
     nodeContexts.resize(network.m_nodes.size());
+    inputErrors.resize(network.m_nodes.size(), nullptr);
 
     // initialize context for each node
     for (size_t i = 0; i < network.m_nodes.size(); ++i)
     {
-        nodeContexts[i] = std::unique_ptr<INodeContext>(network.m_nodes[i]->CreateContext());
+        ASSERT(!nodeContexts[i]);
+        nodeContexts[i].reset(network.m_nodes[i]->CreateContext());
+    }
+
+    // assign input error pointers for each node
+    for (size_t i = 0; i < network.m_nodes.size(); ++i)
+    {
+        const NodePtr& node = network.m_nodes[i];
+
+        if (node->IsConcatenation())
+        {
+            const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
+            ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*nodeContexts[i]);
+
+            bool input0Found = false;
+            bool input1Found = false;
+
+            // match node context inputs to the outputs of the previous nodes
+            for (size_t j = 0; j < i; j++)
+            {
+                if (network.m_nodes[j].get() == concatNode->GetInputNode(0))
+                {
+                    ASSERT(inputErrors[j] == nullptr);
+                    inputErrors[j] = &nodeCtx.inputError;
+                    input0Found = true;
+                }
+                else if (network.m_nodes[j].get() == concatNode->GetInputNode(1))
+                {
+                    ASSERT(inputErrors[j] == nullptr);
+                    inputErrors[j] = &nodeCtx.secondaryInputError;
+                    input1Found = true;
+                }
+            }
+
+            ASSERT(input0Found);
+            ASSERT(input1Found);
+        }
+    }
+
+    // this assumes that the network is a linear chain
+    for (size_t i = 0; i < network.m_nodes.size(); ++i)
+    {
+        if (!inputErrors[i] && i + 1 < network.m_nodes.size())
+        {
+            inputErrors[i] = &(nodeContexts[i + 1]->inputError);
+        }
     }
 
     tempValues.resize(network.m_nodes.back()->GetNumOutputs());
@@ -274,17 +315,50 @@ void NeuralNetwork::Init(const std::vector<NodePtr>& nodes)
     m_nodes = nodes;
 }
 
-const Values& NeuralNetwork::Run(const InputDesc& input, NeuralNetworkRunContext& ctx) const
+const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunContext& ctx) const
 {
     ASSERT(m_nodes.size() == ctx.nodeContexts.size());
 
-    // first node
+    for (size_t i = 0; i < m_nodes.size(); i++)
     {
-        const NodePtr& node = m_nodes.front();
+        const NodePtr& node = m_nodes[i];
+
         // TODO variants
         //const uint32_t variantIndex = node.variants.size() > 0 ? input.variant : 0u;
-        switch (input.mode)
+
+        if (node->IsConcatenation())
         {
+            const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
+            ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*ctx.nodeContexts[i]);
+
+            bool input0Found = false;
+            bool input1Found = false;
+
+            // match node context inputs to the outputs of the previous nodes
+            for (size_t j = 0; j < i; j++)
+            {
+                if (m_nodes[j].get() == concatNode->GetInputNode(0))
+                {
+                    nodeCtx.inputs = ctx.nodeContexts[j]->outputs;
+                    input0Found = true;
+                }
+                else if (m_nodes[j].get() == concatNode->GetInputNode(1))
+                {
+                    nodeCtx.secondaryInputs = ctx.nodeContexts[j]->outputs;
+                    input1Found = true;
+                }
+            }
+
+            ASSERT(input0Found);
+            ASSERT(input1Found);
+        }
+        else if (node->IsInputNode())
+        {
+            ASSERT(i < MaxInputNodes);
+            const NodeInput& input = inputDesc.inputs[i];
+
+            switch (input.mode)
+            {
             case InputMode::Full:
             {
                 FullyConnectedNode::Context& nodeCtx = static_cast<FullyConnectedNode::Context&>(*ctx.nodeContexts.front());
@@ -310,18 +384,18 @@ const Values& NeuralNetwork::Run(const InputDesc& input, NeuralNetworkRunContext
                 ASSERT(input.numFeatures <= node->GetNumInputs());
                 nodeCtx.sparseInputs = std::span<const SparseBinaryInputNode::IndexType>(input.binaryFeatures, input.numFeatures);
                 node->Run(nodeCtx);
+                break;
+            }
+            default:
+                ASSERT(false);
             }
         }
-    }
-    
-    for (size_t i = 1; i < m_nodes.size(); i++)
-    {
-        // TODO variants
-        //const uint32_t variantIndex = m_nodes[i].variants.size() > 0 ? input.variant : 0u;
+        else
+        {
+            ctx.nodeContexts[i]->inputs = ctx.nodeContexts[i - 1]->outputs;
+        }
 
-        ctx.nodeContexts[i]->inputs = ctx.nodeContexts[i - 1]->outputs;
-
-        m_nodes[i]->Run(*ctx.nodeContexts[i]);
+        node->Run(*ctx.nodeContexts[i]);
     }
 
     return ctx.nodeContexts.back()->outputs;
@@ -332,17 +406,34 @@ NeuralNetworkTrainer::NeuralNetworkTrainer()
     m_perThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
 }
 
-size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
+void NeuralNetworkTrainer::Init(NeuralNetwork& network)
 {
+    // create a list of weights storages used by the network
+    for (size_t i = 0; i < network.m_nodes.size(); ++i)
+    {
+        if (network.m_nodes[i]->IsTrainable())
+        {
+            WeightsStorage* weightsStorage = static_cast<const ITrainableNode*>(network.m_nodes[i].get())->GetWeightsStorage();
+            ASSERT(weightsStorage);
+
+            // check if the storage is already in the list
+            if (std::find(m_weightsStorages.begin(), m_weightsStorages.end(), weightsStorage) == m_weightsStorages.end())
+            {
+                m_weightsStorages.push_back(weightsStorage);
+            }
+        }
+    }
+
     for (PerThreadData& threadData : m_perThreadData)
     {
         threadData.runContext.Init(network);
-        threadData.gradients.resize(network.m_nodes.size());
-        for (size_t i = 0; i < network.m_nodes.size(); ++i)
-        {
-            const NodePtr& node = network.m_nodes[i];
 
-            // TODO gradients
+        threadData.perWeightsStorageGradients.resize(m_weightsStorages.size());
+        for (size_t i = 0; i < m_weightsStorages.size(); ++i)
+        {
+            const WeightsStorage* weightsStorage = m_weightsStorages[i];
+
+            // TODO variants
             /*
             threadData.gradients[i].resize(node.variants.size());
             for (size_t j = 0; j < node.variants.size(); ++j)
@@ -351,10 +442,30 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
             }
             */
 
-            threadData.gradients[i].Init(node->GetNumInputs(), node->GetNumOutputs());
+            threadData.perWeightsStorageGradients[i].Init(weightsStorage->m_inputSize, weightsStorage->m_outputSize, weightsStorage->m_isSparse);
+        }
+
+        // assign per-node gradients pointers
+        threadData.perNodeGradients.resize(network.m_nodes.size(), nullptr);
+        for (size_t i = 0; i < network.m_nodes.size(); ++i)
+        {
+            if (network.m_nodes[i]->IsTrainable())
+            {
+                WeightsStorage* weightsStorage = static_cast<const ITrainableNode*>(network.m_nodes[i].get())->GetWeightsStorage();
+                ASSERT(weightsStorage);
+
+                // find the index of the storage in the list
+                const auto it = std::find(m_weightsStorages.begin(), m_weightsStorages.end(), weightsStorage);
+                ASSERT(it != m_weightsStorages.end());
+                const size_t storageIdx = std::distance(m_weightsStorages.begin(), it);
+                threadData.perNodeGradients[i] = &threadData.perWeightsStorageGradients[storageIdx];
+            }
         }
     }
+}
 
+size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
+{
     const size_t numBatches = (trainingSet.size() + params.batchSize - 1) / params.batchSize;
 
     for (size_t batchIdx = 0; batchIdx < numBatches; ++batchIdx)
@@ -363,7 +474,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
         {
             PerThreadData& threadData = m_perThreadData[threadIdx];
 
-            // TODO gradients
+            // TODO variants
             /*
             // at the first node, clear only dirty gradients (most of them are zero)
             for (auto& layerGradients : threadData.gradients.front())
@@ -381,17 +492,25 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
             }
             */
 
+            // clear gradients
+            for (Gradients& gradients : threadData.perWeightsStorageGradients)
+            {
+                gradients.Clear();
+            }
+
+            /*
             // at the first node, clear only dirty gradients (most of them are zero)
-            threadData.gradients.front().Clear();
+            threadData.perWeightsStorageGradients.front().Clear();
 
             // reset accumulated gradients for remaining m_nodes
             for (size_t i = 1; i < network.m_nodes.size(); ++i)
             {
                 if (network.m_nodes[i]->IsTrainable())
                 {
-                    std::fill(threadData.gradients[i].m_values.begin(), threadData.gradients[i].m_values.end(), 0.0f);
+                    std::fill(threadData.perWeightsStorageGradients[i].m_values.begin(), threadData.perWeightsStorageGradients[i].m_values.end(), 0.0f);
                 }
             }
+            */
         };
 
         const auto backpropagateFunc = [this, &network, &trainingSet, batchIdx, params](uint32_t threadIdx, uint32_t indexInBatch)
@@ -404,52 +523,36 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
 
             const TrainingVector& vec = trainingSet[vecIndex];
 
-            NeuralNetwork::InputDesc inputDesc;
-            inputDesc.mode = vec.inputMode;
-            inputDesc.variant = vec.networkVariant;
-
-            switch (vec.inputMode)
-            {
-            case InputMode::Full:
-                inputDesc.floatValues = vec.inputs.data();
-                break;
-            case InputMode::Sparse:
-                inputDesc.numFeatures = (uint32_t)vec.sparseInputs.size();
-                inputDesc.floatFeatures = vec.sparseInputs.data();
-                break;
-            case InputMode::SparseBinary:
-                inputDesc.numFeatures = (uint32_t)vec.sparseBinaryInputs.size();
-                inputDesc.binaryFeatures = vec.sparseBinaryInputs.data(); break;
-                break;
-            default:
-                DEBUG_BREAK();
-            }
-
-            ctx.tempValues = network.Run(inputDesc, ctx);
+            ctx.tempValues = network.Run(vec.input, ctx);
 
             // train last node
             {
                 const float errorScale = 2.0f;
 
                 // compute gradient (error derivative)
-                if (vec.outputMode == OutputMode::Single)
+                if (vec.output.mode == OutputMode::Single)
                 {
-                    ASSERT(ctx.tempValues.size() == 1);
-                    ctx.tempValues[0] = errorScale * (ctx.tempValues[0] - vec.singleOutput);
+                    ASSERT(ctx.tempValues.size() == 1u);
+                    ctx.tempValues[0] = errorScale * (ctx.tempValues[0] - vec.output.singleValue);
                 }
-                else
+                else if (vec.output.mode == OutputMode::Full)
                 {
+                    ASSERT(ctx.tempValues.size() == vec.output.numValues);
                     for (size_t i = 0; i < ctx.tempValues.size(); i++)
                     {
                         // compute gradient (error derivative)
-                        ctx.tempValues[i] = errorScale * (ctx.tempValues[i] - vec.outputs[i]);
+                        ctx.tempValues[i] = errorScale * (ctx.tempValues[i] - vec.output.floatValues[i]);
                     }
+                }
+                else
+                {
+                    ASSERT(false);
                 }
 
                 network.m_nodes.back()->Backpropagate(
                     ctx.tempValues,
                     *ctx.nodeContexts.back(),
-                    perThreadData.gradients.back());
+                    *perThreadData.perNodeGradients.back());
             }
 
             // train hidden m_nodes
@@ -458,25 +561,22 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 for (size_t i = network.m_nodes.size() - 1; i-- > 0; )
                 {
                     const NodePtr& node = network.m_nodes[i];
+                    ASSERT(node);
+                    ASSERT(ctx.inputErrors[i]);
+
                     //const uint32_t layerVariantIndex = inputDesc.variant < node.variants.size() ? inputDesc.variant : 0;
-                    node->Backpropagate(ctx.nodeContexts[i + 1]->inputError,
+                    node->Backpropagate(*ctx.inputErrors[i],
                                         *ctx.nodeContexts[i],
-                                        perThreadData.gradients[i]);
+                                        *perThreadData.perNodeGradients[i]);
                 }
             }
         };
 
         const auto updateWeightsFunc = [this, batchIdx, &network, params]()
         {
-            for (size_t nodeIndex = 0; nodeIndex < network.m_nodes.size(); ++nodeIndex)
+            for (size_t weightsStorageIndex = 0; weightsStorageIndex < m_weightsStorages.size(); ++weightsStorageIndex)
             {
-                const NodePtr& node = network.m_nodes[nodeIndex];
-                ASSERT(node);
-
-                if (!node->IsTrainable()) continue;
-
-                const ITrainableNode* trainableNode = static_cast<const ITrainableNode*>(node.get());
-                WeightsStorage* weightsStorage = trainableNode->GetWeightsStorage();
+                WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
                 ASSERT(weightsStorage);
 
                 WeightsStorage::WeightsUpdateOptions updateOptions;
@@ -485,34 +585,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 updateOptions.learningRate = params.learningRate;
                 updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
 
-                float weightQuantizationScale = 0.0f, biasQuantizationScale = 0.0f;
-                float weightRange = 0.0f, biasRange = 0.0f;
-                if (nodeIndex == 0) // input node
-                {
-                    weightQuantizationScale = InputLayerWeightQuantizationScale;
-                    biasQuantizationScale = InputLayerBiasQuantizationScale;
-                    // divide by number of active input features to avoid accumulator overflow
-                    weightRange = (float)std::numeric_limits<FirstLayerWeightType>::max() / 32;
-                    biasRange = (float)std::numeric_limits<FirstLayerBiasType>::max() / 32;
-                }
-                else if (nodeIndex + 1 == network.m_nodes.size()) // output node
-                {
-                    weightQuantizationScale = OutputLayerWeightQuantizationScale;
-                    biasQuantizationScale = OutputLayerBiasQuantizationScale;
-                    weightRange = (float)std::numeric_limits<LastLayerWeightType>::max();
-                    biasRange = (float)std::numeric_limits<LastLayerBiasType>::max();
-                }
-                else // hidden node
-                {
-                    weightQuantizationScale = HiddenLayerWeightQuantizationScale;
-                    biasQuantizationScale = HiddenLayerBiasQuantizationScale;
-                    weightRange = (float)std::numeric_limits<HiddenLayerWeightType>::max();
-                    biasRange = (float)std::numeric_limits<HiddenLayerBiasType>::max();
-                }
-
-                updateOptions.weightsRange = params.clampWeights ? (weightRange / weightQuantizationScale) : 10000.0f;
-                updateOptions.biasRange = params.clampWeights ? (biasRange / biasQuantizationScale) : 10000.0f;
-
+                // TODO variants
                 //for (size_t variantIdx = 0; variantIdx < node.variants.size(); ++variantIdx)
                 {
                     // accumulate gradients from all per-thread gradients
@@ -520,35 +593,15 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                         MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
                         for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                         {
-                            Gradients& targetGradients = m_perThreadData.front().gradients[nodeIndex];
-                            Gradients& srcGradients = m_perThreadData[threadIdx].gradients[nodeIndex];
+                            Gradients& targetGradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+                            Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
 
-                            const size_t numGradients = targetGradients.m_values.size();
-                            ASSERT(srcGradients.m_values.size() == numGradients);
-
-                            if (nodeIndex == 0)
-                            {
-                                // in case of first node copy only dirty gradients
-                                targetGradients.Accumulate(srcGradients);
-                            }
-                            else
-                            {
-                                const size_t numInputs = node->GetNumInputs();
-                                for (size_t i = 0; i <= numInputs; ++i)
-                                {
-                                    targetGradients.m_dirty[i] = true;
-                                }
-
-                                for (size_t i = 0; i < numGradients; ++i)
-                                {
-                                    targetGradients.m_values[i] += srcGradients.m_values[i];
-                                }
-                            }
+                            targetGradients.Accumulate(srcGradients);
                         }
                     }
 
                     // TODO variants
-                    const auto& gradients = m_perThreadData.front().gradients[nodeIndex];
+                    const auto& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
                     switch (params.optimizer)
                     {
                     case Optimizer::Adadelta:

@@ -28,6 +28,7 @@ public:
     void Run(INodeContext& ctx) const override;
     void Backpropagate(const Values& error, INodeContext& ctx, Gradients& gradients) const override;
     virtual InputMode GetInputMode() const override { return InputMode::SparseBinary; }
+    virtual bool IsInputNode() const override { return true; }
 };
 
 } // namespace nn

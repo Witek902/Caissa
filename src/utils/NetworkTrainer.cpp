@@ -4,6 +4,7 @@
 
 #include "net/SparseBinaryInputNode.hpp"
 #include "net/FullyConnectedNode.hpp"
+#include "net/ConcatenationNode.hpp"
 #include "net/ActivationNode.hpp"
 #include "net/WeightsStorage.hpp"
 
@@ -32,10 +33,10 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 8 * 1024;
-static const uint32_t cMaxBatchSize = 8 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cMinBatchSize = 4096;
+static const uint32_t cMaxBatchSize = 4096;
 static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // 704
 static const uint32_t cNumVariants = 16;
 
@@ -49,6 +50,7 @@ public:
         , m_trainingLog("training.log")
     {
         m_trainingSet.resize(cNumTrainingVectorsPerIteration);
+        m_trainingSetCopy.resize(cNumTrainingVectorsPerIteration);
         m_validationPerThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
     }
 
@@ -90,6 +92,7 @@ private:
 #endif // USE_PACKED_NET
 
     std::vector<TrainingEntry> m_trainingSet;
+    std::vector<TrainingEntry> m_trainingSetCopy; // copy, because training set generation runs in parallel with training
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
     alignas(CACHELINE_SIZE)
@@ -110,7 +113,44 @@ private:
 
 void NetworkTrainer::InitNetwork()
 {
-    const uint32_t hiddenLayerSize = 1536;
+    const uint32_t hiddenLayerSize = 768;
+
+    nn::WeightsStoragePtr featureTransformerWeights = std::make_shared<nn::WeightsStorage>(cNumNetworkInputs, hiddenLayerSize);
+    featureTransformerWeights->m_isSparse = true;
+    // divide by number of active input features to avoid accumulator overflow
+    featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 64 / nn::InputLayerWeightQuantizationScale;
+    featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 64 / nn::InputLayerBiasQuantizationScale;
+
+    //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * hiddenLayerSize, 1);
+    //layer1Weights->m_weightsRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerWeightQuantizationScale;
+    //layer1Weights->m_biasRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerBiasQuantizationScale;
+
+    nn::WeightsStoragePtr lastLayerWeights = std::make_shared<nn::WeightsStorage>(2u * hiddenLayerSize, 1);
+    lastLayerWeights->m_weightsRange = (float)std::numeric_limits<nn::LastLayerWeightType>::max() / nn::OutputLayerWeightQuantizationScale;
+    lastLayerWeights->m_biasRange = (float)std::numeric_limits<nn::LastLayerBiasType>::max() / nn::OutputLayerBiasQuantizationScale;
+
+    featureTransformerWeights->Init();
+    lastLayerWeights->Init();
+
+    nn::NodePtr inputNodeA = std::make_shared<nn::SparseBinaryInputNode>(cNumNetworkInputs, hiddenLayerSize, featureTransformerWeights);
+    nn::NodePtr inputNodeB = std::make_shared<nn::SparseBinaryInputNode>(cNumNetworkInputs, hiddenLayerSize, featureTransformerWeights);
+    nn::NodePtr concatenationNode = std::make_shared<nn::ConcatenationNode>(inputNodeA, inputNodeB);
+    nn::NodePtr activationNode = std::make_shared<nn::ActivationNode>(concatenationNode, nn::ActivationFunction::CReLU);
+    nn::NodePtr hiddenNode = std::make_shared<nn::FullyConnectedNode>(activationNode, 2u * hiddenLayerSize, 1, lastLayerWeights);
+    nn::NodePtr outputNode = std::make_shared<nn::ActivationNode>(hiddenNode, nn::ActivationFunction::Sigmoid);
+
+    std::vector<nn::NodePtr> nodes =
+    {
+        inputNodeA,
+        inputNodeB,
+        concatenationNode,
+        activationNode,
+        hiddenNode,
+        outputNode,
+    };
+
+    /*
+    const uint32_t hiddenLayerSize = 1024;
 
     nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(cNumNetworkInputs, hiddenLayerSize);
     nn::WeightsStoragePtr layer2Weights = std::make_shared<nn::WeightsStorage>(hiddenLayerSize, 1);
@@ -130,9 +170,10 @@ void NetworkTrainer::InitNetwork()
         hiddenNode,
         outputNode,
     };
+    */
 
     m_network.Init(nodes);
-
+    m_trainer.Init(m_network);
     m_runCtx.Init(m_network);
 
     for (size_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -169,7 +210,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.9f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
+        const float wdlLambda = 1.0f; // std::lerp(0.95f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -193,9 +234,9 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
             score = std::lerp(wdlScore, score, tbLambda);
         }
 
-        PositionToTrainingVector(pos, outEntries[i].trainingVector);
-        outEntries[i].trainingVector.singleOutput = score;
-        outEntries[i].trainingVector.networkVariant = GetNetworkVariant(pos);
+        PositionToTrainingEntry(pos, outEntries[i]);
+        outEntries[i].output = score;
+        outEntries[i].networkVariant = GetNetworkVariant(pos);
         outEntries[i].pos = pos;
     }
 
@@ -227,13 +268,12 @@ void NetworkTrainer::Validate(size_t iteration)
         {
             ValidationPerThreadData& threadData = m_validationPerThreadData[ctx.threadId];
 
-            const float expectedValue = m_trainingSet[i].trainingVector.singleOutput;
+            const TrainingEntry& entry = m_trainingSetCopy[i];
 
-            const ScoreType psqtValue = Evaluate(m_trainingSet[i].pos, nullptr, false);
-            const ScoreType evalValue = Evaluate(m_trainingSet[i].pos);
-            
-            const std::vector<uint16_t>& features = m_trainingSet[i].trainingVector.sparseBinaryInputs;
-            const uint32_t variant = m_trainingSet[i].trainingVector.networkVariant;
+            const float expectedValue = entry.output;
+
+            const ScoreType psqtValue = Evaluate(entry.pos, nullptr, false);
+            const ScoreType evalValue = Evaluate(entry.pos);
 
 #ifdef USE_PACKED_NET
             const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size(), variant);
@@ -241,16 +281,22 @@ void NetworkTrainer::Validate(size_t iteration)
             const float nnPackedValue = EvalToExpectedGameScore(scaledPackedNetworkOutput /*+ psqtValue / 100.0f*/);
 #endif // USE_PACKED_NET
 
-            nn::NeuralNetwork::InputDesc inputDesc(features);
-            inputDesc.variant = variant;
-            //inputDesc.lastLayerBias = psqtValue / (float)c_nnOutputToCentiPawns;
+            nn::InputDesc inputDesc;
+            inputDesc.variant = entry.networkVariant;
+            inputDesc.inputs[0].mode = nn::InputMode::SparseBinary;
+            inputDesc.inputs[0].binaryFeatures = entry.whiteFeatures.data();
+            inputDesc.inputs[0].numFeatures = static_cast<uint32_t>(entry.whiteFeatures.size());
+            inputDesc.inputs[1].mode = nn::InputMode::SparseBinary;
+            inputDesc.inputs[1].binaryFeatures = entry.blackFeatures.data();
+            inputDesc.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
+
             const nn::Values& networkOutput = m_network.Run(inputDesc, threadData.networkRunContext);
             const float nnValue = networkOutput[0];
 
             if (i + 1 == cNumValidationVectorsPerIteration)
             {
                 std::cout
-                    << m_trainingSet[i].pos.ToFEN() << std::endl << m_trainingSet[i].pos.Print() << std::endl
+                    << entry.pos.ToFEN() << std::endl << entry.pos.Print() << std::endl
                     << "True Score:     " << expectedValue << " (" << ExpectedGameScoreToInternalEval(expectedValue) << ")" << std::endl
                     << "NN eval:        " << nnValue << " (" << ExpectedGameScoreToInternalEval(nnValue) << ")" << std::endl
 #ifdef USE_PACKED_NET
@@ -352,14 +398,19 @@ void NetworkTrainer::Validate(size_t iteration)
         for (const char* testPosition : s_testPositions)
         {
             Position pos(testPosition);
-            nn::TrainingVector vec;
-            PositionToTrainingVector(pos, vec);
 
-            //const ScoreType psqtValue = Evaluate(pos, nullptr, false);
+            TrainingEntry entry;
+            PositionToTrainingEntry(pos, entry);
 
-            nn::NeuralNetwork::InputDesc inputDesc(vec.sparseBinaryInputs);
+            nn::InputDesc inputDesc;
             inputDesc.variant = GetNetworkVariant(pos);
-            //inputDesc.lastLayerBias = psqtValue / (float)c_nnOutputToCentiPawns;
+            inputDesc.inputs[0].mode = nn::InputMode::SparseBinary;
+            inputDesc.inputs[0].binaryFeatures = entry.whiteFeatures.data();
+            inputDesc.inputs[0].numFeatures = static_cast<uint32_t>(entry.whiteFeatures.size());
+            inputDesc.inputs[1].mode = nn::InputMode::SparseBinary;
+            inputDesc.inputs[1].binaryFeatures = entry.blackFeatures.data();
+            inputDesc.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
+
             const float nnValue = m_network.Run(inputDesc, m_runCtx)[0];
 
 #ifdef USE_PACKED_NET
@@ -385,7 +436,7 @@ void NetworkTrainer::Validate(size_t iteration)
 
 /*
 template<typename WeightType, typename BiasType>
-static void PackLayerWeights(const INode& node, uint32_t variantIdx, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
+static void PackWeights(const nn::WeightsStorage& weights, uint32_t variantIdx, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
 {
     const INode::Variant& variant = node.variants[variantIdx];
 
@@ -561,7 +612,20 @@ bool NetworkTrainer::Train()
         // use validation set from previous iteration as training set in the current one
         ParallelFor("PrepareBatch", cNumTrainingVectorsPerIteration, [&batch, this](const TaskContext&, uint32_t i)
         {
-            batch[i] = m_trainingSet[i].trainingVector;
+            m_trainingSetCopy[i] = m_trainingSet[i];
+
+            const TrainingEntry& entry = m_trainingSetCopy[i];
+
+            nn::TrainingVector& trainingVector = batch[i];
+            trainingVector.input.variant = entry.networkVariant;
+            trainingVector.output.mode = nn::OutputMode::Single;
+            trainingVector.output.singleValue = entry.output;
+            trainingVector.input.inputs[0].mode = nn::InputMode::SparseBinary;
+            trainingVector.input.inputs[0].numFeatures = static_cast<uint32_t>(entry.whiteFeatures.size());
+            trainingVector.input.inputs[0].binaryFeatures = entry.whiteFeatures.data();
+            trainingVector.input.inputs[1].mode = nn::InputMode::SparseBinary;
+            trainingVector.input.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
+            trainingVector.input.inputs[1].binaryFeatures = entry.blackFeatures.data();
         });
 
         // validation vectors generation can be done in parallel with training

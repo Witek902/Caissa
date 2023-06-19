@@ -24,6 +24,8 @@
 #include <fstream>
 #include <limits.h>
 
+#if 0
+
 #define USE_TEMPO
 #define USE_BISHOP_PAIR
 #define USE_PSQT
@@ -825,3 +827,5 @@ bool TrainPieceSquareTables()
 
     return true;
 }
+
+#endif

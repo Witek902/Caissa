@@ -6,6 +6,11 @@
 
 namespace nn {
 
+// how many nodes in the network can be input nodes
+static constexpr uint32_t MaxInputNodes = 2;
+
+struct Gradients;
+
 enum class InputMode : uint8_t
 {
     Unknown,
@@ -16,8 +21,10 @@ enum class InputMode : uint8_t
 
 enum class OutputMode : uint8_t
 {
+    Unknown,
     Single,
-    Array,
+    Full,
+    // TODO sparse
 };
 
 class INodeContext
@@ -25,30 +32,21 @@ class INodeContext
 public:
     INodeContext(uint32_t numOutputs) : outputs(numOutputs) {}
 
-    virtual ~INodeContext() = default;
+    virtual ~INodeContext()
+    {
+
+    }
 
     std::span<const float> inputs;
-    Values outputs;
-    Values inputError; // used for learning
-};
-
-struct Gradients
-{
-    uint32_t            m_numInputs;
-    uint32_t            m_numOutputs;
-    Values              m_values;
-    std::vector<bool>   m_dirty;
-
-    void Init(uint32_t numInputs, uint32_t numOutputs);
-    void Clear();
-    void Accumulate(Gradients& rhs);
+    Values outputs;                     // saved by INode::Run()
+    Values inputError;                  // saved by INode::Backpropagate()
 };
 
 // Base class for all node types
 class INode
 {
 public:
-    INode(uint32_t inputSize, uint32_t outputSize);
+    INode(uint32_t numInputs, uint32_t numOutputs);
     virtual ~INode() = default;
 
     virtual INodeContext* CreateContext() = 0;
@@ -56,15 +54,17 @@ public:
     virtual void Backpropagate(const Values& error, INodeContext& ctx, Gradients& gradients) const = 0;
 
     virtual bool IsTrainable() const { return false; }
+    virtual bool IsInputNode() const { return false; }
+    virtual bool IsConcatenation() const { return false; }
 
     virtual InputMode GetInputMode() const { return InputMode::Unknown; }
 
-    uint32_t GetNumInputs() const { return numInputs; }
-    uint32_t GetNumOutputs() const { return numOutputs; }
+    INLINE uint32_t GetNumInputs() const { return m_numInputs; }
+    INLINE uint32_t GetNumOutputs() const { return m_numOutputs; }
 
 protected:
-    uint32_t numInputs;
-    uint32_t numOutputs;
+    uint32_t m_numInputs;
+    uint32_t m_numOutputs;
 };
 
 using NodePtr = std::shared_ptr<INode>;
