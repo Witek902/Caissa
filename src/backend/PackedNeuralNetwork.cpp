@@ -354,6 +354,18 @@ INLINE static int32_t m256_hadd(__m256i a)
 
 #endif // USE_AVX2
 
+#ifdef USE_AVX512
+
+INLINE static int32_t m512_hadd(__m512i v)
+{
+    const __m256i sum256 = _mm256_add_epi32(
+        _mm512_castsi512_si256(v),
+        _mm512_extracti64x4_epi64(v, 1));
+    return m256_hadd(sum256);
+}
+
+#endif // USE_AVX512
+
 #ifdef USE_SSE4
 
 INLINE static void m128_add_dpbusd_epi32(__m128i& acc, __m128i a, __m128i b)
@@ -667,8 +679,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         sum = _mm512_add_epi32(sum, _mm512_madd_epi16(in, w));
     }
 
-    // add 8 int32s horizontally
-    val += _mm512_reduce_add_epi32(sum);
+    // add 16 int32s horizontally
+    val += m512_hadd(sum);
 
 #elif defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 16;
