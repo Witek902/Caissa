@@ -17,19 +17,20 @@ namespace nn {
 
 class NeuralNetwork;
 
-static constexpr uint32_t CurrentVersion = 3;
+static constexpr uint32_t CurrentVersion = 4;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t AccumulatorSize = 1536;
+static constexpr uint32_t NumNetworkInputs = 32 + 64 + 10 * 64; // 736
+static constexpr uint32_t AccumulatorSize = 1024;
 static constexpr uint32_t OutputSize = 1;
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
 static constexpr float ActivationRangeScaling = 127;
 
-static constexpr int32_t WeightScaleShift = 6;
+static constexpr int32_t WeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 
-static constexpr int32_t OutputScaleShift = 10;
+static constexpr int32_t OutputScaleShift = 8;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
 static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
@@ -56,13 +57,11 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
     void Refresh(
         const FirstLayerWeightType* weights, const FirstLayerBiasType* biases,
-        uint32_t numInputs,
         uint32_t numActiveFeatures, const uint16_t* activeFeatures);
 
     void Update(
         const Accumulator& source,
         const FirstLayerWeightType* weights,
-        uint32_t numInputs,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,
         uint32_t numRemovedFeatures, const uint16_t* removedFeatures);
 };
@@ -104,13 +103,14 @@ public:
     // save to file
     bool Save(const char* filePath) const;
 
-    // Calculate neural network output based on incrementally updated accumulator
-    int32_t Run(const Accumulator& accumulator, uint32_t variant) const;
+    // Calculate neural network output based on incrementally updated accumulators
+    int32_t Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const;
 
     // Calculate neural network output based on input
-    int32_t Run(const uint16_t* activeInputIndices, const uint32_t numActiveInputs, uint32_t variant) const;
+    int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const;
 
     INLINE uint32_t GetNumInputs() const { return header.layerSizes[0]; }
+    INLINE uint32_t GetAccumulatorSize() const { return header.layerSizes[1] / 2; }
     INLINE uint32_t GetLayerSize(uint32_t i) const { return header.layerSizes[i]; }
 
     void GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const;
@@ -121,7 +121,7 @@ public:
     }
     INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
     {
-        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + header.layerSizes[0] * header.layerSizes[1]);
+        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + GetNumInputs() * GetAccumulatorSize());
     }
 
     template<typename T>

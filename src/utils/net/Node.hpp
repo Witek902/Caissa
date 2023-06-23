@@ -34,9 +34,9 @@ public:
 
     virtual ~INodeContext()
     {
-
     }
 
+    uint32_t variant = 0;
     std::span<const float> inputs;
     Values outputs;                     // saved by INode::Run()
     Values inputError;                  // saved by INode::Backpropagate()

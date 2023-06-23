@@ -41,17 +41,6 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         numInputs += 64;
     };
 
-    const auto writePawnFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask) INLINE_LAMBDA
-    {
-        // pawns cannot stand on first or last rank
-        constexpr Bitboard mask = ~(Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>());
-        (bitboard & mask).Iterate([&](uint32_t square) INLINE_LAMBDA
-        {
-            outFeatures[numFeatures++] = (uint16_t)(numInputs + (square ^ bitFlipMask) - 8u);
-        });
-        numInputs += 48;
-    };
-
     const auto& whites = pos.GetSide(perspective);
     const auto& blacks = pos.GetSide(GetOppositeColor(perspective));
 
@@ -76,7 +65,7 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         bitFlipMask |= 0b111000;
     }
 
-    writePawnFeatures(whites.pawns, bitFlipMask);
+    writePieceFeatures(whites.pawns, bitFlipMask);
     writePieceFeatures(whites.knights, bitFlipMask);
     writePieceFeatures(whites.bishops, bitFlipMask);
     writePieceFeatures(whites.rooks, bitFlipMask);
@@ -90,7 +79,7 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         numInputs += 32;
     }
 
-    writePawnFeatures(blacks.pawns, bitFlipMask);
+    writePieceFeatures(blacks.pawns, bitFlipMask);
     writePieceFeatures(blacks.knights, bitFlipMask);
     writePieceFeatures(blacks.bishops, bitFlipMask);
     writePieceFeatures(blacks.rooks, bitFlipMask);
@@ -102,52 +91,51 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         numInputs += 64;
     }
 
-    ASSERT(numInputs == (32 + 64 + 2 * (4 * 64 + 48)));
+    ASSERT(numInputs == (32 + 64 + 10 * 64));
 
     return numFeatures;
 }
 
 INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color pieceColor, const Square square, const Position& pos, const Color perspective)
 {
-    // this must match Position::ToSparseFeaturesVector !!!
+    // this must match PositionToFeaturesVector !!!
 
     Square relativeSquare = square;
     {
         // flip the according to the perspective
-        if (perspective == Color::Black) relativeSquare = relativeSquare.FlippedRank();
+        if (perspective == Color::Black)
+        {
+            relativeSquare = relativeSquare.FlippedRank();
+        }
 
         // flip the according to the king placement
-        const Bitboard leftFilesMask = 0x0F0F0F0F0F0F0F0Full;
-        if ((pos.GetCurrentSide().king & leftFilesMask) == 0) relativeSquare = relativeSquare.FlippedFile();
+        if (pos.GetSide(perspective).GetKingSquare().File() >= 4)
+        {
+            relativeSquare = relativeSquare.FlippedFile();
+        }
     }
 
     uint32_t index;
-    if (piece == Piece::Pawn)
-    {
-        ASSERT(relativeSquare.Rank() > 0 && relativeSquare.Rank() < 7);
-        index = relativeSquare.Index() - 8;
-    }
-    else if (piece == Piece::King && pieceColor == perspective)
+    if (piece == Piece::King && pieceColor == perspective)
     {
         // king of the side-to-move is a special case - it can be only present on A-D files
         ASSERT(relativeSquare.File() < 4);
         const uint32_t kingSquareIndex = 4 * relativeSquare.Rank() + relativeSquare.File();
         ASSERT(kingSquareIndex < 32);
 
-        index = 48 + 4 * 64; // skip other pieces
+        index = 5 * 64; // skip other pieces
         index += kingSquareIndex;
     }
     else
     {
-        index = 48; // skip pawns
-        index += ((uint32_t)piece - (uint32_t)Piece::Knight) * 64;
+        index = ((uint32_t)piece - (uint32_t)Piece::Pawn) * 64;
         index += relativeSquare.Index();
     }
 
     // opposite-side pieces features are in second half
-    if (pieceColor != perspective) index += 32 + 48 + 4 * 64;
+    if (pieceColor != perspective) index += 32 + 5 * 64;
 
-    ASSERT(index < (32 + 64 + 2 * (4 * 64 + 48)));
+    ASSERT(index < (32 + 64 + 10 * 64));
 
     return index;
 }
@@ -162,12 +150,17 @@ static uint32_t GetNetworkVariant(const Position& pos)
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
 {
-    const uint32_t maxFeatures = 64;
-    uint16_t features[maxFeatures];
-    const uint32_t numFeatures = PositionToFeaturesVector(pos, features, pos.GetSideToMove());
-    ASSERT(numFeatures <= maxFeatures);
+    constexpr uint32_t maxFeatures = 64;
 
-    return network.Run(features, numFeatures, GetNetworkVariant(pos));
+    uint16_t ourFeatures[maxFeatures];
+    const uint32_t numOurFeatures = PositionToFeaturesVector(pos, ourFeatures, pos.GetSideToMove());
+    ASSERT(numOurFeatures <= maxFeatures);
+
+    uint16_t theirFeatures[maxFeatures];
+    const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, GetOppositeColor(pos.GetSideToMove()));
+    ASSERT(numTheirFeatures <= maxFeatures);
+
+    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
 }
 
 
@@ -277,6 +270,20 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
             }
         }
 
+        // if same feature is present on both lists, it cancels out
+        for (uint32_t i = 0; i < numAddedFeatures; ++i)
+        {
+            for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+            {
+                if (addedFeatures[i] == removedFeatures[j])
+                {
+                    addedFeatures[i--] = addedFeatures[--numAddedFeatures];
+                    removedFeatures[j--] = removedFeatures[--numRemovedFeatures];
+                    break;
+                }
+            }
+        }
+
 #ifdef VALIDATE_NETWORK_OUTPUT
         {
             const uint32_t maxFeatures = 64;
@@ -315,7 +322,6 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
             accumulator.Update(
                 prevAccumNode->nnContext->accumulator[(uint32_t)perspective],
                 network.GetAccumulatorWeights(),
-                network.GetNumInputs(),
                 numAddedFeatures, addedFeatures,
                 numRemovedFeatures, removedFeatures);
         }
@@ -333,7 +339,6 @@ static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const Node
 
         accumulator.Refresh(
             network.GetAccumulatorWeights(), network.GetAccumulatorBiases(),
-            network.GetNumInputs(),
             numFeatures, features);
     }
 
@@ -360,77 +365,84 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     }
 #endif // VALIDATE_NETWORK_OUTPUT
 
-    const Color perspective = node.position.GetSideToMove();
-    nn::Accumulator& accumulator = node.nnContext->accumulator[(uint32_t)perspective];
-
-    uint32_t updateCost = 0;
     const uint32_t refreshCost = node.position.GetNumPieces();
 
-    const Bitboard leftFilesMask = 0x0F0F0F0F0F0F0F0Full;
-    const bool currKingSide = (static_cast<const Position&>(node.position).GetCurrentSide().king & leftFilesMask) != 0;
-
-    // find closest parent node that has valid accumulator
-    const NodeInfo* prevAccumNode = nullptr;
-    for (const NodeInfo* nodePtr = &node; nodePtr != nullptr; nodePtr = nodePtr->parentNode)
+    constexpr Bitboard leftFilesMask = 0x0F0F0F0F0F0F0F0Full;
+    const bool kingSides[2] =
     {
-        ASSERT(nodePtr->nnContext);
+        (static_cast<const Position&>(node.position).Whites().king & leftFilesMask) != 0,
+        (static_cast<const Position&>(node.position).Blacks().king & leftFilesMask) != 0
+    };
 
-        updateCost += nodePtr->nnContext->numDirtyPieces;
-        if (updateCost > refreshCost)
+    for (const Color perspective : { Color::White, Color::Black })
+    {
+        // find closest parent node that has valid accumulator
+        uint32_t updateCost = 0;
+        const NodeInfo* prevAccumNode = nullptr;
+        for (const NodeInfo* nodePtr = &node; nodePtr != nullptr; nodePtr = nodePtr->parentNode)
         {
-            // update cost higher than refresh cost, incremental update not worth it
-            break;
-        }
+            ASSERT(nodePtr->nnContext);
 
-        // if king moved across left and right files boundary, then we need to refresh the accumulator
-        const bool prevKingSide = (static_cast<const Position&>(nodePtr->position).GetCurrentSide().king & leftFilesMask) != 0;
-        if (currKingSide != prevKingSide)
-        {
-            break;
-        }
+            updateCost += nodePtr->nnContext->numDirtyPieces;
+            if (updateCost > refreshCost)
+            {
+                // update cost higher than refresh cost, incremental update not worth it
+                break;
+            }
 
-        if (!nodePtr->nnContext->accumDirty[(uint32_t)perspective])
-        {
-            // found parent node with valid accumulator
-            prevAccumNode = nodePtr;
-            break;
-        }
+            // if the king moved across left and right files boundary, then we need to refresh the accumulator
+            const bool kingSide = (static_cast<const Position&>(nodePtr->position).GetSide(perspective).king & leftFilesMask) != 0;
+            if (kingSide != kingSides[(uint32_t)perspective])
+            {
+                break;
+            }
+
+            if (!nodePtr->nnContext->accumDirty[(uint32_t)perspective])
+            {
+                // found parent node with valid accumulator
+                prevAccumNode = nodePtr;
+                break;
+            }
 
 #ifdef USE_ACCUMULATOR_CACHE
-        // check if accumulator was cached
-        if (nodePtr->height < 8 &&
-            ReadAccumulatorCache(nodePtr->position,
-                                 perspective,
-                                 nodePtr->nnContext->accumulator[(uint32_t)perspective]))
-        {
-            // found parent node with valid (cached) accumulator
-            nodePtr->nnContext->accumDirty[(uint32_t)perspective] = false;
-            prevAccumNode = nodePtr;
-            break;
-        }
+            // check if accumulator was cached
+            if (nodePtr->height < 8 &&
+                ReadAccumulatorCache(nodePtr->position,
+                    perspective,
+                    nodePtr->nnContext->accumulator[(uint32_t)perspective]))
+            {
+                // found parent node with valid (cached) accumulator
+                nodePtr->nnContext->accumDirty[(uint32_t)perspective] = false;
+                prevAccumNode = nodePtr;
+                break;
+            }
 #endif // USE_ACCUMULATOR_CACHE
+        }
+
+        if (prevAccumNode == &node)
+        {
+            // do nothing - accumulator is already up to date (was cached)
+        }
+        else if (node.parentNode && prevAccumNode &&
+            node.parentNode != prevAccumNode &&
+            node.parentNode->nnContext->accumDirty[(uint32_t)perspective])
+        {
+            // two-stage update:
+            // if parent node has invalid accumulator, update it first
+            // this way, sibling nodes can reuse parent's accumulator
+            UpdateAccumulator(network, prevAccumNode, *node.parentNode, perspective);
+            UpdateAccumulator(network, node.parentNode, node, perspective);
+        }
+        else
+        {
+            UpdateAccumulator(network, prevAccumNode, node, perspective);
+        }
     }
 
-    if (prevAccumNode == &node)
-    {
-        // do nothing - accumulator is already up to date (was cached)
-    }
-    else if (node.parentNode &&
-        node.parentNode != prevAccumNode &&
-        node.parentNode->nnContext->accumDirty[(uint32_t)perspective])
-    {
-        // two-stage update:
-        // if parent node has invalid accumulator, update it first
-        // this way, sibling nodes can reuse parent's accumulator
-        UpdateAccumulator(network, prevAccumNode, *node.parentNode, perspective);
-        UpdateAccumulator(network, node.parentNode, node, perspective);
-    }
-    else
-    {
-        UpdateAccumulator(network, prevAccumNode, node, perspective);
-    }
+    const nn::Accumulator& ourAccumulator = node.nnContext->accumulator[(uint32_t)node.position.GetSideToMove()];
+    const nn::Accumulator& theirAccumulator = node.nnContext->accumulator[(uint32_t)GetOppositeColor(node.position.GetSideToMove())];
 
-    const int32_t nnOutput = network.Run(accumulator, GetNetworkVariant(node.position));
+    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {

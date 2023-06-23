@@ -30,14 +30,15 @@
 #include <limits.h>
 #include <cmath>
 
+#define USE_PACKED_NET
+
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
-static const uint32_t cMinBatchSize = 4096;
+static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 32 * 1024;
+static const uint32_t cMinBatchSize = 32;
 static const uint32_t cMaxBatchSize = 4096;
-static const uint32_t cNumNetworkInputs = 32 + 9 * 64 + 2 * 48; // 704
 static const uint32_t cNumVariants = 16;
 
 
@@ -84,6 +85,9 @@ private:
 
     TrainingDataLoader m_dataLoader;
 
+    nn::WeightsStoragePtr m_featureTransformerWeights;
+    nn::WeightsStoragePtr m_lastLayerWeights;
+
     nn::NeuralNetwork m_network;
     nn::NeuralNetworkRunContext m_runCtx;
     nn::NeuralNetworkTrainer m_trainer;
@@ -109,34 +113,35 @@ private:
     bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries);
 
     void Validate(size_t iteration);
+    bool PackNetwork();
 };
 
 void NetworkTrainer::InitNetwork()
 {
-    const uint32_t hiddenLayerSize = 768;
+    const uint32_t accumulatorSize = nn::AccumulatorSize;
 
-    nn::WeightsStoragePtr featureTransformerWeights = std::make_shared<nn::WeightsStorage>(cNumNetworkInputs, hiddenLayerSize);
-    featureTransformerWeights->m_isSparse = true;
+    m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::NumNetworkInputs, accumulatorSize, 1);
+    m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 64 / nn::InputLayerWeightQuantizationScale;
-    featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 64 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 64 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 64 / nn::InputLayerBiasQuantizationScale;
 
-    //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * hiddenLayerSize, 1);
+    //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * accumulatorSize, 1);
     //layer1Weights->m_weightsRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerWeightQuantizationScale;
     //layer1Weights->m_biasRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerBiasQuantizationScale;
 
-    nn::WeightsStoragePtr lastLayerWeights = std::make_shared<nn::WeightsStorage>(2u * hiddenLayerSize, 1);
-    lastLayerWeights->m_weightsRange = (float)std::numeric_limits<nn::LastLayerWeightType>::max() / nn::OutputLayerWeightQuantizationScale;
-    lastLayerWeights->m_biasRange = (float)std::numeric_limits<nn::LastLayerBiasType>::max() / nn::OutputLayerBiasQuantizationScale;
+    m_lastLayerWeights = std::make_shared<nn::WeightsStorage>(2u * accumulatorSize, 1, cNumVariants);
+    m_lastLayerWeights->m_weightsRange = (float)std::numeric_limits<nn::LastLayerWeightType>::max() / nn::OutputLayerWeightQuantizationScale;
+    m_lastLayerWeights->m_biasRange = (float)std::numeric_limits<nn::LastLayerBiasType>::max() / nn::OutputLayerBiasQuantizationScale;
 
-    featureTransformerWeights->Init();
-    lastLayerWeights->Init();
+    m_featureTransformerWeights->Init();
+    m_lastLayerWeights->Init();
 
-    nn::NodePtr inputNodeA = std::make_shared<nn::SparseBinaryInputNode>(cNumNetworkInputs, hiddenLayerSize, featureTransformerWeights);
-    nn::NodePtr inputNodeB = std::make_shared<nn::SparseBinaryInputNode>(cNumNetworkInputs, hiddenLayerSize, featureTransformerWeights);
+    nn::NodePtr inputNodeA = std::make_shared<nn::SparseBinaryInputNode>(nn::NumNetworkInputs, accumulatorSize, m_featureTransformerWeights);
+    nn::NodePtr inputNodeB = std::make_shared<nn::SparseBinaryInputNode>(nn::NumNetworkInputs, accumulatorSize, m_featureTransformerWeights);
     nn::NodePtr concatenationNode = std::make_shared<nn::ConcatenationNode>(inputNodeA, inputNodeB);
     nn::NodePtr activationNode = std::make_shared<nn::ActivationNode>(concatenationNode, nn::ActivationFunction::CReLU);
-    nn::NodePtr hiddenNode = std::make_shared<nn::FullyConnectedNode>(activationNode, 2u * hiddenLayerSize, 1, lastLayerWeights);
+    nn::NodePtr hiddenNode = std::make_shared<nn::FullyConnectedNode>(activationNode, 2u * accumulatorSize, 1, m_lastLayerWeights);
     nn::NodePtr outputNode = std::make_shared<nn::ActivationNode>(hiddenNode, nn::ActivationFunction::Sigmoid);
 
     std::vector<nn::NodePtr> nodes =
@@ -148,29 +153,6 @@ void NetworkTrainer::InitNetwork()
         hiddenNode,
         outputNode,
     };
-
-    /*
-    const uint32_t hiddenLayerSize = 1024;
-
-    nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(cNumNetworkInputs, hiddenLayerSize);
-    nn::WeightsStoragePtr layer2Weights = std::make_shared<nn::WeightsStorage>(hiddenLayerSize, 1);
-
-    layer1Weights->Init();
-    layer2Weights->Init();
-
-    nn::NodePtr inputNode = std::make_shared<nn::SparseBinaryInputNode>(cNumNetworkInputs, hiddenLayerSize, layer1Weights);
-    nn::NodePtr activationNode = std::make_shared<nn::ActivationNode>(inputNode, nn::ActivationFunction::CReLU);
-    nn::NodePtr hiddenNode = std::make_shared<nn::FullyConnectedNode>(activationNode, hiddenLayerSize, 1, layer2Weights);
-    nn::NodePtr outputNode = std::make_shared<nn::ActivationNode>(hiddenNode, nn::ActivationFunction::Sigmoid);
-
-    std::vector<nn::NodePtr> nodes =
-    {
-        inputNode,
-        activationNode,
-        hiddenNode,
-        outputNode,
-    };
-    */
 
     m_network.Init(nodes);
     m_trainer.Init(m_network);
@@ -276,9 +258,12 @@ void NetworkTrainer::Validate(size_t iteration)
             const ScoreType evalValue = Evaluate(entry.pos);
 
 #ifdef USE_PACKED_NET
-            const int32_t packedNetworkOutput = m_packedNet.Run(features.data(), (uint32_t)features.size(), variant);
+            const int32_t packedNetworkOutput = m_packedNet.Run(
+                entry.whiteFeatures.data(), static_cast<uint32_t>(entry.whiteFeatures.size()),
+                entry.blackFeatures.data(), static_cast<uint32_t>(entry.blackFeatures.size()),
+                entry.networkVariant);
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
-            const float nnPackedValue = EvalToExpectedGameScore(scaledPackedNetworkOutput /*+ psqtValue / 100.0f*/);
+            const float nnPackedValue = EvalToExpectedGameScore(scaledPackedNetworkOutput);
 #endif // USE_PACKED_NET
 
             nn::InputDesc inputDesc;
@@ -413,13 +398,41 @@ void NetworkTrainer::Validate(size_t iteration)
 
             const float nnValue = m_network.Run(inputDesc, m_runCtx)[0];
 
+            // measure accumulator error
+            for (uint32_t accumIndex = 0; accumIndex < 2; ++accumIndex)
+            {
+                nn::Accumulator stmAccum;
+                stmAccum.Refresh(
+                    m_packedNet.GetAccumulatorWeights(), m_packedNet.GetAccumulatorBiases(),
+                    inputDesc.inputs[accumIndex].numFeatures, inputDesc.inputs[accumIndex].binaryFeatures);
+
+                float accumError = 0.0f;
+                float maxError = 0.0f;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                {
+                    const float error = m_runCtx.nodeContexts[accumIndex]->outputs[i] - (float)stmAccum.values[i] / nn::ActivationRangeScaling;
+                    ASSERT(fabsf(error) < 0.2f);
+                    accumError += Sqr(error);
+                    maxError = std::max(maxError, fabsf(error));
+                }
+                accumError = sqrtf(accumError / nn::AccumulatorSize);
+            }
+
 #ifdef USE_PACKED_NET
-            const int32_t packedNetworkOutput = m_packedNet.Run(vec.sparseBinaryInputs.data(), (uint32_t)vec.sparseBinaryInputs.size(), inputDesc.variant);
+            const int32_t packedNetworkOutput = m_packedNet.Run(
+                inputDesc.inputs[0].binaryFeatures, inputDesc.inputs[0].numFeatures,
+                inputDesc.inputs[1].binaryFeatures, inputDesc.inputs[1].numFeatures,
+                inputDesc.variant);
             const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
-            const float nnPackedValue = scaledPackedNetworkOutput /* + psqtValue / 100.0f*/;
 #endif // USE_PACKED_NET
 
-            std::cout << "TEST " << testPosition << "  " << ExpectedGameScoreToInternalEval(nnValue) << std::endl;
+            std::cout
+                << "TEST " << testPosition
+                << "  nn=" << ExpectedGameScoreToInternalEval(nnValue)
+#ifdef USE_PACKED_NET
+                << "  pnn=" << scaledPackedNetworkOutput
+#endif // USE_PACKED_NET
+                << std::endl;
         }
     }
 
@@ -434,19 +447,18 @@ void NetworkTrainer::Validate(size_t iteration)
     m_network.PrintStats();
 }
 
-/*
 template<typename WeightType, typename BiasType>
 static void PackWeights(const nn::WeightsStorage& weights, uint32_t variantIdx, WeightType* outWeights, BiasType* outBiases, float weightScale, float biasScale, bool transpose)
 {
-    const INode::Variant& variant = node.variants[variantIdx];
+    const nn::WeightsStorage::Variant& variant = weights.m_variants[variantIdx];
 
     // weights
-    for (uint32_t j = 0; j < node.numInputs; j++)
+    for (uint32_t j = 0; j < weights.m_inputSize; j++)
     {
         uint32_t i = 0;
 #ifdef USE_AVX2
-        const float* weightsPtr = variant.weights.data() + j * node.numOutputs;
-        for (; i + 8 < node.numOutputs; i += 8)
+        const float* weightsPtr = variant.m_weights.data() + j * weights.m_outputSize;
+        for (; i + 8 < weights.m_outputSize; i += 8)
         {
             const __m256i quantizedWeights =
                 _mm256_cvtps_epi32(_mm256_round_ps(
@@ -455,51 +467,47 @@ static void PackWeights(const nn::WeightsStorage& weights, uint32_t variantIdx, 
 
             if (transpose)
             {
-                outWeights[node.numOutputs * j + (i + 0)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
-                outWeights[node.numOutputs * j + (i + 1)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
-                outWeights[node.numOutputs * j + (i + 2)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
-                outWeights[node.numOutputs * j + (i + 3)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
-                outWeights[node.numOutputs * j + (i + 4)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
-                outWeights[node.numOutputs * j + (i + 5)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
-                outWeights[node.numOutputs * j + (i + 6)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
-                outWeights[node.numOutputs * j + (i + 7)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
+                outWeights[weights.m_outputSize * j + (i + 0)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
+                outWeights[weights.m_outputSize * j + (i + 1)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
+                outWeights[weights.m_outputSize * j + (i + 2)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
+                outWeights[weights.m_outputSize * j + (i + 3)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
+                outWeights[weights.m_outputSize * j + (i + 4)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
+                outWeights[weights.m_outputSize * j + (i + 5)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
+                outWeights[weights.m_outputSize * j + (i + 6)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
+                outWeights[weights.m_outputSize * j + (i + 7)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
             }
             else
             {
-                outWeights[node.numInputs * (i + 0) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
-                outWeights[node.numInputs * (i + 1) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
-                outWeights[node.numInputs * (i + 2) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
-                outWeights[node.numInputs * (i + 3) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
-                outWeights[node.numInputs * (i + 4) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
-                outWeights[node.numInputs * (i + 5) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
-                outWeights[node.numInputs * (i + 6) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
-                outWeights[node.numInputs * (i + 7) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
+                outWeights[weights.m_inputSize * (i + 0) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
+                outWeights[weights.m_inputSize * (i + 1) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
+                outWeights[weights.m_inputSize * (i + 2) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
+                outWeights[weights.m_inputSize * (i + 3) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
+                outWeights[weights.m_inputSize * (i + 4) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
+                outWeights[weights.m_inputSize * (i + 5) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
+                outWeights[weights.m_inputSize * (i + 6) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
+                outWeights[weights.m_inputSize * (i + 7) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
             }
         }
 #endif // USE_AVX2
 
-        for (; i < node.numOutputs; i++)
+        for (; i < weights.m_outputSize; i++)
         {
-            const float weight = variant.weights[j * node.numOutputs + i];
+            const float weight = variant.m_weights[j * weights.m_outputSize + i];
             const int32_t quantizedWeight = (int32_t)std::round(weight * weightScale);
             ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
             ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
 
             if (transpose)
-            {
-                outWeights[node.numOutputs * j + i] = (WeightType)quantizedWeight;
-            }
+                outWeights[weights.m_outputSize * j + i] = (WeightType)quantizedWeight;
             else
-            {
-                outWeights[node.numInputs * i + j] = (WeightType)quantizedWeight;
-            }
+                outWeights[weights.m_inputSize * i + j] = (WeightType)quantizedWeight;
         }
     }
 
     // biases
-    for (uint32_t i = 0; i < node.numOutputs; i++)
+    for (uint32_t i = 0; i < weights.m_outputSize; i++)
     {
-        const float bias = variant.weights[node.numInputs * node.numOutputs + i];
+        const float bias = variant.m_weights[weights.m_inputSize * weights.m_outputSize + i];
         const int32_t quantizedBias = (int32_t)std::round(bias * biasScale);
         ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
         ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
@@ -507,68 +515,61 @@ static void PackWeights(const nn::WeightsStorage& weights, uint32_t variantIdx, 
     }
 }
 
-static bool PackNetwork(const nn::NeuralNetwork& net, PackedNeuralNetwork& outNetwork) const
+bool NetworkTrainer::PackNetwork()
 {
-    ASSERT(nodes.size() <= PackedNeuralNetwork::MaxNumLayers);
-    ASSERT(nodes[0].numOutputs == AccumulatorSize);
-    ASSERT(nodes[1].numInputs == AccumulatorSize);
-    ASSERT(nodes.back().numOutputs == 1);
-    ASSERT(nodes.front().variants.size() == 1);
-
     {
-        std::vector<uint32_t> layerSizes, layerVariants;
-        for (const INode& node : nodes)
-        {
-            layerSizes.push_back(node.numInputs);
-            layerVariants.push_back((uint32_t)node.variants.size());
-        }
+        const std::vector<uint32_t> layerSizes = { nn::NumNetworkInputs, 2u * nn::AccumulatorSize };
+        const std::vector<uint32_t> layerVariants = { 1, cNumVariants };
 
-        if (!outNetwork.Resize(layerSizes, layerVariants))
+        if (!m_packedNet.Resize(layerSizes, layerVariants))
         {
             return false;
         }
     }
 
-    // first node
-    PackLayerWeights(nodes.front(),
+    // feature transformer
+    PackWeights(
+        *m_featureTransformerWeights,
         0,
-        const_cast<FirstLayerWeightType*>(outNetwork.GetAccumulatorWeights()),
-        const_cast<FirstLayerBiasType*>(outNetwork.GetAccumulatorBiases()),
-        InputLayerWeightQuantizationScale,
-        InputLayerBiasQuantizationScale,
+        const_cast<nn::FirstLayerWeightType*>(m_packedNet.GetAccumulatorWeights()),
+        const_cast<nn::FirstLayerBiasType*>(m_packedNet.GetAccumulatorBiases()),
+        nn::InputLayerWeightQuantizationScale,
+        nn::InputLayerBiasQuantizationScale,
         true);
 
-    // hidden nodes
+    /*
+    // hidden layers
     for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
     {
         for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
         {
-            PackLayerWeights(nodes[i],
+            PackWeights(nodes[i],
                 variantIdx,
-                const_cast<HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
-                const_cast<HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
-                HiddenLayerWeightQuantizationScale,
-                HiddenLayerBiasQuantizationScale,
+                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
+                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
+                nn::HiddenLayerWeightQuantizationScale,
+                nn::HiddenLayerBiasQuantizationScale,
                 false);
         }
     }
+    */
 
-    // last node
-    const uint32_t lastLayerIndex = (uint32_t)nodes.size() - 1;
-    for (uint32_t variantIdx = 0; variantIdx < nodes.back().variants.size(); ++variantIdx)
+    // last layer
+    const uint32_t lastLayerIndex = 1;
+    for (uint32_t variantIdx = 0; variantIdx < cNumVariants; ++variantIdx)
     {
-        PackLayerWeights(nodes.back(),
+        PackWeights(
+            *m_lastLayerWeights,
             variantIdx,
-            const_cast<LastLayerWeightType*>(outNetwork.GetLayerWeights<LastLayerWeightType>(lastLayerIndex, variantIdx)),
-            const_cast<LastLayerBiasType*>(outNetwork.GetLayerBiases<LastLayerBiasType>(lastLayerIndex, variantIdx)),
-            OutputLayerWeightQuantizationScale,
-            OutputLayerBiasQuantizationScale,
+            const_cast<nn::LastLayerWeightType*>(m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx)),
+            const_cast<nn::LastLayerBiasType*>(m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx)),
+            nn::OutputLayerWeightQuantizationScale,
+            nn::OutputLayerBiasQuantizationScale,
             false);
     }
 
     return true;
 }
-*/
 
 static float CosineAnnealingLR(float phase, float baseLR)
 {
@@ -595,7 +596,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float baseLearningRate = 0.75f * expf(-0.00005f * (float)iteration);
+        const float baseLearningRate = 1.0f * expf(-0.00001f * (float)iteration);
         //const float learningRate = CosineAnnealingLR((float)iteration / (float)200.0f, baseLearningRate);
         const float learningRate = baseLearningRate;
 
@@ -641,7 +642,7 @@ bool NetworkTrainer::Train()
             {
                 nn::TrainParams params;
                 params.iteration = epoch;
-                params.batchSize = std::min<size_t>(cMinBatchSize + iteration * cMinBatchSize, cMaxBatchSize);
+                params.batchSize = iteration < 100 ? cMinBatchSize : cMaxBatchSize;
                 params.learningRate = learningRate;
                 params.weightDecay = 1.0e-6f;
 
@@ -652,7 +653,7 @@ bool NetworkTrainer::Train()
         waitable.Wait();
 
 #ifdef USE_PACKED_NET
-        m_network.ToPackedNetwork(m_packedNet);
+        PackNetwork();
         ASSERT(m_packedNet.IsValid());
 #endif // USE_PACKED_NET
 
@@ -669,7 +670,7 @@ bool NetworkTrainer::Train()
         std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << std::endl;
         std::cout << "Training rate :   " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl << std::endl;
 
-        if (iteration % 10 == 0)
+        if (iteration % 50 == 0)
         {
             const std::string name = "eval";
             m_network.Save((name + ".nn").c_str());

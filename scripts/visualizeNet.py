@@ -3,7 +3,7 @@ import struct
 import math 
 from math import ceil
 
-filePath = "../build/src/utils/eval.pnn"
+filePath = "../build_avx2/src/utils/eval.pnn"
 marginSize = 1
 headerSize = 64
 
@@ -25,53 +25,53 @@ def inputIndexToCoords(index):
     offset = 8 + marginSize
 
     # white pawns
-    if index < 48:
-        return (0 * offset + index % 8, 1 + index / 8)
+    if index < 64:
+        return (0 * offset + index % 8, index / 8)
     # white knights
-    if index < 48 + 64:
-        index = index - (48)
+    if index < 2 * 64:
+        index = index - (1 * 64)
         return (1 * offset + index % 8, index / 8)
     # white bishops
-    if index < 48 + 2 * 64:
-        index = index - (48 + 1 * 64)
+    if index < 3 * 64:
+        index = index - (2 * 64)
         return (2 * offset + index % 8, index / 8)
     # white rooks
-    if index < 48 + 3 * 64:
-        index = index - (48 + 2 * 64)
+    if index < 4 * 64:
+        index = index - (3 * 64)
         return (3 * offset + index % 8, index / 8)
     # white queens
-    if index < 48 + 4 * 64:
-        index = index - (48 + 3 * 64)
+    if index < 5 * 64:
+        index = index - (4 * 64)
         return (4 * offset + index % 8, index / 8)
     # white king
-    if index < 48 + 4 * 64 + 32:
-        index = index - (48 + 4 * 64)
+    if index < 5 * 64 + 32:
+        index = index - (5 * 64)
         return (5 * offset + index % 4, index / 4)
     
-    index = index - (48 + 4 * 64 + 32)
+    index = index - (5 * 64 + 32)
 
     # black pawns
-    if index < 48:
-        return (6 * offset + index % 8, 1 + index / 8)
+    if index < 64:
+        return (6 * offset + index % 8, index / 8)
     # black knights
-    if index < 48 + 64:
-        index = index - (48)
+    if index < 2 * 64:
+        index = index - (1 * 64)
         return (7 * offset + index % 8, index / 8)
     # black bishops
-    if index < 48 + 2 * 64:
-        index = index - (48 + 1 * 64)
+    if index < 3 * 64:
+        index = index - (2 * 64)
         return (8 * offset + index % 8, index / 8)
     # black rooks
-    if index < 48 + 3 * 64:
-        index = index - (48 + 2 * 64)
+    if index < 4 * 64:
+        index = index - (3 * 64)
         return (9 * offset + index % 8, index / 8)
     # black queens
-    if index < 48 + 4 * 64:
-        index = index - (48 + 3 * 64)
+    if index < 5 * 64:
+        index = index - (4 * 64)
         return (10 * offset + index % 8, index / 8)
     # black king
-    if index < 48 + 5 * 64:
-        index = index - (48 + 4 * 64)
+    if index < 6 * 64:
+        index = index - (5 * 64)
         return (11 * offset + index % 8, index / 8)
     
     return (0,0)
@@ -93,17 +93,19 @@ def main():
     print("Layer 1 size: " + str(layerSize1))
     print("Layer 1 variants: " + str(layerVariants1))
 
-    rawViewImg = Image.new('RGB', (layerSize1,layerSize0), color='black')
+    accumulatorSize = int(layerSize1 / 2)
+
+    rawViewImg = Image.new('RGB', (accumulatorSize,layerSize0), color='black')
     rawViewPixels = rawViewImg.load()
 
     imgWidth = (12 + layerVariants1) * (8 + marginSize) + marginSize
-    imgHeight = layerSize1 * (8 + marginSize) + marginSize
+    imgHeight = accumulatorSize * (8 + marginSize) + marginSize
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
     for i in range(layerSize0):
-        for j in range(layerSize1):
-            dataOffset = headerSize + 2 * (layerSize1 * i + j)
+        for j in range(accumulatorSize):
+            dataOffset = headerSize + 2 * (accumulatorSize * i + j)
             (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
             color = weightToColor(weight)
             (x,y) = inputIndexToCoords(i)
@@ -111,18 +113,18 @@ def main():
             boardViewPixels[marginSize + x, marginSize + j * (8 + marginSize) + y] = color
 
     # last layer weights
-    lastLayerWeightsDataOffset = dataOffset = headerSize + roundUpToMultiple(2 * (layerSize1 * (layerSize0 + 1)), 64)
-    for variant in range(layerVariants1):
-        for j in range(layerSize1):
-            dataOffset = lastLayerWeightsDataOffset + variant * roundUpToMultiple(2 * layerSize1 + 4, 64) + 2 * j
-            (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
-            color = weightToColor(weight)
-
-            xOffset = marginSize + (12 + variant) * (8 + marginSize)
-            yOffset = marginSize + j * (8 + marginSize)
-            for x in range(8):
-                for y in range(8):
-                    boardViewPixels[xOffset + x, yOffset + y] = color
+    #lastLayerWeightsDataOffset = dataOffset = headerSize + roundUpToMultiple(2 * (layerSize1 * (layerSize0 + 1)), 64)
+    #for variant in range(layerVariants1):
+    #    for j in range(layerSize1):
+    #        dataOffset = lastLayerWeightsDataOffset + variant * roundUpToMultiple(2 * layerSize1 + 4, 64) + 2 * j
+    #        (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
+    #        color = weightToColor(weight)
+    #
+    #        xOffset = marginSize + (12 + variant) * (8 + marginSize)
+    #        yOffset = marginSize + j * (8 + marginSize)
+    #        for x in range(8):
+    #            for y in range(8):
+    #                boardViewPixels[xOffset + x, yOffset + y] = color
 
     rawViewImg.save('rawView.png')
     boardViewImg.save('boardView.png')

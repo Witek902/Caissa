@@ -7,7 +7,7 @@
 #include "Square.hpp"
 #include "PackedNeuralNetwork.hpp"
 
-// #define NN_ACCUMULATOR_STATS
+//#define NN_ACCUMULATOR_STATS
 
 struct DirtyPiece
 {

@@ -26,8 +26,8 @@ bool TestNetwork()
     const uint32_t numNetworkInputs = 2;
     const uint32_t hiddenLayerSize = 64;
 
-    nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(numNetworkInputs, hiddenLayerSize);
-    nn::WeightsStoragePtr layer2Weights = std::make_shared<nn::WeightsStorage>(hiddenLayerSize, 1);
+    nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(numNetworkInputs, hiddenLayerSize, 1);
+    nn::WeightsStoragePtr layer2Weights = std::make_shared<nn::WeightsStorage>(hiddenLayerSize, 1, 1);
 
     layer1Weights->Init();
     layer2Weights->Init();
