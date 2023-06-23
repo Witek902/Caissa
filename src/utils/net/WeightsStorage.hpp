@@ -9,7 +9,7 @@ struct Gradients;
 struct WeightsStorage
 {
 public:
-    WeightsStorage(uint32_t inputSize, uint32_t outputSize);
+    WeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants);
 
     void Init();
 
@@ -28,15 +28,21 @@ public:
     uint32_t m_outputSize = 0;
     bool m_isSparse = false;
 
-    Values m_weights;
     Values m_weightsMask;
 
     float m_weightsRange = 10.0f;
     float m_biasRange = 10.0f;
 
-    // used for learning
-    Values m_gradientMoment1;
-    Values m_gradientMoment2;
+    struct Variant
+    {
+        Values m_weights;
+
+        // used for learning
+        Values m_gradientMoment1;
+        Values m_gradientMoment2;
+    };
+
+    std::vector<Variant> m_variants;
 };
 
 using WeightsStoragePtr = std::shared_ptr<WeightsStorage>;

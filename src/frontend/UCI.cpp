@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.9.4"
+#define VersionNumber "1.10"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -640,6 +640,16 @@ void UniversalChessInterface::SearchThreadEntryFunc()
     }
 }
 
+#ifdef NN_ACCUMULATOR_STATS
+static void PrintNNEvaluatorStats()
+{
+    uint64_t numUpdates = 0, numRefreshes = 0;
+    NNEvaluator::GetStats(numUpdates, numRefreshes);
+    std::cout << "NN accumulator updates: " << numUpdates << std::endl;
+    std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
+}
+#endif // NN_ACCUMULATOR_STATS
+
 void UniversalChessInterface::DoSearch()
 {
     mSearchCtx->searchParam.stopSearch = false;
@@ -688,14 +698,8 @@ void UniversalChessInterface::DoSearch()
 
         std::cout << std::endl;
 
-        // print NN evaluator stats
 #ifdef NN_ACCUMULATOR_STATS
-        {
-            uint64_t numUpdates = 0, numRefreshes = 0;
-            NNEvaluator::GetStats(numUpdates, numRefreshes);
-            std::cout << "NN accumulator updates: " << numUpdates << std::endl;
-            std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
-        }
+        PrintNNEvaluatorStats();
 #endif // NN_ACCUMULATOR_STATS
     }
     
@@ -1172,6 +1176,10 @@ bool UniversalChessInterface::Command_Benchmark()
     std::cout << "Total time: " << totalTime << " seconds" << std::endl;
     std::cout << "Total nodes: " << totalNodes << std::endl;
     std::cout << "MNPS: " << totalNodes / totalTime / 1000000.0 << std::endl;
+
+#ifdef NN_ACCUMULATOR_STATS
+    PrintNNEvaluatorStats();
+#endif // NN_ACCUMULATOR_STATS
 
     return true;
 }

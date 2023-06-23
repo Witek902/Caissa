@@ -211,12 +211,12 @@ void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
     outEntry.whiteFeatures.clear();
-    outEntry.whiteFeatures.reserve(numWhiteFeatures + numBlackFeatures);
+    outEntry.whiteFeatures.reserve(numWhiteFeatures);
     for (uint32_t i = 0; i < numWhiteFeatures; ++i)
         outEntry.whiteFeatures.emplace_back(whiteFeatures[i]);
 
     outEntry.blackFeatures.clear();
-    outEntry.blackFeatures.reserve(numWhiteFeatures + numBlackFeatures);
+    outEntry.blackFeatures.reserve(numBlackFeatures);
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
         outEntry.blackFeatures.emplace_back(blackFeatures[i]);
 

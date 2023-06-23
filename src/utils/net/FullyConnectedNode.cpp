@@ -40,7 +40,11 @@ FullyConnectedNode::FullyConnectedNode(const NodePtr& previousNode, uint32_t inp
 void FullyConnectedNode::Run(INodeContext& ctx) const
 {
     Context& context = static_cast<Context&>(ctx);
-    const Values& weights = m_weightsStorage->m_weights;
+
+    ASSERT(!m_weightsStorage->m_variants.empty());
+    const size_t variantIndex = std::min<size_t>(ctx.variant, m_weightsStorage->m_variants.size() - 1);
+
+    const Values& weights = m_weightsStorage->m_variants[variantIndex].m_weights;
 
     ASSERT(ctx.outputs.size() == m_numOutputs);
     ASSERT(ctx.inputs.size() == m_numInputs);
@@ -107,7 +111,12 @@ void FullyConnectedNode::Run(INodeContext& ctx) const
 void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, Gradients& gradients) const
 {
     const Context& context = static_cast<const Context&>(ctx);
-    const Values& weights = m_weightsStorage->m_weights;
+
+    ASSERT(!m_weightsStorage->m_variants.empty());
+    const size_t variantIndex = std::min<size_t>(ctx.variant, m_weightsStorage->m_variants.size() - 1);
+
+    const Values& weights = m_weightsStorage->m_variants[variantIndex].m_weights;
+    Gradients::Variant& gradientsVariant = gradients.m_variants[variantIndex];
 
     ASSERT(!gradients.m_isSparse);
     ASSERT(ctx.outputs.size() == GetNumOutputs());
@@ -138,7 +147,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
             {
                 size_t i = 0;
 #ifdef USE_AVX
-                float* gradientPtr = gradients.m_values.data() + j * m_numOutputs;
+                float* gradientPtr = gradientsVariant.m_values.data() + j * m_numOutputs;
                 for (; i + 8 <= m_numOutputs; i += 8)
                 {
                     _mm256_store_ps(gradientPtr + i,
@@ -149,9 +158,9 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
 #endif // USE_AVX
                 for (; i < m_numOutputs; i++)
                 {
-                    gradients.m_values[j * m_numOutputs + i] += inputValue * error[i];
+                    gradientsVariant.m_values[j * m_numOutputs + i] += inputValue * error[i];
                 }
-                gradients.m_dirty[j] = true;
+                gradientsVariant.m_dirty[j] = true;
             }
         }
     }
@@ -162,7 +171,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
         {
             size_t j = 0;
 #ifdef USE_AVX
-            float* gradientPtr = gradients.m_values.data();
+            float* gradientPtr = gradientsVariant.m_values.data();
             float* inputGradientPtr = ctx.inputError.data();
             const float* inputPtr = context.inputs.data();
             const float* weightsPtr = weights.data();
@@ -187,9 +196,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
                 // compute input gradient
                 ctx.inputError[j] += weights[j] * activationError;
                 // compute weights gradient
-                gradients.m_values[j] += context.inputs[j] * activationError;
-
-                // gradients.m_dirty[j] = true; // dense layers gradients are always accumulated
+                gradientsVariant.m_values[j] += context.inputs[j] * activationError;
             }
         }
     }
@@ -198,7 +205,7 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
     {
         size_t i = 0;
 #ifdef USE_AVX
-        float* gradientPtr = gradients.m_values.data() + m_numInputs * m_numOutputs;
+        float* gradientPtr = gradientsVariant.m_values.data() + m_numInputs * m_numOutputs;
         for (; i + 8 <= m_numOutputs; i += 8)
         {
             _mm256_store_ps(gradientPtr + i,
@@ -208,9 +215,9 @@ void FullyConnectedNode::Backpropagate(const Values& error, INodeContext& ctx, G
 #endif // USE_AVX
         for (; i < m_numOutputs; i++)
         {
-            gradients.m_values[m_numInputs * m_numOutputs + i] += error[i];
+            gradientsVariant.m_values[m_numInputs * m_numOutputs + i] += error[i];
         }
-        gradients.m_dirty[m_numInputs] = true;
+        gradientsVariant.m_dirty[m_numInputs] = true;
     }
 }
 

@@ -323,9 +323,6 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
     {
         const NodePtr& node = m_nodes[i];
 
-        // TODO variants
-        //const uint32_t variantIndex = node.variants.size() > 0 ? input.variant : 0u;
-
         if (node->IsConcatenation())
         {
             const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
@@ -361,7 +358,7 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
             {
             case InputMode::Full:
             {
-                FullyConnectedNode::Context& nodeCtx = static_cast<FullyConnectedNode::Context&>(*ctx.nodeContexts.front());
+                FullyConnectedNode::Context& nodeCtx = static_cast<FullyConnectedNode::Context&>(*ctx.nodeContexts[i]);
                 ASSERT(node->GetInputMode() == InputMode::Full);
                 ASSERT(node->GetNumInputs() == nodeCtx.inputs.size());
                 nodeCtx.inputs = std::span<const float>(input.floatValues, nodeCtx.inputs.size());
@@ -370,7 +367,7 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
             }
             case InputMode::Sparse:
             {
-                SparseInputNode::Context& nodeCtx = static_cast<SparseInputNode::Context&>(*ctx.nodeContexts.front());
+                SparseInputNode::Context& nodeCtx = static_cast<SparseInputNode::Context&>(*ctx.nodeContexts[i]);
                 ASSERT(node->GetInputMode() == InputMode::Sparse);
                 ASSERT(input.numFeatures <= node->GetNumInputs());
                 nodeCtx.sparseInputs = std::span<const ActiveFeature>(input.floatFeatures, input.numFeatures);
@@ -379,7 +376,7 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
             }
             case InputMode::SparseBinary:
             {
-                SparseBinaryInputNode::Context& nodeCtx = static_cast<SparseBinaryInputNode::Context&>(*ctx.nodeContexts.front());
+                SparseBinaryInputNode::Context& nodeCtx = static_cast<SparseBinaryInputNode::Context&>(*ctx.nodeContexts[i]);
                 ASSERT(node->GetInputMode() == InputMode::SparseBinary);
                 ASSERT(input.numFeatures <= node->GetNumInputs());
                 nodeCtx.sparseInputs = std::span<const SparseBinaryInputNode::IndexType>(input.binaryFeatures, input.numFeatures);
@@ -394,6 +391,8 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
         {
             ctx.nodeContexts[i]->inputs = ctx.nodeContexts[i - 1]->outputs;
         }
+
+        ctx.nodeContexts[i]->variant = inputDesc.variant;
 
         node->Run(*ctx.nodeContexts[i]);
     }
@@ -432,17 +431,8 @@ void NeuralNetworkTrainer::Init(NeuralNetwork& network)
         for (size_t i = 0; i < m_weightsStorages.size(); ++i)
         {
             const WeightsStorage* weightsStorage = m_weightsStorages[i];
-
-            // TODO variants
-            /*
-            threadData.gradients[i].resize(node.variants.size());
-            for (size_t j = 0; j < node.variants.size(); ++j)
-            {
-                threadData.gradients[i][j].Init(node.numInputs, node.numOutputs);
-            }
-            */
-
-            threadData.perWeightsStorageGradients[i].Init(weightsStorage->m_inputSize, weightsStorage->m_outputSize, weightsStorage->m_isSparse);
+            threadData.perWeightsStorageGradients[i].Init(
+                weightsStorage->m_inputSize, weightsStorage->m_outputSize, (uint32_t)weightsStorage->m_variants.size(), weightsStorage->m_isSparse);
         }
 
         // assign per-node gradients pointers
@@ -472,45 +462,11 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
     {
         const auto clearGradientsFunc = [this, &network](uint32_t threadIdx)
         {
-            PerThreadData& threadData = m_perThreadData[threadIdx];
-
-            // TODO variants
-            /*
-            // at the first node, clear only dirty gradients (most of them are zero)
-            for (auto& layerGradients : threadData.gradients.front())
-            {
-                layerGradients.Clear();
-            }
-
-            // reset accumulated gradients for remaining m_nodes
-            for (size_t i = 1; i < network.m_nodes.size(); ++i)
-            {
-                for (auto& layerGradients : threadData.gradients[i])
-                {
-                    std::fill(layerGradients.m_values.begin(), layerGradients.m_values.end(), 0.0f);
-                }
-            }
-            */
-
             // clear gradients
-            for (Gradients& gradients : threadData.perWeightsStorageGradients)
+            for (Gradients& gradients : m_perThreadData[threadIdx].perWeightsStorageGradients)
             {
                 gradients.Clear();
             }
-
-            /*
-            // at the first node, clear only dirty gradients (most of them are zero)
-            threadData.perWeightsStorageGradients.front().Clear();
-
-            // reset accumulated gradients for remaining m_nodes
-            for (size_t i = 1; i < network.m_nodes.size(); ++i)
-            {
-                if (network.m_nodes[i]->IsTrainable())
-                {
-                    std::fill(threadData.perWeightsStorageGradients[i].m_values.begin(), threadData.perWeightsStorageGradients[i].m_values.end(), 0.0f);
-                }
-            }
-            */
         };
 
         const auto backpropagateFunc = [this, &network, &trainingSet, batchIdx, params](uint32_t threadIdx, uint32_t indexInBatch)
@@ -549,6 +505,8 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                     ASSERT(false);
                 }
 
+                ctx.nodeContexts.back()->variant = vec.input.variant;
+
                 network.m_nodes.back()->Backpropagate(
                     ctx.tempValues,
                     *ctx.nodeContexts.back(),
@@ -564,7 +522,8 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                     ASSERT(node);
                     ASSERT(ctx.inputErrors[i]);
 
-                    //const uint32_t layerVariantIndex = inputDesc.variant < node.variants.size() ? inputDesc.variant : 0;
+                    ctx.nodeContexts[i]->variant = vec.input.variant;
+
                     node->Backpropagate(*ctx.inputErrors[i],
                                         *ctx.nodeContexts[i],
                                         *perThreadData.perNodeGradients[i]);
@@ -585,35 +544,29 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 updateOptions.learningRate = params.learningRate;
                 updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
 
-                // TODO variants
-                //for (size_t variantIdx = 0; variantIdx < node.variants.size(); ++variantIdx)
+                // accumulate gradients from all per-thread gradients
                 {
-                    // accumulate gradients from all per-thread gradients
+                    MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
+                    for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                     {
-                        MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
-                        for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
-                        {
-                            Gradients& targetGradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
-                            Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
+                        Gradients& targetGradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+                        Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
 
-                            targetGradients.Accumulate(srcGradients);
-                        }
+                        targetGradients.Accumulate(srcGradients);
                     }
+                }
 
-                    // TODO variants
-                    const auto& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
-                    switch (params.optimizer)
-                    {
-                    case Optimizer::Adadelta:
-                        weightsStorage->Update_Adadelta(gradients, updateOptions);
-                        break;
-                    case Optimizer::Adam:
-                        weightsStorage->Update_Adam(gradients, updateOptions);
-                        break;
-                    default:
-                        DEBUG_BREAK();
-                    }
-                    
+                const auto& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+                switch (params.optimizer)
+                {
+                case Optimizer::Adadelta:
+                    weightsStorage->Update_Adadelta(gradients, updateOptions);
+                    break;
+                case Optimizer::Adam:
+                    weightsStorage->Update_Adam(gradients, updateOptions);
+                    break;
+                default:
+                    DEBUG_BREAK();
                 }
             }
         };
