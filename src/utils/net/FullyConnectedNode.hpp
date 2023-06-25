@@ -28,6 +28,7 @@ public:
     virtual void Run(INodeContext& ctx) const override;
     virtual void Backpropagate(const Values& error, INodeContext& ctx, Gradients& gradients) const override;
     virtual InputMode GetInputMode() const override { return InputMode::Full; }
+    virtual bool IsInputNode() const override { return m_previousNode == nullptr; }
 };
 
 

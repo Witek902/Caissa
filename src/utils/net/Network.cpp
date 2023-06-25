@@ -4,7 +4,7 @@
 #include "FullyConnectedNode.hpp"
 #include "SparseBinaryInputNode.hpp"
 #include "SparseInputNode.hpp"
-#include "ConcatenationNode.hpp"
+#include "CombiningNode.hpp"
 #include "../ThreadPool.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"
 #include "../../backend/Waitable.hpp"
@@ -84,10 +84,10 @@ void NeuralNetworkRunContext::Init(const NeuralNetwork& network)
     {
         const NodePtr& node = network.m_nodes[i];
 
-        if (node->IsConcatenation())
+        if (node->IsCombining())
         {
-            const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
-            ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*nodeContexts[i]);
+            const ICombiningNode* concatNode = static_cast<const ICombiningNode*>(node.get());
+            ICombiningNode::Context& nodeCtx = static_cast<ICombiningNode::Context&>(*nodeContexts[i]);
 
             // match node context inputs to the outputs of the previous nodes
             for (size_t j = 0; j < i; j++)
@@ -313,10 +313,10 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
     {
         const NodePtr& node = m_nodes[i];
 
-        if (node->IsConcatenation())
+        if (node->IsCombining())
         {
-            const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
-            ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*ctx.nodeContexts[i]);
+            const ICombiningNode* concatNode = static_cast<const ICombiningNode*>(node.get());
+            ICombiningNode::Context& nodeCtx = static_cast<ICombiningNode::Context&>(*ctx.nodeContexts[i]);
 
             // match node context inputs to the outputs of the previous nodes
             for (size_t j = 0; j < i; j++)
@@ -553,7 +553,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
             }
         };
 
-        if (taskBuilder && params.batchSize > 32) // multi-threaded
+        if (taskBuilder && params.batchSize > 64) // multi-threaded
         {
             if (batchIdx > 0)
             {

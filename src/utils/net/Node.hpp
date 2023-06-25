@@ -56,7 +56,7 @@ public:
 
     virtual bool IsTrainable() const { return false; }
     virtual bool IsInputNode() const { return false; }
-    virtual bool IsConcatenation() const { return false; }
+    virtual bool IsCombining() const { return false; }
 
     virtual InputMode GetInputMode() const { return InputMode::Unknown; }
 
