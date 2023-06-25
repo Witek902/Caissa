@@ -11,7 +11,7 @@ struct WeightsStorage
 public:
     WeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants);
 
-    void Init();
+    void Init(uint32_t numActiveInputs, float bias = 0.0f);
 
     struct WeightsUpdateOptions
     {

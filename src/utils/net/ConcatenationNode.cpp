@@ -3,8 +3,8 @@
 namespace nn {
 
 ConcatenationNode::ConcatenationNode(const NodePtr& previousNodeA, const NodePtr& previousNodeB)
-    : INode(previousNodeA->GetNumOutputs() + previousNodeB->GetNumOutputs(),
-            previousNodeA->GetNumOutputs() + previousNodeB->GetNumOutputs())
+    : ICombiningNode(previousNodeA->GetNumOutputs() + previousNodeB->GetNumOutputs(),
+                     previousNodeA->GetNumOutputs() + previousNodeB->GetNumOutputs())
 {
     m_inputNodes[0] = previousNodeA.get();
     m_inputNodes[1] = previousNodeB.get();

@@ -47,6 +47,7 @@ private:
         static constexpr uint32_t BufferSize = 64;
         std::array<PositionEntry, BufferSize> buffer;
         uint32_t bufferOffset = 0;
+        float skippingProbability = 0.0f;
 
         bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition);
     };
@@ -59,5 +60,3 @@ private:
 
     uint32_t SampleInputFileIndex(double u) const;
 };
-
-void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry);

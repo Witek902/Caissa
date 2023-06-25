@@ -74,4 +74,7 @@ public:
 #endif // NN_ACCUMULATOR_STATS
 };
 
+uint32_t GetNetworkVariant(const Position& pos);
+
+template<bool IncludePieceFeatures = false>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);
