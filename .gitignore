@@ -3,7 +3,7 @@ x64/
 .vscode/
 *.vcxproj.user
 *.args.json
-build/
+build*/
 bin/
 releases/
 release/

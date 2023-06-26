@@ -660,21 +660,26 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     // unroll 2x so two sums can be calculated independently
-    __m512i sum = _mm512_setzero_si512();
+    __m512i sumA = _mm512_setzero_si512();
+    __m512i sumB = _mm512_setzero_si512();
     for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
     {
-        __m512i in = Int16VecLoad(input + j);
+        __m512i inA = Int16VecLoad(inputA + j);
+        __m512i inB = Int16VecLoad(inputB + j);
 
         // apply clipped-ReLU
-        in = _mm512_min_epi16(_mm512_max_epi16(in, _mm512_setzero_si512()), _mm512_set1_epi16(127));
+        inA = _mm512_min_epi16(_mm512_max_epi16(inA, _mm512_setzero_si512()), _mm512_set1_epi16(127));
+        inB = _mm512_min_epi16(_mm512_max_epi16(inB, _mm512_setzero_si512()), _mm512_set1_epi16(127));
 
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m512i w = Int16VecLoad(weights + j);
-        sum = _mm512_add_epi32(sum, _mm512_madd_epi16(in, w));
+        const __m512i wA = Int16VecLoad(weights + j);
+        const __m512i wB = Int16VecLoad(weights + j + AccumulatorSize);
+        sumA = _mm512_add_epi32(sumA, _mm512_madd_epi16(inA, wA));
+        sumB = _mm512_add_epi32(sumB, _mm512_madd_epi16(inB, wB));
     }
 
     // add 16 int32s horizontally
-    val += m512_hadd(sum);
+    val += m512_hadd(_mm512_add_epi32(sumA, sumB));
 
 #elif defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 16;
@@ -745,22 +750,31 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
     int32x4_t sumA = vdupq_n_s32(0);
     int32x4_t sumB = vdupq_n_s32(0);
+    int32x4_t sumC = vdupq_n_s32(0);
+    int32x4_t sumD = vdupq_n_s32(0);
     for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
     {
         // load 8 16bit inputs
-        int16x8_t in = vld1q_s16(input + j);
+        int16x8_t inA = vld1q_s16(inputA + j);
+        int16x8_t inB = vld1q_s16(inputB + j);
+
         // apply clipped-ReLU
-        in = vminq_s16(vmaxq_s16(in, vdupq_n_s16(0)), vdupq_n_s16(127));
+        inA = vminq_s16(vmaxq_s16(inA, vdupq_n_s16(0)), vdupq_n_s16(127));
+        inB = vminq_s16(vmaxq_s16(inB, vdupq_n_s16(0)), vdupq_n_s16(127));
 
         // load 8 16bit weights
-        const int16x8_t w = vld1q_s16(weights + j);
+        const int16x8_t wA = vld1q_s16(weights + j);
+        const int16x8_t wB = vld1q_s16(weights + j + AccumulatorSize);
+
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(w), vget_low_s16(in)));
-        sumB = vaddq_s32(sumB, vmull_high_s16(w, in));
+        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(wA), vget_low_s16(inA)));
+        sumB = vaddq_s32(sumB, vmull_high_s16(wA, inA));
+        sumC = vaddq_s32(sumC, vmull_s16(vget_low_s16(wB), vget_low_s16(inB)));
+        sumD = vaddq_s32(sumD, vmull_high_s16(wB, inB));
     }
 
-    // add 8 int32s horizontally
-    val += vaddvq_s32(vaddq_s32(sumA, sumB));
+    // add int32s horizontally
+    val += vaddvq_s32(vaddq_s32(vaddq_s32(sumA, sumB, vaddq_s32(sumC, sumD));
 
 #else
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
