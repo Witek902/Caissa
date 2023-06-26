@@ -17,9 +17,9 @@
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
 #elif defined(USE_BMI2) && defined(USE_AVX2) 
-#define ArchitectureStr "AVX2/BMI2"
+#define ArchitectureStr "AVX2"
 #elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
-#define ArchitectureStr "POPCNT/SSE4"
+#define ArchitectureStr "POPCNT"
 #elif defined(USE_ARM_NEON) 
 #define ArchitectureStr "ARM NEON"
 #else
@@ -36,7 +36,7 @@
 #error "Unknown configuration"
 #endif
 
-static const char* c_EngineName = "Caissa " VersionNumber " (" ArchitectureStr ConfigurationStr ")";
+static const char* c_EngineName = "Caissa " VersionNumber " " ArchitectureStr ConfigurationStr;
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
