@@ -4,8 +4,6 @@
 
 #include <random>
 
-static constexpr float c_activationEpsilon = 1.0e-10f;
-
 namespace nn {
 
 WeightsStorage::WeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants)
