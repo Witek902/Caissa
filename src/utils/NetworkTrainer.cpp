@@ -35,10 +35,10 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 64 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 32 * 1024;
-static const uint32_t cMinBatchSize = 32;
-static const uint32_t cMaxBatchSize = 4096;
+static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cMinBatchSize = 16 * 1024;
+static const uint32_t cMaxBatchSize = 16 * 1024;
 static const uint32_t cNumVariants = 16;
 
 
@@ -192,7 +192,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         }
 
         // make game score more important for high move count
-        const float wdlLambda = 1.0f; // std::lerp(0.95f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
+        const float wdlLambda = std::lerp(0.9f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -206,7 +206,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.1f;
+            const float tbDrawLambda = 0.05f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
@@ -596,9 +596,8 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float baseLearningRate = 1.0f * expf(-0.00001f * (float)iteration);
-        //const float learningRate = CosineAnnealingLR((float)iteration / (float)200.0f, baseLearningRate);
-        const float learningRate = baseLearningRate;
+        const float baseLearningRate = std::max(0.1f, 10.0f * expf(-0.0001f * (float)iteration));
+        const float learningRate = baseLearningRate; // CosineAnnealingLR((float)iteration / (float)200.0f, baseLearningRate);
 
         if (iteration == 0)
         {
@@ -642,9 +641,9 @@ bool NetworkTrainer::Train()
             {
                 nn::TrainParams params;
                 params.iteration = epoch;
-                params.batchSize = iteration < 100 ? cMinBatchSize : cMaxBatchSize;
+                params.batchSize = iteration < 5 ? cMinBatchSize : cMaxBatchSize;
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-6f;
+                params.weightDecay = 1.0e-4f;
 
                 TaskBuilder taskBuilder{ ctx };
                 epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);

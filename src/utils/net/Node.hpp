@@ -3,6 +3,7 @@
 #include "Common.hpp"
 
 #include <span>
+#include <memory>
 
 namespace nn {
 
