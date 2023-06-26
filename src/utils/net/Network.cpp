@@ -21,8 +21,6 @@
 
 using namespace threadpool;
 
-static constexpr float c_activationEpsilon = 1.0e-15f;
-
 namespace nn {
 
 void NodeInput::Validate() const
@@ -91,9 +89,6 @@ void NeuralNetworkRunContext::Init(const NeuralNetwork& network)
             const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
             ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*nodeContexts[i]);
 
-            bool input0Found = false;
-            bool input1Found = false;
-
             // match node context inputs to the outputs of the previous nodes
             for (size_t j = 0; j < i; j++)
             {
@@ -101,18 +96,13 @@ void NeuralNetworkRunContext::Init(const NeuralNetwork& network)
                 {
                     ASSERT(inputErrors[j] == nullptr);
                     inputErrors[j] = &nodeCtx.inputError;
-                    input0Found = true;
                 }
                 else if (network.m_nodes[j].get() == concatNode->GetInputNode(1))
                 {
                     ASSERT(inputErrors[j] == nullptr);
                     inputErrors[j] = &nodeCtx.secondaryInputError;
-                    input1Found = true;
                 }
             }
-
-            ASSERT(input0Found);
-            ASSERT(input1Found);
         }
     }
 
@@ -328,26 +318,18 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
             const ConcatenationNode* concatNode = static_cast<const ConcatenationNode*>(node.get());
             ConcatenationNode::Context& nodeCtx = static_cast<ConcatenationNode::Context&>(*ctx.nodeContexts[i]);
 
-            bool input0Found = false;
-            bool input1Found = false;
-
             // match node context inputs to the outputs of the previous nodes
             for (size_t j = 0; j < i; j++)
             {
                 if (m_nodes[j].get() == concatNode->GetInputNode(0))
                 {
                     nodeCtx.inputs = ctx.nodeContexts[j]->outputs;
-                    input0Found = true;
                 }
                 else if (m_nodes[j].get() == concatNode->GetInputNode(1))
                 {
                     nodeCtx.secondaryInputs = ctx.nodeContexts[j]->outputs;
-                    input1Found = true;
                 }
             }
-
-            ASSERT(input0Found);
-            ASSERT(input1Found);
         }
         else if (node->IsInputNode())
         {
@@ -460,7 +442,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
 
     for (size_t batchIdx = 0; batchIdx < numBatches; ++batchIdx)
     {
-        const auto clearGradientsFunc = [this, &network](uint32_t threadIdx)
+        const auto clearGradientsFunc = [this](uint32_t threadIdx)
         {
             // clear gradients
             for (Gradients& gradients : m_perThreadData[threadIdx].perWeightsStorageGradients)
@@ -531,7 +513,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
             }
         };
 
-        const auto updateWeightsFunc = [this, batchIdx, &network, params]()
+        const auto updateWeightsFunc = [this, batchIdx, params]()
         {
             for (size_t weightsStorageIndex = 0; weightsStorageIndex < m_weightsStorages.size(); ++weightsStorageIndex)
             {

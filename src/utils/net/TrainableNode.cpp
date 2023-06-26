@@ -7,8 +7,8 @@ namespace nn {
 
 ITrainableNode::ITrainableNode(const NodePtr& previousNode, const WeightsStoragePtr& weightsStorage, uint32_t inputSize, uint32_t outputSize, uint32_t numVariants)
     : INode(inputSize, outputSize)
-    , m_previousNode(previousNode)
     , m_weightsStorage(weightsStorage)
+    , m_previousNode(previousNode)
 {
     ASSERT(numVariants > 0);
 
