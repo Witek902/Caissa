@@ -182,6 +182,15 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
             outMaterialStats.losses += iter.second.losses;
             outMaterialStats.avgEvalScore += iter.second.avgEvalScore / static_cast<double>(iter.second.NumPositions());
         }
+
+        // accumulate piece occupancy stats
+        for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+        {
+            for (uint32_t square = 0; square < 64; ++square)
+            {
+                outStats.pieceOccupancy[pieceIndex][square] += localStats.pieceOccupancy[pieceIndex][square];
+            }
+        }
     }
 }
 
@@ -260,6 +269,24 @@ void AnalyzeGames()
         }
 
         std::cout << std::endl;
+    }
+
+    // piece occupancy stats
+    {
+        std::cout << "Piece occupancy stats: " << std::endl;
+        for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+        {
+            std::cout << PieceToString((Piece)(pieceIndex + (uint32_t)Piece::Pawn)) << ": " << std::endl;
+            for (uint32_t rank = 0; rank < 8; ++rank)
+            {
+                for (uint32_t file = 0; file < 8; ++file)
+                {
+                    std::cout << " " << std::setw(10) << stats.pieceOccupancy[pieceIndex][8 * rank + file];
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+        }
     }
 
     // static eval error

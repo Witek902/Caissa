@@ -35,8 +35,8 @@
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1000000000;
-static const uint32_t cNumTrainingVectorsPerIteration = 128 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 64 * 1024;
+static const uint32_t cNumTrainingVectorsPerIteration = 256 * 1024;
+static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
 static const uint32_t cMinBatchSize = 16 * 1024;
 static const uint32_t cMaxBatchSize = 16 * 1024;
 static const uint32_t cNumVariants = 16;
@@ -192,7 +192,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.9f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
+        const float wdlLambda = std::lerp(0.8f, 0.2f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -206,7 +206,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.05f;
+            const float tbDrawLambda = 0.0f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
@@ -593,10 +593,13 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
+    const float minLearningRate = 0.1f;
+    const float maxLearningRate = 10.0f;
+
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float baseLearningRate = std::max(0.1f, 10.0f * expf(-0.0001f * (float)iteration));
+        const float baseLearningRate = std::lerp(minLearningRate, maxLearningRate, expf(-0.00005f * (float)iteration));
         const float learningRate = baseLearningRate; // CosineAnnealingLR((float)iteration / (float)200.0f, baseLearningRate);
 
         if (iteration == 0)

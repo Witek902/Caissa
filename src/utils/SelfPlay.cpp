@@ -30,12 +30,12 @@ static const uint32_t c_maxNodes = 10000;
 static const uint32_t c_maxDepth = 15;
 static const int32_t c_maxEval = 1500;
 static const int32_t c_openingMaxEval = 900;
-static const int32_t c_multiPv = 1;
-static const int32_t c_multiPvMaxPly = 6;
+static const int32_t c_multiPv = 3;
+static const int32_t c_multiPvMaxPly = 8;
 static const int32_t c_multiPvScoreTreshold = 25;
 static const uint32_t c_minRandomMoves = 4;
 static const uint32_t c_maxRandomMoves = 8;
-static const float c_randomMoveProbability = 0.01f;
+static const float c_randomMoveProbability = 0.001f;
 
 using namespace threadpool;
 
