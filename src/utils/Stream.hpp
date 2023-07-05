@@ -10,8 +10,10 @@ class InputStream
 public:
     virtual ~InputStream() = default;
     virtual uint64_t GetSize() = 0;
+    virtual uint64_t GetPosition() const = 0;
     virtual bool IsEndOfFile() const = 0;
     virtual bool Read(void* data, size_t size) = 0;
+    virtual const char* GetFileName() const { return ""; }
 };
 
 class OutputStream
@@ -30,6 +32,7 @@ class MemoryInputStream : public InputStream
 public:
     MemoryInputStream(const std::vector<uint8_t>& buffer);
     virtual uint64_t GetSize() override;
+    virtual uint64_t GetPosition() const override { return mPosition; }
     virtual bool IsEndOfFile() const override;
     virtual bool Read(void* data, size_t size) override;
 private:
@@ -55,13 +58,16 @@ public:
     FileInputStream(const char* filePath);
     virtual ~FileInputStream() = default;
     bool IsOpen() const;
-    uint64_t GetPosition() const;
+    virtual uint64_t GetPosition() const override;
     bool SetPosition(uint64_t offset);
     virtual uint64_t GetSize() override;
     virtual bool IsEndOfFile() const override;
     virtual bool Read(void* data, size_t size) override;
+    virtual const char* GetFileName() const { return mPath.c_str(); }
 private:
     FILE* mFile;
+    uint64_t mSize = 0;
+    std::string mPath;
 };
 
 class FileOutputStream : public OutputStream
