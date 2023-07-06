@@ -158,8 +158,6 @@ struct NodeInfo
 
     uint16_t pvLength = 0;
     PackedMove pvLine[MaxSearchDepth];
-
-    INLINE bool IsPV() const { return (beta - alpha) != 1; }
 };
 
 struct SearchThreadStats
@@ -221,6 +219,14 @@ struct SearchStats
         return *this;
     }
 };
+
+enum class NodeType
+{
+    Root,
+    PV,
+    NonPV,
+};
+
 
 class Search
 {
@@ -330,9 +336,11 @@ private:
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
+
+    template<NodeType nodeType>
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
 
-    template<bool isRootNode = false>
+    template<NodeType nodeType>
     ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
 
     // returns true if the search needs to be aborted immediately
