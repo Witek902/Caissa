@@ -6,9 +6,9 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 50);
-DEFINE_PARAM(MovesLeftSteepness, 45);
-DEFINE_PARAM(IdealTimeFactor, 79);
+DEFINE_PARAM(MovesLeftMidpoint, 52);
+DEFINE_PARAM(MovesLeftSteepness, 25);
+DEFINE_PARAM(IdealTimeFactor, 83);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
