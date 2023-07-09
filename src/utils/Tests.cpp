@@ -2095,10 +2095,10 @@ void RunUnitTests()
     RunMovesListTests();
     RunEvalTests();
     RunPackedPositionTests();
+    RunGameTests();
     RunPerftTests();
     RunSearchTests(1); // single-threaded
     RunSearchTests(4); // multi-threaded
-    RunGameTests();
 }
 
 bool RunPerformanceTests(const std::vector<std::string>& paths)
