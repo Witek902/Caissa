@@ -22,10 +22,10 @@ void SparseBinaryInputNode::Run(INodeContext& ctx) const
     ASSERT(ctx.outputs.size() == m_numOutputs);
     ASSERT(m_numOutputs % (c_NumRegisters * 8) == 0);
 
+#ifdef USE_AVX
+
     const float* biasesPtr = weights.data() + m_numOutputs * m_numInputs;
     float* valuesPtr = ctx.outputs.data();
-
-#ifdef USE_AVX
 
     // split processing into tiles of 8 AVX registers
     const uint32_t numTiles = m_numOutputs / (c_NumRegisters * 8u);
