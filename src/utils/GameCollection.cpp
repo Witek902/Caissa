@@ -19,11 +19,6 @@ namespace GameCollection
             return false;
         }
 
-        if (stream.IsEndOfFile())
-        {
-            return false;
-        }
-
         thread_local std::vector<MoveAndScore> moves;
         moves.clear();
         moves.resize(header.numMoves);
@@ -31,10 +26,13 @@ namespace GameCollection
         decodedMoves.clear();
         decodedMoves.reserve(header.numMoves);
 
-        if (!stream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
+        if (header.numMoves)
         {
-            std::cout << "Failed to read game moves from file " << stream.GetFileName() << " offset=" << stream.GetPosition() << std::endl;
-            return false;
+            if (!stream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
+            {
+                std::cout << "Failed to read game moves from file " << stream.GetFileName() << " offset=" << stream.GetPosition() << std::endl;
+                return false;
+            }
         }
 
         if (header.forcedScore != Game::Score::Unknown &&
