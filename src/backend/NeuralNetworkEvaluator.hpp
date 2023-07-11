@@ -68,6 +68,9 @@ public:
     // incrementally update and evaluate
     static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node);
 
+    // update accumulators without evaluating
+    static void EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node);
+
 #ifdef NN_ACCUMULATOR_STATS
     static void GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes);
     static void ResetStats();

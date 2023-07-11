@@ -504,3 +504,11 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     return (ScoreType)(finalValue * scale / c_endgameScaleMax);
 }
+
+void EnsureAccumulatorUpdated(NodeInfo& node)
+{
+    if (g_mainNeuralNetwork)
+    {
+        NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node);
+    }
+}
