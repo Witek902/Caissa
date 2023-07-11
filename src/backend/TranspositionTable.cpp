@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <thread>
 
 #ifdef USE_SSE
     #include <xmmintrin.h>
@@ -96,7 +97,35 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
 void TranspositionTable::Clear()
 {
-    std::fill(clusters, clusters + numClusters, TTCluster{});
+    const size_t numThreads = std::min(std::thread::hardware_concurrency(), 4u);
+
+    if (numClusters * sizeof(TTCluster) <= 256 * 1024 * 1024 || numThreads == 1)
+    {
+        std::fill(clusters, clusters + numClusters, TTCluster{});
+    }
+    else // clear using multiple threads
+    {
+        const size_t numClustersPerThread = numClusters / numThreads;
+
+        std::vector<std::thread> threads;
+        threads.reserve(numThreads);
+
+        for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
+        {
+            threads.emplace_back([this, threadIndex, numClustersPerThread]()
+            {
+                const size_t start = threadIndex * numClustersPerThread;
+                const size_t end = start + numClustersPerThread;
+                std::fill(clusters + start, clusters + end, TTCluster{});
+            });
+        }
+
+        for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
+        {
+            threads[threadIndex].join();
+        }
+    }
+
     generation = 0;
 }
 
