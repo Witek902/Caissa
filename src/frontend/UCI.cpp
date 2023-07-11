@@ -1164,7 +1164,7 @@ bool UniversalChessInterface::Command_Benchmark()
         totalTime += (endTimePoint - startTimePoint).ToSeconds();
 
         // print best move and stats
-        printf("Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
+        printf(" Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
             searchResult[0].moves.front().ToString().c_str(),
             stats.nodes.load(),
             (endTimePoint - startTimePoint).ToSeconds(),
@@ -1175,7 +1175,7 @@ bool UniversalChessInterface::Command_Benchmark()
     std::cout << std::endl;
     std::cout << "Total time: " << totalTime << " seconds" << std::endl;
     std::cout << "Total nodes: " << totalNodes << std::endl;
-    std::cout << "MNPS: " << totalNodes / totalTime / 1000000.0 << std::endl;
+    std::cout << "Speed: " << static_cast<int64_t>(totalNodes / totalTime) << " nps" << std::endl;
 
 #ifdef NN_ACCUMULATOR_STATS
     PrintNNEvaluatorStats();
