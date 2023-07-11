@@ -27,7 +27,7 @@ void NNEvaluator::ResetStats()
 
 #endif // NN_ACCUMULATOR_STATS
 
-static void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
+INLINE static void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
 {
     ASSERT(kingSquare.IsValid());
 
@@ -516,4 +516,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     node.nnContext->nnScore = nnOutput;
 
     return nnOutput;
+}
+
+void NNEvaluator::EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node)
+{
+    RefreshAccumulator<Color::White>(network, node);
+    RefreshAccumulator<Color::Black>(network, node);
 }

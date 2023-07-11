@@ -1482,10 +1482,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // evaluate position if it wasn't evaluated
     if (!node.isInCheck)
     {
-        // always evaluate on PV line so the NN accumulator is up to date
-        // TODO there should be a separate function to just update accumulator,
-        // so it could be done if in check as well
-        if (staticEval == InvalidValue || node.isPvNodeFromPrevIteration)
+        if (staticEval == InvalidValue)
         {
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
@@ -1498,6 +1495,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // USE_EVAL_PROBING
 
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+        }
+        else if (node.isPvNodeFromPrevIteration)
+        {
+            // always evaluate on PV line so the NN accumulator is up to date
+            EnsureAccumulatorUpdated(node);
         }
 
         ASSERT(staticEval != InvalidValue);
@@ -1515,6 +1517,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 node.staticEval = ttScore;
             }
         }
+    }
+    else
+    {
+        EnsureAccumulatorUpdated(node);
     }
 
     // check how much static evaluation improved between current position and position in previous turn
