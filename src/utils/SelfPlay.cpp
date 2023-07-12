@@ -26,15 +26,15 @@ static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 64; // print every 64th game
-static const uint32_t c_maxNodes = 15000;
-static const uint32_t c_maxDepth = 20;
+static const uint32_t c_maxNodes = 10000;
+static const uint32_t c_maxDepth = 16;
 static const int32_t c_maxEval = 1500;
-static const int32_t c_openingMaxEval = 1200;
+static const int32_t c_openingMaxEval = 600;
 static const int32_t c_multiPv = 4;
 static const int32_t c_multiPvMaxPly = 5;
 static const int32_t c_multiPvScoreTreshold = 25;
-static const uint32_t c_minRandomMoves = 0;
-static const uint32_t c_maxRandomMoves = 1;
+static const uint32_t c_minRandomMoves = 10;
+static const uint32_t c_maxRandomMoves = 16;
 static const float c_randomMoveProbability = 0.0001f;
 
 using namespace threadpool;
@@ -395,19 +395,17 @@ void SelfPlay(const std::vector<std::string>& args)
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
+            if (std::abs(moveScore) < 5)
+                drawScoreCounter++;
+            else
+                drawScoreCounter = 0;
+
             // adjudicate draw if eval is zero
-            if (!isCheck &&
-                moveScore == 0 &&
-                std::abs(eval) < 200 &&
-                drawScoreCounter++ > 8 &&
+            if (drawScoreCounter > 8 &&
                 halfMoveNumber >= 40 &&
                 game.GetPosition().GetHalfMoveCount() > 10)
             {
                 game.SetScore(Game::Score::Draw);
-            }
-            else
-            {
-                drawScoreCounter = 0;
             }
 
             // adjudicate win
@@ -415,7 +413,7 @@ void SelfPlay(const std::vector<std::string>& args)
                 game.GetPosition().GetNumPieces() < 20 &&
                 halfMoveNumber >= 20)
             {
-                if (moveScore > c_maxEval && eval > c_maxEval)
+                if (moveScore > c_maxEval && eval > c_maxEval / 2)
                 {
                     whiteWinsCounter++;
                     if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
@@ -425,7 +423,7 @@ void SelfPlay(const std::vector<std::string>& args)
                     whiteWinsCounter = 0;
                 }
 
-                if (moveScore < -c_maxEval && eval < c_maxEval)
+                if (moveScore < -c_maxEval && eval < -c_maxEval / 2)
                 {
                     blackWinsCounter++;
                     if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
