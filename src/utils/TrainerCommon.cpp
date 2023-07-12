@@ -33,12 +33,21 @@ bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingData
             ctx.fileName = fileName;
             ctx.fileSize = fileSize;
 
-            // seek to random location
+            // Seek to random location so that each stream starts at different position.
             {
                 const uint64_t numEntries = fileSize / sizeof(PositionEntry);
                 std::uniform_int_distribution<uint64_t> distr(0, numEntries - 1);
                 const uint64_t entryIndex = distr(gen);
                 ctx.fileStream->SetPosition(entryIndex * sizeof(PositionEntry));
+            }
+
+            // Set a small, random skipping probability.
+            // The idea is to have each stream running at different rates
+            // so there's lower chance of generating similar batches from different streams.
+            // Basically, it's another layer of data shuffling.
+            {
+                std::uniform_real_distribution<float> distr(0.0f, 0.1f);
+                ctx.skippingProbability = distr(gen);
             }
 
             mCDF.push_back((double)totalDataSize);
@@ -124,10 +133,28 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         if (outEntry.score >= CheckmateValue || outEntry.score <= -CheckmateValue)
             continue;
 
-        // skip based half-move counter
+        // constant skipping
+        {
+            std::bernoulli_distribution skippingDistr(skippingProbability);
+            if (skippingDistr(gen))
+                continue;
+        }
+
+        // skip drawn game based half-move counter
+        if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
         {
             const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
             std::bernoulli_distribution skippingDistr(hmcSkipProb);
+            if (skippingDistr(gen))
+                continue;
+        }
+
+        // skip early moves
+        constexpr uint32_t maxEarlyMoveCount = 8;
+        if (outEntry.pos.moveCount < maxEarlyMoveCount)
+        {
+            const float earlyMoveSkipProb = 0.5f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / 8.0f;
+            std::bernoulli_distribution skippingDistr(earlyMoveSkipProb);
             if (skippingDistr(gen))
                 continue;
         }
@@ -136,7 +163,10 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         {
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
-            if (numPieces <= 4 && std::bernoulli_distribution(0.5f)(gen))
+            if (numPieces <= 3)
+                continue;
+
+            if (numPieces <= 4 && std::bernoulli_distribution(0.9f)(gen))
                 continue;
 
             const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 100.0f);
@@ -146,26 +176,6 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
-
-        // skip based on PSQT score
-        {
-            const ScoreType psqtScore = Evaluate(outPosition, nullptr, false);
-
-            const int32_t minRange = 1024;
-            const int32_t maxRange = 2048;
-
-            if (std::abs(psqtScore) > maxRange)
-            {
-                continue;
-            }
-            if (std::abs(psqtScore) > minRange)
-            {
-                const float psqtScoreSkipProb = static_cast<float>(std::abs(psqtScore) - minRange) / static_cast<float>(maxRange - minRange);
-                std::bernoulli_distribution skippingDistr(psqtScoreSkipProb);
-                if (skippingDistr(gen))
-                    continue;
-            }
-        }
 
         // skip based on kings placement (prefer king on further ranks)
         {
@@ -196,39 +206,4 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         return true;
     }
-}
-
-void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
-{
-    const uint32_t maxFeatures = 64;
-
-    uint16_t whiteFeatures[maxFeatures];
-    uint32_t numWhiteFeatures = PositionToFeaturesVector(pos, whiteFeatures, pos.GetSideToMove());
-    ASSERT(numWhiteFeatures <= 64);
-
-    uint16_t blackFeatures[maxFeatures];
-    uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, GetOppositeColor(pos.GetSideToMove()));
-    ASSERT(numBlackFeatures == numWhiteFeatures);
-
-    outEntry.whiteFeatures.clear();
-    outEntry.whiteFeatures.reserve(numWhiteFeatures);
-    for (uint32_t i = 0; i < numWhiteFeatures; ++i)
-        outEntry.whiteFeatures.emplace_back(whiteFeatures[i]);
-
-    outEntry.blackFeatures.clear();
-    outEntry.blackFeatures.reserve(numBlackFeatures);
-    for (uint32_t i = 0; i < numBlackFeatures; ++i)
-        outEntry.blackFeatures.emplace_back(blackFeatures[i]);
-
-    /*
-    uint16_t features[maxFeatures];
-    uint32_t numFeatures = PositionToFeaturesVector(pos, features, pos.GetSideToMove());
-    ASSERT(numFeatures <= maxFeatures);
-
-    outEntry.whiteFeatures.clear();
-    outEntry.whiteFeatures.reserve(numFeatures);
-
-    for (uint32_t i = 0; i < numFeatures; ++i)
-        outEntry.whiteFeatures.emplace_back(features[i]);
-    */
 }

@@ -64,7 +64,7 @@ public:
         entries[index] = entries[--numMoves];
     }
 
-    uint32_t BestMoveIndex() const
+    INLINE uint32_t BestMoveIndex() const
     {
         int32_t bestScore = INT32_MIN;
         uint32_t bestMoveIndex = UINT32_MAX;

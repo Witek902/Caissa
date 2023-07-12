@@ -29,8 +29,8 @@ bool TestNetwork()
     nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(numNetworkInputs, hiddenLayerSize, 1);
     nn::WeightsStoragePtr layer2Weights = std::make_shared<nn::WeightsStorage>(hiddenLayerSize, 1, 1);
 
-    layer1Weights->Init();
-    layer2Weights->Init();
+    layer1Weights->Init(64);
+    layer2Weights->Init(64);
 
     nn::NodePtr inputNode = std::make_shared<nn::SparseBinaryInputNode>(numNetworkInputs, hiddenLayerSize, layer1Weights);
     nn::NodePtr activationNode = std::make_shared<nn::ActivationNode>(inputNode, nn::ActivationFunction::CReLU);

@@ -13,14 +13,14 @@ Strong, UCI command-line chess engine, written from scratch in C++ in developmen
 
 Caissa is listed on many chess engines ranking lists:
 
-* [CCRL 40/2 FRC](https://ccrl.chessdom.com/ccrl/404FRC/) - **3738** (#5) (version 1.9)
-* [CCRL 40/15](https://ccrl.chessdom.com/ccrl/4040/) - **3434** (#15) (version 1.8)
+* [CCRL 40/2 FRC](https://ccrl.chessdom.com/ccrl/404FRC/) - **3774** (#5) (version 1.10)
+* [CCRL 40/15](https://ccrl.chessdom.com/ccrl/4040/) - **3439** (#17) (version 1.9)
 * [CCRL 40/2](https://ccrl.chessdom.com/ccrl/404/) - **3588** (#18) (version 1.7)
-* [SPCC](https://www.sp-cc.de) - **3570** (#19) (version 1.9)
+* [SPCC](https://www.sp-cc.de) - **3587** (#17) (version 1.10)
 * [IpMan Chess 5+0](https://ipmanchess.yolasite.com/i7-11800h.php) - **3381** (#27) (version 1.8)
 * [IpMan Chess 10+1](https://ipmanchess.yolasite.com/i9-7980xe.php) - **3311** (#27) (version 1.8.4 avx512)
-* [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) - **3421** (#21) (version 1.9)
-* [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) - **3422** (#20) (version 1.8)
+* [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) - **3421** (#22) (version 1.9)
+* [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) - **3423** (#20) (version 1.8)
 * [CEGT 5+3](http://www.cegt.net/5Plus3Rating/BestVersionsNEW/rangliste.html) - **3382** (#21) (version 1.6.3)
 * [FGRL](http://www.fastgm.de/60-0.60.html) - **3253** (#18) (version 1.5)
 
@@ -76,12 +76,12 @@ The games are generated with the utility [SelfPlay.cpp](https://github.com/Witek
 
 #### Evaluation
 * Neural network evaluation
-  * (736&rarr;1536)x2&rarr;1 architecture
+  * (3x768&rarr;1024)x2&rarr;1 architecture
   * effectively updated first layer
   * manually vectorized code supporting SSE2, AVX2, AVX-512 and ARM NEON instructions
   * clipped-ReLU activation function
-  * 16 variants (aka. buckets) of last layer weights selected based on piece count and queen presence
-  * input features: absolute piece coordinates with horizontal symmetry, no king-relative features
+  * 16 variants of last layer weights selected based on piece count and queen presence
+  * input features: absolute piece coordinates with horizontal symmetry, no king-relative features, 3 king buckets
 * Special endgame evaluation routines
 
 #### Neural net trainer

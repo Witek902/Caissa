@@ -17,12 +17,26 @@ namespace nn {
 
 class NeuralNetwork;
 
-static constexpr uint32_t CurrentVersion = 4;
+static constexpr uint32_t CurrentVersion = 6;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t NumNetworkInputs = 32 + 64 + 10 * 64; // 736
-static constexpr uint32_t AccumulatorSize = 1024;
+static constexpr uint32_t NumKingBuckets = 3;
+static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
+static constexpr uint32_t AccumulatorSize = 768;
 static constexpr uint32_t OutputSize = 1;
+static constexpr uint32_t NumVariants = 16;
+
+static constexpr uint8_t KingBucketIndex[32] =
+{
+    0, 0, 1, 1,
+    0, 0, 1, 1,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
+};
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
 static constexpr float ActivationRangeScaling = 127;
@@ -76,7 +90,6 @@ public:
     static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
     static constexpr uint32_t MinNeuronsInHiddenLayers = 8;
     static constexpr uint32_t MaxNumLayers = 4;
-    static constexpr uint32_t NumVariants = 16;
 
     struct Header
     {

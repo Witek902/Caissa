@@ -112,4 +112,6 @@ void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, co
 #endif // EVAL_USE_PSQT
 
 ScoreType Evaluate(const Position& position, NodeInfo* node = nullptr, bool useNN = true);
+void EnsureAccumulatorUpdated(NodeInfo& node);
+
 bool CheckInsufficientMaterial(const Position& position);

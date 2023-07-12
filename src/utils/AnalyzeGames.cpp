@@ -24,6 +24,7 @@
 
 static const bool c_collectMaterialStats = false;
 static const bool c_dumpFortressPositions = false;
+static const bool c_dumpKingOnFarRankPositions = true;
 
 float GameScoreToExpectedGameScore(const Game::Score score)
 {
@@ -51,6 +52,7 @@ struct GamesStats
     std::mutex mutex;
 
     std::ofstream fortressPosition;
+    std::ofstream kingOnFarRankPositions;
 
     std::unordered_map<MaterialKey, MaterialStats> materialStats;
 
@@ -68,6 +70,8 @@ struct GamesStats
 
 void AnalyzeGames(const char* path, GamesStats& outStats)
 {
+    std::cout << "Reading " << path << "..." << std::endl;
+
     FileInputStream gamesFile(path);
 
     GamesStats localStats;
@@ -153,6 +157,21 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
                 }
             }
 
+            // dump positions where the king is on the far rank
+            if (c_dumpKingOnFarRankPositions)
+            {
+                if (pos.GetNumPieces() >= 16 && std::abs(moveScore) < 400)
+                {
+                    if (pos.Whites().GetKingSquare().Rank() >= 4 ||
+                        pos.Blacks().GetKingSquare().Rank() <= 3)
+                    {
+                        std::unique_lock<std::mutex> lock(outStats.mutex);
+                        outStats.kingOnFarRankPositions << pos.ToFEN() << std::endl;
+                        //break;
+                    }
+                }
+            }
+
             if (!pos.DoMove(move))
             {
                 break;
@@ -182,6 +201,15 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
             outMaterialStats.losses += iter.second.losses;
             outMaterialStats.avgEvalScore += iter.second.avgEvalScore / static_cast<double>(iter.second.NumPositions());
         }
+
+        // accumulate piece occupancy stats
+        for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+        {
+            for (uint32_t square = 0; square < 64; ++square)
+            {
+                outStats.pieceOccupancy[pieceIndex][square] += localStats.pieceOccupancy[pieceIndex][square];
+            }
+        }
     }
 }
 
@@ -189,6 +217,7 @@ void AnalyzeGames()
 {
     GamesStats stats;
     stats.fortressPosition.open("fortress.epd");
+    stats.kingOnFarRankPositions.open("kingOnFarRank.epd");
 
     const std::string gamesPath = DATA_PATH "selfplayGames/";
 
@@ -208,9 +237,10 @@ void AnalyzeGames()
             return std::filesystem::file_size(a) > std::filesystem::file_size(b);
         });
 
+        std::cout << "Found " << paths.size() << " paths" << std::endl;
+
         for (const std::filesystem::path& path : paths)
         {
-            std::cout << "Loading " << path.string() << "..." << std::endl;
             taskBuilder.Task("LoadPositions", [path, &stats](const threadpool::TaskContext&)
             {
                 AnalyzeGames(path.string().c_str(), stats);
@@ -260,6 +290,24 @@ void AnalyzeGames()
         }
 
         std::cout << std::endl;
+    }
+
+    // piece occupancy stats
+    {
+        std::cout << "Piece occupancy stats: " << std::endl;
+        for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+        {
+            std::cout << PieceToString((Piece)(pieceIndex + (uint32_t)Piece::Pawn)) << ": " << std::endl;
+            for (uint32_t rank = 0; rank < 8; ++rank)
+            {
+                for (uint32_t file = 0; file < 8; ++file)
+                {
+                    std::cout << " " << std::setw(10) << stats.pieceOccupancy[pieceIndex][8 * rank + file];
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+        }
     }
 
     // static eval error

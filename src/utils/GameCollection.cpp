@@ -15,7 +15,7 @@ namespace GameCollection
 
         if (!stream.Read(&header, sizeof(header)))
         {
-            std::cout << "Failed to read game header" << std::endl;
+            std::cout << "Failed to read game header in file " << stream.GetFileName() << " offset=" << stream.GetPosition() << std::endl;
             return false;
         }
 
@@ -26,10 +26,13 @@ namespace GameCollection
         decodedMoves.clear();
         decodedMoves.reserve(header.numMoves);
 
-        if (!stream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
+        if (header.numMoves)
         {
-            std::cout << "Failed to read game moves" << std::endl;
-            return false;
+            if (!stream.Read(moves.data(), sizeof(MoveAndScore) * header.numMoves))
+            {
+                std::cout << "Failed to read game moves from file " << stream.GetFileName() << " offset=" << stream.GetPosition() << std::endl;
+                return false;
+            }
         }
 
         if (header.forcedScore != Game::Score::Unknown &&
@@ -37,7 +40,7 @@ namespace GameCollection
             header.forcedScore != Game::Score::BlackWins &&
             header.forcedScore != Game::Score::Draw)
         {
-            std::cout << "Failed to parse game from collection: invalid game score" << std::endl;
+            std::cout << "Failed to parse game from " << stream.GetFileName() << ": invalid game score" << std::endl;
             return false;
         }
 
@@ -54,7 +57,7 @@ namespace GameCollection
             if (!move.IsValid())
             {
                 std::cout
-                    << "Failed to parse game from collection: move " << moves[i].move.ToString()
+                    << "Failed to parse game from " << stream.GetFileName() << ": move " << moves[i].move.ToString()
                     << " is invalid in position " << game.GetPosition().ToFEN() << std::endl;
                 return false;
             }
