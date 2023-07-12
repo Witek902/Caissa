@@ -65,12 +65,14 @@ bool MemoryOutputStream::Write(const void* data, size_t size)
 
 FileInputStream::FileInputStream(const char* filePath)
 {
+    mPath = filePath;
     mFile = fopen(filePath, "rb");
     if (!mFile)
     {
         perror(filePath);
         return;
     }
+    mSize = GetSize();
 }
 
 bool FileInputStream::IsOpen() const
@@ -114,7 +116,7 @@ bool FileInputStream::SetPosition(uint64_t offset)
 
 bool FileInputStream::IsEndOfFile() const
 {
-    return feof(mFile);
+    return GetPosition() >= mSize;
 }
 
 bool FileInputStream::Read(void* data, size_t size)

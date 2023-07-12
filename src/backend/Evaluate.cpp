@@ -10,7 +10,7 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-14.pnn";
+const char* c_DefaultEvalFile = "eval-15.pnn";
 #ifdef USE_ENDGAME_NEURAL_NETWORK
 const char* c_DefaultEndgameEvalFile = "endgame-2.pnn";
 #endif // USE_ENDGAME_NEURAL_NETWORK
@@ -503,4 +503,12 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
     return (ScoreType)(finalValue * scale / c_endgameScaleMax);
+}
+
+void EnsureAccumulatorUpdated(NodeInfo& node)
+{
+    if (g_mainNeuralNetwork)
+    {
+        NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node);
+    }
 }

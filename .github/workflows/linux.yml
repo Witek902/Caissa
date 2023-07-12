@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         configs: [Release, Final]
-        architectures: [x64-legacy, x64-sse4-popcnt, x64-avx2-bmi2, x64-avx512]
+        architectures: [x64-legacy, x64-sse4-popcnt, x64-avx2-bmi2]
 
     steps:
     - name: Checkout

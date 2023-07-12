@@ -371,7 +371,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
         SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
         outResult.resize(1);
-        outResult.front().score = QuiescenceNegaMax(thread, rootNode, searchContext);
+        outResult.front().score = QuiescenceNegaMax<NodeType::Root>(thread, rootNode, searchContext);
         SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
 
         // flush pending stats
@@ -803,7 +803,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.nnContext = thread.nnContextStack[0].get();
             rootNode.nnContext->MarkAsDirty();
 
-            ScoreType score = NegaMax<true>(thread, rootNode, searchContext);
+            ScoreType score = NegaMax<NodeType::Root>(thread, rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
             if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
@@ -862,7 +862,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         SearchTrace::OnRootSearchBegin();
 #endif
 
-        pvLine.score = NegaMax<true>(thread, rootNode, param.searchContext);
+        pvLine.score = NegaMax<NodeType::Root>(thread, rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
 
@@ -1012,13 +1012,18 @@ static void RefreshPsqtScore(NodeInfo& node)
 }
 #endif // EVAL_USE_PSQT
 
+template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.height < MaxSearchDepth);
-    ASSERT(node.alpha < node.beta);
     ASSERT(!node.filteredMove.IsValid());
 
-    const bool isPvNode = node.IsPV();
+    constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
+
+    if constexpr (!isPvNode)
+        ASSERT(node.alpha == node.beta - 1);
+    else
+        ASSERT(node.alpha < node.beta);
 
     // clear PV line
     node.pvLength = 0;
@@ -1057,7 +1062,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 #endif // COLLECT_SEARCH_STATS
 
         // don't prune in PV nodes, because TT does not contain path information
-        if (!isPvNode)
+        if constexpr (!isPvNode)
         {
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
             else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
@@ -1217,7 +1222,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         childNode.alpha = -beta;
         childNode.beta = -alpha;
-        const ScoreType score = -QuiescenceNegaMax(thread, childNode, ctx);
+        const ScoreType score = -QuiescenceNegaMax<nodeType>(thread, childNode, ctx);
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
         if (move.IsCapture())
@@ -1228,7 +1233,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         if (score > bestValue) // new best move found
         {
             // update PV line
-            if (isPvNode)
+            if constexpr (isPvNode)
             {
                 node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
                 node.pvLine[0] = move;
@@ -1286,11 +1291,18 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     return bestValue;
 }
 
-template<bool isRootNode>
+template<NodeType nodeType>
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const
 {
     ASSERT(node.height < MaxSearchDepth);
-    ASSERT(node.alpha < node.beta);
+
+    constexpr bool isRootNode = nodeType == NodeType::Root;
+    constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
+
+    if constexpr (!isPvNode)
+        ASSERT(node.alpha == node.beta - 1);
+    else
+        ASSERT(node.alpha < node.beta);
 
 #ifdef ENABLE_SEARCH_TRACE
     SearchTrace trace(node);
@@ -1304,7 +1316,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     ctx.stats.Append(thread.stats);
 
     const Position& position = node.position;
-    const bool isPvNode = node.IsPV();
 
     ScoreType alpha = node.alpha;
     ScoreType beta = node.beta;
@@ -1328,7 +1339,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // maximum search depth reached, enter quiescence search to find final evaluation
     if (node.depth <= 0)
     {
-        return QuiescenceNegaMax(thread, node, ctx);
+        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
     }
 
     if constexpr (!isRootNode)
@@ -1383,23 +1394,25 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
         // don't prune in PV nodes, because TT does not contain path information
-        if (!isPvNode &&
-            !node.filteredMove.IsValid() &&
-            ttEntry.depth >= node.depth &&
-            position.GetHalfMoveCount() < 80)
+        if constexpr (!isPvNode)
         {
-            // transposition table cutoff
-            ScoreType ttCutoffValue = InvalidValue;
-            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
-
-            if (ttCutoffValue != InvalidValue)
+            if (!node.filteredMove.IsValid() &&
+                ttEntry.depth >= node.depth &&
+                position.GetHalfMoveCount() < 80)
             {
+                // transposition table cutoff
+                ScoreType ttCutoffValue = InvalidValue;
+                if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
+                else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = ttScore;
+                else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
+
+                if (ttCutoffValue != InvalidValue)
+                {
 #ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::TTCutoff, ttCutoffValue);
+                    trace.OnNodeExit(SearchTrace::ExitReason::TTCutoff, ttCutoffValue);
 #endif // ENABLE_SEARCH_TRACE
-                return ttCutoffValue;
+                    return ttCutoffValue;
+                }
             }
         }
     }
@@ -1427,7 +1440,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 TTEntry::Bounds::Exact;
 
             // clamp best score to tablebase score
-            if (isPvNode)
+            if constexpr (isPvNode)
             {
                 if (bounds == TTEntry::Bounds::Lower)
                 {
@@ -1469,10 +1482,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     // evaluate position if it wasn't evaluated
     if (!node.isInCheck)
     {
-        // always evaluate on PV line so the NN accumulator is up to date
-        // TODO there should be a separate function to just update accumulator,
-        // so it could be done if in check as well
-        if (staticEval == InvalidValue || node.isPvNodeFromPrevIteration)
+        if (staticEval == InvalidValue)
         {
             const ScoreType evalScore = Evaluate(position, &node);
             ASSERT(evalScore < TablebaseWinValue&& evalScore > -TablebaseWinValue);
@@ -1485,6 +1495,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // USE_EVAL_PROBING
 
             staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+        }
+        else if (node.isPvNodeFromPrevIteration)
+        {
+            // always evaluate on PV line so the NN accumulator is up to date
+            EnsureAccumulatorUpdated(node);
         }
 
         ASSERT(staticEval != InvalidValue);
@@ -1502,6 +1517,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 node.staticEval = ttScore;
             }
         }
+    }
+    else
+    {
+        EnsureAccumulatorUpdated(node);
     }
 
     // check how much static evaluation improved between current position and position in previous turn
@@ -1531,100 +1550,103 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
     const bool isImproving = evalImprovement >= -5; // leave some small margin
 
-    if (!isPvNode && !node.filteredMove.IsValid() && !node.isInCheck)
+    if constexpr (!isPvNode)
     {
-        // Futility/Beta Pruning
-        if (node.depth <= BetaPruningDepth &&
-            node.staticEval <= KnownWinValue &&
-            node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
+        if (!node.filteredMove.IsValid() && !node.isInCheck)
         {
-#ifdef ENABLE_SEARCH_TRACE
-            trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
-#endif // ENABLE_SEARCH_TRACE
-            return node.staticEval;
-        }
-
-        // Alpha Pruning
-        if (node.depth <= AlphaPruningDepth &&
-            alpha < KnownWinValue &&
-            node.staticEval > -KnownWinValue &&
-            node.staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
-        {
-#ifdef ENABLE_SEARCH_TRACE
-            trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
-#endif // ENABLE_SEARCH_TRACE
-            return node.staticEval;
-        }
-
-        // Razoring
-        // prune if quiescence search on current position can't beat beta
-        if (node.depth <= RazoringStartDepth &&
-            beta < KnownWinValue &&
-            node.staticEval + RazoringMarginBias + RazoringMarginMultiplier * node.depth < beta)
-        {
-            const ScoreType qScore = QuiescenceNegaMax(thread, node, ctx);
-            if (qScore < beta)
+            // Futility/Beta Pruning
+            if (node.depth <= BetaPruningDepth &&
+                node.staticEval <= KnownWinValue &&
+                node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
             {
 #ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
+                trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
-                return qScore;
+                return node.staticEval;
             }
-        }
 
-        // Null Move Reductions
-        if (node.staticEval >= beta + (node.depth < 4 ? 20 : 0) &&
-            staticEval >= beta &&
-            node.depth >= NullMoveReductionsStartDepth &&
-            position.HasNonPawnMaterial(position.GetSideToMove()))
-        {
-            // don't allow null move if parent or grandparent node was null move
-            bool doNullMove = !node.isNullMove;
-            if (node.parentNode && node.parentNode->isNullMove) doNullMove = false;
-
-            if (doNullMove)
+            // Alpha Pruning
+            if (node.depth <= AlphaPruningDepth &&
+                alpha < KnownWinValue &&
+                node.staticEval > -KnownWinValue &&
+                node.staticEval + AlphaMarginBias + AlphaMarginMultiplier * node.depth <= alpha)
             {
-                const int32_t depthReduction =
-                    NullMoveReductions_NullMoveDepthReduction +
-                    node.depth / 4 +
-                    std::min(3, int32_t(node.staticEval - beta) / 256);
-
-                NodeInfo childNode;
-                childNode.parentNode = &node;
-                childNode.pvIndex = node.pvIndex;
-                childNode.position = position;
-                childNode.alpha = -beta;
-                childNode.beta = -beta + 1;
-                childNode.isNullMove = true;
-                childNode.doubleExtensions = node.doubleExtensions;
-                childNode.height = node.height + 1;
-                childNode.depth = static_cast<int16_t>(node.depth - depthReduction);
-                childNode.isCutNode = !node.isCutNode;
-                childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
-                childNode.nnContext->MarkAsDirty();
-
-                childNode.position.DoNullMove();
-
-                ScoreType nullMoveScore = -NegaMax(thread, childNode, ctx);
-
-                if (nullMoveScore >= beta)
-                {
-                    if (nullMoveScore >= TablebaseWinValue)
-                        nullMoveScore = beta;
-
-                    if (std::abs(beta) < KnownWinValue && node.depth < 10)
-                    {
 #ifdef ENABLE_SEARCH_TRACE
-                        trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
+                trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
-                        return nullMoveScore;
-                    }
+                return node.staticEval;
+            }
 
-                    node.depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
+            // Razoring
+            // prune if quiescence search on current position can't beat beta
+            if (node.depth <= RazoringStartDepth &&
+                beta < KnownWinValue &&
+                node.staticEval + RazoringMarginBias + RazoringMarginMultiplier * node.depth < beta)
+            {
+                const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                if (qScore < beta)
+                {
+#ifdef ENABLE_SEARCH_TRACE
+                    trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
+#endif // ENABLE_SEARCH_TRACE
+                    return qScore;
+                }
+            }
 
-                    if (node.depth <= 0)
+            // Null Move Reductions
+            if (node.staticEval >= beta + (node.depth < 4 ? 20 : 0) &&
+                staticEval >= beta &&
+                node.depth >= NullMoveReductionsStartDepth &&
+                position.HasNonPawnMaterial(position.GetSideToMove()))
+            {
+                // don't allow null move if parent or grandparent node was null move
+                bool doNullMove = !node.isNullMove;
+                if (node.parentNode && node.parentNode->isNullMove) doNullMove = false;
+
+                if (doNullMove)
+                {
+                    const int32_t depthReduction =
+                        NullMoveReductions_NullMoveDepthReduction +
+                        node.depth / 4 +
+                        std::min(3, int32_t(node.staticEval - beta) / 256);
+
+                    NodeInfo childNode;
+                    childNode.parentNode = &node;
+                    childNode.pvIndex = node.pvIndex;
+                    childNode.position = position;
+                    childNode.alpha = -beta;
+                    childNode.beta = -beta + 1;
+                    childNode.isNullMove = true;
+                    childNode.doubleExtensions = node.doubleExtensions;
+                    childNode.height = node.height + 1;
+                    childNode.depth = static_cast<int16_t>(node.depth - depthReduction);
+                    childNode.isCutNode = !node.isCutNode;
+                    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
+                    childNode.nnContext->MarkAsDirty();
+
+                    childNode.position.DoNullMove();
+
+                    ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, childNode, ctx);
+
+                    if (nullMoveScore >= beta)
                     {
-                        return QuiescenceNegaMax(thread, node, ctx);
+                        if (nullMoveScore >= TablebaseWinValue)
+                            nullMoveScore = beta;
+
+                        if (std::abs(beta) < KnownWinValue && node.depth < 10)
+                        {
+#ifdef ENABLE_SEARCH_TRACE
+                            trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
+#endif // ENABLE_SEARCH_TRACE
+                            return nullMoveScore;
+                        }
+
+                        node.depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
+
+                        if (node.depth <= 0)
+                        {
+                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                        }
                     }
                 }
             }
@@ -1660,7 +1682,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     int32_t globalDepthReduction = 0;
     {
         // reduce non-PV nodes more
-        if (!isPvNode) globalDepthReduction++;
+        if constexpr (!isPvNode) globalDepthReduction++;
 
         // reduce more if eval is dropping
         if (!isImproving) globalDepthReduction++;
@@ -1827,7 +1849,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                 singularChildNode.beta = singularBeta;
                 singularChildNode.filteredMove = move;
 
-                const ScoreType singularScore = NegaMax(thread, singularChildNode, ctx);
+                const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, singularChildNode, ctx);
 
                 if (singularScore < singularBeta)
                 {
@@ -1836,12 +1858,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                         moveExtension++;
 
                         // double extension if singular score is way below beta
-                        if (!isPvNode &&
-                            node.doubleExtensions < 8 &&
-                            singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                        {
-                            moveExtension++;
-                        }
+                        if constexpr (!isPvNode)
+                            if (node.doubleExtensions < 8 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                                moveExtension++;
                     }
                 }
                 else if (singularScore >= beta)
@@ -1944,14 +1963,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.beta = -alpha;
             childNode.isCutNode = true;
 
-            score = -NegaMax(thread, childNode, ctx);
+            score = -NegaMax<NodeType::NonPV>(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
             doFullDepthSearch = score > alpha;
         }
 
         // PVS search at full depth
-        // TODO: internal aspiration window?
         if (doFullDepthSearch)
         {
             childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
@@ -1959,21 +1977,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             childNode.beta = -alpha;
             childNode.isCutNode = !node.isCutNode;
 
-            score = -NegaMax(thread, childNode, ctx);
+            score = -NegaMax<NodeType::NonPV>(thread, childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
         }
 
         // full search for PV nodes
-        if (isPvNode)
+        if constexpr (isPvNode)
         {
-            if (moveIndex == 1 || (score > alpha && score < beta))
+            if (moveIndex == 1 ||
+                (score > alpha && (isRootNode || score < beta)))
             {
                 childNode.depth = static_cast<int16_t>(node.depth + moveExtension - 1);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isCutNode = false;
 
-                score = -NegaMax(thread, childNode, ctx);
+                score = -NegaMax<NodeType::PV>(thread, childNode, ctx);
             }
         }
 
@@ -2001,10 +2020,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             bestValue = score;
 
             // make sure we have any best move in root node
-            if (isRootNode) bestMove = move;
+            if constexpr (isRootNode) bestMove = move;
 
             // update PV line
-            if (isPvNode)
+            if constexpr  (isPvNode)
             {
                 node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
                 node.pvLine[0] = move;
@@ -2129,7 +2148,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
     }
 
     // clamp score to TB bounds
-    if (isPvNode) bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
+    if constexpr (isPvNode)
+        bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
 
     // update transposition table
     // don't write if:
@@ -2143,7 +2163,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             TTEntry::Bounds::Upper;
 
         // only PV nodes can have exact score
-        ASSERT(isPvNode || bounds != TTEntry::Bounds::Exact);
+        if constexpr (!isPvNode)
+            ASSERT(bounds != TTEntry::Bounds::Exact);
 
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node.height), staticEval, node.depth, bounds, bestMove);
 

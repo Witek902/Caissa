@@ -25,7 +25,7 @@ def inputIndexToCoords(index):
     offset = 8 + marginSize
 
     # white pawns
-    if index < 64:
+    if index < 1 * 64:
         return (0 * offset + index % 8, index / 8)
     # white knights
     if index < 2 * 64:
@@ -43,36 +43,30 @@ def inputIndexToCoords(index):
     if index < 5 * 64:
         index = index - (4 * 64)
         return (4 * offset + index % 8, index / 8)
-    # white king
-    if index < 5 * 64 + 32:
-        index = index - (5 * 64)
-        return (5 * offset + index % 4, index / 4)
-    
-    index = index - (5 * 64 + 32)
-
     # black pawns
-    if index < 64:
-        return (6 * offset + index % 8, index / 8)
-    # black knights
-    if index < 2 * 64:
-        index = index - (1 * 64)
-        return (7 * offset + index % 8, index / 8)
-    # black bishops
-    if index < 3 * 64:
-        index = index - (2 * 64)
-        return (8 * offset + index % 8, index / 8)
-    # black rooks
-    if index < 4 * 64:
-        index = index - (3 * 64)
-        return (9 * offset + index % 8, index / 8)
-    # black queens
-    if index < 5 * 64:
-        index = index - (4 * 64)
-        return (10 * offset + index % 8, index / 8)
-    # black king
     if index < 6 * 64:
         index = index - (5 * 64)
-        return (11 * offset + index % 8, index / 8)
+        return (5 * offset + index % 8, index / 8)
+    # black knights
+    if index < 7 * 64:
+        index = index - (6 * 64)
+        return (6 * offset + index % 8, index / 8)
+    # black bishops
+    if index < 8 * 64:
+        index = index - (7 * 64)
+        return (7 * offset + index % 8, index / 8)
+    # black rooks
+    if index < 9 * 64:
+        index = index - (8 * 64)
+        return (8 * offset + index % 8, index / 8)
+    # black queens
+    if index < 10 * 64:
+        index = index - (9 * 64)
+        return (9 * offset + index % 8, index / 8)
+    # black king
+    if index < 11 * 64:
+        index = index - (10 * 64)
+        return (10 * offset + index % 8, index / 8)
     
     return (0,0)
 
@@ -103,9 +97,11 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
-    for i in range(layerSize0):
+    kingBucket = 0
+
+    for i in range(768):
         for j in range(accumulatorSize):
-            dataOffset = headerSize + 2 * (accumulatorSize * i + j)
+            dataOffset = headerSize + 2 * (accumulatorSize * i + j) + 2 * 768 * accumulatorSize * kingBucket
             (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
             color = weightToColor(weight)
             (x,y) = inputIndexToCoords(i)
