@@ -34,13 +34,15 @@
 #define USE_PACKED_NET
 // #define USE_VIRTUAL_FEATURES
 
+// #define KING_BUCKET_TUNING
+
 using namespace threadpool;
 
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 16 * 1024;
-static const uint32_t cMaxBatchSize = 16 * 1024;
+static const uint32_t cMinBatchSize = 32 * 1024;
+static const uint32_t cMaxBatchSize = 32 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -114,10 +116,12 @@ private:
 
     std::ofstream m_trainingLog;
 
-    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries);
+    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, int32_t kingBucket);
 
     void Validate(size_t iteration);
+
     bool PackNetwork();
+    bool UnpackNetwork();
 };
 
 void NetworkTrainer::InitNetwork()
@@ -212,14 +216,14 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
 }
 
 
-bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
+bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, int32_t kingBucket)
 {
     Position pos;
     PositionEntry entry;
 
     for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
     {
-        if (!m_dataLoader.FetchNextPosition(m_randomGenerator, entry, pos))
+        if (!m_dataLoader.FetchNextPosition(m_randomGenerator, entry, pos, kingBucket))
             return false;
 
         // flip the board randomly in pawnless positions
@@ -232,7 +236,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries)
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.8f, 0.2f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
+        const float wdlLambda = std::lerp(0.5f, 0.0f, 1.0f - expf(-(float)pos.GetMoveCount() / 40.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -438,7 +442,7 @@ void NetworkTrainer::Validate(size_t iteration)
             "4k3/5p2/2K1p3/1Q1rP3/8/8/8/8 w - - 0 1", // should be 0
             "8/8/8/5B1p/5p1r/4kP2/6K1/8 w - - 0 1", // should be 0
             "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
-            "3k4/3B4/8/8/7p/7P/8/5K1B w - - 0 1", // should be 0
+            "rnbq1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNk w Q - 0 1",
         };
 
         for (const char* testPosition : s_testPositions)
@@ -512,42 +516,7 @@ static void PackWeights(const nn::Values& weights, uint32_t numInputs, uint32_t 
     // weights
     for (uint32_t j = 0; j < numInputs; j++)
     {
-        uint32_t i = 0;
-#ifdef USE_AVX2
-        const float* weightsPtr = weights.data() + j * numOutputs;
-        for (; i + 8 < numOutputs; i += 8)
-        {
-            const __m256i quantizedWeights =
-                _mm256_cvtps_epi32(_mm256_round_ps(
-                    _mm256_mul_ps(_mm256_load_ps(weightsPtr + i), _mm256_set1_ps(weightScale)),
-                    _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
-
-            if (transpose)
-            {
-                outWeights[numOutputs * j + (i + 0)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
-                outWeights[numOutputs * j + (i + 1)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
-                outWeights[numOutputs * j + (i + 2)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
-                outWeights[numOutputs * j + (i + 3)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
-                outWeights[numOutputs * j + (i + 4)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
-                outWeights[numOutputs * j + (i + 5)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
-                outWeights[numOutputs * j + (i + 6)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
-                outWeights[numOutputs * j + (i + 7)] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
-            }
-            else
-            {
-                outWeights[numInputs * (i + 0) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 0);
-                outWeights[numInputs * (i + 1) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 1);
-                outWeights[numInputs * (i + 2) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 2);
-                outWeights[numInputs * (i + 3) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 3);
-                outWeights[numInputs * (i + 4) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 4);
-                outWeights[numInputs * (i + 5) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 5);
-                outWeights[numInputs * (i + 6) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 6);
-                outWeights[numInputs * (i + 7) + j] = (WeightType)_mm256_extract_epi32(quantizedWeights, 7);
-            }
-        }
-#endif // USE_AVX2
-
-        for (; i < numOutputs; i++)
+        for (uint32_t i = 0; i < numOutputs; i++)
         {
             const float weight = weights[j * numOutputs + i];
             const int32_t quantizedWeight = (int32_t)std::round(weight * weightScale);
@@ -569,6 +538,27 @@ static void PackWeights(const nn::Values& weights, uint32_t numInputs, uint32_t 
         ASSERT(quantizedBias <= std::numeric_limits<BiasType>::max());
         ASSERT(quantizedBias >= std::numeric_limits<BiasType>::min());
         outBiases[i] = (BiasType)quantizedBias;
+    }
+}
+
+template<typename WeightType, typename BiasType>
+static void UnpackWeights(nn::Values& outWeights, uint32_t numInputs, uint32_t numOutputs, const WeightType* weights, const BiasType* biases, float weightScale, float biasScale, bool transpose)
+{
+    // weights
+    for (uint32_t j = 0; j < numInputs; j++)
+    {
+        for (uint32_t i = 0; i < numOutputs; i++)
+        {
+            outWeights[j * numOutputs + i] = transpose ?
+                (float)weights[numOutputs * j + i] / weightScale :
+                (float)weights[numInputs * i + j] / weightScale;
+        }
+    }
+
+    // biases
+    for (uint32_t i = 0; i < numOutputs; i++)
+    {
+        outWeights[numInputs * numOutputs + i] = (float)biases[i] / biasScale;
     }
 }
 
@@ -661,9 +651,66 @@ bool NetworkTrainer::PackNetwork()
     return true;
 }
 
+bool NetworkTrainer::UnpackNetwork()
+{
+    // feature transformer
+    {
+        UnpackWeights(
+            m_featureTransformerWeights->m_variants.front().m_weights,
+            nn::NumNetworkInputs,
+            nn::AccumulatorSize,
+            m_packedNet.GetAccumulatorWeights(),
+            m_packedNet.GetAccumulatorBiases(),
+            nn::InputLayerWeightQuantizationScale,
+            nn::InputLayerBiasQuantizationScale,
+            true);
+    }
+
+    /*
+    // hidden layers
+    for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
+    {
+        for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
+        {
+            UnpackWeights(nodes[i],
+                variantIdx,
+                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
+                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
+                nn::HiddenLayerWeightQuantizationScale,
+                nn::HiddenLayerBiasQuantizationScale,
+                false);
+        }
+    }
+    */
+
+    // last layer
+    const uint32_t lastLayerIndex = 1;
+    for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
+    {
+        UnpackWeights(
+            m_lastLayerWeights->m_variants[variantIdx].m_weights,
+            m_lastLayerWeights->m_inputSize,
+            1u,
+            m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx),
+            m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx),
+            nn::OutputLayerWeightQuantizationScale,
+            nn::OutputLayerBiasQuantizationScale,
+            false);
+    }
+
+    return true;
+}
+
 bool NetworkTrainer::Train()
 {
     InitNetwork();
+
+    if (!m_packedNet.Load("eval-17.pnn"))
+    {
+        std::cout << "ERROR: Failed to load packed network" << std::endl;
+        return false;
+    }
+    UnpackNetwork();
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -675,8 +722,11 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 4.0f;
-    const float minLearningRate = 0.2f;
+    const float maxLearningRate = 1.0f;
+    const float minLearningRate = 0.1f;
+
+    // TODO rotate king buckets from 0 to NumKingBuckets - 1
+    int32_t currentKingBucket = -1;
 
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
@@ -686,7 +736,7 @@ bool NetworkTrainer::Train()
 
         if (iteration == 0)
         {
-            if (!GenerateTrainingSet(m_trainingSet))
+            if (!GenerateTrainingSet(m_trainingSet, currentKingBucket))
                 return false;
         }
 
@@ -719,10 +769,10 @@ bool NetworkTrainer::Train()
             TaskBuilder taskBuilder{ waitable };
             taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                GenerateTrainingSet(m_trainingSet);
+                GenerateTrainingSet(m_trainingSet, currentKingBucket);
             });
 
-            taskBuilder.Task("Train", [this, iteration, &epoch, &batch, &learningRate](const TaskContext& ctx)
+            taskBuilder.Task("Train", [this, iteration, currentKingBucket, &epoch, &batch, &learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
                 params.optimizer = nn::Optimizer::Adadelta;
@@ -730,6 +780,16 @@ bool NetworkTrainer::Train()
                 params.batchSize = iteration < 5 ? cMinBatchSize : cMaxBatchSize;
                 params.learningRate = learningRate;
                 params.weightDecay = 1.0e-5f;
+
+#ifdef KING_BUCKET_TUNING
+                // set weights mask based on king bucket
+                std::fill(m_lastLayerWeights->m_weightsMask.begin(), m_lastLayerWeights->m_weightsMask.end(), 0.0f);
+                std::fill(m_featureTransformerWeights->m_weightsMask.begin(), m_featureTransformerWeights->m_weightsMask.end(), 0.0f);
+                std::fill(
+                    m_featureTransformerWeights->m_weightsMask.begin() + 12 * 64 * nn::AccumulatorSize * currentKingBucket,
+                    m_featureTransformerWeights->m_weightsMask.begin() + 12 * 64 * nn::AccumulatorSize * (currentKingBucket + 1),
+                    1.0f);
+#endif // KING_BUCKET_TUNING
 
                 TaskBuilder taskBuilder{ ctx };
                 epoch += m_trainer.Train(m_network, batch, params, &taskBuilder);

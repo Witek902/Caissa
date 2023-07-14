@@ -27,7 +27,7 @@ void NNEvaluator::ResetStats()
 
 #endif // NN_ACCUMULATOR_STATS
 
-INLINE static void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
+void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
 {
     ASSERT(kingSquare.IsValid());
 

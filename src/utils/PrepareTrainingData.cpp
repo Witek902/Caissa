@@ -70,15 +70,10 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
             if (move.IsQuiet() &&                                   // best move must be quiet
                 (i >= 2 || pos.GetNumPieces() < 32) &&
                 pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
+                (std::abs(moveScore) < 1200 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};
-
-                // reject position that approach fifty-move rule
-                if (gameScore == Game::Score::Draw &&
-                    pos.GetHalfMoveCount() > 50 && std::abs(moveScore) < 5)
-                    break;
 
                 entry.wdlScore = static_cast<uint8_t>(gameScore);
                 entry.tbScore = static_cast<uint8_t>(Game::Score::Unknown);
