@@ -34,7 +34,7 @@ public:
         const std::string& trainingDataPath = "../../../data/trainingData");
 
     // sample new position from the training set
-    bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition);
+    bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket);
 
 private:
 
@@ -49,7 +49,7 @@ private:
         uint32_t bufferOffset = 0;
         float skippingProbability = 0.0f;
 
-        bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition);
+        bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket);
     };
 
     std::vector<InputFileContext> mContexts;

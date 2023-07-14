@@ -10,7 +10,7 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-15.pnn";
+const char* c_DefaultEvalFile = "eval-17.pnn";
 #ifdef USE_ENDGAME_NEURAL_NETWORK
 const char* c_DefaultEndgameEvalFile = "endgame-2.pnn";
 #endif // USE_ENDGAME_NEURAL_NETWORK

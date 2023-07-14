@@ -77,6 +77,8 @@ public:
 #endif // NN_ACCUMULATOR_STATS
 };
 
+void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket);
+
 uint32_t GetNetworkVariant(const Position& pos);
 
 template<bool IncludePieceFeatures = false>

@@ -92,7 +92,7 @@ uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
     return low - 1u;
 }
 
-bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition)
+bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket)
 {
     std::uniform_real_distribution<double> distr;
     const double u = distr(gen);
@@ -102,10 +102,10 @@ bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& out
     if (fileIndex >= mContexts.size())
         return false;
 
-    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition);
+    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition, kingBucket);
 }
 
-bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition)
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket)
 {
     for (;;)
     {
@@ -150,10 +150,10 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         }
 
         // skip early moves
-        constexpr uint32_t maxEarlyMoveCount = 8;
+        constexpr uint32_t maxEarlyMoveCount = 12;
         if (outEntry.pos.moveCount < maxEarlyMoveCount)
         {
-            const float earlyMoveSkipProb = 0.5f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / 8.0f;
+            const float earlyMoveSkipProb = 0.5f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / (float)maxEarlyMoveCount;
             std::bernoulli_distribution skippingDistr(earlyMoveSkipProb);
             if (skippingDistr(gen))
                 continue;
@@ -169,7 +169,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             if (numPieces <= 4 && std::bernoulli_distribution(0.9f)(gen))
                 continue;
 
-            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 100.0f);
+            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 26) / 25.0f);
             if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
                 continue;
         }
@@ -177,11 +177,23 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
 
-        // skip based on kings placement (prefer king on further ranks)
+        // filter by king bucket
+        if (kingBucket >= 0)
         {
+            uint32_t whiteKingSide, blackKingSide;
+            uint32_t whiteKingBucket, blackKingBucket;
+            GetKingSideAndBucket(outPosition.Whites().GetKingSquare(), whiteKingSide, whiteKingBucket);
+            GetKingSideAndBucket(outPosition.Blacks().GetKingSquare().FlippedRank(), blackKingSide, blackKingBucket);
+
+            if (whiteKingBucket != (uint32_t)kingBucket && blackKingBucket != (uint32_t)kingBucket)
+                continue;
+        }
+        else
+        {
+            // skip based on kings placement (prefer king on further ranks)
             const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
             const float blackKingProb =        (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
-            std::bernoulli_distribution skippingDistr(0.5f * Sqr(std::min(whiteKingProb, blackKingProb)));
+            std::bernoulli_distribution skippingDistr(0.25f * Sqr(std::min(whiteKingProb, blackKingProb)));
             if (skippingDistr(gen))
                 continue;
         }
@@ -198,7 +210,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
             if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
 
-            const float maxSkippingProb = 0.5f;
+            const float maxSkippingProb = 0.25f;
             std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
             if (skippingDistr(gen))
                 continue;

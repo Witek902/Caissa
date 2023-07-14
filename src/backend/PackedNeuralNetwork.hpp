@@ -17,10 +17,10 @@ namespace nn {
 
 class NeuralNetwork;
 
-static constexpr uint32_t CurrentVersion = 6;
+static constexpr uint32_t CurrentVersion = 7;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t NumKingBuckets = 3;
+static constexpr uint32_t NumKingBuckets = 5;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 768;
 static constexpr uint32_t OutputSize = 1;
@@ -30,12 +30,12 @@ static constexpr uint8_t KingBucketIndex[32] =
 {
     0, 0, 1, 1,
     0, 0, 1, 1,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
+    2, 2, 3, 3,
+    2, 2, 3, 3,
+    2, 2, 3, 3,
+    4, 4, 4, 4,
+    4, 4, 4, 4,
+    4, 4, 4, 4,
 };
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)

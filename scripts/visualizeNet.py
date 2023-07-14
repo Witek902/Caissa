@@ -101,7 +101,7 @@ def main():
 
     for i in range(768):
         for j in range(accumulatorSize):
-            dataOffset = headerSize + 2 * (accumulatorSize * i + j) + 2 * 768 * accumulatorSize * kingBucket
+            dataOffset = headerSize + 2 * (accumulatorSize * i + j) + 2 * 12 * 64 * accumulatorSize * kingBucket
             (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
             color = weightToColor(weight)
             (x,y) = inputIndexToCoords(i)
