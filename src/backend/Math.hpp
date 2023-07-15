@@ -69,6 +69,16 @@ INLINE constexpr const T RoundUp(const T x)
 }
 
 template<typename T>
+INLINE constexpr T DivFloor(const T a, const T b)
+{
+    const T res = a / b;
+    const T rem = a % b;
+    // Correct division result downwards if up-rounding happened,
+    // (for non-zero remainder of sign different than the divisor).
+    return res - (rem != 0 && ((rem < 0) != (b < 0)));
+}
+
+template<typename T>
 INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
 {
     T prev = outMax;

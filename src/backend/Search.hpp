@@ -143,6 +143,7 @@ struct NodeInfo
     ScoreType staticEval = InvalidValue;
 
     Move previousMove = Move::Invalid();
+    int32_t moveStatScore = 0;
 
 #ifdef EVAL_USE_PSQT
     TPieceScore<int32_t> psqtScore = { INT32_MIN, INT32_MIN };
@@ -153,6 +154,8 @@ struct NodeInfo
     bool isNullMove = false;
     bool isInCheck = false;
     bool isSingularSearch = false;
+
+    MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
 
     NNEvaluatorContext* nnContext = nullptr;
 

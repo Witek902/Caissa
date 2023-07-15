@@ -72,11 +72,16 @@ public:
     static constexpr uint32_t NumKillerMoves        = 2;
 
     using CounterType = int16_t;
+    using PieceSquareHistory = CounterType[6][64];
+    using PieceSquareHistoryPtr = PieceSquareHistory*;
+    using ContinuationHistory = PieceSquareHistory[2][6][64];
 
     MoveOrderer();
 
     void NewSearch();
     void Clear();
+
+    void InitContinuationHistoryPointers(NodeInfo& node);
 
     INLINE CounterType GetHistoryScore(const Color color, const Move move) const
     {
@@ -132,9 +137,6 @@ public:
     void DebugPrint() const;
 
 private:
-
-    using PieceSquareHistory = CounterType[6][64];
-    using ContinuationHistory = PieceSquareHistory[2][6][64];
 
     alignas(CACHELINE_SIZE)
 

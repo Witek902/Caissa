@@ -45,7 +45,7 @@ DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
 DEFINE_PARAM(LateMovePruningBase, 3);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 97);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 128);
 
 DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
@@ -73,6 +73,9 @@ DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 58);
 DEFINE_PARAM(RazoringStartDepth, 3);
 DEFINE_PARAM(RazoringMarginMultiplier, 138);
 DEFINE_PARAM(RazoringMarginBias, 20);
+
+DEFINE_PARAM(ReductionStatOffset, 7500);
+DEFINE_PARAM(ReductionStatDiv, 8192);
 
 class SearchTrace
 {
@@ -1557,6 +1560,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // Futility/Beta Pruning
             if (node.depth <= BetaPruningDepth &&
                 node.staticEval <= KnownWinValue &&
+                //node.staticEval >= beta && node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving) + node.moveStatScore / 400))
                 node.staticEval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node.depth - isImproving)))
             {
 #ifdef ENABLE_SEARCH_TRACE
@@ -1699,6 +1703,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (node.isCutNode) globalDepthReduction++;
     }
 
+    thread.moveOrderer.InitContinuationHistoryPointers(node);
+
     NodeCacheEntry* nodeCacheEntry = nullptr;
     if (node.height < 3)
     {
@@ -1754,7 +1760,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             }
         }
 
-        if (move.IsQuiet()) quietMoveIndex++;
+        int32_t moveStatScore = 0;
+
+        if (move.IsQuiet())
+        {
+            // compute move stat score using some of history counters
+            const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+            const uint32_t to = move.ToSquare().Index();
+            moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
+            if (const auto* h = node.continuationHistories[0]) moveStatScore += (*h)[piece][to];
+            if (const auto* h = node.continuationHistories[1]) moveStatScore += (*h)[piece][to];
+            if (const auto* h = node.continuationHistories[3]) moveStatScore += (*h)[piece][to];
+
+            quietMoveIndex++;
+        }
 
         if constexpr (!isRootNode)
         {
@@ -1764,8 +1783,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 if (move.IsQuiet() || move.IsUnderpromotion())
                 {
-                    //const int32_t historyScore = thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
-
                     // Late Move Pruning
                     // skip quiet moves that are far in the list
                     // the higher depth is, the less aggressive pruning is
@@ -1781,7 +1798,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     // if a move score is really bad, do not consider this move at low depth
                     if (quietMoveIndex > 1 &&
                         node.depth < 9 &&
-                        moveScore < GetHistoryPruningTreshold(node.depth))
+                        moveStatScore < GetHistoryPruningTreshold(node.depth))
                     {
                         continue;
                     }
@@ -1789,7 +1806,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
                     // Futility Pruning
                     // skip quiet move that have low chance to beat alpha
                     if (node.depth < 9 &&
-                        node.staticEval + 32 * node.depth * node.depth + moveScore / 256 < alpha)
+                        node.staticEval + 32 * node.depth * node.depth + moveStatScore / 512 < alpha)
                     {
                         movePicker.SkipQuiets();
                         if (quietMoveIndex > 1) continue;
@@ -1913,6 +1930,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
         childNode.isInCheck = childNode.position.IsInCheck();
         childNode.previousMove = move;
+        childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node.doubleExtensions + (moveExtension >= 2);
 
@@ -1932,12 +1950,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             // reduce depth gradually
             depthReduction += GetDepthReduction(node.depth, moveIndex);
 
-            // reduce good moves less
-            if (moveScore < -16000) depthReduction++;
-            if (moveScore < -8000) depthReduction++;
-            if (moveScore > 0) depthReduction--;
-            if (moveScore > 8000) depthReduction--;
-            if (moveScore > 16000) depthReduction--;
+            if (move.IsQuiet())
+            {
+                // reduce good moves less
+                if (moveScore >= MoveOrderer::CounterMoveBonus) depthReduction -= 2;
+
+                // reduce less based on move stat score
+                depthReduction -= std::min(3, DivFloor(moveStatScore + ReductionStatOffset, ReductionStatDiv));
+            }
 
             if (node.isInCheck && move.GetPiece() == Piece::King) depthReduction--;
             if (childNode.isInCheck) depthReduction--;
