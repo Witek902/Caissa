@@ -143,6 +143,24 @@ void MoveOrderer::DebugPrint() const
 #endif // CONFIGURATION_FINAL
 }
 
+void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
+{
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    const NodeInfo* prevNode = &node;
+    for (uint32_t i = 0; i < 6; ++i)
+    {
+        if (!prevNode || prevNode->isNullMove) break;
+        if (prevNode->previousMove.IsValid())
+        {
+            const uint32_t prevPiece = (uint32_t)prevNode->previousMove.GetPiece() - 1;
+            const uint32_t prevTo = prevNode->previousMove.ToSquare().Index();
+            ContinuationHistory& historyTable = (i % 2 == 0) ? counterMoveHistory : continuationHistory;
+            node.continuationHistories[i] = &(historyTable[color][prevPiece][prevTo]);
+        }
+        prevNode = prevNode->parentNode;
+    }
+}
+
 void MoveOrderer::NewSearch()
 {
     const CounterType scaleDownFactor = 2;
@@ -196,23 +214,6 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    PieceSquareHistory* continuationHistories[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-    {
-        const NodeInfo* prevNode = &node;
-        for (uint32_t i = 0; i < 6; ++i)
-        {
-            if (!prevNode || prevNode->isNullMove) break;
-            if (prevNode->previousMove.IsValid())
-            {
-                const uint32_t prevPiece = (uint32_t)prevNode->previousMove.GetPiece() - 1;
-                const uint32_t prevTo = prevNode->previousMove.ToSquare().Index();
-                ContinuationHistory& historyTable = (i % 2 == 0) ? counterMoveHistory : continuationHistory;
-                continuationHistories[i] = &(historyTable[color][prevPiece][prevTo]);
-            }
-            prevNode = prevNode->parentNode;
-        }
-    }
-
     const int32_t bonus = std::min(128 * (depth - 1) + depth * depth, 2000);
 
     for (uint32_t i = 0; i < numMoves; ++i)
@@ -226,10 +227,10 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
         UpdateHistoryCounter(quietMoveHistory[color][from][to], delta);
 
-        if (PieceSquareHistory* h = continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
     }
 }
 
@@ -327,24 +328,6 @@ void MoveOrderer::ScoreMoves(
         }
     }
 
-    const PieceSquareHistory* continuationHistories[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-    if (withQuiets)
-    {
-        const NodeInfo* prevNode = &node;
-        for (uint32_t i = 0; i < 6; ++i)
-        {
-            if (!prevNode || prevNode->isNullMove) break;
-            if (prevNode->previousMove.IsValid())
-            {
-                const uint32_t prevPiece = (uint32_t)prevNode->previousMove.GetPiece() - 1;
-                const uint32_t prevTo = prevNode->previousMove.ToSquare().Index();
-                const ContinuationHistory& historyTable = (i % 2 == 0) ? counterMoveHistory : continuationHistory;
-                continuationHistories[i] = &(historyTable[color][prevPiece][prevTo]);
-            }
-            prevNode = prevNode->parentNode;
-        }
-    }
-
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.GetMove(i);
@@ -409,10 +392,10 @@ void MoveOrderer::ScoreMoves(
             score += quietMoveHistory[color][from][to];
 
             // continuation history
-            if (const PieceSquareHistory* h = continuationHistories[0]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = continuationHistories[1]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = continuationHistories[3]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = continuationHistories[5]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to];
 
             switch (move.GetPiece())
             {
