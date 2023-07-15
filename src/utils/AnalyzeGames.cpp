@@ -24,7 +24,7 @@
 
 static const bool c_collectMaterialStats = false;
 static const bool c_dumpFortressPositions = false;
-static const bool c_dumpKingOnFarRankPositions = true;
+static const bool c_dumpKingOnFarRankPositions = false;
 
 float GameScoreToExpectedGameScore(const Game::Score score)
 {
@@ -92,9 +92,10 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];
 
-            if (!move.IsQuiet() &&
-                std::abs(moveScore) < KnownWinValue &&
-                !pos.IsInCheck(pos.GetSideToMove()))
+            if (move.IsQuiet() &&
+                pos.GetNumPieces() >= 4 &&
+                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
+                !pos.IsInCheck())
             {
                 const MaterialKey matKey = pos.GetMaterialKey();
 
