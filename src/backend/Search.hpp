@@ -74,6 +74,9 @@ struct SearchParam
     // number of PV lines to report
     uint32_t numPvLines = 1;
 
+    // randomize eval by +- this value
+    int32_t evalRandomization = 0;
+
     // exclude this root moves from the search
     std::vector<Move> excludedMoves;
 

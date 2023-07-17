@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.10.7_net"
+#define VersionNumber "1.10.8"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -163,6 +163,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
+        std::cout << "option name EvalRandomization type spin default 0 min 0 max 100\n";
 #ifdef USE_ENDGAME_NEURAL_NETWORK
         std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
 #endif // USE_ENDGAME_NEURAL_NETWORK
@@ -583,6 +584,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.limits.analysisMode = !isPonder && (isInfinite || mOptions.analysisMode); // run full analysis when pondering
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
+    mSearchCtx->searchParam.evalRandomization = mOptions.evalRandomization;
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
@@ -800,6 +802,11 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         mOptions.moveOverhead = atoi(value.c_str());
         mOptions.moveOverhead = std::clamp(mOptions.moveOverhead, 0, 10000);
+    }
+    else if (lowerCaseName == "evalrandomization")
+    {
+        mOptions.evalRandomization = atoi(value.c_str());
+        mOptions.evalRandomization = std::clamp(mOptions.evalRandomization, 0, 100);
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
