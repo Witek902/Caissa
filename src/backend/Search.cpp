@@ -981,7 +981,7 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
-static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
+static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node, int32_t randomization)
 {
     // TODO analyze history moves, scale down when moving same piece all the time
 
@@ -991,6 +991,11 @@ static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node)
     {
         // scale down when approaching 50-move draw
         adjustedScore = (int32_t)rawScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
+
+        if (randomization > 0)
+        {
+            adjustedScore += (uint32_t)node.position.GetHash() % (2 * randomization + 1) - randomization;
+        }
     }
 
     return static_cast<ScoreType>(adjustedScore);
@@ -1106,7 +1111,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ASSERT(staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(staticEval, node);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(staticEval, node, ctx.searchParam.evalRandomization);
 
         bestValue = adjustedEvalScore;
 
@@ -1508,7 +1513,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        node.staticEval = AdjustEvalScore(staticEval, node);
+        node.staticEval = AdjustEvalScore(staticEval, node, ctx.searchParam.evalRandomization);
 
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
