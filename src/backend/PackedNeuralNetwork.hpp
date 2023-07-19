@@ -24,7 +24,9 @@ static constexpr uint32_t NumKingBuckets = 5;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 768;
 static constexpr uint32_t OutputSize = 1;
-static constexpr uint32_t NumVariants = 16;
+static constexpr uint32_t NumMaterialGroups = 2; // queen / no-queen
+static constexpr uint32_t NumPieceCountBuckets = 8; // piece count buckets
+static constexpr uint32_t NumVariants = NumMaterialGroups * NumPieceCountBuckets;
 
 static constexpr uint8_t KingBucketIndex[32] =
 {
