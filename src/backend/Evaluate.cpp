@@ -498,7 +498,7 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     if (finalValue > c_evalSaturationTreshold)
         finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 8;
     else if (finalValue < -c_evalSaturationTreshold)
-        finalValue = -c_evalSaturationTreshold - (c_evalSaturationTreshold - finalValue) / 8;
+        finalValue = -c_evalSaturationTreshold + (finalValue + c_evalSaturationTreshold) / 8;
 
     ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
 
