@@ -2,12 +2,7 @@
 #include "Search.hpp"
 
 // enable validation of NN output (check if incremental updates work correctly)
-//#define VALIDATE_NETWORK_OUTPUT
-
-// (EXPERIMENTAL) enable accumulator cache
-// - doesn't work with multithreading
-// - looks like accessing cache lots of cache misses
-// #define USE_ACCUMULATOR_CACHE
+// #define VALIDATE_NETWORK_OUTPUT
 
 #ifdef NN_ACCUMULATOR_STATS
 
@@ -27,27 +22,6 @@ void NNEvaluator::ResetStats()
 
 #endif // NN_ACCUMULATOR_STATS
 
-void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
-{
-    ASSERT(kingSquare.IsValid());
-
-    if (kingSquare.File() >= 4)
-    {
-        kingSquare = kingSquare.FlippedFile();
-        side = 1;
-    }
-    else
-    {
-        side = 0;
-    }
-
-    const uint32_t kingIndex = 4 * kingSquare.Rank() + kingSquare.File();
-    ASSERT(kingIndex < 32);
-
-    bucket = nn::KingBucketIndex[kingIndex];
-    ASSERT(bucket < nn::NumKingBuckets);
-}
-
 template<bool IncludePieceFeatures>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective)
 {
@@ -56,31 +30,25 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
     const auto& whites = pos.GetSide(perspective);
     const auto& blacks = pos.GetSide(GetOppositeColor(perspective));
 
-    Square whiteKingSquare = whites.GetKingSquare();
-    Square blackKingSquare = blacks.GetKingSquare();
+    Square kingSquare = whites.GetKingSquare();
 
     uint32_t bitFlipMask = 0;
 
-    if (whiteKingSquare.File() >= 4)
+    if (kingSquare.File() >= 4)
     {
         // flip file
-        whiteKingSquare = whiteKingSquare.FlippedFile();
-        blackKingSquare = blackKingSquare.FlippedFile();
+        kingSquare = kingSquare.FlippedFile();
         bitFlipMask = 0b000111;
     }
 
     if (perspective == Color::Black)
     {
         // flip rank
-        whiteKingSquare = whiteKingSquare.FlippedRank();
-        blackKingSquare = blackKingSquare.FlippedRank();
+        kingSquare = kingSquare.FlippedRank();
         bitFlipMask |= 0b111000;
     }
 
-    const uint32_t kingIndex = 4 * whiteKingSquare.Rank() + whiteKingSquare.File();
-    ASSERT(kingIndex < 32);
-
-    const uint32_t kingBucket = nn::KingBucketIndex[kingIndex];
+    const uint32_t kingBucket = nn::KingBucketIndex[kingSquare.Index()];
     ASSERT(kingBucket < nn::NumKingBuckets);
 
     uint32_t inputOffset = kingBucket * 12 * 64;
@@ -144,39 +112,33 @@ template uint32_t PositionToFeaturesVector<true>(const Position& pos, uint16_t* 
 template uint32_t PositionToFeaturesVector<false>(const Position& pos, uint16_t* outFeatures, const Color perspective);
 
 template<Color perspective>
-INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color pieceColor, const Square square, const Position& pos)
+INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color pieceColor, Square square, const Position& pos)
 {
     // this must match PositionToFeaturesVector !!!
 
-    Square ourKingSquare = pos.GetSide(perspective).GetKingSquare();
+    Square kingSquare = pos.GetSide(perspective).GetKingSquare();
 
-    Square relativeSquare = square;
+    // flip the according to the perspective
+    if constexpr (perspective == Color::Black)
     {
-        // flip the according to the perspective
-        if constexpr (perspective == Color::Black)
-        {
-            relativeSquare = relativeSquare.FlippedRank();
-            ourKingSquare = ourKingSquare.FlippedRank();
-        }
-
-        // flip the according to the king placement
-        if (ourKingSquare.File() >= 4)
-        {
-            relativeSquare = relativeSquare.FlippedFile();
-            ourKingSquare = ourKingSquare.FlippedFile();
-        }
+        square = square.FlippedRank();
+        kingSquare = kingSquare.FlippedRank();
     }
 
-    const uint32_t kingIndex = 4 * ourKingSquare.Rank() + ourKingSquare.File();
-    ASSERT(kingIndex < 32);
+    // flip the according to the king placement
+    if (kingSquare.File() >= 4)
+    {
+        square = square.FlippedFile();
+        kingSquare = kingSquare.FlippedFile();
+    }
 
-    const uint32_t kingBucket = nn::KingBucketIndex[kingIndex];
+    const uint32_t kingBucket = nn::KingBucketIndex[kingSquare.Index()];
     ASSERT(kingBucket < nn::NumKingBuckets);
 
     uint32_t index =
         kingBucket * 12 * 64 +
         ((uint32_t)piece - (uint32_t)Piece::Pawn) * 64 +
-        relativeSquare.Index();
+        square.Index();
 
     if (pieceColor != perspective)
     {
@@ -210,67 +172,6 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
 
     return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
 }
-
-
-#ifdef USE_ACCUMULATOR_CACHE
-
-struct alignas(CACHELINE_SIZE) AccumulatorCacheEntry
-{
-    bool isValid = false;
-    Color perspective = Color::White;
-    uint64_t posHash;
-    SidePosition posWhite;
-    SidePosition posBlack;
-    nn::Accumulator accumulator;
-};
-
-static constexpr uint32_t c_AccumulatorCacheSize = 8 * 1024;
-static AccumulatorCacheEntry c_AccumulatorCache[c_AccumulatorCacheSize];
-
-static bool ReadAccumulatorCache(const Position& pos, const Color perspective, nn::Accumulator& outAccumulator)
-{
-    const uint64_t posHash = pos.GetHash_NoSideToMove();
-    const uint32_t index = posHash % c_AccumulatorCacheSize;
-    const AccumulatorCacheEntry& entry = c_AccumulatorCache[index];
-
-    // must have valid entry with matching piece placement and side to move
-    if (!entry.isValid ||
-        entry.perspective != perspective ||
-        entry.posHash != posHash ||
-        entry.posWhite != pos.Whites() ||
-        entry.posBlack != pos.Blacks())
-    {
-        return false;
-    }
-
-    outAccumulator = entry.accumulator;
-    return true;
-}
-
-static void WriteAccumulatorCache(const Position& pos, const Color perspective, const nn::Accumulator& accumulator)
-{
-    const uint64_t posHash = pos.GetHash_NoSideToMove();
-    const uint32_t index = posHash % c_AccumulatorCacheSize;
-    AccumulatorCacheEntry& entry = c_AccumulatorCache[index];
-
-    // don't overwrite same entry
-    if (entry.isValid &&
-        entry.perspective == perspective &&
-        entry.posWhite == pos.Whites() &&
-        entry.posBlack == pos.Blacks())
-    {
-        return;
-    }
-
-    entry.isValid = true;
-    entry.perspective = perspective;
-    entry.posHash = posHash;
-    entry.posWhite = pos.Whites();
-    entry.posBlack = pos.Blacks();
-    entry.accumulator = accumulator;
-}
-
-#endif // USE_ACCUMULATOR_CACHE
 
 template<Color perspective>
 INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const NodeInfo* prevAccumNode, const NodeInfo& node)
@@ -393,14 +294,6 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
 
     // mark accumulator as computed
     node.nnContext->accumDirty[(uint32_t)perspective] = false;
-
-#ifdef USE_ACCUMULATOR_CACHE
-    // cache accumulator values in PV nodes
-    if (node.IsPV())
-    {
-        WriteAccumulatorCache(node.position, perspective, accumulator);
-    }
-#endif // USE_ACCUMULATOR_CACHE
 }
 
 template<Color perspective>
@@ -447,20 +340,6 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
             prevAccumNode = nodePtr;
             break;
         }
-
-#ifdef USE_ACCUMULATOR_CACHE
-        // check if accumulator was cached
-        if (nodePtr->height < 8 &&
-            ReadAccumulatorCache(nodePtr->position,
-                perspective,
-                nodePtr->nnContext->accumulator[(uint32_t)perspective]))
-        {
-            // found parent node with valid (cached) accumulator
-            nodePtr->nnContext->accumDirty[(uint32_t)perspective] = false;
-            prevAccumNode = nodePtr;
-            break;
-        }
-#endif // USE_ACCUMULATOR_CACHE
     }
 
     if (prevAccumNode == &node)
