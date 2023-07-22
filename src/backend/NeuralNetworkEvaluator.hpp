@@ -50,7 +50,7 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
         MarkAsDirty();
     }
 
-    void MarkAsDirty()
+    INLINE void MarkAsDirty()
     {
         accumDirty[0] = true;
         accumDirty[1] = true;
@@ -77,7 +77,24 @@ public:
 #endif // NN_ACCUMULATOR_STATS
 };
 
-void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket);
+
+INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
+{
+    ASSERT(kingSquare.IsValid());
+
+    if (kingSquare.File() >= 4)
+    {
+        kingSquare = kingSquare.FlippedFile();
+        side = 1;
+    }
+    else
+    {
+        side = 0;
+    }
+
+    bucket = nn::KingBucketIndex[kingSquare.Index()];
+    ASSERT(bucket < nn::NumKingBuckets);
+}
 
 uint32_t GetNetworkVariant(const Position& pos);
 

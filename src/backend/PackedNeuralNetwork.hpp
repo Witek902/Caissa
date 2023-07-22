@@ -28,16 +28,16 @@ static constexpr uint32_t NumMaterialGroups = 2; // queen / no-queen
 static constexpr uint32_t NumPieceCountBuckets = 8; // piece count buckets
 static constexpr uint32_t NumVariants = NumMaterialGroups * NumPieceCountBuckets;
 
-static constexpr uint8_t KingBucketIndex[32] =
+static constexpr uint8_t KingBucketIndex[64] =
 {
-    0, 0, 1, 1,
-    0, 0, 1, 1,
-    2, 2, 3, 3,
-    2, 2, 3, 3,
-    2, 2, 3, 3,
-    4, 4, 4, 4,
-    4, 4, 4, 4,
-    4, 4, 4, 4,
+    0, 0, 1, 1, 1, 1, 0, 0,
+    0, 0, 1, 1, 1, 1, 0, 0,
+    2, 2, 3, 3, 3, 3, 2, 2,
+    2, 2, 3, 3, 3, 3, 2, 2,
+    2, 2, 3, 3, 3, 3, 2, 2,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4,
 };
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
