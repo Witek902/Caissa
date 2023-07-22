@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.10.8"
+#define VersionNumber "1.10.9"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -164,6 +164,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
         std::cout << "option name EvalRandomization type spin default 0 min 0 max 100\n";
+        std::cout << "option name StaticContempt type spin default 0 min -1000 max 1000\n";
+        std::cout << "option name DynamicContempt type spin default 0 min -1000 max 1000\n";
 #ifdef USE_ENDGAME_NEURAL_NETWORK
         std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
 #endif // USE_ENDGAME_NEURAL_NETWORK
@@ -585,6 +587,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.evalRandomization = mOptions.evalRandomization;
+    mSearchCtx->searchParam.staticContempt = mOptions.staticContempt;
+    mSearchCtx->searchParam.dynamicContempt = mOptions.dynamicContempt;
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
@@ -784,8 +788,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 
     if (lowerCaseName == "multipv")
     {
-        mOptions.multiPV = atoi(value.c_str());
-        mOptions.multiPV = std::clamp(mOptions.multiPV, 1u, MaxAllowedMoves);
+        mOptions.multiPV = std::clamp((uint32_t)atoi(value.c_str()), 1u, MaxAllowedMoves);
     }
     else if (lowerCaseName == "threads")
     {
@@ -800,13 +803,19 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else if (lowerCaseName == "moveoverhead")
     {
-        mOptions.moveOverhead = atoi(value.c_str());
-        mOptions.moveOverhead = std::clamp(mOptions.moveOverhead, 0, 10000);
+        mOptions.moveOverhead = std::clamp(atoi(value.c_str()), 0, 10000);
     }
     else if (lowerCaseName == "evalrandomization")
     {
-        mOptions.evalRandomization = atoi(value.c_str());
-        mOptions.evalRandomization = std::clamp(mOptions.evalRandomization, 0, 100);
+        mOptions.evalRandomization = std::clamp(atoi(value.c_str()), 0, 100);
+    }
+    else if (lowerCaseName == "staticcontempt")
+    {
+        mOptions.staticContempt = std::clamp(atoi(value.c_str()), -1000, 1000);
+    }
+    else if (lowerCaseName == "dynamiccontempt")
+    {
+        mOptions.dynamicContempt = std::clamp(atoi(value.c_str()), -1000, 1000);
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {

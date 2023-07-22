@@ -981,7 +981,20 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
-static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node, int32_t randomization)
+INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
+{
+    int32_t contempt = searchParam.staticContempt;
+
+    if (searchParam.dynamicContempt > 0)
+        contempt += (searchParam.dynamicContempt * pos.GetNumPiecesExcludingKing()) / 32;
+
+    if (pos.GetSideToMove() != rootStm)
+        contempt = -contempt;
+
+    return contempt;
+}
+
+static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
 {
     // TODO analyze history moves, scale down when moving same piece all the time
 
@@ -989,13 +1002,13 @@ static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node,
     
     if (std::abs(rawScore) < KnownWinValue)
     {
-        // scale down when approaching 50-move draw
-        adjustedScore = (int32_t)rawScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
+        adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        if (randomization > 0)
-        {
-            adjustedScore += (uint32_t)node.position.GetHash() % (2 * randomization + 1) - randomization;
-        }
+        // scale down when approaching 50-move draw
+        adjustedScore = adjustedScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
+
+        if (searchParam.evalRandomization > 0)
+            adjustedScore += (uint32_t)node.position.GetHash() % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
     }
 
     return static_cast<ScoreType>(adjustedScore);
@@ -1111,7 +1124,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
         ASSERT(staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(staticEval, node, ctx.searchParam.evalRandomization);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(staticEval, node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1513,7 +1526,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         ASSERT(staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        node.staticEval = AdjustEvalScore(staticEval, node, ctx.searchParam.evalRandomization);
+        node.staticEval = AdjustEvalScore(staticEval, node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
