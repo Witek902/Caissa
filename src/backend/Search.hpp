@@ -160,7 +160,6 @@ struct NodeInfo
     bool isCutNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
-    bool isSingularSearch = false;
 
     MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
 
