@@ -848,18 +848,22 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? UINT32_MAX : std::min(param.depth, DefaultMaxPvLineLength);
 
+    // TODO root node could be created in Search_Internal
+    NodeInfo rootNode;
+    rootNode.position = param.position;
+    rootNode.isInCheck = param.position.IsInCheck();
+    rootNode.isPvNodeFromPrevIteration = true;
+    rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
+    rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
+    rootNode.nnContext->MarkAsDirty();
+
+    EnsureAccumulatorUpdated(rootNode);
+
     for (;;)
     {
-        NodeInfo rootNode;
-        rootNode.position = param.position;
-        rootNode.isInCheck = param.position.IsInCheck();
-        rootNode.isPvNodeFromPrevIteration = true;
         rootNode.depth = static_cast<int16_t>(depth);
-        rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
-        rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
-        rootNode.nnContext->MarkAsDirty();
 
 #ifdef ENABLE_SEARCH_TRACE
         SearchTrace::OnRootSearchBegin();
@@ -1096,10 +1100,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
     RefreshPsqtScore(node);
 #endif // EVAL_USE_PSQT
 
-    const bool maxDepthReached = false; // node.height + 1 >= MaxSearchDepth;
-
     // do not consider stand pat if in check
-    if (!node.isInCheck || maxDepthReached)
+    if (!node.isInCheck)
     {
         if (staticEval == InvalidValue)
         {
@@ -1139,7 +1141,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
             }
         }
 
-        if (bestValue >= beta || maxDepthReached)
+        if (bestValue >= beta)
         {
             if (!ttEntry.IsValid())
             {
