@@ -316,7 +316,14 @@ private:
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
 
-        NNEvaluatorContext* GetNNEvaluatorContext(uint32_t height);
+        INLINE NNEvaluatorContext* GetNNEvaluatorContext(uint32_t height)
+        {
+            ASSERT(height < MaxSearchDepth);
+            NNEvaluatorContextPtr& context = nnContextStack[height];
+            if (!context)
+                context = std::make_unique<NNEvaluatorContext>();
+            return context.get();
+        }
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;

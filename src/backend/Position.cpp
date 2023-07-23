@@ -822,21 +822,21 @@ int32_t Position::BestPossibleMoveValue() const
     return value;
 }
 
+static const int32_t c_seePieceValues[] =
+{
+    0, // none
+    pawnValue,
+    knightValue,
+    bishopValue,
+    rookValue,
+    queenValue,
+    kingValue,
+};
+
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
 {
     const Square toSquare = move.ToSquare();
     const Square fromSquare = move.FromSquare();
-
-    const int32_t c_seePieceValues[] =
-    {
-        0, // none
-        pawnValue,
-        knightValue,
-        bishopValue,
-        rookValue,
-        queenValue,
-        kingValue,
-    };
 
     int32_t balance = -treshold;
 

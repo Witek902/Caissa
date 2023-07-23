@@ -198,7 +198,7 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-inline void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));

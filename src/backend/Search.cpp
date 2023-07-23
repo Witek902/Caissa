@@ -944,18 +944,6 @@ Search::ThreadData::ThreadData()
     randomSeed = 0x4abf372b;
 }
 
-NNEvaluatorContext* Search::ThreadData::GetNNEvaluatorContext(uint32_t height)
-{
-    ASSERT(height < MaxSearchDepth);
-
-    if (!nnContextStack[height])
-    {
-        nnContextStack[height] = std::make_unique<NNEvaluatorContext>();
-    }
-
-    return nnContextStack[height].get();
-}
-
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
     if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.filteredMove.IsValid())
