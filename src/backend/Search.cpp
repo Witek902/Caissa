@@ -783,6 +783,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         // check for singular root move
         if (isMainThread &&
+            primaryMove.IsValid() &&
             numPvLines == 1 &&
             depth >= SingularitySearchMinDepth &&
             std::abs(primaryMoveScore) < 1000 &&
@@ -798,7 +799,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             NodeInfo rootNode;
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
-            rootNode.isSingularSearch = true;
             rootNode.depth = singularDepth;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
@@ -954,7 +954,7 @@ NNEvaluatorContext* Search::ThreadData::GetNNEvaluatorContext(uint32_t height)
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
-    if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.isSingularSearch)
+    if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.filteredMove.IsValid())
     {
         return Move::Invalid();
     }
@@ -1330,7 +1330,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 #endif // ENABLE_SEARCH_TRACE
 
     // clear PV line
-    node.pvLength = 0;
+    if (!node.filteredMove.IsValid()) // don't overwrite PV in singular search
+    {
+        node.pvLength = 0;
+    }
 
     // update stats
     thread.stats.OnNodeEnter(node.height + 1);
@@ -1876,15 +1879,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node.depth);
 
-                NodeInfo singularChildNode = node;
-                singularChildNode.isPvNodeFromPrevIteration = false;
-                singularChildNode.isSingularSearch = true;
-                singularChildNode.depth = node.depth / 2 - 1;
-                singularChildNode.alpha = singularBeta - 1;
-                singularChildNode.beta = singularBeta;
-                singularChildNode.filteredMove = move;
+                const bool originalIsPvNodeFromPrevIteration = node.isPvNodeFromPrevIteration;
+                const int16_t originalDepth = node.depth;
+                const ScoreType originalAlpha = node.alpha;
+                const ScoreType originalBeta = node.beta;
 
-                const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, singularChildNode, ctx);
+                node.isPvNodeFromPrevIteration = false;
+                node.depth = node.depth / 2 - 1;
+                node.alpha = singularBeta - 1;
+                node.beta = singularBeta;
+                node.filteredMove = move;
+                const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
+
+                // restore node state
+                node.isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
+                node.depth = originalDepth;
+                node.alpha = originalAlpha;
+                node.beta = originalBeta;
+                node.filteredMove = PackedMove::Invalid();
 
                 if (singularScore < singularBeta)
                 {
@@ -2061,11 +2073,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
             if constexpr (isRootNode) bestMove = move;
 
             // update PV line
-            if constexpr  (isPvNode)
+            if constexpr (isPvNode)
             {
-                node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-                node.pvLine[0] = move;
-                memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+                if (!node.filteredMove.IsValid()) // don't overwrite PV in singular search
+                {
+                    node.pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+                    node.pvLine[0] = move;
+                    memcpy(node.pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+                }
             }
         }
 
