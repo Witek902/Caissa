@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Common.hpp"
+#include "Accumulator.hpp"
 #include "Memory.hpp"
 #include "Color.hpp"
 #include "Piece.hpp"
 #include "Square.hpp"
-#include "PackedNeuralNetwork.hpp"
 
 //#define NN_ACCUMULATOR_STATS
 
