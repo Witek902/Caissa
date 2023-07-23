@@ -994,7 +994,7 @@ INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm
     return contempt;
 }
 
-static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
+INLINE static ScoreType AdjustEvalScore(const ScoreType rawScore, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
 {
     // TODO analyze history moves, scale down when moving same piece all the time
 
