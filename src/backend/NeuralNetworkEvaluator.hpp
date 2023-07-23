@@ -3,9 +3,7 @@
 #include "Common.hpp"
 #include "Accumulator.hpp"
 #include "Memory.hpp"
-#include "Color.hpp"
-#include "Piece.hpp"
-#include "Square.hpp"
+#include "Position.hpp"
 
 //#define NN_ACCUMULATOR_STATS
 
@@ -96,7 +94,13 @@ INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bu
     ASSERT(bucket < nn::NumKingBuckets);
 }
 
-uint32_t GetNetworkVariant(const Position& pos);
+INLINE uint32_t GetNetworkVariant(const Position& pos)
+{
+    const uint32_t numPieceCountBuckets = 8;
+    const uint32_t pieceCountBucket = std::min(pos.GetNumPiecesExcludingKing() / 4u, numPieceCountBuckets - 1u);
+    const uint32_t queenPresenceBucket = pos.Whites().queens || pos.Blacks().queens;
+    return queenPresenceBucket * numPieceCountBuckets + pieceCountBucket;
+}
 
 template<bool IncludePieceFeatures = false>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);

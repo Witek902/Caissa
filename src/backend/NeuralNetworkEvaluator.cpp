@@ -150,14 +150,6 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     return index;
 }
 
-uint32_t GetNetworkVariant(const Position& pos)
-{
-    const uint32_t numPieceCountBuckets = 8;
-    const uint32_t pieceCountBucket = std::min(pos.GetNumPiecesExcludingKing() / 4u, numPieceCountBuckets - 1u);
-    const uint32_t queenPresenceBucket = pos.Whites().queens || pos.Blacks().queens;
-    return queenPresenceBucket * numPieceCountBuckets + pieceCountBucket;
-}
-
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
 {
     constexpr uint32_t maxFeatures = 64;
