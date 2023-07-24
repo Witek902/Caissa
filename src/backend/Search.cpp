@@ -1703,7 +1703,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (!isImproving) globalDepthReduction++;
 
         // reduce more if TT move is a capture
-        if (ttMove.IsValid() && position.IsCapture(ttMove)) globalDepthReduction++;
+        if (ttMove.IsValid() && position.IsCapture(ttMove))
+        {
+            globalDepthReduction++;
+
+            // reduce even more if TT move is a recapture
+            if (node.previousMove.IsCapture() && node.previousMove.ToSquare() == ttMove.ToSquare())
+                globalDepthReduction++;
+        }
 
         // reduce more if entered a winning endgame
         if (node.previousMove.IsCapture() && node.staticEval >= KnownWinValue) globalDepthReduction++;
