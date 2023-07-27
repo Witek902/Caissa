@@ -831,6 +831,8 @@ bool NetworkTrainer::Train()
                     m_featureTransformerWeights->m_weightsMask.begin() + 12 * 64 * nn::AccumulatorSize * currentKingBucket,
                     m_featureTransformerWeights->m_weightsMask.begin() + 12 * 64 * nn::AccumulatorSize * (currentKingBucket + 1),
                     1.0f);
+#else
+                (void)currentKingBucket;
 #endif // KING_BUCKET_TUNING
 
                 TaskBuilder taskBuilder{ ctx };

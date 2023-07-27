@@ -63,7 +63,7 @@ public:
     virtual uint64_t GetSize() override;
     virtual bool IsEndOfFile() const override;
     virtual bool Read(void* data, size_t size) override;
-    virtual const char* GetFileName() const { return mPath.c_str(); }
+    virtual const char* GetFileName() const override { return mPath.c_str(); }
 private:
     FILE* mFile;
     uint64_t mSize = 0;
