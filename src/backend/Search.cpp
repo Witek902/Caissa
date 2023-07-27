@@ -1176,7 +1176,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
-        ASSERT(move.IsValid());
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
         if (!node.isInCheck &&
             bestValue > -TablebaseWinValue)
@@ -1206,9 +1207,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchCo
         {
             continue;
         }
-
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         // don't try all check evasions
         if (node.isInCheck && move.IsQuiet())
@@ -1635,6 +1633,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
                 if (doNullMove)
                 {
+                    // start prefetching child node's TT entry
+                    ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
+
                     const int32_t r =
                         NullMoveReductions_NullMoveDepthReduction +
                         node.depth / 4 +
@@ -1745,7 +1746,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
 
     while (movePicker.PickMove(node, ctx.game, move, moveScore))
     {
-        ASSERT(move.IsValid());
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
 #ifdef VALIDATE_MOVE_PICKER
         for (uint32_t i = 0; i < numGeneratedMoves; ++i) ASSERT(generatedSoFar[i] != move);
@@ -1918,9 +1920,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx
         if (!childNode.position.DoMove(move, childNode.nnContext))
             continue;
         moveIndex++;
-
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(childNode.position);
 
         // report current move to UCI
         if constexpr (isRootNode)

@@ -1143,7 +1143,7 @@ bool UniversalChessInterface::Command_Benchmark()
         "rnbqkb1r/1p3p2/p3p1p1/2ppP1P1/3P2P1/2P4p/PP5P/RNBQKB1R w KQkq - 0 6",
     };
 
-    const uint32_t maxDepth = 11;
+    const uint32_t maxDepth = 12;
 
     Search search;
     TranspositionTable tt(4 * 1024 * 1024);
