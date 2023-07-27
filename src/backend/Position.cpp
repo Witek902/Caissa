@@ -109,6 +109,24 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
 
+uint64_t Position::HashAfterMove(const Move move) const
+{
+    ASSERT(move.IsValid());
+
+    uint64_t hash = mHash ^ GetSideToMoveZobristHash();
+
+    hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.FromSquare().Index());
+    hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.ToSquare().Index());
+
+    if (move.IsCapture() && !move.IsEnPassant())
+    {
+        const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+        hash ^= GetPieceZobristHash(GetOppositeColor(mSideToMove), capturedPiece, move.ToSquare().Index());
+    }
+
+    return hash;
+}
+
 void Position::SetSideToMove(Color color)
 {
     ASSERT(color == Color::White || color == Color::Black);

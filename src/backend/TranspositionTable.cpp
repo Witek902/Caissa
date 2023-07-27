@@ -167,12 +167,12 @@ void TranspositionTable::NextGeneration()
     generation++;
 }
 
-void TranspositionTable::Prefetch(const Position& position) const
+void TranspositionTable::Prefetch(const uint64_t hash) const
 {
 #ifdef USE_SSE
-    _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), _MM_HINT_T0);
+    _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), _MM_HINT_T0);
 #elif defined(USE_NEON)
-    __builtin_prefetch(reinterpret_cast<const char*>(&GetCluster(position.GetHash())), 0, 0);
+    __builtin_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), 0, 0);
 #else
     (void)position;
 #endif // USE_SSE

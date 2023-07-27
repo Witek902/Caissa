@@ -240,6 +240,7 @@ public:
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
     INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu); }
+    uint64_t HashAfterMove(const Move move) const;
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }

@@ -89,7 +89,7 @@ public:
 
     bool Read(const Position& position, TTEntry& outEntry) const;
     void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
-    void Prefetch(const Position& position) const;
+    void Prefetch(const uint64_t hash) const;
 
     // invalidate all entries
     void Clear();
