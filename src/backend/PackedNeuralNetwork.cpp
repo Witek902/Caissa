@@ -541,7 +541,7 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     }
 
     // add int32s horizontally
-    val += vaddvq_s32(vaddq_s32(vaddq_s32(sumA, sumB, vaddq_s32(sumC, sumD));
+    val += vaddvq_s32(vaddq_s32(vaddq_s32(sumA, sumB), vaddq_s32(sumC, sumD)));
 
 #else
     for (uint32_t i = 0; i < AccumulatorSize; ++i)

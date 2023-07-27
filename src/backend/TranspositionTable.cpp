@@ -171,10 +171,10 @@ void TranspositionTable::Prefetch(const uint64_t hash) const
 {
 #ifdef USE_SSE
     _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), _MM_HINT_T0);
-#elif defined(USE_NEON)
+#elif defined(USE_ARM_NEON)
     __builtin_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), 0, 0);
 #else
-    (void)position;
+    (void)hash;
 #endif // USE_SSE
 }
 
