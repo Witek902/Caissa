@@ -149,7 +149,7 @@ void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
     const NodeInfo* prevNode = &node;
     for (uint32_t i = 0; i < 6; ++i)
     {
-        if (!prevNode || prevNode->isNullMove) break;
+        if (!prevNode || prevNode->height == 0 || prevNode->isNullMove) break;
         if (prevNode->previousMove.IsValid())
         {
             const uint32_t prevPiece = (uint32_t)prevNode->previousMove.GetPiece() - 1;
@@ -157,7 +157,7 @@ void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
             ContinuationHistory& historyTable = (i % 2 == 0) ? counterMoveHistory : continuationHistory;
             node.continuationHistories[i] = &(historyTable[color][prevPiece][prevTo]);
         }
-        prevNode = prevNode->parentNode;
+        --prevNode;
     }
 }
 
@@ -194,9 +194,9 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
-void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
+void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
 {
-    ASSERT(depth >= 0);
+    ASSERT(node.depth >= 0);
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
@@ -209,12 +209,12 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 
     // don't update uncertain moves
-    if (numMoves <= 1 && depth < 2)
+    if (numMoves <= 1 && node.depth < 2)
     {
         return;
     }
 
-    const int32_t bonus = std::min(128 * (depth - 1) + depth * depth, 2000);
+    const int32_t bonus = std::min(128 * (node.depth - 1) + node.depth * node.depth, 2000);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
@@ -234,10 +234,10 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 }
 
-void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
+void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
 {
     // depth can be negative in QSearch
-    depth = std::max(0, depth);
+    int32_t depth = std::max<int32_t>(0, node.depth);
 
     // don't update uncertain moves
     if (numMoves <= 1)
@@ -266,14 +266,6 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
         UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
-    }
-}
-
-void MoveOrderer::UpdateKillerMove(const NodeInfo& node, const Move move)
-{
-    if (node.height < MaxSearchDepth)
-    {
-        killerMoves[node.height].Push(move);
     }
 }
 
