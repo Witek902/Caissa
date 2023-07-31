@@ -184,7 +184,7 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
         uint16_t removedFeatures[maxChangedFeatures];
 
         // build a list of features to be updated
-        for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; nodePtr = nodePtr->parentNode)
+        for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; --nodePtr)
         {
             NNEvaluatorContext& nnContext = *(nodePtr->nnContext);
 
@@ -209,6 +209,12 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
                     const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex<perspective>(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.fromSquare, node.position);
                     removedFeatures[numRemovedFeatures++] = featureIdx;
                 }
+            }
+
+            if (nodePtr->height == 0)
+            {
+                // reached end of stack
+                break;
             }
         }
 
@@ -303,7 +309,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     // find closest parent node that has valid accumulator
     uint32_t updateCost = 0;
     const NodeInfo* prevAccumNode = nullptr;
-    for (const NodeInfo* nodePtr = &node; nodePtr != nullptr; nodePtr = nodePtr->parentNode)
+    for (const NodeInfo* nodePtr = &node; ; --nodePtr)
     {
         ASSERT(nodePtr->nnContext);
 
@@ -332,21 +338,29 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
             prevAccumNode = nodePtr;
             break;
         }
+
+        if (nodePtr->height == 0)
+        {
+            // reached end of stack
+            break;
+        }
     }
+
+    const NodeInfo* parentInfo = &node - 1;
 
     if (prevAccumNode == &node)
     {
         // do nothing - accumulator is already up to date (was cached)
     }
-    else if (node.parentNode && prevAccumNode &&
-        node.parentNode != prevAccumNode &&
-        node.parentNode->nnContext->accumDirty[(uint32_t)perspective])
+    else if (node.height > 0 && prevAccumNode &&
+        parentInfo != prevAccumNode &&
+        parentInfo->nnContext->accumDirty[(uint32_t)perspective])
     {
         // two-stage update:
         // if parent node has invalid accumulator, update it first
         // this way, sibling nodes can reuse parent's accumulator
-        UpdateAccumulator<perspective>(network, prevAccumNode, *node.parentNode);
-        UpdateAccumulator<perspective>(network, node.parentNode, node);
+        UpdateAccumulator<perspective>(network, prevAccumNode, *parentInfo);
+        UpdateAccumulator<perspective>(network, parentInfo, node);
     }
     else
     {

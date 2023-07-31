@@ -80,19 +80,20 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
     }
 
     const uint64_t originalKey = node.position.GetHash();
-    const NodeInfo* currNode = node.parentNode;
+    const NodeInfo* currNode = &node - 1;
     ASSERT(currNode);
 
     for (;;)
     {
-        const NodeInfo* parentNode = currNode->parentNode;
+        const NodeInfo* parentNode = currNode - 1;
 
         // go up the tree, abort on any null move or capture
-        if (!parentNode || !parentNode->parentNode) break;
+        if (currNode->height < 2) break;
         if (currNode->isNullMove || parentNode->isNullMove) break;
         if (currNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
         if (parentNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
-        currNode = parentNode->parentNode;
+
+        currNode = currNode - 2;
 
         const uint64_t moveKey = originalKey ^ currNode->position.GetHash();
 
@@ -159,13 +160,11 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game)
             }
         }
 
-        prevNode = prevNode->parentNode;
-
         // reached end of the stack
-        if (!prevNode)
-        {
+        if (prevNode->height == 0)
             break;
-        }
+
+        --prevNode;
 
         // only check every second previous node, because side to move must be the same
         if (ply % 2 == 0)

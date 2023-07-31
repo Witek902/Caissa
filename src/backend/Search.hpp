@@ -129,8 +129,6 @@ struct NodeInfo
 {
     Position position;
 
-    NodeInfo* parentNode = nullptr;
-
     // ignore given moves in search, used for singular extensions
     PackedMove filteredMove = PackedMove::Invalid();
 
@@ -142,7 +140,7 @@ struct NodeInfo
     int16_t depth = 0;
 
     // depth in ply (depth counting from root)
-    uint16_t height = 0;
+    int16_t height = 0;
 
     ScoreType alpha;
     ScoreType beta;
@@ -167,6 +165,27 @@ struct NodeInfo
 
     uint16_t pvLength = 0;
     PackedMove pvLine[MaxSearchDepth];
+
+    INLINE void Clear()
+    {
+        pvIndex = 0;
+        filteredMove = PackedMove::Invalid();
+        staticEval = InvalidValue;
+        previousMove = Move::Invalid();
+        moveStatScore = 0;
+        isPvNodeFromPrevIteration = false;
+        isInCheck = false;
+        isNullMove = false;
+        isCutNode = false;
+        doubleExtensions = 0;
+        nnContext = nullptr;
+        continuationHistories[0] = nullptr;
+        continuationHistories[1] = nullptr;
+        continuationHistories[2] = nullptr;
+        continuationHistories[3] = nullptr;
+        continuationHistories[4] = nullptr;
+        continuationHistories[5] = nullptr;
+    }
 };
 
 struct SearchThreadStats
@@ -308,6 +327,8 @@ private:
 
         NodeCache nodeCache;
 
+        NodeInfo searchStack[MaxSearchDepth];
+
         // neural network context for each node height
         using NNEvaluatorContextPtr = std::unique_ptr<NNEvaluatorContext>;
         NNEvaluatorContextPtr nnContextStack[MaxSearchDepth];
@@ -354,10 +375,10 @@ private:
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
 
     template<NodeType nodeType>
-    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
+    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
 
     template<NodeType nodeType>
-    ScoreType NegaMax(ThreadData& thread, NodeInfo& node, SearchContext& ctx) const;
+    ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
 
     // returns true if the search needs to be aborted immediately
     static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);

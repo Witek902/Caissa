@@ -113,18 +113,20 @@ public:
         }
     }
 
-    void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
-    void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth);
+    void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove);
+    void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove);
 
     INLINE void ClearKillerMoves(uint32_t depth)
     {
-        if (depth < MaxSearchDepth)
-        {
-            killerMoves[depth].Clear();
-        }
+        ASSERT(depth < MaxSearchDepth);
+        killerMoves[depth].Clear();
     }
 
-    void UpdateKillerMove(const NodeInfo& node, const Move move);
+    INLINE void UpdateKillerMove(uint32_t depth, const Move move)
+    {
+        ASSERT(depth < MaxSearchDepth);
+        killerMoves[depth].Push(move);
+    }
 
     // assign scores to move list
     void ScoreMoves(
