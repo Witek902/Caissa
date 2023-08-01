@@ -413,7 +413,7 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 
 bool Position::IsMate() const
 {
-    return IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u);
+    return IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u) && (mHalfMoveCount < 100);
 }
 
 bool Position::IsStalemate() const
