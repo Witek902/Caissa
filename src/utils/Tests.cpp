@@ -2084,6 +2084,18 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result[0].score == CheckmateValue - 1);
     }
 
+    // mate on 50th move is a draw
+    {
+        param.limits.maxDepth = 10;
+        param.numPvLines = 1;
+
+        game.Reset(Position("8/6B1/8/8/2K2n2/k7/1R6/8 b - - 98 2"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 1);
+        TEST_EXPECT(result[0].score == 0);
+    }
+
     ASSERT(param.numThreads == numThreads); // don't modify number of threads!
 }
 
