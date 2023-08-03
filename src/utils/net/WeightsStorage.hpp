@@ -28,6 +28,7 @@ public:
     uint32_t m_outputSize = 0;
     bool m_isSparse = false;
 
+    bool m_updateWeights = true;
     Values m_weightsMask;
 
     float m_weightsRange = 10.0f;

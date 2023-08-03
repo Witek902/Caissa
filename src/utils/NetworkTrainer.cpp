@@ -41,8 +41,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 64 * 1024;
-static const uint32_t cMaxBatchSize = 64 * 1024;
+static const uint32_t cMinBatchSize = 32 * 1024;
+static const uint32_t cMaxBatchSize = 32 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -238,7 +238,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.7f, 0.0f, 1.0f - expf(-(float)pos.GetMoveCount() / 50.0f));
+        const float wdlLambda = std::lerp(0.25f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -252,12 +252,12 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.0f;
+            const float tbDrawLambda = 0.05f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
         {
-            const float tbLambda = 0.2f;
+            const float tbLambda = 0.1f;
             const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
             score = std::lerp(wdlScore, score, tbLambda);
         }
@@ -514,7 +514,7 @@ void NetworkTrainer::Validate(size_t iteration)
 
 void NetworkTrainer::BlendLastLayerWeights()
 {
-    const float blendFactor = 0.0001f;
+    const float blendFactor = 0.00001f;
 
     for (uint32_t i = 0; i < nn::AccumulatorSize * 2; ++i)
     {
@@ -763,7 +763,7 @@ bool NetworkTrainer::Train()
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
     const float maxLearningRate = 0.5f;
-    const float minLearningRate = 0.05f;
+    const float minLearningRate = 0.1f;
 
     // TODO rotate king buckets from 0 to NumKingBuckets - 1
     int32_t currentKingBucket = -1;
@@ -821,7 +821,7 @@ bool NetworkTrainer::Train()
                 params.iteration = epoch;
                 params.batchSize = iteration < 5 ? cMinBatchSize : cMaxBatchSize;
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-5f;
+                params.weightDecay = 1.0e-4f;
 
 #ifdef KING_BUCKET_TUNING
                 // set weights mask based on king bucket

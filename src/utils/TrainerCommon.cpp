@@ -143,14 +143,14 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         // skip drawn game based half-move counter
         if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
         {
-            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
+            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 200.0f;
             std::bernoulli_distribution skippingDistr(hmcSkipProb);
             if (skippingDistr(gen))
                 continue;
         }
 
         // skip early moves
-        constexpr uint32_t maxEarlyMoveCount = 12;
+        constexpr uint32_t maxEarlyMoveCount = 10;
         if (outEntry.pos.moveCount < maxEarlyMoveCount)
         {
             const float earlyMoveSkipProb = 0.5f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / (float)maxEarlyMoveCount;
@@ -212,6 +212,20 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
             const float maxSkippingProb = 0.25f;
             std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
+            if (skippingDistr(gen))
+                continue;
+        }
+
+        // skip based on eval
+        {
+            const ScoreType staticEval = Evaluate(outPosition, nullptr, false);
+            const float evalScore = EvalToExpectedGameScore((float)staticEval / 100.0f);
+            const float searchScore = EvalToExpectedGameScore((float)outEntry.score / 100.0f);
+
+            // skip if eval score is matching search score and it's either very losing or very winning
+            const float prob = 4.0f * (searchScore - 0.5f) * (searchScore - 0.5f) * std::max(0.0f, 1.0f - 6.0f * fabsf(evalScore - searchScore));
+
+            std::bernoulli_distribution skippingDistr(prob);
             if (skippingDistr(gen))
                 continue;
         }
