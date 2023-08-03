@@ -42,17 +42,6 @@ void NodeCacheEntry::ScaleDown()
     }
 }
 
-void NodeCacheEntry::ClearMoves()
-{
-    nodesSum = 0;
-
-    for (MoveInfo& moveInfo : moves)
-    {
-        moveInfo.move = Move::Invalid();
-        moveInfo.nodesSearched = 0;
-    }
-}
-
 const NodeCacheEntry::MoveInfo* NodeCacheEntry::GetMove(const Move move) const
 {
     for (const MoveInfo& moveInfo : moves)
@@ -118,7 +107,7 @@ void NodeCache::Reset()
     generation = 0;
     for (NodeCacheEntry& entry : entries)
     {
-        entry.ClearMoves();
+        entry = NodeCacheEntry{};
     }
 }
 
@@ -158,10 +147,10 @@ NodeCacheEntry* NodeCache::GetEntry(const Position& pos, uint32_t distanceFromRo
     // allocate new entry
     if (entry->generation < generation)
     {
+        *entry = NodeCacheEntry{};
         entry->position = pos;
         entry->generation = generation;
         entry->distanceFromRoot = distanceFromRoot;
-        entry->ClearMoves();
 
         return entry;
     }
