@@ -520,6 +520,8 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
                 ASSERT(weightsStorage);
 
+                if (!weightsStorage->m_updateWeights) continue;
+
                 WeightsStorage::WeightsUpdateOptions updateOptions;
                 updateOptions.iteration = params.iteration + batchIdx;
                 updateOptions.weightDecay = params.weightDecay;
