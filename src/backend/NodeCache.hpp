@@ -25,7 +25,6 @@ struct NodeCacheEntry
 
     const MoveInfo* GetMove(const Move move) const;
 
-    void ClearMoves();
     void ScaleDown();
     void AddMoveStats(const Move& move, uint64_t numNodes);
     void PrintMoves() const;
