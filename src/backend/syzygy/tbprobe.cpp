@@ -344,6 +344,9 @@ static void *map_file(FD fd, map_t *mapping)
     perror("mmap");
     return NULL;
   }
+#if defined(MADV_RANDOM)
+  madvise(data, statbuf.st_size, MADV_RANDOM);
+#endif // defined(MADV_RANDOM)
 #else
   DWORD size_low, size_high;
   size_low = GetFileSize(fd, &size_high);
