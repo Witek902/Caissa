@@ -2,8 +2,9 @@
 
 namespace nn {
 
-SumNode::SumNode(const NodePtr& previousNodeA, const NodePtr& previousNodeB)
+OperatorNode::OperatorNode(const NodePtr& previousNodeA, const NodePtr& previousNodeB, Operator op)
     : ICombiningNode(previousNodeA->GetNumOutputs(), previousNodeA->GetNumOutputs())
+    , m_operator(op)
 {
     ASSERT(previousNodeA->GetNumOutputs() == previousNodeB->GetNumOutputs());
 
@@ -11,7 +12,7 @@ SumNode::SumNode(const NodePtr& previousNodeA, const NodePtr& previousNodeB)
     m_inputNodes[1] = previousNodeB.get();
 }
 
-void SumNode::Run(INodeContext& ctx) const
+void OperatorNode::Run(INodeContext& ctx) const
 {
     Context& context = static_cast<Context&>(ctx);
 
@@ -19,13 +20,24 @@ void SumNode::Run(INodeContext& ctx) const
     ASSERT(context.inputs.size() == m_inputNodes[0]->GetNumOutputs());
     ASSERT(context.secondaryInputs.size() == m_inputNodes[1]->GetNumOutputs());
 
-    for (uint32_t i = 0; i < context.inputs.size(); ++i)
+    switch (m_operator)
     {
-        context.outputs[i] = context.inputs[i] + context.secondaryInputs[i];
+    case Operator::Sum:
+        for (uint32_t i = 0; i < context.inputs.size(); ++i)
+        {
+            context.outputs[i] = context.inputs[i] + context.secondaryInputs[i];
+        }
+        break;
+    case Operator::Product:
+        for (uint32_t i = 0; i < context.inputs.size(); ++i)
+        {
+            context.outputs[i] = context.inputs[i] * context.secondaryInputs[i];
+        }
+        break;
     }
 }
 
-void SumNode::Backpropagate(const Values& error, INodeContext& ctx, Gradients&) const
+void OperatorNode::Backpropagate(const Values& error, INodeContext& ctx, Gradients&) const
 {
     Context& context = static_cast<Context&>(ctx);
 
@@ -34,10 +46,22 @@ void SumNode::Backpropagate(const Values& error, INodeContext& ctx, Gradients&) 
     ASSERT(context.inputError.size() == m_inputNodes[0]->GetNumOutputs());
     ASSERT(context.secondaryInputError.size() == m_inputNodes[1]->GetNumOutputs());
 
-    for (uint32_t i = 0; i < context.outputs.size(); ++i)
+    switch (m_operator)
     {
-        context.inputError[i] = error[i];
-        context.secondaryInputError[i] = error[i];
+    case Operator::Sum:
+        for (uint32_t i = 0; i < context.outputs.size(); ++i)
+        {
+            context.inputError[i] = error[i];
+            context.secondaryInputError[i] = error[i];
+        }
+        break;
+    case Operator::Product:
+        for (uint32_t i = 0; i < context.outputs.size(); ++i)
+        {
+            context.inputError[i] = error[i] * context.secondaryInputs[i];
+            context.secondaryInputError[i] = error[i] * context.inputs[i];
+        }
+        break;
     }
 }
 

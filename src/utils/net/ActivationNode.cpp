@@ -6,10 +6,11 @@ INLINE static float ApplyActivationFunction(float x, ActivationFunction func)
 {
     switch (func)
     {
-    case ActivationFunction::ReLU:      return ReLU(x);
-    case ActivationFunction::CReLU:     return CReLU(x);
-    case ActivationFunction::SqrCReLU:  return SqrCReLU(x);
-    case ActivationFunction::Sigmoid:   return Sigmoid(x);
+    case ActivationFunction::ReLU:              return ReLU(x);
+    case ActivationFunction::CReLU:             return CReLU(x);
+    case ActivationFunction::SqrCReLU:          return SqrCReLU(x);
+    case ActivationFunction::Sigmoid:           return Sigmoid(x);
+    case ActivationFunction::EvalToGameScore:   return EvalToExpectedGameScore(x);
     }
     return x;
 }
@@ -18,10 +19,11 @@ INLINE static float GetActivationFunctionDerivative(float x, ActivationFunction 
 {
     switch (func)
     {
-    case ActivationFunction::ReLU:      return ReLUDerivative(x);
-    case ActivationFunction::CReLU:     return CReLUDerivative(x);
-    case ActivationFunction::SqrCReLU:  return SqrCReLUDerivative(x);
-    case ActivationFunction::Sigmoid:   return SigmoidDerivative(x);
+    case ActivationFunction::ReLU:              return ReLUDerivative(x);
+    case ActivationFunction::CReLU:             return CReLUDerivative(x);
+    case ActivationFunction::SqrCReLU:          return SqrCReLUDerivative(x);
+    case ActivationFunction::Sigmoid:           return SigmoidDerivative(x);
+    case ActivationFunction::EvalToGameScore:   return EvalToExpectedGameScore_Derivative(x);
     }
     return 1.0f;
 }

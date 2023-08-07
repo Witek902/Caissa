@@ -11,6 +11,7 @@ enum class ActivationFunction : uint8_t
     CReLU,      // clipped ReLU
     SqrCReLU,   // squared clipped ReLU
     Sigmoid,
+    EvalToGameScore,
 };
 
 // node applying an activation function

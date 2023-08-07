@@ -8,7 +8,7 @@
 namespace nn {
 
 // how many nodes in the network can be input nodes
-static constexpr uint32_t MaxInputNodes = 2;
+static constexpr uint32_t MaxInputNodes = 4;
 
 struct Gradients;
 

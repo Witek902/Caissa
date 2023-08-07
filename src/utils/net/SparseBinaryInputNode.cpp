@@ -87,28 +87,21 @@ void SparseBinaryInputNode::Backpropagate(const Values& error, INodeContext& ctx
 
 #ifdef USE_AVX
 
-    // split processing into tiles of 8 AVX registers
-    const uint32_t numTiles = m_numOutputs / (c_NumRegisters * 8u);
-
-    __m256 regs[c_NumRegisters];
-
-    for (uint32_t tile = 0; tile < numTiles; ++tile)
+    for (uint32_t i = 0; i < m_numOutputs; i += 8u)
     {
-        const uint32_t chunkBase = tile * (c_NumRegisters * 8u);
+        // load error into AVX register
+        const __m256 errorV = _mm256_load_ps(error.data() + i);
 
-        // load error into registers
-        for (uint32_t i = 0; i < c_NumRegisters; ++i)
-            regs[i] = _mm256_load_ps(error.data() + chunkBase + i * 8u);
+        // skip tile if error is zero in every lane
+        if (0xFF == _mm256_movemask_ps(_mm256_cmp_ps(errorV, _mm256_setzero_ps(), _CMP_EQ_OQ)))
+            continue;
 
         // accumulate error to active feature's gradients
         for (const IndexType featureIdx : context.sparseInputs)
         {
             float* gradientPtr = gradientsVariant.m_values.data() + featureIdx * m_numOutputs;
-            for (uint32_t i = 0; i < c_NumRegisters; ++i)
-            {
-                _mm256_store_ps(gradientPtr + chunkBase + i * 8u,
-                    _mm256_add_ps(_mm256_load_ps(gradientPtr + chunkBase + i * 8u), regs[i]));
-            }
+            _mm256_store_ps(gradientPtr + i,
+                _mm256_add_ps(_mm256_load_ps(gradientPtr + i), errorV));
         }
     }
 

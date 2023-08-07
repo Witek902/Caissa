@@ -2,6 +2,7 @@
 
 #include "../Common.hpp"
 #include "../../backend/Memory.hpp"
+#include "../../backend/Math.hpp"
 
 #include <vector>
 
@@ -27,6 +28,43 @@ inline float SigmoidDerivative(float x)
 {
     float s = Sigmoid(x);
     return s * (1.0f - s);
+}
+
+
+static constexpr float c_WinProbabilityOffset = 2.0f;
+static constexpr float c_WinProbabilityScale = 1.0f;
+
+inline float EvalToWinProbability(float eval)
+{
+    return 1.0f / (1.0f + expf((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale));
+}
+
+inline float EvalToDrawProbability(float eval)
+{
+    const float winProbability = EvalToWinProbability(eval);
+    const float lossProbability = EvalToWinProbability(-eval);
+    return 1.0f - winProbability - lossProbability;
+}
+
+inline float EvalToExpectedGameScore(float eval)
+{
+    const float winProbability = EvalToWinProbability(eval);
+    const float lossProbability = EvalToWinProbability(-eval);
+    return (1.0f + winProbability - lossProbability) / 2.0f;
+}
+
+inline float EvalToWinProbability_Derivative(float eval)
+{
+    const float t = expf((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale);
+    return t / (c_WinProbabilityScale * Sqr(1.0f + t));
+}
+
+inline float EvalToExpectedGameScore_Derivative(float eval)
+{
+    const float winProbabilityDerivative = EvalToWinProbability_Derivative(eval);
+    const float lossProbabilityDerivative = EvalToWinProbability_Derivative(-eval);
+
+    return (winProbabilityDerivative + lossProbabilityDerivative) / 2.0f;
 }
 
 
