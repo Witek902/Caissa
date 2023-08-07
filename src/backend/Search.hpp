@@ -143,7 +143,7 @@ struct NodeInfo
     int16_t depth = 0;
 
     // depth in ply (depth counting from root)
-    int16_t height = 0;
+    uint16_t height = 0;
 
     ScoreType alpha;
     ScoreType beta;
