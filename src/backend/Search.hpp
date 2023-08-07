@@ -77,6 +77,9 @@ struct SearchParam
     // randomize eval by +- this value
     int32_t evalRandomization = 0;
 
+    // random seed for eval randomization
+    uint32_t seed = 0;
+
     // eval offset
     int32_t staticContempt = 0;
     int32_t dynamicContempt = 0;

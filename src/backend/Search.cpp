@@ -159,7 +159,7 @@ INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 
 void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
 {
-    if (threadStats.nodesTemp >= 64 || flush)
+    if (threadStats.nodesTemp >= 128 || flush)
     {
         nodes += threadStats.nodesTemp;
         threadStats.nodesTemp = 0;
@@ -1005,7 +1005,7 @@ INLINE static ScoreType AdjustEvalScore(const NodeInfo& node, const Color rootSt
         adjustedScore = adjustedScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
 
         if (searchParam.evalRandomization > 0)
-            adjustedScore += (uint32_t)node.position.GetHash() % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
+            adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
     }
 
     return static_cast<ScoreType>(adjustedScore);
@@ -1450,16 +1450,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if constexpr (!isRootNode)
     {
         int32_t wdl = 0;
-        if ((node->depth >= WdlTablebaseProbeDepth || !node->previousMove.IsQuiet()) &&
+        if (node->depth >= WdlTablebaseProbeDepth &&
             position.GetNumPieces() <= g_syzygyProbeLimit &&
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
             thread.stats.tbHits++;
 
+            const ScoreType tbWinScore = TablebaseWinValue - ScoreType(100 * position.GetNumPiecesExcludingKing()) - ScoreType(node->height);
+            ASSERT(tbWinScore > KnownWinValue);
+
             // convert the WDL value to a score
-            const ScoreType tbValue =
-                wdl < 0 ? -ScoreType(TablebaseWinValue - node->height) :
-                wdl > 0 ? ScoreType(TablebaseWinValue - node->height) : 0;
+            const ScoreType tbValue = wdl < 0 ? -tbWinScore : wdl > 0 ? tbWinScore : 0;
             ASSERT(tbValue > -CheckmateValue && tbValue < CheckmateValue);
 
             // only draws are exact, we don't know exact value for win/loss just based on WDL value
