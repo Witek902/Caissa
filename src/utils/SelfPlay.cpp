@@ -25,17 +25,18 @@
 static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
-static const uint32_t c_printPgnFrequency = 64; // print every 64th game
-static const uint32_t c_maxNodes = 10000;
-static const uint32_t c_maxDepth = 16;
+static const uint32_t c_printPgnFrequency = 32;
+static const uint32_t c_minNodes = 8000;
+static const uint32_t c_maxNodes = 16000;
+static const uint32_t c_maxDepth = 20;
 static const int32_t c_maxEval = 1500;
 static const int32_t c_openingMaxEval = 600;
-static const int32_t c_multiPv = 4;
-static const int32_t c_multiPvMaxPly = 5;
-static const int32_t c_multiPvScoreTreshold = 25;
-static const uint32_t c_minRandomMoves = 10;
-static const uint32_t c_maxRandomMoves = 16;
-static const float c_randomMoveProbability = 0.0001f;
+static const int32_t c_multiPv = 5;
+static const int32_t c_multiPvMaxPly = 1;
+static const int32_t c_multiPvScoreTreshold = 75;
+static const uint32_t c_minRandomMoves = 0;
+static const uint32_t c_maxRandomMoves = 0;
+static const float c_blunderProbability = 0.05f;
 
 using namespace threadpool;
 
@@ -48,61 +49,6 @@ uint32_t XorShift32(uint32_t state)
     x ^= x << 5;
     return x;
 }
-
-#ifdef USE_EVAL_PROBING
-
-class EvalProbing : public EvalProbingInterface
-{
-public:
-    static constexpr uint32_t ProbingFrequency = 1 << 10;
-
-    EvalProbing(std::ofstream& outputFile, uint32_t seed)
-        : probedPositionsFile(outputFile)
-        , randomSeed(seed)
-    {}
-
-    virtual void ReportPosition(const Position& pos, ScoreType eval) override
-    {
-        if (!(pos.Whites().GetKingSquare().Rank() == 7 ||
-              pos.Blacks().GetKingSquare().Rank() == 0)) return;
-
-        if (std::abs(eval) >= 200) return;
-
-        uint32_t numPieces = pos.GetNumPieces();
-
-        if (numPieces < 14) return;
-
-        randomSeed = XorShift32(randomSeed);
-
-        if (!pos.IsQuiet()) return;
-
-        PackedPosition packedPos;
-        PackPosition(pos, packedPos);
-        positions.push_back(packedPos);
-    }
-
-    void Flush()
-    {
-        for (const PackedPosition& pp : positions)
-        {
-            Position pos;
-            UnpackPosition(pp, pos);
-            probedPositionsFile << pos.ToFEN() << '\n';
-        }
-
-        positions.clear();
-
-        probedPositionsFile.flush();
-    }
-
-private:
-    std::ofstream& probedPositionsFile;
-    std::vector<PackedPosition> positions;
-
-    uint32_t randomSeed;
-};
-
-#endif // USE_EVAL_PROBING
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -165,7 +111,7 @@ static Move GetRandomMove(std::mt19937& randomGenerator, const Position& pos)
 
 void SelfPlay(const std::vector<std::string>& args)
 {
-    g_syzygyProbeLimit = 5;
+    g_syzygyProbeLimit = 6;
 
     std::string outputFileName;
     {
@@ -230,6 +176,9 @@ void SelfPlay(const std::vector<std::string>& args)
     alignas(CACHELINE_SIZE) std::mutex mutex;
     alignas(CACHELINE_SIZE) std::atomic<uint32_t> gameIndex = 0;
     alignas(CACHELINE_SIZE) std::atomic<uint64_t> quietPositionIndex = 0;
+    std::atomic<uint32_t> numWhiteWins = 0;
+    std::atomic<uint32_t> numBlackWins = 0;
+    std::atomic<uint32_t> numDraws = 0;
 
     const auto gameTask = [&](const TaskContext& context, uint32_t)
     {
@@ -240,9 +189,6 @@ void SelfPlay(const std::vector<std::string>& args)
         TranspositionTable& tt = ttArray[context.threadId];
 
         SearchResult searchResult;
-#ifdef USE_EVAL_PROBING
-        EvalProbing evalProbing(probedPositionsFile, gen());
-#endif // USE_EVAL_PROBING
 
         // generate opening position
         Position openingPos;
@@ -288,30 +234,25 @@ void SelfPlay(const std::vector<std::string>& args)
         game.Reset(openingPos);
 
         int32_t multiPvScoreTreshold = c_multiPvScoreTreshold;
-        uint32_t halfMoveNumber = 0;
+        int32_t halfMoveNumber = 0;
         uint32_t drawScoreCounter = 0;
         uint32_t whiteWinsCounter = 0;
         uint32_t blackWinsCounter = 0;
 
+        const uint32_t searchSeed = gen();
+
         for (;; ++halfMoveNumber)
         {
+            const bool playBlunder = std::bernoulli_distribution(c_blunderProbability)(gen);
+
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
-            searchParam.useAspirationWindows = false; // disable aspiration windows so we don't get lower/upper bound scores
-#ifdef USE_EVAL_PROBING
-            searchParam.evalProbingInterface = probePositions ? &evalProbing : nullptr;
-#endif // USE_EVAL_PROBING
-            searchParam.numPvLines = halfMoveNumber < c_multiPvMaxPly ? c_multiPv : 1;
+            searchParam.evalRandomization = 2;
+            searchParam.seed = searchSeed;
+            searchParam.numPvLines = (halfMoveNumber < c_multiPvMaxPly || playBlunder) ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
-            searchParam.limits.maxNodes = c_maxNodes + std::uniform_int_distribution<int32_t>(0, c_maxNodes / 64)(gen);
-
-            searchParam.limits.maxNodes *= searchParam.numPvLines;
-            if (halfMoveNumber == 0)
-            {
-                searchParam.limits.maxDepth *= 2;
-                searchParam.limits.maxNodes *= 2;
-            }
+            searchParam.limits.maxNodes = c_minNodes + (c_maxNodes - c_minNodes) * std::max(0, 80 - halfMoveNumber) / 80;
 
             searchResult.clear();
             tt.NextGeneration();
@@ -382,15 +323,6 @@ void SelfPlay(const std::vector<std::string>& args)
             const ScoreType eval = Evaluate(game.GetPosition());
             const bool isCheck = game.GetPosition().IsInCheck();
 
-            // play random move
-            if (move.IsQuiet() &&
-                std::bernoulli_distribution(c_randomMoveProbability)(gen))
-            {
-                const Move randomMove = GetRandomMove(gen, game.GetPosition());
-                if (randomMove.IsValid())
-                    move = randomMove;
-            }
-
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
             (void)moveSuccess;
@@ -451,6 +383,9 @@ void SelfPlay(const std::vector<std::string>& args)
 
             if (game.GetScore() != Game::Score::Unknown)
             {
+                if (game.GetScore() == Game::Score::WhiteWins) numWhiteWins++;
+                if (game.GetScore() == Game::Score::BlackWins) numBlackWins++;
+                if (game.GetScore() == Game::Score::Draw) numDraws++;
                 break;
             }
         }
@@ -460,13 +395,6 @@ void SelfPlay(const std::vector<std::string>& args)
 
             writer.WriteGame(game);
 
-#ifdef USE_EVAL_PROBING
-            if (probePositions)
-            {
-                evalProbing.Flush();
-            }
-#endif // USE_EVAL_PROBING
-
             GameMetadata metadata;
             metadata.roundNumber = index;
             game.SetMetadata(metadata);
@@ -475,6 +403,12 @@ void SelfPlay(const std::vector<std::string>& args)
             {
                 const std::string pgn = game.ToPGN(true);
                 std::cout << std::endl << pgn << std::endl;
+
+                const uint32_t numGames = numWhiteWins + numBlackWins + numDraws;
+                std::cout << std::endl;
+                std::cout << "White wins: " << numWhiteWins << " (" << (numWhiteWins * 100.0 / numGames) << "%)" << std::endl;
+                std::cout << "Black wins: " << numBlackWins << " (" << (numBlackWins * 100.0 / numGames) << "%)" << std::endl;
+                std::cout << "Draws:      " << numDraws << " (" << (numDraws * 100.0 / numGames) << "%)" << std::endl;
             }
         }
     };
