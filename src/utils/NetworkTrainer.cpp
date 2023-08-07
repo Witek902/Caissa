@@ -737,8 +737,8 @@ bool NetworkTrainer::Train()
     const float maxLearningRate = 1.0f;
     const float minLearningRate = 0.4f;
 
-    //int64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
-    int64_t kingBucketMask = UINT64_MAX;
+    //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
+    uint64_t kingBucketMask = UINT64_MAX;
 
     GenerateTrainingSet(m_validationSet, kingBucketMask);
 
