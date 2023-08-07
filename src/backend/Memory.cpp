@@ -92,8 +92,19 @@ bool EnableLargePagesSupport()
 
 void* Malloc(size_t size)
 {
+#if defined(__linux__) && defined(MADV_HUGEPAGE)
+    constexpr size_t alignment = 2 * 1024 * 1024;
+#else
+    constexpr size_t alignment = CACHELINE_SIZE;
+#endif // defined(__linux__)
+
     void* ptr = nullptr;
-    int ret = posix_memalign(&ptr, CACHELINE_SIZE, size);
+    int ret = posix_memalign(&ptr, alignment, size);
+
+#if defined(__linux__) && defined(MADV_HUGEPAGE)
+    madvise(ptr, size, MADV_HUGEPAGE);
+#endif // defined(__linux__)
+
     return ret != 0 ? nullptr : ptr;
 }
 
