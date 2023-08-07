@@ -92,7 +92,7 @@ uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
     return low - 1u;
 }
 
-bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket)
+bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask)
 {
     std::uniform_real_distribution<double> distr;
     const double u = distr(gen);
@@ -102,10 +102,10 @@ bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& out
     if (fileIndex >= mContexts.size())
         return false;
 
-    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition, kingBucket);
+    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition, kingBucketMask);
 }
 
-bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, int32_t kingBucket)
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask)
 {
     for (;;)
     {
@@ -140,94 +140,85 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 continue;
         }
 
-        // skip drawn game based half-move counter
-        if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
+        if (kingBucketMask != UINT64_MAX)
         {
-            const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 200.0f;
-            std::bernoulli_distribution skippingDistr(hmcSkipProb);
-            if (skippingDistr(gen))
-                continue;
-        }
+            // skip drawn game based half-move counter
+            if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
+            {
+                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
+                std::bernoulli_distribution skippingDistr(hmcSkipProb);
+                if (skippingDistr(gen))
+                    continue;
+            }
 
-        // skip early moves
-        constexpr uint32_t maxEarlyMoveCount = 10;
-        if (outEntry.pos.moveCount < maxEarlyMoveCount)
-        {
-            const float earlyMoveSkipProb = 0.5f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / (float)maxEarlyMoveCount;
-            std::bernoulli_distribution skippingDistr(earlyMoveSkipProb);
-            if (skippingDistr(gen))
-                continue;
-        }
+            // skip early moves
+            constexpr uint32_t maxEarlyMoveCount = 12;
+            if (outEntry.pos.moveCount < maxEarlyMoveCount)
+            {
+                const float earlyMoveSkipProb = 0.95f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / (float)maxEarlyMoveCount;
+                std::bernoulli_distribution skippingDistr(earlyMoveSkipProb);
+                if (skippingDistr(gen))
+                    continue;
+            }
 
-        // skip based on piece count
-        {
-            const int32_t numPieces = outEntry.pos.occupied.Count();
+            // skip based on piece count
+            {
+                const int32_t numPieces = outEntry.pos.occupied.Count();
 
-            if (numPieces <= 3)
-                continue;
+                if (numPieces <= 3)
+                    continue;
 
-            if (numPieces <= 4 && std::bernoulli_distribution(0.9f)(gen))
-                continue;
+                if (numPieces <= 4 && std::bernoulli_distribution(0.9f)(gen))
+                    continue;
 
-            const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 26) / 25.0f);
-            if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
-                continue;
+                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);
+                if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
+                    continue;
+            }
         }
 
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
 
         // filter by king bucket
-        if (kingBucket >= 0)
+        if (kingBucketMask != UINT64_MAX)
         {
             uint32_t whiteKingSide, blackKingSide;
             uint32_t whiteKingBucket, blackKingBucket;
             GetKingSideAndBucket(outPosition.Whites().GetKingSquare(), whiteKingSide, whiteKingBucket);
             GetKingSideAndBucket(outPosition.Blacks().GetKingSquare().FlippedRank(), blackKingSide, blackKingBucket);
 
-            if (whiteKingBucket != (uint32_t)kingBucket && blackKingBucket != (uint32_t)kingBucket)
+            if ((((1ull << whiteKingBucket) & kingBucketMask) == 0ull) && (((1ull << blackKingBucket) & kingBucketMask) == 0ull))
                 continue;
         }
         else
         {
             // skip based on kings placement (prefer king on further ranks)
-            const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
-            const float blackKingProb =        (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
-            std::bernoulli_distribution skippingDistr(0.25f * Sqr(std::min(whiteKingProb, blackKingProb)));
-            if (skippingDistr(gen))
-                continue;
-        }
+            {
+                const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
+                const float blackKingProb = (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
+                std::bernoulli_distribution skippingDistr(0.25f * Sqr(std::min(whiteKingProb, blackKingProb)));
+                if (skippingDistr(gen))
+                    continue;
+            }
 
-        // skip based on WDL
-        // the idea is to skip positions where for instance eval is high, but game result is loss
-        {
-            const uint32_t ply = 2 * outEntry.pos.moveCount;
-            const float w = EvalToWinProbability(outEntry.score / 100.0f, ply);
-            const float l = EvalToWinProbability(-outEntry.score / 100.0f, ply);
-            const float d = 1.0f - w - l;
+            // skip based on WDL
+            // the idea is to skip positions where for instance eval is high, but game result is loss
+            {
+                const uint32_t ply = 2 * outEntry.pos.moveCount;
+                const float w = EvalToWinProbability(outEntry.score / 100.0f, ply);
+                const float l = EvalToWinProbability(-outEntry.score / 100.0f, ply);
+                const float d = 1.0f - w - l;
 
-            float prob = d;
-            if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
-            if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
+                float prob = d;
+                if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
+                if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
 
-            const float maxSkippingProb = 0.25f;
-            std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
-            if (skippingDistr(gen))
-                continue;
-        }
-
-        // skip based on eval
-        {
-            const ScoreType staticEval = Evaluate(outPosition, nullptr, false);
-            const float evalScore = EvalToExpectedGameScore((float)staticEval / 100.0f);
-            const float searchScore = EvalToExpectedGameScore((float)outEntry.score / 100.0f);
-
-            // skip if eval score is matching search score and it's either very losing or very winning
-            const float prob = 4.0f * (searchScore - 0.5f) * (searchScore - 0.5f) * std::max(0.0f, 1.0f - 6.0f * fabsf(evalScore - searchScore));
-
-            std::bernoulli_distribution skippingDistr(prob);
-            if (skippingDistr(gen))
-                continue;
+                const float maxSkippingProb = 0.25f;
+                std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
+                if (skippingDistr(gen))
+                    continue;
+            }
         }
 
         return true;

@@ -342,8 +342,8 @@ const Values& NeuralNetwork::Run(const InputDesc& inputDesc, NeuralNetworkRunCon
             {
                 FullyConnectedNode::Context& nodeCtx = static_cast<FullyConnectedNode::Context&>(*ctx.nodeContexts[i]);
                 ASSERT(node->GetInputMode() == InputMode::Full);
-                ASSERT(node->GetNumInputs() == nodeCtx.inputs.size());
-                nodeCtx.inputs = std::span<const float>(input.floatValues, nodeCtx.inputs.size());
+                ASSERT(input.numFeatures == node->GetNumInputs());
+                nodeCtx.inputs = std::span<const float>(input.floatValues, input.numFeatures);
                 node->Run(nodeCtx);
                 break;
             }
