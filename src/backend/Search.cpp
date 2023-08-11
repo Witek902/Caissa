@@ -28,7 +28,7 @@ static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
-static const int32_t WdlTablebaseProbeDepth = 4;
+static const int32_t WdlTablebaseProbeDepth = 5;
 
 DEFINE_PARAM(LateMoveReductionScale, 46);
 DEFINE_PARAM(LateMoveReductionBias, 63);
