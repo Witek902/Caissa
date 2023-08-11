@@ -6,8 +6,8 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 52);
-DEFINE_PARAM(MovesLeftSteepness, 25);
+DEFINE_PARAM(MovesLeftMidpoint, 50);
+DEFINE_PARAM(MovesLeftSteepness, 20);
 DEFINE_PARAM(IdealTimeFactor, 83);
 
 static float EstimateMovesLeft(const uint32_t moves)
@@ -26,33 +26,15 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
-        float factor = 1.0f;
-
-        if (movesLeft > 1)
-        {
-            // scale based on number of moves (40 moves -> 100%, 80 moves -> 125%, 0 moves -> 75%)
-            {
-                const uint32_t numLegalMoves = game.GetPosition().GetNumLegalMoves();
-                const float avgNumMoves = 40.0f;
-                factor *= 0.75f + 0.25f * static_cast<float>(numLegalMoves) / avgNumMoves;
-            }
-
-            // decrease search time if in check, because it should have been extended during previous search
-            if (game.GetPosition().IsInCheck())
-            {
-                factor *= 0.75f;
-            }
-        }
-
-        const float marigin = 0.98f;
-        const float increment = marigin * (float)data.timeIncrement;
+        // don't use more than 50% of remaining time
+        const float margin = 0.5f;
 
         const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
-        const float idealTime = std::clamp(idealTimeFactor * factor * (data.remainingTime - moveOverhead) / movesLeft + increment,
-            0.0f, marigin * (float)data.remainingTime);
+        const float idealTime = std::clamp(idealTimeFactor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement,
+            0.0f, margin * (float)data.remainingTime);
 
-        const float maxTime = std::clamp(factor * (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + increment,
-            0.0f, marigin * (float)data.remainingTime);
+        const float maxTime = std::clamp((data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement,
+            0.0f, margin * (float)data.remainingTime);
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
