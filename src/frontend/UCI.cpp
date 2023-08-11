@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.11.7_tm"
+#define VersionNumber "1.11.8"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -171,7 +171,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #endif // USE_ENDGAME_NEURAL_NETWORK
 #ifdef USE_SYZYGY_TABLEBASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
-        std::cout << "option name SyzygyProbeLimit type spin default 7 min 4 max 7\n";
+        std::cout << "option name SyzygyProbeLimit type spin default 6 min 4 max 7\n";
 #endif // USE_SYZYGY_TABLEBASES
 #ifdef USE_GAVIOTA_TABLEBASES
         std::cout << "option name GaviotaTbPath type string default <empty>\n";

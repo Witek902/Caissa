@@ -4,7 +4,7 @@
 #include "MoveList.hpp"
 #include "MoveGen.hpp"
 
-uint32_t g_syzygyProbeLimit = 7;
+uint32_t g_syzygyProbeLimit = 6;
 
 #ifdef USE_SYZYGY_TABLEBASES
 #include "syzygy/tbprobe.h"

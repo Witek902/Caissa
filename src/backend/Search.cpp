@@ -1451,6 +1451,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         int32_t wdl = 0;
         if (node->depth >= WdlTablebaseProbeDepth &&
+            position.GetHalfMoveCount() == 0 &&
             position.GetNumPieces() <= g_syzygyProbeLimit &&
             (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
         {
