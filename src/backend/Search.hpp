@@ -153,10 +153,6 @@ struct NodeInfo
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
 
-#ifdef EVAL_USE_PSQT
-    TPieceScore<int32_t> psqtScore = { INT32_MIN, INT32_MIN };
-#endif // EVAL_USE_PSQT
-
     bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
     bool isNullMove = false;

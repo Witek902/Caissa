@@ -163,111 +163,6 @@ bool CheckInsufficientMaterial(const Position& pos)
     return false;
 }
 
-#ifdef EVAL_USE_PSQT
-
-const TPieceScore<int32_t> ComputePSQT(const Position& pos)
-{
-    const Square whiteKingSq = pos.Whites().GetKingSquare();
-    const Square blackKingSq = pos.Blacks().GetKingSquare();
-
-    const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
-    const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
-
-    const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
-    const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
-
-    const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
-    const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
-
-    const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
-    const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
-
-    TPieceScore<int32_t> value = { 0, 0 };
-
-    pos.Whites().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[0][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[1][2 * (square ^ blackSqMask)]); });
-    pos.Whites().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[2][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[3][2 * (square ^ blackSqMask)]); });
-    pos.Whites().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[4][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[5][2 * (square ^ blackSqMask)]); });
-    pos.Whites().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[6][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[7][2 * (square ^ blackSqMask)]); });
-    pos.Whites().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[8][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[9][2 * (square ^ blackSqMask)]); });
-
-    pos.Blacks().pawns.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[1][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[0][2 * (square ^ blackSqMask)]); });
-    pos.Blacks().knights.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[3][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[2][2 * (square ^ blackSqMask)]); });
-    pos.Blacks().bishops.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[5][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[4][2 * (square ^ blackSqMask)]); });
-    pos.Blacks().rooks.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[7][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[6][2 * (square ^ blackSqMask)]); });
-    pos.Blacks().queens.Iterate([&](const uint32_t square) INLINE_LAMBDA{
-        value += PieceScore(&whitesPSQT[9][2 * (square ^ whiteSqMask)]);
-        value -= PieceScore(&blacksPSQT[8][2 * (square ^ blackSqMask)]); });
-
-    return value;
-}
-
-void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, const DirtyPiece* dirtyPieces, uint32_t numDirtyPieces)
-{
-    const Square whiteKingSq = pos.Whites().GetKingSquare();
-    const Square blackKingSq = pos.Blacks().GetKingSquare();
-
-    const Square whiteKingSqFlipped = whiteKingSq.File() >= 4 ? whiteKingSq.FlippedFile() : whiteKingSq;
-    const Square blackKingSqFlipped = blackKingSq.File() >= 4 ? blackKingSq.FlippedRank().FlippedFile() : blackKingSq.FlippedRank();
-
-    const uint32_t whiteKingSquareIndex = 4 * whiteKingSqFlipped.Rank() + whiteKingSqFlipped.File();
-    const uint32_t blackKingSquareIndex = 4 * blackKingSqFlipped.Rank() + blackKingSqFlipped.File();
-
-    const uint32_t whiteSqMask = whiteKingSq.File() >= 4 ? 0b000111 : 0; // mirror horizontally depending on king position
-    const uint32_t blackSqMask = blackKingSq.File() >= 4 ? 0b111111 : 0b111000; // mirror vertically + mirror horizontally depending on king position
-
-    const KingsPerspectivePSQT& whitesPSQT = PSQT[whiteKingSquareIndex];
-    const KingsPerspectivePSQT& blacksPSQT = PSQT[blackKingSquareIndex];
-
-    for (uint32_t i = 0; i < numDirtyPieces; ++i)
-    {
-        const DirtyPiece& dirtyPiece = dirtyPieces[i];
-
-        // any king movement invalidates PSQT as the values are king-relative
-        // it should be checked before
-        ASSERT(dirtyPiece.piece != Piece::King);
-
-        const uint32_t pieceIndex = (uint32_t)dirtyPiece.piece - (uint32_t)Piece::Pawn;
-        ASSERT(pieceIndex < 5);
-
-        const uint32_t whitePieceIndex = 2u * pieceIndex + (0 ^ (uint32_t)dirtyPiece.color);
-        const uint32_t blackPieceIndex = 2u * pieceIndex + (1 ^ (uint32_t)dirtyPiece.color);
-
-        if (dirtyPiece.toSquare.IsValid()) // add piece
-        {
-            score += PieceScore(&whitesPSQT[whitePieceIndex][2u * (dirtyPiece.toSquare.Index() ^ whiteSqMask)]);
-            score -= PieceScore(&blacksPSQT[blackPieceIndex][2u * (dirtyPiece.toSquare.Index() ^ blackSqMask)]);
-        }
-        if (dirtyPiece.fromSquare.IsValid()) // remove piece
-        {
-            score -= PieceScore(&whitesPSQT[whitePieceIndex][2u * (dirtyPiece.fromSquare.Index() ^ whiteSqMask)]);
-            score += PieceScore(&blacksPSQT[blackPieceIndex][2u * (dirtyPiece.fromSquare.Index() ^ blackSqMask)]);
-        }
-    }
-
-    // compare with non-incremental version
-    ASSERT(score == ComputePSQT(pos));
-}
-
-#endif // EVAL_USE_PSQT
-
 #ifdef USE_MOBILITY
 static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 {
@@ -405,21 +300,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     }
     else // fallback to simple evaluation
     {
-        TPieceScore<int32_t> value;
-
-#ifdef EVAL_USE_PSQT
-        if (nodeInfo)
-        {
-            value = node.psqtScore;
-            ASSERT(value.mg != INT32_MIN && value.eg != INT32_MIN);
-        }
-        else
-        {
-            value = ComputePSQT(pos);
-        }
-#else // !EVAL_USE_PSQT
-        value = {};
-#endif // EVAL_USE_PSQT
+        TPieceScore<int32_t> value = {};
 
         value += c_queenValue * (whiteQueens - blackQueens);
         value += c_rookValue * (whiteRooks - blackRooks);
