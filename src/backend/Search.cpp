@@ -1171,7 +1171,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     Move bestMove = Move::Invalid();
     int32_t moveIndex = 0;
-    uint32_t numQuietCheckEvasion = 0;
     bool searchAborted = false;
 
     Move captureMovesTried[MoveList::MaxMoves];
@@ -1211,16 +1210,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             continue;
         }
 
-        // don't try all check evasions
-        if (node->isInCheck && move.IsQuiet())
-        {
-            if (bestMove.IsValid() &&
-                numQuietCheckEvasion > 1 &&
-                bestValue > -TablebaseWinValue) continue;
-
-            numQuietCheckEvasion++;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
@@ -1229,7 +1218,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         if (bestMove.IsValid() &&
             bestValue > -TablebaseWinValue)
         {
-                 if (node->depth < -4 && moveIndex > 1) break;
+            if (move.IsQuiet()) break;
+            else if (node->depth < -4 && moveIndex > 1) break;
             else if (node->depth < -2 && moveIndex > 2) break;
             else if (node->depth < 0 && moveIndex > 3) break;
         }
