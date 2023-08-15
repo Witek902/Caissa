@@ -57,6 +57,19 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
     }
 };
 
+struct AccumulatorCache
+{
+    struct KingBucket
+    {
+        nn::Accumulator accum;
+        Bitboard pieces[2][6]; // [color][piece type]
+    };
+    KingBucket kingBuckets[2][2 * nn::NumKingBuckets]; // [side to move][king side * king bucket]
+    const nn::PackedNeuralNetwork* currentNet = nullptr;
+
+    void Init(const nn::PackedNeuralNetwork* net);
+};
+
 class NNEvaluator
 {
 public:
@@ -64,10 +77,10 @@ public:
     static int32_t Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos);
 
     // incrementally update and evaluate
-    static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node);
+    static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache);
 
     // update accumulators without evaluating
-    static void EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node);
+    static void EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache);
 
 #ifdef NN_ACCUMULATOR_STATS
     static void GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes);

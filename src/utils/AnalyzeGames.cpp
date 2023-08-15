@@ -94,7 +94,7 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
 
             if (move.IsQuiet() &&
                 pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos, nullptr, false)) < 2000) &&   // skip unbalanced positions
+                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos)) < 2000) &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 const MaterialKey matKey = pos.GetMaterialKey();

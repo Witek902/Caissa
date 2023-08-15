@@ -332,7 +332,6 @@ void NetworkTrainer::Validate(size_t iteration)
 
             const float expectedValue = entry.output;
 
-            const ScoreType psqtValue = Evaluate(entry.pos, nullptr, false);
             const ScoreType evalValue = Evaluate(entry.pos);
 
 #ifdef USE_PACKED_NET
@@ -355,7 +354,6 @@ void NetworkTrainer::Validate(size_t iteration)
                     << "Packed NN eval: " << nnPackedValue << " (" << ExpectedGameScoreToInternalEval(nnPackedValue) << ")" << std::endl
 #endif // USE_PACKED_NET
                     << "Static eval:    " << InternalEvalToExpectedGameScore(evalValue) << " (" << evalValue << ")" << std::endl
-                    << "PSQT eval:      " << InternalEvalToExpectedGameScore(psqtValue) << " (" << psqtValue << ")" << std::endl
                     << std::endl;
             }
 

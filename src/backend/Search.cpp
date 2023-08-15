@@ -863,7 +863,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
     rootNode.nnContext->MarkAsDirty();
 
-    EnsureAccumulatorUpdated(rootNode);
+    thread.accumulatorCache.Init(g_mainNeuralNetwork.get());
 
     for (;;)
     {
@@ -1102,7 +1102,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         if (node->staticEval == InvalidValue)
         {
-            const ScoreType evalScore = Evaluate(position, node);
+            const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
 
 #ifdef USE_EVAL_PROBING
@@ -1504,7 +1504,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (node->isInCheck)
     {
         eval = node->staticEval = InvalidValue;
-        EnsureAccumulatorUpdated(*node);
+        EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
     }
     else if (node->filteredMove.IsValid())
     {
@@ -1517,7 +1517,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (node->staticEval == InvalidValue)
         {
-            const ScoreType evalScore = Evaluate(position, node);
+            const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
 
 #ifdef USE_EVAL_PROBING
@@ -1532,7 +1532,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         else if (node->isPvNodeFromPrevIteration)
         {
             // always evaluate on PV line so the NN accumulator is up to date
-            EnsureAccumulatorUpdated(*node);
+            EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
         }
 
         ASSERT(node->staticEval != InvalidValue);
