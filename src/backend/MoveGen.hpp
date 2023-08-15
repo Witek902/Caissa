@@ -25,7 +25,7 @@ INLINE void GeneratePromotionsMoveList(const Square from, const Square to, MoveL
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-inline void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
@@ -280,7 +280,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 }
 
 template<MoveGenerationMode mode>
-inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == Color::White)
     {
@@ -292,13 +292,13 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
     }
 }
 
-inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
     GenerateMoveList<MoveGenerationMode::Captures>(pos, outMoveList);
     GenerateMoveList<MoveGenerationMode::Quiets>(pos, outMoveList);
 }
 
-inline void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == Color::White)
     {
