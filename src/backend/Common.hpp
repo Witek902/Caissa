@@ -42,7 +42,6 @@
 
 #define CACHELINE_SIZE 64u
 
-// #define EVAL_USE_PSQT
 #define USE_SYZYGY_TABLEBASES
 // #define USE_GAVIOTA_TABLEBASES
 

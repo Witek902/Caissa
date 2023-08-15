@@ -22,13 +22,6 @@ extern const char* c_DefaultEndgameEvalFile;
 
 extern PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
-#ifdef EVAL_USE_PSQT
-// not using array of PieceScore, because Visual Studio compiler can't pack that nicely as data section of EXE,
-// but generates ugly initialization code instead
-using KingsPerspectivePSQT = int16_t[10][2 * Square::NumSquares];
-extern const KingsPerspectivePSQT PSQT[Square::NumSquares / 2];
-#endif // EVAL_USE_PSQT
-
 static constexpr PieceScore c_pawnValue     = {   97, 166 };
 static constexpr PieceScore c_knightValue   = {  455, 371 };
 static constexpr PieceScore c_bishopValue   = {  494, 385 };
@@ -107,11 +100,6 @@ inline ScoreType ExpectedGameScoreToInternalEval(float score)
         return (ScoreType)std::clamp((int32_t)std::round(100.0f * ExpectedGameScoreToEval(score)),
             -KnownWinValue + 1, KnownWinValue - 1);
 }
-
-#ifdef EVAL_USE_PSQT
-const TPieceScore<int32_t> ComputePSQT(const Position& pos);
-void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, const DirtyPiece* dirtyPieces, uint32_t numDirtyPieces);
-#endif // EVAL_USE_PSQT
 
 ScoreType Evaluate(const Position& position);
 ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache);

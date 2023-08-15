@@ -1012,25 +1012,6 @@ INLINE static ScoreType AdjustEvalScore(const NodeInfo& node, const Color rootSt
     return static_cast<ScoreType>(adjustedScore);
 }
 
-#ifdef EVAL_USE_PSQT
-static void RefreshPsqtScore(NodeInfo& node)
-{
-    // refresh PSQT score (incrementally, if possible)
-    if (node.height == 0 ||
-        node.previousMove.GetPiece() == Piece::King ||
-        !node.nnContext)
-    {
-        node.psqtScore = ComputePSQT(node.position);
-    }
-    else // incremental update
-    {
-        node.psqtScore = node.parentNode->psqtScore;
-        ASSERT(node.psqtScore.mg != INT32_MIN && node.psqtScore.eg != INT32_MIN);
-        ComputeIncrementalPSQT(node.psqtScore, node.position, node.nnContext->dirtyPieces, node.nnContext->numDirtyPieces);
-    }
-}
-#endif // EVAL_USE_PSQT
-
 template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
@@ -1087,11 +1068,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
         }
     }
-
-#ifdef EVAL_USE_PSQT
-    // make sure PSQT score is up to date before calling Evaluate()
-    RefreshPsqtScore(node);
-#endif // EVAL_USE_PSQT
 
     // do not consider stand pat if in check
     if (node->isInCheck)
@@ -1494,11 +1470,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
     }
-
-#ifdef EVAL_USE_PSQT
-    // make sure PSQT score is up to date before calling Evaluate()
-    RefreshPsqtScore(node);
-#endif // EVAL_USE_PSQT
 
     // evaluate position
     if (node->isInCheck)
