@@ -595,6 +595,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
                 const uint64_t value = stats.ttMoveBetaCutoffs[i];
                 printf("TT-move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
             }
+            printf("Winning capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.winningCaptureCutoffs, 100.0f * float(stats.winningCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
             for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
             {
@@ -2104,16 +2105,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (moveScore == MoveOrderer::KillerMoveBonus - static_cast<int32_t>(i))
                         ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-                if (moveScore == MoveOrderer::CounterMoveBonus)
-                    ctx.stats.counterMoveCutoffs++;
-
-                if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue)
-                    ctx.stats.goodCaptureCutoffs++;
-                if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue)
-                    ctx.stats.badCaptureCutoffs++;
-                if (!ttOrKiller && move.IsQuiet())
-                    ctx.stats.quietCutoffs++;
-
+                if (moveScore == MoveOrderer::CounterMoveBonus) ctx.stats.counterMoveCutoffs++;
+                else if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
+                else if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
+                else if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue) ctx.stats.badCaptureCutoffs++;
+                else if (!ttOrKiller && move.IsQuiet()) ctx.stats.quietCutoffs++;
 #endif // COLLECT_SEARCH_STATS
 
                 break;

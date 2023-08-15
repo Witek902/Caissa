@@ -230,6 +230,7 @@ struct SearchStats
     uint64_t totalBetaCutoffs = 0;
     uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
     uint64_t ttMoveBetaCutoffs[TTEntry::NumMoves] = { };
+    uint64_t winningCaptureCutoffs = 0;
     uint64_t goodCaptureCutoffs = 0;
     uint64_t badCaptureCutoffs = 0;
     uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
