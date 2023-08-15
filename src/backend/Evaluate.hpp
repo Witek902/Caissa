@@ -7,13 +7,20 @@
 #include <math.h>
 #include <algorithm>
 
-// TODO re-enable once new net is generated
-// #define USE_ENDGAME_NEURAL_NETWORK
+namespace nn
+{
+class PackedNeuralNetwork;
+}
+using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 
 struct DirtyPiece;
+struct AccumulatorCache;
+
 
 extern const char* c_DefaultEvalFile;
 extern const char* c_DefaultEndgameEvalFile;
+
+extern PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
 #ifdef EVAL_USE_PSQT
 // not using array of PieceScore, because Visual Studio compiler can't pack that nicely as data section of EXE,
@@ -42,11 +49,6 @@ static constexpr PieceScore c_pieceValues[] =
 
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
-
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-bool TryLoadingDefaultEndgameEvalFile();
-bool LoadEndgameNeuralNetwork(const char* path);
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 // scaling factor when converting from neural network output (logistic space) to centipawn value
 // equal to 400/ln(10) = 173.7177...
@@ -111,7 +113,9 @@ const TPieceScore<int32_t> ComputePSQT(const Position& pos);
 void ComputeIncrementalPSQT(TPieceScore<int32_t>& score, const Position& pos, const DirtyPiece* dirtyPieces, uint32_t numDirtyPieces);
 #endif // EVAL_USE_PSQT
 
-ScoreType Evaluate(const Position& position, NodeInfo* node = nullptr, bool useNN = true);
-void EnsureAccumulatorUpdated(NodeInfo& node);
+ScoreType Evaluate(const Position& position);
+ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache);
+
+void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache);
 
 bool CheckInsufficientMaterial(const Position& position);

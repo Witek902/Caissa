@@ -11,9 +11,6 @@
 #include <memory>
 
 const char* c_DefaultEvalFile = "eval-19.pnn";
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-const char* c_DefaultEndgameEvalFile = "endgame-2.pnn";
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -39,14 +36,10 @@ static constexpr PieceScore c_queenMobilityBonus[28] = {
     S(  45,  11), S(  40,  17), S(  35,  10), S(  31,   9), S(  28,   3), S(  25,   6), S(  20,   1) };
 #endif // USE_MOBILITY
 
-using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
-static PackedNeuralNetworkPtr g_mainNeuralNetwork;
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-static PackedNeuralNetworkPtr g_endgameNeuralNetwork;
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 } // namespace
 
+PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
 bool LoadMainNeuralNetwork(const char* path)
 {
@@ -68,29 +61,6 @@ bool LoadMainNeuralNetwork(const char* path)
     g_mainNeuralNetwork.reset();
     return false;
 }
-
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-bool LoadEndgameNeuralNetwork(const char* path)
-{
-    if (strcmp(path, "") == 0)
-    {
-        std::cout << "info string disabled neural network endgame evaluation" << std::endl;
-        g_endgameNeuralNetwork.reset();
-        return true;
-    }
-
-    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
-    if (network->Load(path))
-    {
-        g_endgameNeuralNetwork = std::move(network);
-        std::cout << "info string Loaded endgame neural network: " << path << std::endl;
-        return true;
-    }
-
-    g_endgameNeuralNetwork.reset();
-    return false;
-}
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 static std::string GetDefaultEvalFilePath()
 {
@@ -142,46 +112,6 @@ bool TryLoadingDefaultEvalFile()
     std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
     return false;
 }
-
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-bool TryLoadingDefaultEndgameEvalFile()
-{
-    // check if there's eval file in same directory as executable
-    {
-        std::string path = GetDefaultEvalFilePath() + c_DefaultEndgameEvalFile;
-        if (!path.empty())
-        {
-            bool fileExists = false;
-            {
-                std::ifstream f(path.c_str());
-                fileExists = f.good();
-            }
-
-            if (fileExists && LoadEndgameNeuralNetwork(path.c_str()))
-            {
-                return true;
-            }
-        }
-    }
-
-    // try working directory
-    {
-        bool fileExists = false;
-        {
-            std::ifstream f(c_DefaultEndgameEvalFile);
-            fileExists = f.good();
-        }
-
-        if (fileExists && LoadEndgameNeuralNetwork(c_DefaultEndgameEvalFile))
-        {
-            return true;
-        }
-    }
-
-    std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
-    return false;
-}
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 static int32_t InterpolateScore(const int32_t mgPhase, const TPieceScore<int32_t>& score)
 {
@@ -403,8 +333,27 @@ static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 }
 #endif // USE_MOBILITY
 
-ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
+ScoreType Evaluate(const Position& pos)
 {
+    NNEvaluatorContext nnEvalContext;
+
+    NodeInfo dummyNode{};
+    dummyNode.position = pos;
+    dummyNode.nnContext = &nnEvalContext;
+
+    AccumulatorCache dummyCache;
+    if (g_mainNeuralNetwork)
+    {
+        dummyCache.Init(g_mainNeuralNetwork.get());
+    }
+
+    return Evaluate(dummyNode, dummyCache);
+}
+
+ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
+{
+    const Position& pos = node.position;
+
     const int32_t whiteQueens   = pos.Whites().queens.Count();
     const int32_t whiteRooks    = pos.Whites().rooks.Count();
     const int32_t whiteBishops  = pos.Whites().bishops.Count();
@@ -442,11 +391,9 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 
     int32_t finalValue = 0;
 
-    if (useNN && g_mainNeuralNetwork)
+    if (g_mainNeuralNetwork)
     {
-        int32_t nnValue = nodeInfo ?
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, *nodeInfo) :
-            NNEvaluator::Evaluate(*g_mainNeuralNetwork, pos);
+        int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
 
         // convert to centipawn range
         nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
@@ -463,7 +410,7 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
 #ifdef EVAL_USE_PSQT
         if (nodeInfo)
         {
-            value = nodeInfo->psqtScore;
+            value = node.psqtScore;
             ASSERT(value.mg != INT32_MIN && value.eg != INT32_MIN);
         }
         else
@@ -505,10 +452,10 @@ ScoreType Evaluate(const Position& pos, NodeInfo* nodeInfo, bool useNN)
     return (ScoreType)(finalValue * scale / c_endgameScaleMax);
 }
 
-void EnsureAccumulatorUpdated(NodeInfo& node)
+void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache)
 {
     if (g_mainNeuralNetwork)
     {
-        NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node);
+        NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node, cache);
     }
 }

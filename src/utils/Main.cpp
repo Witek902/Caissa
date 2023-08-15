@@ -30,9 +30,6 @@ int main(int argc, const char* argv[])
 
     InitEngine();
     TryLoadingDefaultEvalFile();
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-    TryLoadingDefaultEndgameEvalFile();
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
     // load optional syzygy
     for (size_t i = 0; i < args.size(); ++i)

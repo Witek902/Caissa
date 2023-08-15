@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.11.10_qs"
+#define VersionNumber "1.11.11"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -64,9 +64,6 @@ UniversalChessInterface::UniversalChessInterface()
     std::cout << c_EngineName << " by " << c_Author << std::endl;
 
     TryLoadingDefaultEvalFile();
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-    TryLoadingDefaultEndgameEvalFile();
-#endif // USE_ENDGAME_NEURAL_NETWORK
 
 #ifdef USE_GAVIOTA_TABLEBASES
     // Note: this won't allocate memory immediately, but will be deferred once tablebase is loaded
@@ -166,9 +163,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name EvalRandomization type spin default 0 min 0 max 100\n";
         std::cout << "option name StaticContempt type spin default 0 min -1000 max 1000\n";
         std::cout << "option name DynamicContempt type spin default 0 min -1000 max 1000\n";
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-        std::cout << "option name EndgameEvalFile type string default " << c_DefaultEndgameEvalFile << "\n";
-#endif // USE_ENDGAME_NEURAL_NETWORK
 #ifdef USE_SYZYGY_TABLEBASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name SyzygyProbeLimit type spin default 6 min 4 max 7\n";
@@ -879,12 +873,6 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         LoadMainNeuralNetwork(value.c_str());
     }
-#ifdef USE_ENDGAME_NEURAL_NETWORK
-    else if (lowerCaseName == "endgameevalfile")
-    {
-        LoadEndgameNeuralNetwork(value.c_str());
-    }
-#endif // USE_ENDGAME_NEURAL_NETWORK
     else if (lowerCaseName == "ponder")
     {
         // nothing special here

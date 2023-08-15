@@ -331,6 +331,8 @@ private:
 
         NodeCache nodeCache;
 
+        AccumulatorCache accumulatorCache;
+
         NodeInfo searchStack[MaxSearchDepth];
 
         // neural network context for each node height
