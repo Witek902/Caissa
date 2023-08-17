@@ -57,7 +57,7 @@ DEFINE_PARAM(SingularExtensionMinDepth, 6);
 DEFINE_PARAM(SingularExtensionScoreMarigin, 4);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 25);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 142);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 90);
 
 DEFINE_PARAM(BetaPruningDepth, 7);
 DEFINE_PARAM(BetaMarginMultiplier, 139);
@@ -1043,7 +1043,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     ScoreType alpha = node->alpha;
     ScoreType beta = node->beta;
-    ScoreType bestValue = -CheckmateValue + (ScoreType)node->height;
+    ScoreType bestValue = -InfValue;
     ScoreType futilityBase = -InfValue;
 
     // transposition table lookup
@@ -1155,31 +1155,35 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     while (movePicker.PickMove(*node, ctx.game, move, moveScore))
     {
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
-
-        if (!node->isInCheck &&
-            bestValue > -TablebaseWinValue)
+        if (bestValue > -TablebaseWinValue)
         {
-            ASSERT(!move.IsQuiet());
+            // try only one check evasion
+            if (move.IsQuiet()) break;
 
-            // skip underpromotions
-            if (move.IsUnderpromotion()) continue;
-
-            // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move, -120)) continue;
-
-            // futility pruning - skip captures that won't beat alpha
-            if (move.IsCapture() &&
-                futilityBase > -KnownWinValue &&
-                futilityBase <= alpha &&
-                !position.StaticExchangeEvaluation(move, 1))
+            if (!node->isInCheck)
             {
-                bestValue = std::max(bestValue, futilityBase);
-                continue;
+                // skip underpromotions
+                if (move.IsUnderpromotion()) continue;
+
+                // futility pruning - skip captures that won't beat alpha
+                if (move.IsCapture() &&
+                    futilityBase > -KnownWinValue &&
+                    futilityBase <= alpha &&
+                    !position.StaticExchangeEvaluation(move, 1))
+                {
+                    bestValue = std::max(bestValue, futilityBase);
+                    continue;
+                }
+
+                // skip very bad captures
+                if (moveScore < MoveOrderer::GoodCaptureValue &&
+                    !position.StaticExchangeEvaluation(move, -120))
+                    continue;
             }
         }
+
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
@@ -1192,13 +1196,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestMove.IsValid() &&
-            bestValue > -TablebaseWinValue)
+        if (bestValue > -TablebaseWinValue)
         {
-            if (move.IsQuiet()) break;
-            else if (node->depth < -4 && moveIndex > 1) break;
+                 if (node->depth < -4 && moveIndex > 1) break;
             else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth < 0 && moveIndex > 3) break;
+            else if (node->depth <  0 && moveIndex > 3) break;
         }
 
         childNode.previousMove = move;
