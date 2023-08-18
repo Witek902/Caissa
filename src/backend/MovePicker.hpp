@@ -18,7 +18,6 @@ public:
         Captures,
         Killer1,
         Killer2,
-        Counter,
         GenerateQuiets,
         PickQuiets,
         End,
@@ -54,7 +53,6 @@ private:
     uint32_t m_moveIndex = 0;
     Stage m_stage = Stage::TTMove;
 
-    Move m_counterMove = Move::Invalid();
     Move m_killerMoves[2] = { Move::Invalid(), Move::Invalid() };
 
     MoveList m_moves;

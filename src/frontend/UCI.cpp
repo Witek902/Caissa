@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.11.12"
+#define VersionNumber "1.11.13"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -41,7 +41,7 @@ static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size
 #ifndef _DEBUG
-static const uint32_t c_DefaultTTSizeInMB = 256;
+static const uint32_t c_DefaultTTSizeInMB = 64;
 #else
 static const uint32_t c_DefaultTTSizeInMB = 16;
 #endif

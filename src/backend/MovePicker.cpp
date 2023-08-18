@@ -100,28 +100,6 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             [[fallthrough]];
         }
 
-        case Stage::Counter:
-        {
-            m_stage = Stage::GenerateQuiets;
-            PackedMove move = m_moveOrderer.GetCounterMove(node.position.GetSideToMove(), node.previousMove);
-            if (move.IsValid() && move != m_ttMove)
-            {
-                const auto& killers = m_moveOrderer.GetKillerMoves(node.height);
-                if (move != killers.moves[0] && move != killers.moves[1])
-                {
-                    const Move counterMove = m_position.MoveFromPacked(move);
-                    if (counterMove.IsValid() && !counterMove.IsCapture())
-                    {
-                        m_counterMove = counterMove;
-                        outMove = counterMove;
-                        outScore = MoveOrderer::CounterMoveBonus;
-                        return true;
-                    }
-                }
-            }
-            [[fallthrough]];
-        }
-
         case Stage::GenerateQuiets:
         {
             m_stage = Stage::PickQuiets;
@@ -133,7 +111,6 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 m_moves.RemoveMove(m_ttMove);
                 m_moves.RemoveMove(m_killerMoves[0]);
                 m_moves.RemoveMove(m_killerMoves[1]);
-                m_moves.RemoveMove(m_counterMove);
 
                 m_moveOrderer.ScoreMoves(node, game, m_moves, true, m_nodeCacheEntry);
             }
