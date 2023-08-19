@@ -940,12 +940,13 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
             ttEntry.bounds == TTEntry::Bounds::Lower ? "lower" :
             "invalid";
 
-        std::cout << "Score:      " << ttEntry.score << std::endl;
-        std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
-        std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
-        std::cout << "Bounds:     " << boundsStr << std::endl;
-        std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
-        std::cout << "Moves:      " << ttEntry.move.ToString() << std::endl;
+        std::cout << "Score:       " << ttEntry.score << std::endl;
+        std::cout << "StaticEval:  " << ttEntry.staticEval << std::endl;
+        std::cout << "Depth:       " << (uint32_t)ttEntry.depth << std::endl;
+        std::cout << "Bounds:      " << boundsStr << std::endl;
+        std::cout << "Was PV-node: " << (ttEntry.wasPv ? "true" : "false") << std::endl;
+        std::cout << "Generation:  " << (uint32_t)ttEntry.generation << std::endl;
+        std::cout << "Move:        " << ttEntry.move.ToString() << std::endl;
     }
     else
     {

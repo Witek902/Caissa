@@ -210,7 +210,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, bool wasPv, TTEntry::Bounds bounds, PackedMove move)
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
@@ -219,6 +219,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     entry.staticEval = staticEval;
     entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
     entry.bounds = bounds;
+    entry.wasPv = wasPv;
     entry.move = move;
 
     ASSERT(entry.IsValid());
@@ -256,7 +257,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - 64 * entryAge + 4 * (data.bounds == TTEntry::Bounds::Exact);
+        const int32_t entryRelevance = (int32_t)data.depth - 64 * entryAge + 4 * (data.bounds == TTEntry::Bounds::Exact || data.wasPv);
 
         if (entryRelevance < minRelevanceInCluster)
         {

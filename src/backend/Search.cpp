@@ -1057,10 +1057,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // transposition table lookup
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
+    bool ttPv = isPvNode;
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
         node->staticEval = ttEntry.staticEval;
 
+        ttPv = ttPv || ttEntry.wasPv;
         ttScore = ScoreFromTT(ttEntry.score, node->height, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
@@ -1126,7 +1128,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         {
             if (!ttEntry.IsValid())
             {
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, ttPv, TTEntry::Bounds::Lower);
             }
             return bestValue;
         }
@@ -1267,7 +1269,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, ttPv, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
@@ -1368,6 +1370,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // transposition table lookup
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
+    bool ttPv = isPvNode;
     if (!node->filteredMove.IsValid() &&
         ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
@@ -1377,6 +1380,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         node->staticEval = ttEntry.staticEval;
 
+        ttPv = ttPv || ttEntry.wasPv;
         ttScore = ScoreFromTT(ttEntry.score, node->height, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
@@ -1455,7 +1459,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (!ttEntry.IsValid())
                 {
-                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->height), node->staticEval, node->depth, bounds);
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->height), node->staticEval, node->depth, ttPv, bounds);
 #ifdef COLLECT_SEARCH_STATS
                     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1904,7 +1908,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (move.IsQuiet())
             {
                 // reduce non-PV nodes more
-                if constexpr (!isPvNode) r++;
+                if (!ttPv) r++;
 
                 // reduce more if TT move is capture
                 if (ttCapture) r++;
@@ -2147,7 +2151,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, node->depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, node->depth, ttPv, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
