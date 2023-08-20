@@ -1156,29 +1156,25 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         if (bestValue > -TablebaseWinValue)
         {
-            // try only one check evasion
-            if (move.IsQuiet()) break;
+            ASSERT(!node->isInCheck);
 
-            if (!node->isInCheck)
+            // skip underpromotions
+            if (move.IsUnderpromotion()) continue;
+
+            // futility pruning - skip captures that won't beat alpha
+            if (move.IsCapture() &&
+                futilityBase > -KnownWinValue &&
+                futilityBase <= alpha &&
+                !position.StaticExchangeEvaluation(move, 1))
             {
-                // skip underpromotions
-                if (move.IsUnderpromotion()) continue;
-
-                // futility pruning - skip captures that won't beat alpha
-                if (move.IsCapture() &&
-                    futilityBase > -KnownWinValue &&
-                    futilityBase <= alpha &&
-                    !position.StaticExchangeEvaluation(move, 1))
-                {
-                    bestValue = std::max(bestValue, futilityBase);
-                    continue;
-                }
-
-                // skip very bad captures
-                if (moveScore < MoveOrderer::GoodCaptureValue &&
-                    !position.StaticExchangeEvaluation(move, -120))
-                    break;
+                bestValue = std::max(bestValue, futilityBase);
+                continue;
             }
+
+            // skip very bad captures
+            if (moveScore < MoveOrderer::GoodCaptureValue &&
+                !position.StaticExchangeEvaluation(move, -120))
+                break;
         }
 
         // start prefetching child node's TT entry
@@ -1230,6 +1226,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             bestValue = score;
 
             if (score >= beta) break;
+            if (node->isInCheck) break; // try only one check evasion
             if (score > alpha) alpha = score;
         }
 
