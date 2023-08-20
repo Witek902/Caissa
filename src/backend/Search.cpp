@@ -1759,7 +1759,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // Late Move Pruning
                     // skip quiet moves that are far in the list
                     // the higher depth is, the less aggressive pruning is
-                    if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth, isImproving) + isPvNode)
+                    if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
                     {
                         // if we're in quiets stage, skip everything
                         if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
