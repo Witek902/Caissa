@@ -1,6 +1,6 @@
 CC  = g++
 SRC = backend/*.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
-EXE = Caissa
+EXE = caissa
 
 ifeq ($(OS), Windows_NT)
 	EXT = .exe
@@ -31,18 +31,14 @@ endif
 
 COMMONFLAGS   = -DCONFIGURATION_FINAL
 
-NATIVEFLAGS   = $(COMMONFLAGS) -mno-avx512f -march=native
 SSE2FLAGS     = $(COMMONFLAGS) -march=core2 -DUSE_SSE -DUSE_SSE2
 AVX2FLAGS     = $(COMMONFLAGS) -march=core-avx2 -DUSE_SSE -DUSE_SSE2 -DUSE_SSE4 -DUSE_POPCNT -DUSE_AVX2 -DUSE_BMI2
 AVX512FLAGS   = $(COMMONFLAGS) -march=core-avx2 -mavx512f -mavx512bw -mavx512dq -DUSE_SSE2 -DUSE_SSE4 -DUSE_POPCNT -DUSE_AVX2 -DUSE_BMI2 -DUSE_AVX512
 
-
-native:
-	$(CC)   $(SRC) $(RFLAGS) $(LIBS) $(NATIVEFLAGS) -o $(EXE)$(EXT)
-sse2:
-	$(CC)   $(SRC) $(RFLAGS) $(LIBS) $(SSE2FLAGS) -o $(EXE)-sse2$(EXT)
 avx2:
 	$(CC)   $(SRC) $(RFLAGS) $(LIBS) $(AVX2FLAGS) -o $(EXE)-avx2$(EXT)
+sse2:
+	$(CC)   $(SRC) $(RFLAGS) $(LIBS) $(SSE2FLAGS) -o $(EXE)-sse2$(EXT)
 avx512:
 	$(CC)   $(SRC) $(RFLAGS) $(LIBS) $(AVX512FLAGS) -o $(EXE)-avx512$(EXT)
 pgo:
