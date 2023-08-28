@@ -3,6 +3,7 @@
 #include "../HaltonSequence.hpp"
 #include "../minitrace/minitrace.h"
 
+#include <algorithm>
 #include <random>
 
 namespace nn {
