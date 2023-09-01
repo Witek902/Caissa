@@ -20,7 +20,8 @@ struct Gradients
 
     void Init(uint32_t numInputs, uint32_t numOutputs, uint32_t numVariants, bool isSparse);
     void Clear();
-    void Accumulate(Gradients& rhs);
+    void Accumulate(Gradients& rhs, uint32_t inputIndex);
+    void Accumulate_UpdateDirtyFlags(Gradients& rhs, uint32_t inputIndex);
 };
 
 } // namespace nn

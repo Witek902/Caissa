@@ -39,8 +39,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 32 * 1024;
-static const uint32_t cMaxBatchSize = 32 * 1024;
+static const uint32_t cMinBatchSize = 16 * 1024;
+static const uint32_t cMaxBatchSize = 16 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -105,17 +105,17 @@ private:
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
     alignas(CACHELINE_SIZE)
-    std::atomic<uint64_t> m_numTrainingVectorsPassed = 0;
+        std::atomic<uint64_t> m_numTrainingVectorsPassed = 0;
 
     alignas(CACHELINE_SIZE)
-    std::mutex m_mutex;
+        std::mutex m_mutex;
 
     std::random_device m_randomDevice;
     std::mt19937 m_randomGenerator;
 
     std::ofstream m_trainingLog;
 
-    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask);
+    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask, float baseLambda);
 
     void Validate(size_t iteration);
 
@@ -224,7 +224,7 @@ static void TrainingEntryToNetworkInput(const TrainingEntry& entry, nn::InputDes
     inputDesc.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
 }
 
-bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask)
+bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask, float baseLambda)
 {
     Position pos;
     PositionEntry entry;
@@ -244,7 +244,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
         }
 
         // make game score more important for high move count
-        const float wdlLambda = std::lerp(0.25f, 0.1f, 1.0f - expf(-(float)pos.GetMoveCount() / 80.0f));
+        const float wdlLambda = baseLambda * expf(-(float)pos.GetMoveCount() / 120.0f);
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -258,12 +258,12 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.0f;
+            const float tbDrawLambda = 0.1f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
         {
-            const float tbLambda = 0.1f;
+            const float tbLambda = 0.25f;
             const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
             score = std::lerp(wdlScore, score, tbLambda);
         }
@@ -612,7 +612,7 @@ bool NetworkTrainer::PackNetwork()
 #else // !USE_VIRTUAL_FEATURES
         const nn::Values weights = m_featureTransformerWeights->m_variants.front().m_weights;
 #endif // USE_VIRTUAL_FEATURES
-        
+
         PackWeights(
             weights,
             nn::NumNetworkInputs,
@@ -713,12 +713,14 @@ bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.Load("eval-18-1.pnn"))
+    /*
+    if (!m_packedNet.Load("eval-20-6.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
     }
     UnpackNetwork();
+    */
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -732,22 +734,25 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 1.0f;
-    const float minLearningRate = 0.4f;
+    const float maxLearningRate = 4.0f;
+    const float minLearningRate = 0.25f;
+    const float maxLambda = 0.8f;
+    const float minLambda = 0.2f;
 
     //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
 
-    GenerateTrainingSet(m_validationSet, kingBucketMask);
+    GenerateTrainingSet(m_validationSet, kingBucketMask, maxLambda);
 
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float learningRate = std::lerp(minLearningRate, maxLearningRate, expf(-0.0001f * (float)iteration));
+        const float learningRate = std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
+        const float lambda = std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
         if (iteration == 0)
         {
-            if (!GenerateTrainingSet(m_trainingSet, kingBucketMask))
+            if (!GenerateTrainingSet(m_trainingSet, kingBucketMask, lambda))
                 return false;
         }
 
@@ -756,7 +761,7 @@ bool NetworkTrainer::Train()
         prevIterationStartTime = iterationStartTime;
 
         BlendLastLayerWeights();
-        
+
         // use validation set from previous iteration as training set in the current one
         ParallelFor("PrepareBatch", cNumTrainingVectorsPerIteration, [&batch, this](const TaskContext&, uint32_t i)
         {
@@ -778,7 +783,7 @@ bool NetworkTrainer::Train()
             TaskBuilder taskBuilder{ waitable };
             taskBuilder.Task("GenerateSet", [&](const TaskContext&)
             {
-                GenerateTrainingSet(m_trainingSet, kingBucketMask);
+                GenerateTrainingSet(m_trainingSet, kingBucketMask, lambda);
             });
 
             taskBuilder.Task("Train", [this, iteration, kingBucketMask, &epoch, &batch, &learningRate](const TaskContext& ctx)
@@ -788,7 +793,7 @@ bool NetworkTrainer::Train()
                 params.iteration = epoch;
                 params.batchSize = iteration < 5 ? cMinBatchSize : cMaxBatchSize;
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-4f;
+                params.weightDecay = 1.0e-5f;
 
                 if (kingBucketMask != UINT64_MAX)
                 {
@@ -824,6 +829,7 @@ bool NetworkTrainer::Train()
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
         std::cout
+            << "Lambda:                 " << lambda << std::endl
             << "Iteration:              " << iteration << std::endl
             << "Epoch:                  " << epoch << std::endl
             << "Num training vectors:   " << std::setprecision(3) << m_numTrainingVectorsPassed / 1.0e9f << "B" << std::endl

@@ -21,8 +21,8 @@ public:
         size_t iteration = 0;
     };
 
-    void Update_Adadelta(const Gradients& gradients, const WeightsUpdateOptions& options);
-    void Update_Adam(const Gradients& gradients, const WeightsUpdateOptions& options);
+    void Update_Adadelta(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options);
+    void Update_Adam(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options);
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;

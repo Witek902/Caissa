@@ -74,10 +74,9 @@ void WeightsStorage::Init(uint32_t numActiveNeurons, float bias)
     }
 }
 
-void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUpdateOptions& options)
+void WeightsStorage::Update_Adadelta(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options)
 {
-    MTR_SCOPE("WeightsStorage::Update_Adadelta", "Update_Adadelta");
-
+    ASSERT(inputIndex <= m_inputSize);
     ASSERT(gradients.m_numInputs == m_inputSize);
     ASSERT(gradients.m_numOutputs == m_outputSize);
     ASSERT(gradients.m_variants.size() == m_variants.size());
@@ -99,10 +98,8 @@ void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUp
         const __m256 gradientScaleVec = _mm256_set1_ps(options.gradientScale);
 #endif
 
-        // TODO parallel for
-        for (size_t j = 0; j <= m_inputSize; j++)
         {
-            const float maxWeightValue = j < m_inputSize ? m_weightsRange : m_biasRange;
+            const float maxWeightValue = inputIndex < m_inputSize ? m_weightsRange : m_biasRange;
 
             size_t i = 0;
 
@@ -111,11 +108,11 @@ void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUp
             const __m256 maxValueV = _mm256_set1_ps(maxWeightValue);
             for (; i + 8 <= m_outputSize; i += 8)
             {
-                float* mPtr = variant.m_gradientMoment1.data() + j * m_outputSize + i;
-                float* vPtr = variant.m_gradientMoment2.data() + j * m_outputSize + i;
-                float* wPtr = variant.m_weights.data() + j * m_outputSize + i;
-                float* wMaskPtr = m_weightsMask.data() + j * m_outputSize + i;
-                const float* gPtr = gradientsVariant.m_values.data() + j * m_outputSize + i;
+                float* mPtr = variant.m_gradientMoment1.data() + inputIndex * m_outputSize + i;
+                float* vPtr = variant.m_gradientMoment2.data() + inputIndex * m_outputSize + i;
+                float* wPtr = variant.m_weights.data() + inputIndex * m_outputSize + i;
+                float* wMaskPtr = m_weightsMask.data() + inputIndex * m_outputSize + i;
+                const float* gPtr = gradientsVariant.m_values.data() + inputIndex * m_outputSize + i;
 
                 __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
                 __m256 v = _mm256_load_ps(vPtr);
@@ -145,11 +142,11 @@ void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUp
 
             for (; i < m_outputSize; ++i)
             {
-                float& m = variant.m_gradientMoment1[j * m_outputSize + i];
-                float& v = variant.m_gradientMoment2[j * m_outputSize + i];
-                float& w = variant.m_weights[j * m_outputSize + i];
-                const float& wMask = m_weightsMask[j * m_outputSize + i];
-                float g = options.gradientScale * gradientsVariant.m_values[j * m_outputSize + i];
+                float& m = variant.m_gradientMoment1[inputIndex * m_outputSize + i];
+                float& v = variant.m_gradientMoment2[inputIndex * m_outputSize + i];
+                float& w = variant.m_weights[inputIndex * m_outputSize + i];
+                const float& wMask = m_weightsMask[inputIndex * m_outputSize + i];
+                float g = options.gradientScale * gradientsVariant.m_values[inputIndex * m_outputSize + i];
 
                 ASSERT(!std::isnan(g));
                 ASSERT(v >= 0.0f);
@@ -176,10 +173,8 @@ void WeightsStorage::Update_Adadelta(const Gradients& gradients, const WeightsUp
     }
 }
 
-void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdateOptions& options)
+void WeightsStorage::Update_Adam(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options)
 {
-    MTR_SCOPE("WeightsStorage::Weights_Adam", "Update_Adam");
-
     ASSERT(gradients.m_numInputs == m_inputSize);
     ASSERT(gradients.m_numOutputs == m_outputSize);
     ASSERT(gradients.m_variants.size() == m_variants.size());
@@ -193,7 +188,7 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdate
 
         const float cBeta1 = 0.9f;
         const float cBeta2 = 0.999f;
-        const float cEpsilon = 1.0e-8f;
+        const float cEpsilon = 1.0e-10f;
 
         const float cIter = (float)(options.iteration + 1);
         const float cBeta1Mult = 1.0f / (1.0f - powf(cBeta1, cIter));
@@ -208,10 +203,8 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdate
         const __m256 gradientScaleVec = _mm256_set1_ps(options.gradientScale);
 #endif
 
-        // TODO parallel for
-        for (size_t j = 0; j <= m_inputSize; j++)
         {
-            const float maxWeightValue = j < m_inputSize ? m_weightsRange : m_biasRange;
+            const float maxWeightValue = inputIndex < m_inputSize ? m_weightsRange : m_biasRange;
 
             size_t i = 0;
 
@@ -220,11 +213,11 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdate
             const __m256 maxValueV = _mm256_set1_ps(maxWeightValue);
             for (; i + 8 <= m_outputSize; i += 8)
             {
-                float* mPtr = variant.m_gradientMoment1.data() + j * m_outputSize + i;
-                float* vPtr = variant.m_gradientMoment2.data() + j * m_outputSize + i;
-                float* wPtr = variant.m_weights.data() + j * m_outputSize + i;
-                float* wMaskPtr = m_weightsMask.data() + j * m_outputSize + i;
-                const float* gPtr = gradientsVariant.m_values.data() + j * m_outputSize + i;
+                float* mPtr = variant.m_gradientMoment1.data() + inputIndex * m_outputSize + i;
+                float* vPtr = variant.m_gradientMoment2.data() + inputIndex * m_outputSize + i;
+                float* wPtr = variant.m_weights.data() + inputIndex * m_outputSize + i;
+                float* wMaskPtr = m_weightsMask.data() + inputIndex * m_outputSize + i;
+                const float* gPtr = gradientsVariant.m_values.data() + inputIndex * m_outputSize + i;
 
                 __m256 g = _mm256_mul_ps(gradientScaleVec, _mm256_load_ps(gPtr));
                 __m256 v = _mm256_load_ps(vPtr);
@@ -260,11 +253,11 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, const WeightsUpdate
 
             for (; i < m_outputSize; ++i)
             {
-                float& m = variant.m_gradientMoment1[j * m_outputSize + i];
-                float& v = variant.m_gradientMoment2[j * m_outputSize + i];
-                float& w = variant.m_weights[j * m_outputSize + i];
-                const float wMask = m_weightsMask[j * m_outputSize + i];
-                float g = options.gradientScale * gradientsVariant.m_values[j * m_outputSize + i];
+                float& m = variant.m_gradientMoment1[inputIndex * m_outputSize + i];
+                float& v = variant.m_gradientMoment2[inputIndex * m_outputSize + i];
+                float& w = variant.m_weights[inputIndex * m_outputSize + i];
+                const float wMask = m_weightsMask[inputIndex * m_outputSize + i];
+                float g = options.gradientScale * gradientsVariant.m_values[inputIndex * m_outputSize + i];
 
                 ASSERT(!std::isnan(g));
                 ASSERT(v >= 0.0f);

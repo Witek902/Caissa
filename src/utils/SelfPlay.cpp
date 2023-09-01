@@ -26,17 +26,17 @@ static const bool writeQuietPositions = false;
 static const bool probePositions = false;
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 32;
-static const uint32_t c_minNodes = 8000;
-static const uint32_t c_maxNodes = 16000;
-static const uint32_t c_maxDepth = 20;
+static const uint32_t c_minNodes = 10000;
+static const uint32_t c_maxNodes = 50000;
+static const uint32_t c_maxDepth = 25;
 static const int32_t c_maxEval = 1500;
-static const int32_t c_openingMaxEval = 600;
-static const int32_t c_multiPv = 5;
-static const int32_t c_multiPvMaxPly = 1;
-static const int32_t c_multiPvScoreTreshold = 75;
+static const int32_t c_openingMaxEval = 800;
+static const int32_t c_multiPv = 3;
+static const int32_t c_multiPvMaxPly = 0;
+static const int32_t c_multiPvScoreTreshold = 50;
 static const uint32_t c_minRandomMoves = 0;
 static const uint32_t c_maxRandomMoves = 0;
-static const float c_blunderProbability = 0.05f;
+static const float c_blunderProbability = 0.0f;
 
 using namespace threadpool;
 
@@ -111,7 +111,7 @@ static Move GetRandomMove(std::mt19937& randomGenerator, const Position& pos)
 
 void SelfPlay(const std::vector<std::string>& args)
 {
-    g_syzygyProbeLimit = 6;
+    g_syzygyProbeLimit = 7;
 
     std::string outputFileName;
     {
@@ -221,6 +221,15 @@ void SelfPlay(const std::vector<std::string>& args)
                 (void)moveSuccess;
             }
         }
+
+        /*
+        // randomize side to move
+        if (!openingPos.IsInCheck() &&
+            std::uniform_int_distribution<uint32_t>(0, 1)(gen) == 0)
+        {
+            openingPos.DoNullMove();
+        }
+        */
 
         if (openingPos.IsMate() || openingPos.IsStalemate())
         {
