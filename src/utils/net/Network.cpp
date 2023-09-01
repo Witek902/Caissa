@@ -513,10 +513,13 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
             }
         };
 
+        /*
         const auto updateWeightsFunc = [this, batchIdx, params]()
         {
             for (size_t weightsStorageIndex = 0; weightsStorageIndex < m_weightsStorages.size(); ++weightsStorageIndex)
             {
+                MTR_SCOPE("NeuralNetworkTrainer::Train", "UpdateWeights");
+
                 WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
                 ASSERT(weightsStorage);
 
@@ -528,32 +531,33 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 updateOptions.learningRate = params.learningRate;
                 updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
 
-                // accumulate gradients from all per-thread gradients
+                Gradients& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+
+                for (uint32_t inputIndex = 0; inputIndex <= weightsStorage->m_inputSize; ++inputIndex)
                 {
-                    MTR_SCOPE("NeuralNetworkTrainer::Train", "AccumulateGradients");
+                    // accumulate gradients from all per-thread gradients
                     for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
                     {
-                        Gradients& targetGradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
                         Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
-
-                        targetGradients.Accumulate(srcGradients);
+                        gradients.Accumulate(srcGradients, inputIndex);
                     }
-                }
 
-                const auto& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
-                switch (params.optimizer)
-                {
-                case Optimizer::Adadelta:
-                    weightsStorage->Update_Adadelta(gradients, updateOptions);
-                    break;
-                case Optimizer::Adam:
-                    weightsStorage->Update_Adam(gradients, updateOptions);
-                    break;
-                default:
-                    DEBUG_BREAK();
+                    // apply weights update
+                    switch (params.optimizer)
+                    {
+                    case Optimizer::Adadelta:
+                        weightsStorage->Update_Adadelta(gradients, inputIndex, updateOptions);
+                        break;
+                    case Optimizer::Adam:
+                        weightsStorage->Update_Adam(gradients, inputIndex, updateOptions);
+                        break;
+                    default:
+                        DEBUG_BREAK();
+                    }
                 }
             }
         };
+        */
 
         if (taskBuilder && params.batchSize > 64) // multi-threaded
         {
@@ -579,10 +583,80 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
 
             taskBuilder->Fence();
 
-            taskBuilder->Task("UpdateWeights",
-                              [updateWeightsFunc](const TaskContext&)
+            for (size_t weightsStorageIndex = 0; weightsStorageIndex < m_weightsStorages.size(); ++weightsStorageIndex)
             {
-                updateWeightsFunc();
+                MTR_SCOPE("NeuralNetworkTrainer::Train", "UpdateWeights");
+
+                WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
+                ASSERT(weightsStorage);
+
+                if (!weightsStorage->m_updateWeights) continue;
+
+                //for (uint32_t inputIndex = 0; inputIndex <= weightsStorage->m_inputSize; ++inputIndex)
+                taskBuilder->ParallelFor("UpdateWeights", weightsStorage->m_inputSize + 1,
+                    [this, weightsStorageIndex, params, batchIdx](const TaskContext&, uint32_t inputIndex)
+                {
+                    WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
+                    ASSERT(weightsStorage);
+
+                    Gradients& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+
+                    // accumulate gradients from all per-thread gradients
+                    for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
+                    {
+                        Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
+                        gradients.Accumulate(srcGradients, inputIndex);
+                    }
+
+                    WeightsStorage::WeightsUpdateOptions updateOptions;
+                    updateOptions.iteration = params.iteration + batchIdx;
+                    updateOptions.weightDecay = params.weightDecay;
+                    updateOptions.learningRate = params.learningRate;
+                    updateOptions.gradientScale = 1.0f; // 1.0f / (float)params.batchSize;
+
+                    // apply weights update
+                    switch (params.optimizer)
+                    {
+                    case Optimizer::Adadelta:
+                        weightsStorage->Update_Adadelta(gradients, inputIndex, updateOptions);
+                        break;
+                    case Optimizer::Adam:
+                        weightsStorage->Update_Adam(gradients, inputIndex, updateOptions);
+                        break;
+                    default:
+                        DEBUG_BREAK();
+                    }
+                });
+            }
+
+            taskBuilder->Fence();
+
+            taskBuilder->Task("UpdateGradientsDirtyFlag", [this](const TaskContext&)
+            {
+                for (size_t weightsStorageIndex = 0; weightsStorageIndex < m_weightsStorages.size(); ++weightsStorageIndex)
+                {
+                    WeightsStorage* weightsStorage = m_weightsStorages[weightsStorageIndex];
+                    ASSERT(weightsStorage);
+
+                    if (!weightsStorage->m_updateWeights) continue;
+                    if (!weightsStorage->m_isSparse) continue;
+
+                    Gradients& gradients = m_perThreadData.front().perWeightsStorageGradients[weightsStorageIndex];
+
+                    for (size_t threadIdx = 1; threadIdx < m_perThreadData.size(); ++threadIdx)
+                    {
+                        Gradients& srcGradients = m_perThreadData[threadIdx].perWeightsStorageGradients[weightsStorageIndex];
+                        for (uint32_t i = 0; i < weightsStorage->m_inputSize + 1; ++i)
+                        {
+                            gradients.Accumulate_UpdateDirtyFlags(srcGradients, i);
+
+                            //for (const Gradients::Variant& variant : srcGradients.m_variants)
+                            //{
+                            //    ASSERT(!variant.m_dirty[i]);
+                            //}
+                        }
+                    }
+                }
             });
         }
         else // single-threaded
@@ -596,7 +670,8 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                 backpropagateFunc(dummyThreadIdx, indexInBatch);
             }
 
-            updateWeightsFunc();
+            //TODO
+            //updateWeightsFunc();
         }
     }
 

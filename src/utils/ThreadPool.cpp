@@ -548,7 +548,7 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
     {
         uint32_t elementOffset = 0; // base element
         uint32_t numElements = 0;
-        std::atomic<int32_t> counter = 0;
+        std::atomic<uint32_t> counter = 0;
         uint32_t threadDataIndex = 0;
 
         ThreadData() = default;
@@ -585,7 +585,7 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
         subTaskDesc.debugName = debugName;
         subTaskDesc.parent = parallelForTask;
         subTaskDesc.dependency = mDependencyTask;
-        subTaskDesc.function = [func, threadDataPtr, numTasksToSpawn](const TaskContext& context)
+        subTaskDesc.function = [func, threadDataPtr, numTasksToSpawn, arraySize](const TaskContext& context)
         {
             // consume elements assigned to each thread (starting from self)
             for (uint32_t threadDataOffset = 0; threadDataOffset < numTasksToSpawn; ++threadDataOffset)
@@ -598,10 +598,14 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
 
                 ThreadData& threadData = (*threadDataPtr)[threadDataIndex];
 
-                uint32_t index;
-                while ((index = threadData.counter++) < threadData.numElements)
+                if (threadData.counter.load() < threadData.numElements)
                 {
-                    func(context, static_cast<uint32_t>(threadData.elementOffset + index));
+                    uint32_t index;
+                    while ((index = threadData.counter++) < threadData.numElements)
+                    {
+                        ASSERT(threadData.elementOffset + index < arraySize);
+                        func(context, static_cast<uint32_t>(threadData.elementOffset + index));
+                    }
                 }
             }
         };

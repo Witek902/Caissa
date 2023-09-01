@@ -55,8 +55,54 @@ void Gradients::Clear()
     }
 }
 
-void Gradients::Accumulate(Gradients& rhs)
+void Gradients::Accumulate(Gradients& rhs, uint32_t inputIndex)
 {
+    ASSERT(inputIndex <= m_numInputs);
+    ASSERT(rhs.m_numInputs == m_numInputs);
+    ASSERT(rhs.m_numOutputs == m_numOutputs);
+    ASSERT(rhs.m_variants.size() == m_variants.size());
+    ASSERT(rhs.m_isSparse == m_isSparse);
+
+    for (size_t variantIndex = 0; variantIndex < m_variants.size(); ++variantIndex)
+    {
+        Variant& variant = m_variants[variantIndex];
+        Variant& rhsVariant = rhs.m_variants[variantIndex];
+
+        ASSERT(rhsVariant.m_values.size() == variant.m_values.size());
+
+        if (m_isSparse && !rhsVariant.m_dirty[inputIndex])
+            continue;
+
+        // NOTE: not updating dirty flags here, because it's not thread-safe
+        // It will be done later in Accumulate_UpdateDirtyFlags
+        //variant.m_dirty[inputIndex] = true;
+        //rhsVariant.m_dirty[inputIndex] = false;
+
+        size_t j = inputIndex * m_numOutputs;
+        const size_t j_max = (inputIndex + 1) * m_numOutputs;
+
+#ifdef USE_AVX
+        float* values = variant.m_values.data();
+        float* rhsValues = rhsVariant.m_values.data();
+        for (; j + 8 <= j_max; j += 8)
+        {
+            _mm256_store_ps(values + j,
+                _mm256_add_ps(_mm256_load_ps(values + j), _mm256_load_ps(rhsValues + j)));
+            _mm256_store_ps(rhsValues + j, _mm256_setzero_ps());
+        }
+#endif // USE_AVX
+
+        for (; j < j_max; ++j)
+        {
+            variant.m_values[j] += rhsVariant.m_values[j];
+            rhsVariant.m_values[j] = 0.0f;
+        }
+    }
+}
+
+void Gradients::Accumulate_UpdateDirtyFlags(Gradients& rhs, uint32_t inputIndex)
+{
+    ASSERT(inputIndex <= m_numInputs);
     ASSERT(rhs.m_numInputs == m_numInputs);
     ASSERT(rhs.m_numOutputs == m_numOutputs);
     ASSERT(rhs.m_variants.size() == m_variants.size());
@@ -71,41 +117,10 @@ void Gradients::Accumulate(Gradients& rhs)
 
         if (m_isSparse)
         {
-            for (size_t i = 0; i <= m_numInputs; ++i)
+            if (rhsVariant.m_dirty[inputIndex])
             {
-                if (!rhsVariant.m_dirty[i])
-                    continue;
-
-                variant.m_dirty[i] = true;
-                rhsVariant.m_dirty[i] = false;
-
-                size_t j = i * m_numOutputs;
-                const size_t j_max = (i + 1) * m_numOutputs;
-
-#ifdef USE_AVX
-                float* values = variant.m_values.data();
-                float* rhsValues = rhsVariant.m_values.data();
-                for (; j + 8 <= j_max; j += 8)
-                {
-                    _mm256_store_ps(values + j,
-                        _mm256_add_ps(_mm256_load_ps(values + j), _mm256_load_ps(rhsValues + j)));
-                    _mm256_store_ps(rhsValues + j, _mm256_setzero_ps());
-                }
-#endif // USE_AVX
-
-                for (; j < j_max; ++j)
-                {
-                    variant.m_values[j] += rhsVariant.m_values[j];
-                    rhsVariant.m_values[j] = 0.0f;
-                }
-            }
-        }
-        else
-        {
-            for (size_t i = 0; i < variant.m_values.size(); ++i)
-            {
-                variant.m_values[i] += rhsVariant.m_values[i];
-                rhsVariant.m_values[i] = 0.0f;
+                variant.m_dirty[inputIndex] = true;
+                rhsVariant.m_dirty[inputIndex] = false;
             }
         }
     }

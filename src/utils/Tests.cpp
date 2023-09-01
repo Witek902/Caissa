@@ -1096,6 +1096,14 @@ static void RunPositionTests()
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
         }
 
+        // promotion
+        {
+            Position pos("k7/5P2/8/8/8/8/8/K7 w - - 0 1");
+            const Move move = pos.MoveFromString("f7f8q");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+        }
+
         // queen takes pawn protected by another pawn
         {
             Position pos("7k/p7/1p6/8/8/1Q6/8/7K w - - 0 1");

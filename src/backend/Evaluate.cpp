@@ -10,7 +10,7 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-19.pnn";
+const char* c_DefaultEvalFile = "eval-20.pnn";
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
