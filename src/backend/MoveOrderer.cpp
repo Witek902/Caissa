@@ -390,9 +390,10 @@ void MoveOrderer::ScoreMoves(
             }
         }
 
-        if (move.GetPromoteTo() == Piece::Queen)
+        if (move.GetPromoteTo() != Piece::None)
         {
-            score += PromotionValue;
+            ASSERT((uint32_t)move.GetPromoteTo() >= (uint32_t)Piece::Knight && (uint32_t)move.GetPromoteTo() <= (uint32_t)Piece::Queen);
+            score += PromotionValues[uint32_t(move.GetPromoteTo())];
         }
 
         moves.entries[i].score = score;
