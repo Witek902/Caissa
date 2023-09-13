@@ -252,6 +252,11 @@ struct Bitboard
         }
     }
 
+    INLINE bool IsBitSet(uint32_t index) const
+    {
+        return (value & (1ull << index)) != 0;
+    }
+
     static Bitboard GetRay(const Square square, const Direction dir);
     static Bitboard GetBetween(const Square squareA, const Square squareB);
 

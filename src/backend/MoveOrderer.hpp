@@ -82,15 +82,7 @@ public:
 
     void InitContinuationHistoryPointers(NodeInfo& node);
 
-    INLINE CounterType GetHistoryScore(const Color color, const Move move) const
-    {
-        ASSERT(move.IsValid());
-        const uint32_t from = move.FromSquare().Index();
-        const uint32_t to = move.ToSquare().Index();
-        ASSERT(from < 64);
-        ASSERT(to < 64);
-        return quietMoveHistory[(uint32_t)color][from][to];
-    }
+    CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
 
     INLINE const KillerMoves<NumKillerMoves>& GetKillerMoves(uint32_t treeHeight) const
     {
@@ -126,10 +118,10 @@ private:
 
     alignas(CACHELINE_SIZE)
 
-    CounterType quietMoveHistory[2][64][64];                // side, from-square, to-square
+    CounterType quietMoveHistory[2][2][2][64][64];  // side, from-threated, to-threated, from-square, to-square
     ContinuationHistory counterMoveHistory;
     ContinuationHistory continuationHistory;
-    CounterType capturesHistory[2][6][5][64];               // side, capturing piece, captured piece, to-square
+    CounterType capturesHistory[2][6][5][64];       // side, capturing piece, captured piece, to-square
 
     KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
 };

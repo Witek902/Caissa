@@ -369,6 +369,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode = NodeInfo{};
         rootNode.position = game.GetPosition();
         rootNode.isInCheck = game.GetPosition().IsInCheck();
+        rootNode.position.ComputeThreats(rootNode.threats);
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
@@ -803,6 +804,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode = NodeInfo{};
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
+            rootNode.position.ComputeThreats(rootNode.threats);
             rootNode.depth = singularDepth;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
@@ -857,6 +859,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode = NodeInfo{};
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
+    rootNode.position.ComputeThreats(rootNode.threats);
     rootNode.isPvNodeFromPrevIteration = true;
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
@@ -1200,6 +1203,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.previousMove = move;
         childNode.isInCheck = childNode.position.IsInCheck();
+        childNode.position.ComputeThreats(childNode.threats);
 
         childNode.staticEval = InvalidValue;
         childNode.alpha = -beta;
@@ -1616,6 +1620,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.nnContext->MarkAsDirty();
 
                     childNode.position.DoNullMove();
+                    childNode.position.ComputeThreats(childNode.threats);
 
                     ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
 
@@ -1737,7 +1742,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // compute move stat score using some of history counters
             const uint32_t piece = (uint32_t)move.GetPiece() - 1;
             const uint32_t to = move.ToSquare().Index();
-            moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(position.GetSideToMove(), move);
+            moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
             if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
             if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
             if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
@@ -1906,6 +1911,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         childNode.staticEval = InvalidValue;
         childNode.isInCheck = childNode.position.IsInCheck();
+        childNode.position.ComputeThreats(childNode.threats);
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);

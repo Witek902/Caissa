@@ -934,6 +934,38 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     return result != 0;
 }
 
+void Position::ComputeThreats(Threats& outThreats) const
+{
+    Bitboard attackedByPawns = 0;
+    Bitboard attackedByMinors = 0;
+    Bitboard attackedByRooks = 0;
+    Bitboard allThreats = 0;
+
+    const SidePosition& opponentSide = GetOpponentSide();
+    const Bitboard occupied = Occupied();
+
+    attackedByPawns = Bitboard::GetPawnsAttacks(opponentSide.pawns, GetSideToMove());
+
+    attackedByMinors = attackedByPawns |
+        Bitboard::GetKnightAttacks(opponentSide.knights);
+    opponentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
+        attackedByMinors |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupied); });
+
+    attackedByRooks = attackedByMinors;
+    opponentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
+        attackedByRooks |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupied); });
+
+    allThreats = attackedByRooks;
+    opponentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
+        allThreats |= Bitboard::GenerateQueenAttacks(Square(fromIndex), occupied); });
+    allThreats |= Bitboard::GetKingAttacks(opponentSide.GetKingSquare());
+
+    outThreats.attackedByPawns = attackedByPawns;
+    outThreats.attackedByMinors = attackedByMinors;
+    outThreats.attackedByRooks = attackedByRooks;
+    outThreats.allThreats = allThreats;
+}
+
 bool Position::IsQuiet() const
 {
     if (IsInCheck(mSideToMove))

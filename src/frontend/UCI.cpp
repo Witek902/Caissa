@@ -12,7 +12,7 @@
 
 #include <math.h>
 
-#define VersionNumber "1.12"
+#define VersionNumber "1.12.1"
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -253,6 +253,15 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "scoremoves")
     {
         Command_ScoreMoves();
+    }
+    else if (command == "threats")
+    {
+        Threats threats;
+        mGame.GetPosition().ComputeThreats(threats);
+        std::cout << "Attacked by pawns" << std::endl << threats.attackedByPawns.Print() << std::endl;
+        std::cout << "Attacked by minors" << std::endl << threats.attackedByMinors.Print() << std::endl;
+        std::cout << "Attacked by rooks" << std::endl << threats.attackedByRooks.Print() << std::endl;
+        std::cout << "All threats:" << std::endl << threats.allThreats.Print() << std::endl;
     }
     else if (command == "ttinfo")
     {

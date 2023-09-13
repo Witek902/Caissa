@@ -20,7 +20,7 @@ void MoveOrderer::DebugPrint() const
 {
 #ifndef CONFIGURATION_FINAL
     std::cout << "=== QUIET MOVES HISTORY HEURISTICS ===" << std::endl;
-
+    /*
     for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
     {
         for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
@@ -38,7 +38,7 @@ void MoveOrderer::DebugPrint() const
                 }
             }
         }
-    }
+    }*/
 
     std::cout << "=== QUIET MOVES CONTINUATION HISTORY HEURISTICS ===" << std::endl;
 
@@ -160,6 +160,17 @@ void MoveOrderer::Clear()
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
+MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
+{
+    ASSERT(move.IsValid());
+    const Bitboard threats = node.threats.allThreats;
+    const uint32_t from = move.FromSquare().Index();
+    const uint32_t to = move.ToSquare().Index();
+    ASSERT(from < 64);
+    ASSERT(to < 64);
+    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
+}
+
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
     int32_t newValue = (int32_t)counter + delta - ((int32_t)counter * std::abs(delta) + 8192) / 16384;
@@ -187,6 +198,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const int32_t bonus = std::min(128 * (node.depth - 1) + node.depth * node.depth, 2000);
 
+    const Bitboard threats = node.threats.allThreats;
+
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
@@ -195,8 +208,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
-
-        UpdateHistoryCounter(quietMoveHistory[color][from][to], delta);
+        
+        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -250,34 +263,7 @@ void MoveOrderer::ScoreMoves(
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
-    
-    Bitboard attackedByPawns = 0;
-    Bitboard attackedByMinors = 0;
-    Bitboard attackedByRooks = 0;
-
-    if (withQuiets)
-    {
-        const SidePosition& currentSide = pos.GetCurrentSide();
-        const SidePosition& opponentSide = pos.GetOpponentSide();
-        const Bitboard occupied = pos.Occupied();
-
-        attackedByPawns = Bitboard::GetPawnsAttacks(opponentSide.pawns, pos.GetSideToMove());
-
-        if (currentSide.rooks | currentSide.queens)
-        {
-            attackedByMinors = attackedByPawns |
-                Bitboard::GetKnightAttacks(pos.GetOpponentSide().knights);
-            opponentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA{
-                attackedByMinors |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupied); });
-        }
-
-        if (currentSide.queens)
-        {
-            attackedByRooks = attackedByMinors;
-            opponentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA{
-                attackedByRooks |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupied); });
-        }
-    }
+    const Bitboard threats = node.threats.allThreats;
 
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
 
@@ -347,7 +333,7 @@ void MoveOrderer::ScoreMoves(
             ASSERT(killerMoves[node.height].Find(move) < 0);
 
             // history heuristics
-            score += quietMoveHistory[color][from][to];
+            score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
@@ -375,16 +361,16 @@ void MoveOrderer::ScoreMoves(
                     break;
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
-                    if (attackedByPawns & move.FromSquare())    score += 4000;
-                    if (attackedByPawns & move.ToSquare())      score -= 4000;
+                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
+                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
                     break;
                 case Piece::Rook:
-                    if (attackedByMinors & move.FromSquare())   score += 8000;
-                    if (attackedByMinors & move.ToSquare())     score -= 8000;
+                    if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
+                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 8000;
                     break;
                 case Piece::Queen:
-                    if (attackedByRooks & move.FromSquare())    score += 12000;
-                    if (attackedByRooks & move.ToSquare())      score -= 12000;
+                    if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
+                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
                     break;
                 case Piece::King:
                     if (pos.GetOurCastlingRights())             score -= 6000;

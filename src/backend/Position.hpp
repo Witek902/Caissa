@@ -83,6 +83,14 @@ enum class MoveNotation : uint8_t
     LAN,    // Long Algebraic Notation
 };
 
+struct Threats
+{
+    Bitboard attackedByPawns;
+    Bitboard attackedByMinors;
+    Bitboard attackedByRooks;
+    Bitboard allThreats;
+};
+
 // class representing whole board state
 class Position
 {
@@ -257,6 +265,8 @@ public:
 
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;
+
+    void ComputeThreats(Threats& outThreats) const;
 
     static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
     static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
