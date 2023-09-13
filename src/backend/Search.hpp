@@ -131,6 +131,7 @@ using SearchResult = std::vector<PvLine>;
 struct NodeInfo
 {
     Position position;
+    Threats threats;
 
     // ignore given moves in search, used for singular extensions
     PackedMove filteredMove = PackedMove::Invalid();
