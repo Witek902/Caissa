@@ -43,31 +43,36 @@ def inputIndexToCoords(index):
     if index < 5 * 64:
         index = index - (4 * 64)
         return (4 * offset + index % 8, index / 8)
-    # black pawns
+    # white king
     if index < 6 * 64:
         index = index - (5 * 64)
         return (5 * offset + index % 8, index / 8)
-    # black knights
+
+    # black pawns
     if index < 7 * 64:
         index = index - (6 * 64)
         return (6 * offset + index % 8, index / 8)
-    # black bishops
+    # black knights
     if index < 8 * 64:
         index = index - (7 * 64)
         return (7 * offset + index % 8, index / 8)
-    # black rooks
+    # black bishops
     if index < 9 * 64:
         index = index - (8 * 64)
         return (8 * offset + index % 8, index / 8)
-    # black queens
+    # black rooks
     if index < 10 * 64:
         index = index - (9 * 64)
         return (9 * offset + index % 8, index / 8)
-    # black king
+    # black queens
     if index < 11 * 64:
         index = index - (10 * 64)
         return (10 * offset + index % 8, index / 8)
-    
+    # black king
+    if index < 12 * 64:
+        index = index - (11 * 64)
+        return (11 * offset + index % 8, index / 8)
+        
     return (0,0)
 
 
@@ -97,7 +102,7 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
-    kingBucket = 0
+    kingBucket = 4
 
     for i in range(768):
         for j in range(accumulatorSize):
