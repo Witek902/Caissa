@@ -39,8 +39,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 16 * 1024;
-static const uint32_t cMaxBatchSize = 16 * 1024;
+static const uint32_t cMinBatchSize = 32 * 1024;
+static const uint32_t cMaxBatchSize = 32 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -258,7 +258,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.1f;
+            const float tbDrawLambda = 0.05f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
@@ -484,7 +484,7 @@ void NetworkTrainer::Validate(size_t iteration)
 
 void NetworkTrainer::BlendLastLayerWeights()
 {
-    const float blendFactor = 0.00001f;
+    const float blendFactor = 1.0e-5f;
 
     for (uint32_t i = 0; i < nn::AccumulatorSize * 2; ++i)
     {
@@ -713,14 +713,12 @@ bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    /*
-    if (!m_packedNet.Load("eval-20-6.pnn"))
+    if (!m_packedNet.Load("eval-21-1.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
     }
     UnpackNetwork();
-    */
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -734,10 +732,10 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 4.0f;
-    const float minLearningRate = 0.25f;
-    const float maxLambda = 0.8f;
-    const float minLambda = 0.2f;
+    const float maxLearningRate = 0.25f;
+    const float minLearningRate = 0.1f;
+    const float maxLambda = 0.2f;
+    const float minLambda = 0.1f;
 
     //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
@@ -747,7 +745,8 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float learningRate = std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
+        const float warmup = iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
+        const float learningRate = warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
         if (iteration == 0)
@@ -786,7 +785,7 @@ bool NetworkTrainer::Train()
                 GenerateTrainingSet(m_trainingSet, kingBucketMask, lambda);
             });
 
-            taskBuilder.Task("Train", [this, iteration, kingBucketMask, &epoch, &batch, &learningRate](const TaskContext& ctx)
+            taskBuilder.Task("Train", [this, iteration, kingBucketMask, &epoch, &batch, learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
                 params.optimizer = nn::Optimizer::Adadelta;
