@@ -651,6 +651,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.depthCompleted = 0;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
+    thread.avgScores.clear();
+    thread.avgScores.resize(numPvLines, 0);
     thread.moveOrderer.NewSearch();
     thread.nodeCache.OnNewSearch();
 
@@ -674,20 +676,15 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
         {
-            PvLine& prevPvLine = thread.pvLines[pvIndex];
-
             // use previous iteration score as starting aspiration window
             // if it's the first iteration - try score from transposition table
-            ScoreType prevScore = prevPvLine.score;
+            ScoreType prevScore = thread.avgScores[pvIndex];
             if (depth <= 1 && pvIndex == 0)
             {
                 TTEntry ttEntry;
-                if (param.transpositionTable.Read(game.GetPosition(), ttEntry))
+                if (param.transpositionTable.Read(game.GetPosition(), ttEntry) && ttEntry.IsValid())
                 {
-                    if (ttEntry.IsValid())
-                    {
-                        prevScore = ScoreFromTT(ttEntry.score, 0, game.GetPosition().GetHalfMoveCount());
-                    }
+                    prevScore = ScoreFromTT(ttEntry.score, 0, game.GetPosition().GetHalfMoveCount());
                 }
             }
 
@@ -737,6 +734,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
+            thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
         }
 
         if (abortSearch)
@@ -902,10 +900,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
-            if (depth + 3 > param.depth)
-            {
-                depth--;
-            }
+            if (depth > 1 && depth + 3 > param.depth) depth--;
         }
 
         const bool stopSearch = param.depth > 1 && CheckStopCondition(thread, param.searchContext, true);
