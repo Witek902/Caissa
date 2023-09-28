@@ -17,9 +17,7 @@ using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 struct DirtyPiece;
 struct AccumulatorCache;
 
-
 extern const char* c_DefaultEvalFile;
-extern const char* c_DefaultEndgameEvalFile;
 
 extern PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
@@ -73,7 +71,7 @@ inline float EvalToDrawProbability(float eval, uint32_t ply)
 // convert evaluation score (in pawns) to expected game score
 inline float EvalToExpectedGameScore(float eval)
 {
-    return 1.0f / (1.0f + powf(10.0, -eval / 4.0f));
+    return 1.0f / (1.0f + powf(10.0, -eval / 3.875f));
 }
 
 // convert evaluation score (in centipawns) to expected game score

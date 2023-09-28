@@ -573,17 +573,15 @@ PackedNeuralNetwork::~PackedNeuralNetwork()
 
 void PackedNeuralNetwork::Release()
 {
-    if (mappedData)
+    ReleaseFileMapping();
+
+    if (allocatedData)
     {
-        ReleaseFileMapping();
-        weightsBuffer = nullptr;
+        AlignedFree(allocatedData);
+        allocatedData = nullptr;
     }
 
-    if (weightsBuffer)
-    {
-        AlignedFree(weightsBuffer);
-        weightsBuffer = nullptr;
-    }
+    weightsBuffer = nullptr;
 
     header = Header{};
 }
@@ -702,11 +700,11 @@ void PackedNeuralNetwork::GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t
     ASSERT(weightsBlockSize > 0);
     ASSERT(biasesBlockSize > 0);
 
-    uint8_t* basePointer = layerDataPointers[layerIndex];
+    const uint8_t* basePointer = layerDataPointers[layerIndex];
     ASSERT(basePointer != nullptr);
 
-    uint8_t* weightsPointer = basePointer + layerVariant * RoundUp<size_t,CACHELINE_SIZE>(weightsBlockSize + biasesBlockSize);
-    uint8_t* biasesPointer = weightsPointer + weightsBlockSize;
+    const uint8_t* weightsPointer = basePointer + layerVariant * RoundUp<size_t, CACHELINE_SIZE>(weightsBlockSize + biasesBlockSize);
+    const uint8_t* biasesPointer = weightsPointer + weightsBlockSize;
 
     outWeights = weightsPointer;
     outBiases = biasesPointer;
@@ -747,39 +745,42 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
 
 void PackedNeuralNetwork::ReleaseFileMapping()
 {
-#if defined(PLATFORM_WINDOWS)
-    if (fileMapping == INVALID_HANDLE_VALUE)
-    {
-        CloseHandle(fileMapping);
-        fileMapping = INVALID_HANDLE_VALUE;
-    }
-
-    if (fileHandle == INVALID_HANDLE_VALUE)
-    {
-        CloseHandle(fileHandle);
-        fileHandle = INVALID_HANDLE_VALUE;
-    }
-#else
     if (mappedData)
     {
-        if (0 != munmap(mappedData, mappedSize))
+#if defined(PLATFORM_WINDOWS)
+        if (fileMapping == INVALID_HANDLE_VALUE)
         {
-            perror("munmap");
+            CloseHandle(fileMapping);
+            fileMapping = INVALID_HANDLE_VALUE;
         }
-    }
 
-    if (fileDesc != -1)
-    {
-        close(fileDesc);
-        fileDesc = -1;
-    }
+        if (fileHandle == INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(fileHandle);
+            fileHandle = INVALID_HANDLE_VALUE;
+        }
+#else
+        if (mappedData)
+        {
+            if (0 != munmap(mappedData, mappedSize))
+            {
+                perror("munmap");
+            }
+        }
+
+        if (fileDesc != -1)
+        {
+            close(fileDesc);
+            fileDesc = -1;
+        }
 #endif // PLATFORM_WINDOWS
+    }
 
     mappedData = nullptr;
     mappedSize = 0;
 }
 
-bool PackedNeuralNetwork::Load(const char* filePath)
+bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
 {
     Release();
 
@@ -896,7 +897,7 @@ bool PackedNeuralNetwork::Load(const char* filePath)
         goto onError;
     }
 
-    weightsBuffer = (uint8_t*)mappedData + sizeof(Header);
+    weightsBuffer = reinterpret_cast<const uint8_t*>(mappedData) + sizeof(Header);
 
     InitLayerDataSizes();
     InitLayerDataPointers();
@@ -912,6 +913,26 @@ bool PackedNeuralNetwork::Load(const char* filePath)
 onError:
     Release();
     return false;
+}
+
+bool PackedNeuralNetwork::LoadFromMemory(const void* data)
+{
+    Release();
+
+    // TODO this should be all hardcoded
+    header = Header{};
+    header.layerSizes[0] = nn::NumNetworkInputs;
+    header.layerSizes[1] = nn::AccumulatorSize * 2;
+    header.layerVariants[0] = 1;
+    header.layerVariants[1] = nn::NumVariants;
+    numActiveLayers = 2;
+
+    weightsBuffer = reinterpret_cast<const uint8_t*>(data) + sizeof(Header);
+
+    InitLayerDataSizes();
+    InitLayerDataPointers();
+
+    return true;
 }
 
 int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const
