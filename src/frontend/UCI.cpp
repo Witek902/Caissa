@@ -1182,13 +1182,9 @@ bool UniversalChessInterface::Command_Benchmark()
             stats.nodes.load(),
             (endTimePoint - startTimePoint).ToSeconds(),
             stats.nodes.load() / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
-
     }
 
-    std::cout << std::endl;
-    std::cout << "Total time: " << totalTime << " seconds" << std::endl;
-    std::cout << "Total nodes: " << totalNodes << std::endl;
-    std::cout << "Speed: " << static_cast<int64_t>(totalNodes / totalTime) << " nps" << std::endl;
+    std::cout << totalNodes << " nodes " << static_cast<int64_t>(totalNodes / totalTime) << " nps" << std::endl;
 
 #ifdef NN_ACCUMULATOR_STATS
     PrintNNEvaluatorStats();
