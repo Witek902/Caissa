@@ -94,43 +94,47 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
 
             if (move.IsQuiet() &&
                 pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 800 || std::abs(Evaluate(pos)) < 2000) &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
-                const MaterialKey matKey = pos.GetMaterialKey();
-
-                if (pos.GetHalfMoveCount() <= 100)
-                {
-                    localStats.gameResultVsHalfMoveCounter[(uint32_t)game.GetScore()][pos.GetHalfMoveCount()]++;
-                }
-
-                const float moveScoreAsGameScore = InternalEvalToExpectedGameScore(moveScore);
                 const ScoreType staticEval = Evaluate(pos);
-                const float staticEvalAsGameScore = InternalEvalToExpectedGameScore(staticEval);
 
-                if (c_collectMaterialStats)
+                // skip unbalanced positions
+                if (std::abs(moveScore) < 800 || std::abs(Evaluate(pos)) < 2000)
                 {
-                    MaterialStats& matStats = localStats.materialStats[matKey];
-                    matStats.wins += (game.GetScore() == Game::Score::WhiteWins ? 1 : 0);
-                    matStats.draws += (game.GetScore() == Game::Score::Draw ? 1 : 0);
-                    matStats.losses += (game.GetScore() == Game::Score::BlackWins ? 1 : 0);
-                    matStats.avgEvalScore += moveScoreAsGameScore;
-                }
+                    const MaterialKey matKey = pos.GetMaterialKey();
 
-                localStats.evalErrorSum_Score += Sqr(staticEvalAsGameScore - moveScoreAsGameScore);
-                localStats.evalErrorSum_WDL += Sqr(staticEvalAsGameScore - GameScoreToExpectedGameScore(game.GetScore()));
+                    if (pos.GetHalfMoveCount() <= 100)
+                    {
+                        localStats.gameResultVsHalfMoveCounter[(uint32_t)game.GetScore()][pos.GetHalfMoveCount()]++;
+                    }
 
-                localStats.numPositions++;
-                if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) localStats.numPawnlessPositions++;
+                    const float moveScoreAsGameScore = InternalEvalToExpectedGameScore(moveScore);
+                    const float staticEvalAsGameScore = InternalEvalToExpectedGameScore(staticEval);
 
-                // piece occupancy
-                for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
-                {
-                    const Piece piece = (Piece)(pieceIndex + (uint32_t)Piece::Pawn);
-                    pos.Whites().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
-                        localStats.pieceOccupancy[pieceIndex][square]++; });
-                    pos.Blacks().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA {
-                        localStats.pieceOccupancy[pieceIndex][Square(square).FlippedRank().Index()]++; });
+                    if (c_collectMaterialStats)
+                    {
+                        MaterialStats& matStats = localStats.materialStats[matKey];
+                        matStats.wins += (game.GetScore() == Game::Score::WhiteWins ? 1 : 0);
+                        matStats.draws += (game.GetScore() == Game::Score::Draw ? 1 : 0);
+                        matStats.losses += (game.GetScore() == Game::Score::BlackWins ? 1 : 0);
+                        matStats.avgEvalScore += moveScoreAsGameScore;
+                    }
+
+                    localStats.evalErrorSum_Score += Sqr(staticEvalAsGameScore - moveScoreAsGameScore);
+                    localStats.evalErrorSum_WDL += Sqr(staticEvalAsGameScore - GameScoreToExpectedGameScore(game.GetScore()));
+
+                    localStats.numPositions++;
+                    if (matKey.numWhitePawns == 0 && matKey.numBlackPawns == 0) localStats.numPawnlessPositions++;
+
+                    // piece occupancy
+                    for (uint32_t pieceIndex = 0; pieceIndex < 6; ++pieceIndex)
+                    {
+                        const Piece piece = (Piece)(pieceIndex + (uint32_t)Piece::Pawn);
+                        pos.Whites().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA{
+                            localStats.pieceOccupancy[pieceIndex][square]++; });
+                        pos.Blacks().GetPieceBitBoard(piece).Iterate([&](const uint32_t square) INLINE_LAMBDA{
+                            localStats.pieceOccupancy[pieceIndex][Square(square).FlippedRank().Index()]++; });
+                    }
                 }
             }
 

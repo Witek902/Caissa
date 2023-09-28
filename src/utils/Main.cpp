@@ -11,6 +11,7 @@ extern void RunUnitTests();
 extern bool RunPerformanceTests(const std::vector<std::string>& paths);
 extern void SelfPlay(const std::vector<std::string>& args);
 extern void PrepareTrainingData(const std::vector<std::string>& args);
+extern void PlainTextToTrainingData(const std::vector<std::string>& args);
 extern bool TrainPieceSquareTables();
 extern bool TrainEndgame();
 extern bool TestNetwork();
@@ -47,47 +48,27 @@ int main(int argc, const char* argv[])
         return 1;
     }
 
-    if (args[0] == "unittest")
-    {
+    const std::string toolName = args[0];
+    args.erase(args.begin());
+
+    if (toolName == "unittest")
         RunUnitTests();
-    }
-    else if (args[0] == "perftest")
-    {
-        args.erase(args.begin());
+    else if (toolName == "perftest")
         RunPerformanceTests(args);
-    }
-    else if (args[0] == "selfplay")
-    {
+    else if (toolName == "selfplay")
         SelfPlay(args);
-    }
-    else if (args[0] == "prepareTrainingData")
-    {
+    else if (toolName == "prepareTrainingData")
         PrepareTrainingData(args);
-    }
-    else if (args[0] == "testNetwork")
-    {
+    else if (toolName == "plainTextToTrainingData")
+        PlainTextToTrainingData(args);
+    else if (toolName == "testNetwork")
         TestNetwork();
-    }
-    else if (args[0] == "trainPieceSquareTables")
-    {
-        //TrainPieceSquareTables();
-    }
-    else if (args[0] == "trainEndgame")
-    {
-        //TrainEndgame();
-    }
-    else if (args[0] == "validateEndgame")
-    {
+    else if (toolName == "validateEndgame")
         ValidateEndgame();
-    }
-    else if (args[0] == "analyzeGames")
-    {
+    else if (toolName == "analyzeGames")
         AnalyzeGames();
-    }
-    else if (args[0] == "trainNetwork")
-    {
+    else if (toolName == "trainNetwork")
         TrainNetwork();
-    }
     else
     {
         std::cerr << "Unknown option: " << args[0] << std::endl;
