@@ -12,7 +12,9 @@
 
 #include <math.h>
 
-#define VersionNumber "1.12.5"
+#ifndef CAISSA_VERSION
+#define CAISSA_VERSION "1.12.5_dev"
+#endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
@@ -36,7 +38,7 @@
 #error "Unknown configuration"
 #endif
 
-static const char* c_EngineName = "Caissa " VersionNumber " " ArchitectureStr ConfigurationStr;
+static const char* c_EngineName = "Caissa " CAISSA_VERSION " " ArchitectureStr ConfigurationStr;
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size

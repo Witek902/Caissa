@@ -10,7 +10,23 @@
 #include <fstream>
 #include <memory>
 
-const char* c_DefaultEvalFile = "eval-21.pnn";
+#if defined(CAISSA_EVALFILE)
+
+    // embed eval file into executable
+    #define INCBIN_PREFIX
+    #define INCBIN_STYLE INCBIN_STYLE_CAMEL
+    #include "incbin.h"
+    INCBIN(Embed, CAISSA_EVALFILE);
+
+    const char* c_DefaultEvalFile = "<empty>";
+
+#else // !defined(CAISSA_EVALFILE)
+
+    // use eval file
+    const char* c_DefaultEvalFile = "eval-21.pnn";
+
+#endif // defined(CAISSA_EVALFILE)
+
 
 #define S(mg, eg) PieceScore{ mg, eg }
 
@@ -43,15 +59,25 @@ PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
 bool LoadMainNeuralNetwork(const char* path)
 {
-    if (strcmp(path, "") == 0)
+    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
+
+    if (path == nullptr || strcmp(path, "") == 0)
     {
+#if defined(CAISSA_EVALFILE)
+        if (network->LoadFromMemory(EmbedData))
+        {
+            g_mainNeuralNetwork = std::move(network);
+            std::cout << "info string Using embedded neural network" << std::endl;
+            return true;
+        }
+#endif // defined(CAISSA_EVALFILE)
+
         std::cout << "info string disabled neural network evaluation" << std::endl;
         g_mainNeuralNetwork.reset();
         return true;
     }
 
-    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
-    if (network->Load(path))
+    if (network->LoadFromFile(path))
     {
         g_mainNeuralNetwork = std::move(network);
         std::cout << "info string Loaded neural network: " << path << std::endl;
@@ -77,6 +103,13 @@ static std::string GetDefaultEvalFilePath()
 
 bool TryLoadingDefaultEvalFile()
 {
+#if defined(CAISSA_EVALFILE)
+
+    // use embedded net
+    return LoadMainNeuralNetwork(nullptr);
+
+#else // !defined(CAISSA_EVALFILE)
+
     // check if there's eval file in same directory as executable
     {
         std::string path = GetDefaultEvalFilePath() + c_DefaultEvalFile;
@@ -111,6 +144,8 @@ bool TryLoadingDefaultEvalFile()
 
     std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
     return false;
+
+#endif // defined(CAISSA_EVALFILE)
 }
 
 static int32_t InterpolateScore(const int32_t mgPhase, const TPieceScore<int32_t>& score)

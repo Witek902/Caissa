@@ -7,4 +7,6 @@ build*/
 bin/
 releases/
 release/
+src/*.exe
+CMakeSettings.json
 

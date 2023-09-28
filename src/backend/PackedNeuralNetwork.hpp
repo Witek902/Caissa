@@ -69,7 +69,9 @@ namespace nn {
     #define NN_USE_SSE4
 #endif // USE_SSE
 
-#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+#if defined(NN_USE_AVX512)
+    constexpr uint32_t OptimalRegisterCount = 16;
+#elif defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
     constexpr uint32_t OptimalRegisterCount = 8;
 #endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
 
@@ -158,7 +160,10 @@ public:
                 const std::vector<uint32_t>& numVariantsPerLayer = std::vector<uint32_t>());
 
     // load from file
-    bool Load(const char* filePath);
+    bool LoadFromFile(const char* filePath);
+
+    // load from memory
+    bool LoadFromMemory(const void* data);
 
     // save to file
     bool Save(const char* filePath) const;
@@ -218,7 +223,7 @@ private:
 
     uint32_t numActiveLayers = 0;
     uint32_t layerDataSizes[MaxNumLayers];  // size of each layer (in bytes)
-    uint8_t* layerDataPointers[MaxNumLayers];  // base pointer to weights of each layer
+    const uint8_t* layerDataPointers[MaxNumLayers];  // base pointer to weights of each layer
 
     // file mapping
 #if defined(PLATFORM_WINDOWS)
@@ -231,8 +236,10 @@ private:
     void* mappedData = nullptr;
     size_t mappedSize = 0;
 
+    void* allocatedData = nullptr;
+
     // all weights and biases are stored in this buffer
-    uint8_t* weightsBuffer = nullptr;
+    const uint8_t* weightsBuffer = nullptr;
 };
 
 } // namespace nn
