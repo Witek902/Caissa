@@ -39,8 +39,8 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 32 * 1024;
-static const uint32_t cMaxBatchSize = 32 * 1024;
+static const uint32_t cMinBatchSize = 16 * 1024;
+static const uint32_t cMaxBatchSize = 16 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -484,7 +484,7 @@ void NetworkTrainer::Validate(size_t iteration)
 
 void NetworkTrainer::BlendLastLayerWeights()
 {
-    const float blendFactor = 1.0e-5f;
+    const float blendFactor = 1.0e-4f;
 
     for (uint32_t i = 0; i < nn::AccumulatorSize * 2; ++i)
     {
@@ -713,7 +713,7 @@ bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.Load("eval-21-1.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-21.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
