@@ -82,8 +82,17 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
     {
         if (argv[i])
         {
-            std::cout << "CommandLine: " << argv[i] << std::endl;
-            if (!ExecuteCommand(argv[i]))
+            std::string cmd = argv[i];
+
+            std::cout << "CommandLine: " << cmd << std::endl;
+
+            if (!ExecuteCommand(cmd))
+            {
+                return;
+            }
+
+            // "bench" command is used to run benchmark and exit immediately to comply with OpenBench
+            if (cmd == "bench")
             {
                 return;
             }
@@ -97,7 +106,7 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
         if (!ExecuteCommand(str))
         {
             break;
-    }
+        }
     }
 
     UnloadTablebase();
