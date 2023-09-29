@@ -61,7 +61,7 @@ bool LoadMainNeuralNetwork(const char* path)
 {
     PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
 
-    if (path == nullptr || strcmp(path, "") == 0)
+    if (path == nullptr || strcmp(path, "") == 0 || strcmp(path, "<empty>") == 0)
     {
 #if defined(CAISSA_EVALFILE)
         if (network->LoadFromMemory(EmbedData))
@@ -83,6 +83,8 @@ bool LoadMainNeuralNetwork(const char* path)
         std::cout << "info string Loaded neural network: " << path << std::endl;
         return true;
     }
+
+    // TODO use embedded net?
 
     g_mainNeuralNetwork.reset();
     return false;
