@@ -1014,6 +1014,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
+    mGame.GetPosition().ComputeThreats(nodeInfo.threats);
 
     const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
 
