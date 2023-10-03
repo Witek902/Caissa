@@ -614,7 +614,8 @@ bool PackedNeuralNetwork::Resize(const std::vector<uint32_t>& layerSizes,
     InitLayerDataSizes();
 
     const size_t weightsSize = GetWeightsBufferSize();
-    weightsBuffer = (uint8_t*)AlignedMalloc(weightsSize, CACHELINE_SIZE);
+    allocatedData = AlignedMalloc(weightsSize, CACHELINE_SIZE);
+    weightsBuffer = (uint8_t*)allocatedData;
 
     InitLayerDataPointers();
 
