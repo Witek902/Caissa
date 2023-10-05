@@ -33,8 +33,8 @@
 #define UNUSED(x) (void)(x)
 
 #ifndef CONFIGURATION_FINAL
-    #define ASSERT(x) do { if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
-    #define VERIFY(x) do { if (!(x)) { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
+    #define ASSERT(x) do { if (!(x)) [[unlikely]] { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
+    #define VERIFY(x) do { if (!(x)) [[unlikely]] { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
 #else
     #define ASSERT(x) do { } while (0)
     #define VERIFY(x) (x)

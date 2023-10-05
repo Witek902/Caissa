@@ -1403,7 +1403,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (node->depth >= WdlTablebaseProbeDepth &&
             position.GetHalfMoveCount() == 0 &&
             position.GetNumPieces() <= g_syzygyProbeLimit &&
-            (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl)))
+            (ProbeSyzygy_WDL(position, &wdl) || ProbeGaviota(position, nullptr, &wdl))) [[unlikely]]
         {
             thread.stats.tbHits++;
 
@@ -1972,7 +1972,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         // PVS search at full depth
-        if (doFullDepthSearch)
+        if (doFullDepthSearch) [[unlikely]]
         {
             childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1);
             childNode.alpha = -alpha - 1;
@@ -1999,7 +1999,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         // update node cache after searching a move
-        if (nodeCacheEntry)
+        if (nodeCacheEntry) [[unlikely]]
         {
             ASSERT(thread.stats.nodesTotal > nodesSearchedBefore);
             const uint64_t nodesSearched = thread.stats.nodesTotal - nodesSearchedBefore;
