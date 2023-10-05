@@ -212,7 +212,8 @@ public:
     bool IsMoveLegal(const Move& move) const;
 
     // apply a move
-    bool DoMove(const Move& move, NNEvaluatorContext* nnContext = nullptr);
+    bool DoMove(const Move& move);
+    bool DoMove(const Move& move, NNEvaluatorContext& nnContext);
 
     // apply null move
     bool DoNullMove();

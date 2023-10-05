@@ -267,11 +267,7 @@ static TPieceScore<int32_t> EvaluateMobility(const Position& pos)
 
 ScoreType Evaluate(const Position& pos)
 {
-    NNEvaluatorContext nnEvalContext;
-
-    NodeInfo dummyNode{};
-    dummyNode.position = pos;
-    dummyNode.nnContext = &nnEvalContext;
+    NodeInfo dummyNode = { pos };
 
     AccumulatorCache dummyCache;
     if (g_mainNeuralNetwork)

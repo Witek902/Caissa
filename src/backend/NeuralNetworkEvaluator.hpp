@@ -18,11 +18,8 @@ struct DirtyPiece
 // promotion with capture
 static constexpr uint32_t MaxNumDirtyPieces = 3;
 
-struct alignas(CACHELINE_SIZE) NNEvaluatorContext
+struct NNEvaluatorContext
 {
-    // first layer accumulators for both perspectives
-    nn::Accumulator accumulator[2];
-
     // indicates which accumulator is dirty
     bool accumDirty[2];
 
@@ -32,16 +29,6 @@ struct alignas(CACHELINE_SIZE) NNEvaluatorContext
 
     // cache NN output
     int32_t nnScore;
-
-    void* operator new(size_t size)
-    {
-        return AlignedMalloc(size, CACHELINE_SIZE);
-    }
-
-    void operator delete(void* ptr)
-    {
-        AlignedFree(ptr);
-    }
 
     NNEvaluatorContext()
     {
