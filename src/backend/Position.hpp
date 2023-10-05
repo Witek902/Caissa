@@ -8,9 +8,13 @@
 #include <vector>
 
 // class representing one side's pieces state
-struct SidePosition
+struct alignas(16) SidePosition
 {
-    Piece GetPieceAtSquare(const Square sqare) const;
+    INLINE Piece GetPieceAtSquare(const Square square) const
+    {
+        ASSERT(square.IsValid());
+        return pieces[square.mIndex];
+    }
 
     Bitboard& GetPieceBitBoard(Piece piece);
     const Bitboard& GetPieceBitBoard(Piece piece) const;
@@ -59,6 +63,7 @@ struct SidePosition
     Bitboard rooks = 0;
     Bitboard queens = 0;
     Bitboard king = 0;
+    Piece pieces[64] = {};
 };
 
 INLINE Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -92,7 +97,7 @@ struct Threats
 };
 
 // class representing whole board state
-class Position
+class alignas(32) Position
 {
 public:
     static const char* InitPositionFEN;
@@ -100,10 +105,28 @@ public:
     static bool s_enableChess960;
 
     Position();
-    Position(const Position&) = default;
-    Position(Position&&) = default;
-    Position& operator=(const Position&) = default;
-    Position& operator=(Position&&) = default;
+
+    INLINE Position(const Position& rhs)
+    {
+        AlignedMemcpy64(this, &rhs);
+    }
+
+    INLINE Position(Position&& rhs)
+    {
+        AlignedMemcpy64(this, &rhs);
+    }
+
+    INLINE Position& operator=(const Position& rhs)
+    {
+        AlignedMemcpy64(this, &rhs);
+        return *this;
+    }
+
+    INLINE Position& operator=(Position&& rhs)
+    {
+        AlignedMemcpy64(this, &rhs);
+        return *this;
+    }
 
     explicit Position(const std::string& fenString);
 
@@ -273,8 +296,6 @@ public:
 
 private:
 
-    friend class Search;
-
     INLINE SidePosition& GetSide(const Color color) { return color == Color::White ? mColors[0] : mColors[1]; }
     INLINE SidePosition& GetCurrentSide() { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE SidePosition& GetOpponentSide() { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
@@ -304,7 +325,7 @@ private:
     uint64_t mHash; // whole position hash
 };
 
-static_assert(sizeof(Position) <= 128, "Invalid position size");
+static_assert(sizeof(Position) <= 256, "Invalid position size");
 
 static constexpr uint8_t c_shortCastleMask = (1 << 7);
 static constexpr uint8_t c_longCastleMask = (1 << 0);
