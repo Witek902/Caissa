@@ -47,24 +47,6 @@ uint64_t Position::ComputeHash() const
     return hash;
 }
 
-Piece SidePosition::GetPieceAtSquare(const Square square) const
-{
-    ASSERT(square.IsValid());
-
-    const Bitboard squareBitboard = square.GetBitboard();
-
-    uint32_t piece = 0;
-
-    if (pawns & squareBitboard)     piece = (uint32_t)Piece::Pawn;
-    if (knights & squareBitboard)   piece = (uint32_t)Piece::Knight;
-    if (bishops & squareBitboard)   piece = (uint32_t)Piece::Bishop;
-    if (rooks & squareBitboard)     piece = (uint32_t)Piece::Rook;
-    if (queens & squareBitboard)    piece = (uint32_t)Piece::Queen;
-    if (king & squareBitboard)      piece = (uint32_t)Piece::King;
-
-    return (Piece)piece;
-}
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Position::Position()
@@ -91,10 +73,12 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.rooks & mask) == 0);
     ASSERT((pos.queens & mask) == 0);
     ASSERT((pos.king & mask) == 0);
+    ASSERT(pos.pieces[square.Index()] == Piece::None);
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 
     pos.GetPieceBitBoard(piece) |= mask;
+    pos.pieces[square.Index()] = piece;
 }
 
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
@@ -105,6 +89,9 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
 
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
+
+    ASSERT(pos.pieces[square.Index()] == piece);
+    pos.pieces[square.Index()] = Piece::None;
 
     mHash ^= GetPieceZobristHash(color, piece, square.Index());
 }
