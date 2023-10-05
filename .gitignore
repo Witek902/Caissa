@@ -8,5 +8,5 @@ bin/
 releases/
 release/
 src/*.exe
+src/pgo/
 CMakeSettings.json
-

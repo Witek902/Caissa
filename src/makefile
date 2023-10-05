@@ -24,12 +24,23 @@ else
 endif
 
 ifneq ($(findstring g++, $(CC)),)
-	PGO_GENERATE = -fprofile-generate
-	PGO_USE      = -fprofile-use
+	PGO_DIR = "pgo"
+	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
+	PGO_USE      = -fprofile-use=$(PGO_DIR)
 else ifneq ($(findstring clang++, $(CC)),)
 	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
 	PGO_GENERATE = -fprofile-instr-generate
 	PGO_USE      = -fprofile-instr-use=caissa.profdata
+endif
+
+# Try to detect windows environment by seeing
+# whether the shell filters out " or not.
+ifeq ($(shell echo "test"), "test")
+	BENCH = $(EXE_NAME)$(EXT) bench 15 > nul 2>&1
+	CLEAN = rmdir /s /q $(PGO_DIR)
+else
+	BENCH = ./$(EXE_NAME) bench 15 > /dev/null 2>&1
+	CLEAN = $(RM) -rf $(PGO_DIR)
 endif
 
 COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL  -DNDEBUG -DCAISSA_VERSION=\"$(VERSION)\" -DCAISSA_EVALFILE=\"$(EVALFILE)\"
@@ -47,14 +58,13 @@ sse2:
 	$(CC)   $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
 avx512:
 	$(CC)   $(SRC) -march=core-avx2 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
+
 pgo:
-	$(CC)   $(SRC) $(AVX2FLAGS) -o $(EXE_NAME)-pgo$(EXT) $(PGO_GENERATE)
-	./$(EXE_NAME)-pgo$(EXT) "bench 15" "quit"
+	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_GENERATE)
+	$(BENCH)
 	$(PGO_MERGE)
-	$(CC)   $(SRC) $(AVX2FLAGS) -o $(EXE_NAME)-pgo$(EXT) $(PGO_USE)
+	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_USE)
+	$(CLEAN)
 
 release:
-	make avx2
-	make sse4
-	make avx512
-	make sse2
+	make -j sse2 sse4 avx2 avx512
