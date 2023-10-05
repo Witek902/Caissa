@@ -161,7 +161,10 @@ struct NodeInfo
 
     MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
 
-    NNEvaluatorContext* nnContext = nullptr;
+    NNEvaluatorContext nnContext;
+
+    // first layer accumulators for both perspectives
+    nn::Accumulator accumulator[2];
 
     uint16_t pvLength = 0;
     PackedMove pvLine[MaxSearchDepth];
@@ -178,7 +181,7 @@ struct NodeInfo
         isNullMove = false;
         isCutNode = false;
         doubleExtensions = 0;
-        nnContext = nullptr;
+        nnContext.MarkAsDirty();
         continuationHistories[0] = nullptr;
         continuationHistories[1] = nullptr;
         continuationHistories[2] = nullptr;
@@ -301,7 +304,7 @@ private:
         uint32_t threadID = 0;
     };
 
-    struct ThreadData
+    struct alignas(64) ThreadData
     {
         std::atomic<bool> stopThread = false;
         std::thread thread;
@@ -332,22 +335,9 @@ private:
 
         NodeInfo searchStack[MaxSearchDepth];
 
-        // neural network context for each node height
-        using NNEvaluatorContextPtr = std::unique_ptr<NNEvaluatorContext>;
-        NNEvaluatorContextPtr nnContextStack[MaxSearchDepth];
-
         ThreadData();
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
-
-        INLINE NNEvaluatorContext* GetNNEvaluatorContext(uint32_t height)
-        {
-            ASSERT(height < MaxSearchDepth);
-            NNEvaluatorContextPtr& context = nnContextStack[height];
-            if (!context)
-                context = std::make_unique<NNEvaluatorContext>();
-            return context.get();
-        }
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;

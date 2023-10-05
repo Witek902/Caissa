@@ -373,8 +373,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
-        rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
-        rootNode.nnContext->MarkAsDirty();
+        rootNode.nnContext.MarkAsDirty();
 
         SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
         outResult.resize(1);
@@ -807,8 +806,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
             rootNode.filteredMove = primaryMove;
-            rootNode.nnContext = thread.nnContextStack[0].get();
-            rootNode.nnContext->MarkAsDirty();
+            rootNode.nnContext.MarkAsDirty();
 
             ScoreType score = NegaMax<NodeType::Root>(thread, &rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -860,8 +858,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.position.ComputeThreats(rootNode.threats);
     rootNode.isPvNodeFromPrevIteration = true;
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
-    rootNode.nnContext = thread.GetNNEvaluatorContext(rootNode.height);
-    rootNode.nnContext->MarkAsDirty();
+    rootNode.nnContext.MarkAsDirty();
 
     thread.accumulatorCache.Init(g_mainNeuralNetwork.get());
 
@@ -937,13 +934,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
 Search::ThreadData::ThreadData()
 {
-    constexpr uint32_t InitialNNEvaluatorStackSize = 32;
-
-    for (uint32_t i = 0; i < InitialNNEvaluatorStackSize; ++i)
-    {
-        GetNNEvaluatorContext(i);
-    }
-
     randomSeed = 0x4abf372b;
 }
 
@@ -1135,8 +1125,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     childNode.pvIndex = node->pvIndex;
     childNode.depth = node->depth - 1;
     childNode.height = node->height + 1;
-    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
-    childNode.nnContext->MarkAsDirty();
+    childNode.nnContext.MarkAsDirty();
 
     MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node->isInCheck);
 
@@ -1291,10 +1280,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // ENABLE_SEARCH_TRACE
 
     // clear PV line
-    if (!node->filteredMove.IsValid()) // don't overwrite PV in singular search
-    {
-        node->pvLength = 0;
-    }
+    node->pvLength = 0;
 
     // update stats
     thread.stats.OnNodeEnter(node->height + 1);
@@ -1611,8 +1597,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.doubleExtensions = node->doubleExtensions;
                     childNode.height = node->height + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
-                    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
-                    childNode.nnContext->MarkAsDirty();
+                    childNode.nnContext.MarkAsDirty();
 
                     childNode.position.DoNullMove();
                     childNode.position.ComputeThreats(childNode.threats);
@@ -1655,8 +1640,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.height = node->height + 1;
     childNode.pvIndex = node->pvIndex;
     childNode.doubleExtensions = node->doubleExtensions;
-    childNode.nnContext = thread.GetNNEvaluatorContext(childNode.height);
-    childNode.nnContext->MarkAsDirty();
+    childNode.nnContext.MarkAsDirty();
 
     int32_t extension = 0;
 
