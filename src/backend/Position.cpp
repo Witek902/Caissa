@@ -493,7 +493,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     // remove captured piece
     if (move.IsCapture())
     {
-        if (move.IsEnPassant())
+        if (move.IsEnPassant()) [[unlikely]]
         {
             Square captureSquare = Square::Invalid();
             if (move.ToSquare().Rank() == 5)  captureSquare = Square(move.ToSquare().File(), 4u);
@@ -521,7 +521,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     }
 
     // put moved piece
-    if (!move.IsCastling())
+    if (!move.IsCastling()) [[likely]]
     {
         const bool isPromotion = move.GetPromoteTo() != Piece::None;
         const Piece targetPiece = isPromotion ? move.GetPromoteTo() : move.GetPiece();
@@ -539,7 +539,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
 
     if (move.GetPiece() == Piece::King)
     {
-        if (move.IsCastling())
+        if (move.IsCastling()) [[unlikely]]
         {
             const uint8_t currentSideCastlingRights = mCastlingRights[(uint32_t)mSideToMove];
 

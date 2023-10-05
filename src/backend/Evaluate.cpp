@@ -299,7 +299,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     int32_t scale = c_endgameScaleMax;
 
     // check endgame evaluation first
-    if (whitePieceCount + blackPieceCount <= 6 || blackPieceCount == 0 || whitePieceCount == 0)
+    if (whitePieceCount + blackPieceCount <= 6 || blackPieceCount == 0 || whitePieceCount == 0) [[unlikely]]
     {
         int32_t endgameScore;
         if (EvaluateEndgame(pos, endgameScore, scale))
@@ -328,26 +328,6 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
 
         finalValue = nnValue;
-    }
-    else // fallback to simple evaluation
-    {
-        TPieceScore<int32_t> value = {};
-
-        value += c_queenValue * (whiteQueens - blackQueens);
-        value += c_rookValue * (whiteRooks - blackRooks);
-        value += c_bishopValue * (whiteBishops - blackBishops);
-        value += c_knightValue * (whiteKnights - blackKnights);
-        value += c_pawnValue * (whitePawns - blackPawns);
-
-        // tempo bonus
-        value += (pos.GetSideToMove() == Color::White) ? c_tempoBonus : -c_tempoBonus;
-
-#ifdef USE_MOBILITY
-        value += EvaluateMobility(pos);
-#endif // USE_MOBILITY
-
-        // accumulate middle/end game scores
-        finalValue = InterpolateScore(gamePhase, value);
     }
 
     // apply scaling based on game phase
