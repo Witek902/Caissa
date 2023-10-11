@@ -322,7 +322,8 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
 
         // convert to centipawn range
-        nnValue = (nnValue * c_nnOutputToCentiPawns + nn::OutputScale / 2) / nn::OutputScale;
+        constexpr int32_t nnOutputDiv = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
+        nnValue = DivRoundNearest(nnValue, nnOutputDiv);
 
         // NN output is side-to-move relative
         if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;

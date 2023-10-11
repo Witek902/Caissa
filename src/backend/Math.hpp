@@ -78,6 +78,16 @@ INLINE constexpr T DivFloor(const T a, const T b)
     return res - (rem != 0 && ((rem < 0) != (b < 0)));
 }
 
+// divide with rounding up
+template<typename T>
+INLINE constexpr T DivRoundNearest(T x, T y)
+{
+    if (x >= 0)
+        return (x + y / 2) / y;
+    else
+        return (x - y / 2) / y;
+}
+
 template<typename T>
 INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
 {
