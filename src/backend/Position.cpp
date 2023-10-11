@@ -646,24 +646,38 @@ bool Position::DoNullMove()
 Position Position::SwappedColors() const
 {
     Position result;
+
     result.mColors[0].king          = mColors[1].king.MirroredVertically();
     result.mColors[0].queens        = mColors[1].queens.MirroredVertically();
     result.mColors[0].rooks         = mColors[1].rooks.MirroredVertically();
     result.mColors[0].bishops       = mColors[1].bishops.MirroredVertically();
     result.mColors[0].knights       = mColors[1].knights.MirroredVertically();
     result.mColors[0].pawns         = mColors[1].pawns.MirroredVertically();
+
     result.mColors[1].king          = mColors[0].king.MirroredVertically();
     result.mColors[1].queens        = mColors[0].queens.MirroredVertically();
     result.mColors[1].rooks         = mColors[0].rooks.MirroredVertically();
     result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
     result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
     result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
+
+    // flip pieces
+    for (uint32_t rank = 0; rank < 8; ++rank)
+    {
+        for (uint32_t file = 0; file < 8; ++file)
+        {
+            result.mColors[1].pieces[rank * 8 + file] = mColors[0].pieces[(7 - rank) * 8 + file];
+            result.mColors[0].pieces[rank * 8 + file] = mColors[1].pieces[(7 - rank) * 8 + file];
+        }
+    }
+
     result.mCastlingRights[0]       = mCastlingRights[1];
     result.mCastlingRights[1]       = mCastlingRights[0];
     result.mSideToMove              = GetOppositeColor(mSideToMove);
     result.mMoveCount               = mMoveCount;
     result.mHalfMoveCount           = mHalfMoveCount;
     result.mHash                    = 0;
+
     return result;
 }
 
