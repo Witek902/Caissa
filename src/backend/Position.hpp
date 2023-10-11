@@ -13,7 +13,12 @@ struct alignas(16) SidePosition
     INLINE Piece GetPieceAtSquare(const Square square) const
     {
         ASSERT(square.IsValid());
-        return pieces[square.mIndex];
+        const Piece piece = pieces[square.mIndex];
+
+        if (piece != Piece::None)
+            ASSERT(GetPieceBitBoard(piece).IsBitSet(square.mIndex));
+
+        return piece;
     }
 
     Bitboard& GetPieceBitBoard(Piece piece);
