@@ -984,6 +984,8 @@ void tb_free(void)
   syzygy_tb_init("");
   free(pieceEntry);
   free(pawnEntry);
+  pieceEntry = nullptr;
+  pawnEntry = nullptr;
 }
 
 static const int8_t OffDiag[] = {

@@ -19,6 +19,7 @@ uint32_t g_syzygyProbeLimit = 6;
 
 #ifdef USE_SYZYGY_TABLEBASES
 static std::mutex g_syzygyMutex;
+static std::string g_syzygyPath;
 #endif // USE_SYZYGY_TABLEBASES
 
 #ifdef USE_GAVIOTA_TABLEBASES
@@ -55,6 +56,17 @@ void LoadSyzygyTablebase(const char* path)
         std::cout << "info string Syzygy tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
     else
         std::cout << "info string Failed to load Syzygy tablebase" << std::endl;
+    g_syzygyPath = path;
+}
+
+void ReleoadTablebase()
+{
+    std::unique_lock lock(g_syzygyMutex);
+    if (!g_syzygyPath.empty())
+    {
+        tb_free();
+        syzygy_tb_init(g_syzygyPath.c_str());
+    }
 }
 
 bool HasSyzygyTablebases()
