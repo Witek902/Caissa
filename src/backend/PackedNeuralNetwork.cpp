@@ -379,8 +379,7 @@ INLINE static int32_t LinearLayer_SingleOutput(
         // add 8 int32s horizontally
         val += m256_hadd(sum);
 
-        // divide with rounding to nearest
-        return (val + (WeightScale / 2)) >> WeightScaleShift;
+        return val;
     }
 #endif // NN_USE_AVX2
 
@@ -411,8 +410,7 @@ INLINE static int32_t LinearLayer_SingleOutput(
     }
 #endif
 
-    // divide with rounding to nearest
-    return (val + (WeightScale / 2)) >> WeightScaleShift;
+    return val;
 }
 
 INLINE static int32_t LinearLayer_Accum_SingleOutput(
@@ -556,8 +554,7 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     }
 #endif
 
-    // divide with rounding to nearest
-    return (val + (WeightScale / 2)) >> WeightScaleShift;
+    return val;
 }
 
 ///
