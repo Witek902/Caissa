@@ -12,6 +12,7 @@ void LoadGaviotaTablebase(const char* path);
 void SetGaviotaCacheSize(size_t cacheSize);
 
 void UnloadTablebase();
+void ReleoadTablebase();
 
 bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDTZ = nullptr, int32_t* outWDL = nullptr);
 bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL);
