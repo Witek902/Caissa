@@ -51,7 +51,7 @@ void MoveOrderer::DebugPrint() const
                 for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
                 {
                     // TODO color
-                    const CounterType count = continuationHistory[0][prevPiece][prevToIndex][piece][toIndex];
+                    const CounterType count = continuationHistory[0][0][0][prevPiece][prevToIndex][piece][toIndex];
 
                     if (count)
                     {
@@ -124,18 +124,20 @@ void MoveOrderer::DebugPrint() const
 void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
 {
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
-    const NodeInfo* prevNode = &node;
+    const NodeInfo* nodePtr = &node;
     for (uint32_t i = 0; i < 6; ++i)
     {
-        if (!prevNode || prevNode->height == 0 || prevNode->isNullMove) break;
-        if (prevNode->previousMove.IsValid())
+        if (!nodePtr || nodePtr->height == 0)
+            break;
+        if (nodePtr->previousMove.IsValid())
         {
-            const uint32_t prevPiece = (uint32_t)prevNode->previousMove.GetPiece() - 1;
-            const uint32_t prevTo = prevNode->previousMove.ToSquare().Index();
-            ContinuationHistory& historyTable = (i % 2 == 0) ? counterMoveHistory : continuationHistory;
-            node.continuationHistories[i] = &(historyTable[color][prevPiece][prevTo]);
+            const uint32_t prevIsCapture = (uint32_t)nodePtr->previousMove.IsCapture();
+            const uint32_t prevPiece = (uint32_t)nodePtr->previousMove.GetPiece() - 1;
+            const uint32_t prevTo = nodePtr->previousMove.ToSquare().Index();
+            const uint32_t prevColor = (uint32_t)(nodePtr - 1)->position.GetSideToMove();
+            node.continuationHistories[i] = &(continuationHistory[prevIsCapture][color][prevColor][prevPiece][prevTo]);
         }
-        --prevNode;
+        --nodePtr;
     }
 }
 
@@ -156,7 +158,6 @@ void MoveOrderer::Clear()
 {
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
-    memset(counterMoveHistory, 0, sizeof(counterMoveHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
@@ -174,7 +175,7 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = (int32_t)counter + delta - ((int32_t)counter * std::abs(delta) + 8192) / 16384;
+    int32_t newValue = (int32_t)counter + delta - (int32_t)counter * std::abs(delta) / 16384;
 
     // there should be no saturation
     ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());

@@ -74,7 +74,6 @@ public:
     using CounterType = int16_t;
     using PieceSquareHistory = CounterType[6][64];
     using PieceSquareHistoryPtr = PieceSquareHistory*;
-    using ContinuationHistory = PieceSquareHistory[2][6][64];
 
     MoveOrderer();
 
@@ -119,10 +118,9 @@ private:
 
     alignas(CACHELINE_SIZE)
 
-    CounterType quietMoveHistory[2][2][2][64][64];  // side, from-threated, to-threated, from-square, to-square
-    ContinuationHistory counterMoveHistory;
-    ContinuationHistory continuationHistory;
-    CounterType capturesHistory[2][6][5][64];       // side, capturing piece, captured piece, to-square
+    CounterType quietMoveHistory[2][2][2][64][64];          // stm, from-threated, to-threated, from-square, to-square
+    PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
+    CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
 
     KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
 };
