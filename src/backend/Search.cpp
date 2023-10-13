@@ -1118,8 +1118,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
 
-    ScoreType oldAlpha = alpha;
-
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.pvIndex = node->pvIndex;
@@ -1202,23 +1200,34 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         if (score > bestValue) // new best move found
         {
-            // update PV line
-            if constexpr (isPvNode)
-            {
-                node->pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-                node->pvLine[0] = move;
-                memcpy(node->pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
-            }
-
-            bestMove = move;
             bestValue = score;
 
-            if (score >= beta) break;
+            if (score > alpha)
+            {
+                alpha = score;
+                bestMove = move;
+
+                // update PV line
+                if constexpr (isPvNode)
+                {
+                    node->pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
+                    node->pvLine[0] = move;
+                    memcpy(node->pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
+                }
+
+                if (score >= beta)
+                {
+                    if (bestMove.IsCapture())
+                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
+
+                    break;
+                }
+            }
+
             if (node->isInCheck) break; // try only one check evasion
-            if (score > alpha) alpha = score;
         }
 
-        if (CheckStopCondition(thread, ctx, false))
+        if (CheckStopCondition(thread, ctx, false)) [[unlikely]]
         {
             // abort search of further moves
             searchAborted = true;
@@ -1232,24 +1241,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         return -CheckmateValue + (ScoreType)node->height;
     }
 
-    // update move orderer
-    if (bestValue >= beta)
-    {
-        if (bestMove.IsCapture())
-        {
-            thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
-        }
-    }
-
     // store value in transposition table
     if (!searchAborted)
     {
-        // if we didn't beat alpha and had valid TT entry, don't overwrite it
-        if (bestValue <= oldAlpha && ttEntry.IsValid() && ttEntry.depth > 0)
-        {
-            return bestValue;
-        }
-
         const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
 
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, bounds, bestMove);
