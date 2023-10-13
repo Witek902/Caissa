@@ -100,8 +100,8 @@ public:
 
     size_t GetSize() const { return numClusters * NumEntriesPerCluster; }
 
-    // compute number of used entries
-    size_t GetNumUsedEntries() const;
+    // print debug info
+    void PrintInfo() const;
 
     // compute percent of TT used (value displayed in UCI output)
     uint32_t GetHashFull() const;
