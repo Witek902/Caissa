@@ -286,9 +286,12 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     cluster.entries[replaceIndex].Store(positionKey, entry);
 }
 
-size_t TranspositionTable::GetNumUsedEntries() const
+void TranspositionTable::PrintInfo() const
 {
-    size_t num = 0;
+    size_t totalCount = 0;
+    size_t exactCount = 0;
+    size_t lowerBoundCount = 0;
+    size_t upperBoundCount = 0;
 
     for (size_t i = 0; i < numClusters; ++i)
     {
@@ -298,12 +301,20 @@ size_t TranspositionTable::GetNumUsedEntries() const
             const InternalEntry& entry = cluster.entries[j];
             if (entry.entry.IsValid())
             {
-                num++;
+                totalCount++;
+
+                if (entry.entry.bounds == TTEntry::Bounds::Exact) exactCount++;
+                if (entry.entry.bounds == TTEntry::Bounds::Lower) lowerBoundCount++;
+                if (entry.entry.bounds == TTEntry::Bounds::Upper) upperBoundCount++;
             }
         }
     }
 
-    return num;
+    std::cout << "=== TT statistics ===" << std::endl;
+    std::cout << "Entries in use:      " << totalCount << " (" << (100.0f * (float)totalCount / (float)GetSize()) << "%)" << std::endl;
+    std::cout << "Exact entries:       " << exactCount << " (" << (100.0f * (float)exactCount / (float)totalCount) << "%)" << std::endl;
+    std::cout << "Lower-bound entries: " << lowerBoundCount << " (" << (100.0f * (float)lowerBoundCount / (float)totalCount) << "%)" << std::endl;
+    std::cout << "Upper-bound entries: " << upperBoundCount << " (" << (100.0f * (float)upperBoundCount / (float)totalCount) << "%)" << std::endl;
 }
 
 uint32_t TranspositionTable::GetHashFull() const

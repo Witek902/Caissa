@@ -276,9 +276,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "ttinfo")
     {
-        const size_t numEntriesUsed = mTranspositionTable.GetNumUsedEntries();
-        const float percentage = 100.0f * (float)numEntriesUsed / (float)mTranspositionTable.GetSize();
-        std::cout << "TT entries in use: " << numEntriesUsed << " (" << percentage << "%)" << std::endl;
+        mTranspositionTable.PrintInfo();
     }
     else if (command == "ttprobe")
     {
