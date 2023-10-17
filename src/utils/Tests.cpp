@@ -1923,7 +1923,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // mate in one
     {
-        param.limits.maxDepth = 4;
+        param.limits.maxDepth = 12;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("k7/7Q/1K6/8/8/8/8/8 w - - 0 1"));
@@ -2002,7 +2002,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // chess-rook skewer
     {
-        param.limits.maxDepth = 1;
+        param.limits.maxDepth = 4;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("3k3r/8/8/8/8/8/8/KR6 w - - 0 1"));
