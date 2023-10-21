@@ -144,9 +144,10 @@ void SearchUtils::GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, std::v
     }
 }
 
-bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game)
+bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPvNode)
 {
     const NodeInfo* prevNode = &node;
+    uint32_t repCount = 0;
 
     for (uint32_t ply = 1; ; ++ply)
     {
@@ -167,19 +168,24 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game)
         --prevNode;
 
         // only check every second previous node, because side to move must be the same
-        if (ply % 2 == 0)
-        {
-            ASSERT(prevNode->position.GetSideToMove() == node.position.GetSideToMove());
+        if (ply % 2 != 0)
+            continue;
 
-            if (prevNode->position.GetHash() == node.position.GetHash())
-            {
-                if (prevNode->position == node.position)
-                {
-                    return true;
-                }
-            }
+        ASSERT(prevNode->position.GetSideToMove() == node.position.GetSideToMove());
+
+        if (prevNode->position.GetHash() == node.position.GetHash() &&
+            prevNode->position == node.position)
+        {
+            // twofold repetition within search tree in non-PV nodes
+            if (!isPvNode && prevNode->height > 0)
+                return true;
+
+            // threefold repetition
+            if (repCount++ >= 1)
+                return true;
         }
     }
 
-    return game.GetRepetitionCount(node.position) >= 2;
+    // threefold repetition
+    return repCount + game.GetRepetitionCount(node.position) >= 2;
 }
