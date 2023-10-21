@@ -3,12 +3,24 @@
 #include "MoveList.hpp"
 #include "Evaluate.hpp"
 #include "Game.hpp"
+#include "Tuning.hpp"
 
 #include <algorithm>
 #include <limits>
 #include <iomanip>
 
-static constexpr int32_t RecaptureBonus = 100000;
+DEFINE_PARAM(QuietBonusOffset, -109);
+DEFINE_PARAM(QuietBonusLinear, 150);
+DEFINE_PARAM(QuietBonusQuadratic, 1);
+DEFINE_PARAM(QuietBonusLimit, 2271);
+
+DEFINE_PARAM(CaptureBonusOffset, 33);
+DEFINE_PARAM(CaptureBonusLinear, 65);
+DEFINE_PARAM(CaptureBonusQuadratic, 1);
+DEFINE_PARAM(CaptureBonusLimit, 2318);
+
+DEFINE_PARAM(RecaptureBonus, 100000);
+
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
 MoveOrderer::MoveOrderer()
@@ -198,7 +210,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min(128 * (node.depth - 1) + node.depth * node.depth, 2000);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusQuadratic * node.depth * node.depth, QuietBonusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
@@ -233,7 +245,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
-    const int32_t bonus = std::min(16 + 32 * depth + depth * depth, 2000);
+    const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth + CaptureBonusQuadratic * depth * depth, CaptureBonusLimit);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
