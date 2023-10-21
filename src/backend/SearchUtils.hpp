@@ -10,7 +10,7 @@ public:
     static void Init();
 
     // check for repetition in the searched node
-    static bool IsRepetition(const NodeInfo& node, const Game& game);
+    static bool IsRepetition(const NodeInfo& node, const Game& game, bool isPvNode);
 
     // check if the search node has a move that draws by repetition
     // or a past position could directly reach the current position

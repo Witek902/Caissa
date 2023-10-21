@@ -1286,7 +1286,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     ScoreType beta = node->beta;
 
     // check if we can draw by repetition in losing position
-    if constexpr (!isRootNode)
+    if constexpr (!isPvNode)
     {
         if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
         {
@@ -1313,7 +1313,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // Skip root node as we need some move to be reported in PV
         if (node->position.GetHalfMoveCount() >= 100 ||
             CheckInsufficientMaterial(node->position) ||
-            SearchUtils::IsRepetition(*node, ctx.game))
+            SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
         {
 #ifdef ENABLE_SEARCH_TRACE
             trace.OnNodeExit(SearchTrace::ExitReason::Draw, 0);
