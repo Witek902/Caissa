@@ -13,12 +13,14 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.13.11"
+#define CAISSA_VERSION "1.13.12"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
-#elif defined(USE_BMI2) && defined(USE_AVX2) 
+#elif defined(USE_BMI2) && defined(USE_AVX2)
+#define ArchitectureStr "BMI2"
+#elif defined(USE_AVX2)
 #define ArchitectureStr "AVX2"
 #elif defined(USE_POPCNT) &&  defined(USE_SSE4) 
 #define ArchitectureStr "POPCNT"

@@ -12,6 +12,24 @@ static Bitboard gBishopAttacksBitboard[Square::NumSquares];
 static Bitboard gRaysBitboard[Square::NumSquares][8];
 static Bitboard gBetweenBitboards[Square::NumSquares][Square::NumSquares];
 
+#ifdef USE_BMI2
+
+struct AttackData
+{
+    Bitboard mask = 0;
+    uint32_t offset = 0;
+};
+
+static constexpr uint32_t cRookAttackTableSize = 102400;
+static constexpr uint32_t cBishopAttackTableSize = 5248;
+
+static AttackData gRookAttacksData[Square::NumSquares];
+static AttackData gBishopAttacksData[Square::NumSquares];
+static Bitboard gRookAttackTable[cRookAttackTableSize];
+static Bitboard gBishopAttackTable[cBishopAttackTableSize];
+
+#else
+
 static const uint64_t cRookMagics[Square::NumSquares] =
 {
     0xa8002c000108020ULL, 0x6c00049b0002001ULL, 0x100200010090040ULL, 0x2480041000800801ULL, 0x280028004000800ULL,
@@ -75,6 +93,8 @@ static uint64_t gRookAttackTable[Square::NumSquares][RookAttackTableSize];
 
 static const uint32_t BishopAttackTableSize = 512;
 static uint64_t gBishopAttackTable[Square::NumSquares][BishopAttackTableSize];
+
+#endif // USE_BMI2
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -189,20 +209,34 @@ Bitboard Bitboard::GetQueenAttacks(const Square square)
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)
 {
+#ifdef USE_BMI2
+    const AttackData& data = gRookAttacksData[square.Index()];
+    const uint32_t index = static_cast<uint32_t>(ParallelBitsExtract(blockers, data.mask));
+    return gRookAttackTable[data.offset + index];
+    //return ParallelBitsDeposit(gRookAttackTable[data.offset + index], data.dstMask);
+#else
     uint64_t b = blockers;
     b &= gRookAttacksMasks[square.Index()];
     b *= cRookMagics[square.Index()];
     b >>= cRookMagicOffsets[square.Index()];
     return gRookAttackTable[square.Index()][b];
+#endif // USE_BMI2
 }
 
 Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blockers)
 {
+#ifdef USE_BMI2
+    const AttackData& data = gBishopAttacksData[square.Index()];
+    const uint32_t index = static_cast<uint32_t>(ParallelBitsExtract(blockers, data.mask));
+    return gBishopAttackTable[data.offset + index];
+    //return ParallelBitsDeposit(gBishopAttackTable[data.offset + index], data.dstMask);
+#else
     uint64_t b = blockers;
     b &= gBishopAttacksMasks[square.Index()];
     b *= cBishopMagics[square.Index()];
     b >>= cBishopMagicOffsets[square.Index()];
     return gBishopAttackTable[square.Index()][b];
+#endif // USE_BMI2
 }
 
 Bitboard Bitboard::GenerateQueenAttacks(const Square square, const Bitboard blockers)
@@ -399,32 +433,6 @@ static void InitKnightAttacks()
     }
 }
 
-static void InitRookAttacks()
-{
-    for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
-    {
-        const Square square(squareIndex);
-
-        gRookAttacksBitboard[squareIndex] =
-            Bitboard::RankBitboard(square.Rank()) |
-            Bitboard::FileBitboard(square.File());
-    }
-}
-
-static void InitBishopAttacks()
-{
-    for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
-    {
-        const Square square(squareIndex);
-
-        gBishopAttacksBitboard[squareIndex] =
-            Bitboard::GetRay(square, Direction::NorthEast) |
-            Bitboard::GetRay(square, Direction::NorthWest) |
-            Bitboard::GetRay(square, Direction::SouthEast) |
-            Bitboard::GetRay(square, Direction::SouthWest);
-    }
-}
-
 static Bitboard GetRookAttackMask(const Square square)
 {
     Bitboard b = 0;
@@ -457,14 +465,20 @@ static Bitboard GetBishopAttackMask(const Square square)
     return b;
 }
 
-static void InitRookMagicBitboards()
+static void InitRookAttacks()
 {
+#ifdef USE_BMI2
+    uint32_t tableSize = 0;
+#endif // USE_BMI2
+
     for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
     {
-        const uint64_t magic = cRookMagics[squareIndex];
-        const uint64_t shift = cRookMagicOffsets[squareIndex];
-
         const Square square(squareIndex);
+
+        gRookAttacksBitboard[squareIndex] =
+            Bitboard::RankBitboard(square.Rank()) |
+            Bitboard::FileBitboard(square.File());
+
         const Bitboard attackMask = GetRookAttackMask(square);
 
         gRookAttacksMasks[squareIndex] = attackMask;
@@ -473,6 +487,23 @@ static void InitRookMagicBitboards()
         const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
 
+#ifdef USE_BMI2
+        gRookAttacksData[squareIndex].mask = attackMask;
+        gRookAttacksData[squareIndex].offset = tableSize;
+
+        for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
+        {
+            // reconstruct (masked) blockers bitboard
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex), attackMask);
+            gRookAttackTable[tableSize + blockersIndex] = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
+        }
+
+        tableSize += numBlockerSets;
+
+#else // !USE_BMI2
+        const uint64_t magic = cRookMagics[squareIndex];
+        const uint64_t shift = cRookMagicOffsets[squareIndex];
+
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
             // reconstruct (masked) blockers bitboard
@@ -480,7 +511,6 @@ static void InitRookMagicBitboards()
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             ASSERT(tableIndex < RookAttackTableSize);
-
             gRookAttackTable[squareIndex][tableIndex] = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
         }
 
@@ -495,24 +525,54 @@ static void InitRookMagicBitboards()
             ASSERT(Bitboard::GenerateRookAttacks(square, blockerBitboard) == expected);
         }
 #endif // CONFIGURATION_FINAL
+
+#endif // USE_BMI2
     }
+
+#ifdef USE_BMI2
+    ASSERT(tableSize == cRookAttackTableSize);
+#endif // USE_BMI2
 }
 
-static void InitBishopMagicBitboards()
+static void InitBishopAttacks()
 {
+#ifdef USE_BMI2
+    uint32_t tableSize = 0;
+#endif // USE_BMI2
+
     for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
     {
-        const uint64_t magic = cBishopMagics[squareIndex];
-        const uint64_t shift = cBishopMagicOffsets[squareIndex];
-
         const Square square(squareIndex);
-        const Bitboard attackMask = GetBishopAttackMask(square);
 
+        gBishopAttacksBitboard[squareIndex] =
+            Bitboard::GetRay(square, Direction::NorthEast) |
+            Bitboard::GetRay(square, Direction::NorthWest) |
+            Bitboard::GetRay(square, Direction::SouthEast) |
+            Bitboard::GetRay(square, Direction::SouthWest);
+
+        const Bitboard attackMask = GetBishopAttackMask(square);
         gBishopAttacksMasks[squareIndex] = attackMask;
 
         // compute number of possible occluder layouts
         const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
+
+#ifdef USE_BMI2
+        gBishopAttacksData[squareIndex].mask = attackMask;
+        gBishopAttacksData[squareIndex].offset = tableSize;
+
+        for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
+        {
+            // reconstruct (masked) blockers bitboard
+            const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex), attackMask);
+            gBishopAttackTable[tableSize + blockersIndex] = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
+        }
+
+        tableSize += numBlockerSets;
+
+#else // !USE_BMI2
+        const uint64_t magic = cBishopMagics[squareIndex];
+        const uint64_t shift = cBishopMagicOffsets[squareIndex];
 
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
@@ -521,7 +581,6 @@ static void InitBishopMagicBitboards()
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             ASSERT(tableIndex < BishopAttackTableSize);
-
             gBishopAttackTable[squareIndex][tableIndex] = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
         }
 
@@ -536,78 +595,14 @@ static void InitBishopMagicBitboards()
             ASSERT(Bitboard::GenerateBishopAttacks(square, blockerBitboard) == expected);
         }
 #endif // CONFIGURATION_FINAL
+
+#endif // USE_BMI2
     }
+
+#ifdef USE_BMI2
+    ASSERT(tableSize == cBishopAttackTableSize);
+#endif // USE_BMI2
 }
-
-/*
-static void InitMagicBitboards()
-{
-    const uint32_t attacksTableSizeBits = 12u;
-    const uint32_t attacksTableSize = 1u << attacksTableSizeBits;
-
-    uint64_t attacksTable[attacksTableSize];
-
-
-    for (uint32_t squareIndex = 1; squareIndex < 64; ++squareIndex)
-    {
-        const Square square(squareIndex);
-
-        std::cout << "Square: " << square.ToString() << std::endl;
-
-        const Bitboard attackMask = GetRookAttackMask(square);
-
-        //std::cout << attackMask.Print() << std::endl;
-
-        // compute number of possible occluder layouts
-        const uint32_t attackMaskBits = (uint32_t)__popcnt64(attackMask);
-        const uint32_t numBlockerSets = 1 << attackMaskBits;
-
-        uint32_t bestMatchedSets = 0;
-
-        for (uint32_t i = 0; ; ++i)
-        {
-            uint64_t magic = XorShift();
-
-            memset(attacksTable, 0xFF, sizeof(attacksTable));
-
-            if (i % 100000 == 0)
-            {
-                std::cout << "Iter " << i << ", matches: " << bestMatchedSets << '/' << numBlockerSets << std::endl;
-            }
-
-            bool match = true;
-
-            // iterate each occluder layout
-            for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
-            {
-                // reconstruct (masked) blockers bitboard
-                const Bitboard blockerBitboard = ParallelBitsDeposit(blockersIndex + 1u, attackMask);
-
-                const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> (64u - attacksTableSizeBits));
-
-                const uint64_t expected = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
-
-                if (attacksTable[tableIndex] == UINT64_MAX)
-                {
-                    attacksTable[tableIndex] = expected;
-                }
-                else if (attacksTable[tableIndex] != expected)
-                {
-                    match = false;
-                    bestMatchedSets = std::max(bestMatchedSets, blockersIndex);
-                    break;
-                }
-            }
-
-            if (match)
-            {
-                std::cout << "Found magic: " << std::hex << magic << std::dec << " (iter " << i << ")" << std::endl;
-                break;
-            }
-        }
-    }
-}
-*/
 
 static void InitBetweenBitboards()
 {
@@ -645,11 +640,5 @@ void InitBitboards()
     InitKnightAttacks();
     InitRookAttacks();
     InitBishopAttacks();
-
-    InitRookMagicBitboards();
-    InitBishopMagicBitboards();
-
     InitBetweenBitboards();
-
-    //InitMagicBitboards();
 }

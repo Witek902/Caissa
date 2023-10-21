@@ -33,6 +33,14 @@ extern void RunPackedPositionTests();
 
 static void RunBitboardTests()
 {
+    // attacks on empty board
+    for (uint32_t sq = 0; sq < 64; ++sq)
+    {
+        const Square square(sq);
+        TEST_EXPECT(Bitboard::GenerateRookAttacks(square, 0) == (Bitboard::GetRookAttacks(square) & ~square.GetBitboard()));
+        TEST_EXPECT(Bitboard::GenerateBishopAttacks(square, 0) == (Bitboard::GetBishopAttacks(square) & ~square.GetBitboard()));
+    }
+
     // "GetBetween"
     {
         TEST_EXPECT(Bitboard::GetBetween(Square_f3, Square_b6) == 0);

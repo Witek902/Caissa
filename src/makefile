@@ -47,11 +47,14 @@ COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL  -DNDEBUG -DCAISSA_VERSIO
 
 SSE2FLAGS     = $(COMMONFLAGS) -DUSE_SSE -DUSE_SSE2
 SSE4FLAGS     = $(SSE2FLAGS) -DUSE_SSE4 -DUSE_POPCNT
-AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2 -DUSE_BMI2
-AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
+AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
+BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
+AVX512FLAGS   = $(BMI2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
+bmi2:
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
 avx2:
-	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2-bmi2$(EXT)
+	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
 sse4:
 	$(CC)   $(SRC) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
 sse2:
@@ -67,4 +70,4 @@ pgo:
 	$(CLEAN)
 
 release:
-	make -j sse2 sse4 avx2 avx512
+	make -j sse2 sse4 avx2 bmi2 avx512
