@@ -236,6 +236,7 @@ void Search::Clear()
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
         memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
+        memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
     }
 }
 
@@ -1001,23 +1002,31 @@ uint32_t Search::ThreadData::GetRandomUint()
 
 ScoreType Search::ThreadData::GetMaterialScoreCorrection(const Position& pos) const
 {
-    const MaterialKey key = pos.GetMaterialKey();
-    const int32_t index = Murmur3(key.value) % MatCorrectionTableSize;
-    return matScoreCorrection[index] / MatCorrectionScale;
+    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MatCorrectionTableSize;
+    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
 }
 
 void Search::ThreadData::AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
-    const MaterialKey key = pos.GetMaterialKey();
-    const int32_t index = Murmur3(key.value) % MatCorrectionTableSize;
-    int16_t& d = matScoreCorrection[index];
-
-    int32_t diff = std::clamp<int32_t>(MatCorrectionScale * (trueScore - evalScore), -32000, 32000);
+    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
     if (pos.GetSideToMove() == Color::Black) diff = -diff;
 
-    // exponential average
-    const int32_t blendFactor = 256; // TODO should be dependent on time control?
-    d = static_cast<int16_t>((d * (blendFactor - 1) + diff) / blendFactor);
+    constexpr const int32_t blendFactor = 256; // TODO should be dependent on time control?
+
+    // material
+    {
+        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MatCorrectionTableSize;
+        int16_t& matScore = matScoreCorrection[index];
+        matScore = static_cast<int16_t>((matScore * (blendFactor - 1) + diff) / blendFactor);
+    }
+
+    // pawn structure
+    {
+        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+        int16_t& pawnScore = pawnStructureCorrection[index];
+        pawnScore = static_cast<int16_t>((pawnScore * (blendFactor - 1) + diff) / blendFactor);
+    }
 }
 
 INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
