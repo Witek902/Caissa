@@ -254,10 +254,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "print")
     {
-        std::cout << "Init:    " << mGame.GetInitialPosition().ToFEN() << std::endl; 
-        std::cout << "Moves:   " << mGame.ToPGNMoveList() << std::endl;
-        std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGNMoveList() << std::endl;
+        std::cout << "Init:         " << mGame.GetInitialPosition().ToFEN() << std::endl; 
+        std::cout << "Moves:        " << mGame.ToPGNMoveList() << std::endl;
+        std::cout << "Current:      " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGNMoveList() << std::endl;
         std::cout << mGame.GetPosition().Print() << std::endl;
+        std::cout << "Hash:         " << std::hex << mGame.GetPosition().GetHash() << std::dec << std::endl;
+        std::cout << "Pawns hash:   " << std::hex << mGame.GetPosition().GetPawnsHash() << std::dec << std::endl;
     }
     else if (command == "eval")
     {
