@@ -39,6 +39,10 @@ SSE4FLAGS     = $(SSE2FLAGS) -DUSE_SSE4 -DUSE_POPCNT
 AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2 -DUSE_BMI2
 AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
+ob:
+	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+bmi2:
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
 avx2:
 	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2-bmi2$(EXT)
 sse4:
