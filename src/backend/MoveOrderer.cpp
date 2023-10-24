@@ -21,8 +21,6 @@ DEFINE_PARAM(CaptureBonusLimit, 2318);
 
 DEFINE_PARAM(RecaptureBonus, 100000);
 
-static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-
 MoveOrderer::MoveOrderer()
 {
     Clear();
@@ -171,6 +169,7 @@ void MoveOrderer::Clear()
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
+    memset(pawnStructHistory, 0, sizeof(pawnStructHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -214,6 +213,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const Bitboard threats = node.threats.allThreats;
 
+    auto& pawnStructTable = pawnStructHistory[color][node.position.GetPawnsHash() % PawnStructCount];
+
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
@@ -229,6 +230,11 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+
+        if (move.GetPiece() == Piece::Pawn && bestMove.GetPiece() == Piece::Pawn)
+        {
+            UpdateHistoryCounter(pawnStructTable[to], delta);
+        }
     }
 }
 
@@ -278,6 +284,7 @@ void MoveOrderer::ScoreMoves(
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
+    const auto& pawnStructTable = pawnStructHistory[color][node.position.GetPawnsHash() % PawnStructCount];
 
     Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
 
@@ -358,7 +365,8 @@ void MoveOrderer::ScoreMoves(
             switch (move.GetPiece())
             {
                 case Piece::Pawn:
-                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
+                    // pawn structure history
+                    score += pawnStructTable[to];
                     // check if pushed pawn is protected by other pawn
                     if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
                     {

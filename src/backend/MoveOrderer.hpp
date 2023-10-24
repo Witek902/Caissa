@@ -116,11 +116,14 @@ public:
 
 private:
 
+    static constexpr uint32_t PawnStructCount = 1024;
+
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][2][2][64][64];          // stm, from-threated, to-threated, from-square, to-square
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
+    CounterType pawnStructHistory[2][PawnStructCount][64];  // stm, pawn structure index, pawn to-square
 
     KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
 };
