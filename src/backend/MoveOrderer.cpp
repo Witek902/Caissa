@@ -19,8 +19,6 @@ DEFINE_PARAM(CaptureBonusLinear, 69, 40, 200);
 DEFINE_PARAM(CaptureBonusQuadratic, 0, 0, 4);
 DEFINE_PARAM(CaptureBonusLimit, 2387, 1000, 4000);
 
-static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-
 MoveOrderer::MoveOrderer()
 {
     Clear();
@@ -164,6 +162,7 @@ void MoveOrderer::Clear()
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(counterMoves, 0, sizeof(counterMoves));
+    memset(pawnStructHistory, 0, sizeof(pawnStructHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -228,6 +227,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const Bitboard threats = node.threats.allThreats;
 
+    auto& pawnStructTable = pawnStructHistory[color][node.position.GetPawnsHash() % PawnStructCount];
+
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
@@ -238,6 +239,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t to = move.ToSquare().Index();
         
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to], delta);
+        UpdateHistoryCounter(pawnStructTable[piece][to], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -291,6 +293,7 @@ void MoveOrderer::ScoreMoves(
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
+    const auto& pawnStructTable = pawnStructHistory[color][node.position.GetPawnsHash() % PawnStructCount];
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -344,6 +347,9 @@ void MoveOrderer::ScoreMoves(
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
 
+            // pawn structure history
+            score += pawnStructTable[piece][to];
+
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
             if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
@@ -353,7 +359,6 @@ void MoveOrderer::ScoreMoves(
             switch (move.GetPiece())
             {
                 case Piece::Pawn:
-                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
                     // check if pushed pawn is protected by other pawn
                     if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
                     {

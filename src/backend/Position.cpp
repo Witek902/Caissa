@@ -56,6 +56,7 @@ Position::Position()
     , mHalfMoveCount(0u)
     , mMoveCount(1u)
     , mHash(0u)
+    , mPawnsHash(0u)
 {}
 
 void Position::SetPiece(const Square square, const Piece piece, const Color color)
@@ -75,7 +76,9 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.king & mask) == 0);
     ASSERT(pos.pieces[square.Index()] == Piece::None);
 
-    mHash ^= GetPieceZobristHash(color, piece, square.Index());
+    const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
+    mHash ^= pieceHash;
+    if (piece == Piece::Pawn) mPawnsHash ^= pieceHash;
 
     pos.GetPieceBitBoard(piece) |= mask;
     pos.pieces[square.Index()] = piece;
@@ -93,7 +96,9 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     ASSERT(pos.pieces[square.Index()] == piece);
     pos.pieces[square.Index()] = Piece::None;
 
-    mHash ^= GetPieceZobristHash(color, piece, square.Index());
+    const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
+    mHash ^= pieceHash;
+    if (piece == Piece::Pawn) mPawnsHash ^= pieceHash;
 }
 
 uint64_t Position::HashAfterMove(const Move move) const
@@ -683,6 +688,7 @@ Position Position::SwappedColors() const
     result.mMoveCount               = mMoveCount;
     result.mHalfMoveCount           = mHalfMoveCount;
     result.mHash                    = 0;
+    result.mPawnsHash               = 0;
 
     return result;
 }
@@ -707,6 +713,7 @@ void Position::MirrorVertically()
     mCastlingRights[1] = 0;
 
     mHash = ComputeHash();
+    mPawnsHash = 0; // TODO
 }
 
 void Position::MirrorHorizontally()
@@ -729,6 +736,7 @@ void Position::MirrorHorizontally()
     mCastlingRights[1] = ReverseBits(mCastlingRights[1]);
 
     mHash = ComputeHash();
+    mPawnsHash = 0; // TODO
 }
 
 void Position::FlipDiagonally()
@@ -751,6 +759,7 @@ void Position::FlipDiagonally()
     mCastlingRights[1] = 0;
 
     mHash = ComputeHash();
+    mPawnsHash = 0; // TODO
 }
 
 Position Position::MirroredVertically() const
