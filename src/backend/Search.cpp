@@ -1904,6 +1904,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce more if eval is not improving
                 if (!isImproving) r++;
 
+                // reduce more on expected cut nodes
+                if (node->isCutNode) r++;
+
                 // reduce more if TT move is capture
                 if (ttCapture) r++;
 
@@ -1919,9 +1922,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 r = GetDepthReduction(node->depth, moveIndex) / 2;
 
-                // reduce more if eval is not improving
-                if (!isImproving) r++;
-
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r--;
 
@@ -1931,8 +1931,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // reduce more if TT move is recapture
             if (ttRecapture) r++;
-
-            if (node->isCutNode) r++;
 
             // reduce less if move is a check
             if (childNode.isInCheck) r--;
