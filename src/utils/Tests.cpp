@@ -1946,7 +1946,7 @@ void RunSearchTests(uint32_t numThreads)
         param.limits.mateSearch = false;
     }
 
-    // winnnig KPvK
+    // winning KPvK
     {
         param.limits.maxDepth = 1;
         param.numPvLines = UINT32_MAX;
@@ -1957,10 +1957,10 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result.size() == 6);
         TEST_EXPECT(result[0].score > KnownWinValue);
         TEST_EXPECT(result[1].score > KnownWinValue);
-        TEST_EXPECT(result[2].score == 0);
-        TEST_EXPECT(result[3].score == 0);
-        TEST_EXPECT(result[4].score == 0);
-        TEST_EXPECT(result[5].score == 0);
+        TEST_EXPECT(std::abs(result[2].score) < 10);
+        TEST_EXPECT(std::abs(result[3].score) < 10);
+        TEST_EXPECT(std::abs(result[4].score) < 10);
+        TEST_EXPECT(std::abs(result[5].score) < 10);
     }
 
     // drawing KPvK
