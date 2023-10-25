@@ -461,6 +461,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     bool waitForSearch = false;
     uint32_t maxDepth = UINT32_MAX;
     uint64_t maxNodes = UINT64_MAX;
+    uint64_t maxNodesSoft = UINT64_MAX;
     int32_t moveTime = INT32_MAX;
     int32_t whiteRemainingTime = INT32_MAX;
     int32_t blacksRemainingTime = INT32_MAX;
@@ -500,6 +501,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         else if (args[i] == "nodes" && i + 1 < args.size())
         {
             maxNodes = std::stoull(args[i + 1].c_str());
+        }
+        else if (args[i] == "nodes_soft" && i + 1 < args.size())
+        {
+            maxNodesSoft = std::stoull(args[i + 1].c_str());
         }
         else if (args[i] == "movetime" && i + 1 < args.size())
         {
@@ -596,6 +601,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
+    mSearchCtx->searchParam.limits.maxNodesSoft = maxNodesSoft;
     mSearchCtx->searchParam.limits.mateSearch = mateSearchDepth > 0;
     mSearchCtx->searchParam.limits.analysisMode = !isPonder && (isInfinite || mOptions.analysisMode); // run full analysis when pondering
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;

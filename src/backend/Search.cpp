@@ -768,6 +768,14 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 break;
             }
 
+            // check soft node limit
+            if (param.limits.maxNodesSoft < UINT64_MAX &&
+                searchContext.stats.nodes > param.limits.maxNodesSoft)
+            {
+                param.stopSearch = true;
+                break;
+            }
+
             // stop the search if found mate in multiple depths in a row
             if (!param.limits.analysisMode &&
                 mateCounter >= MateCountStopCondition &&
@@ -1727,7 +1735,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             quietMoveIndex++;
         }
 
-        if (bestValue > -KnownWinValue &&
+        const bool doPruning = isPvNode ? ctx.searchParam.allowPruningInPvNodes : true;
+
+        if (doPruning &&
+            bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
             if (move.IsQuiet() || move.IsUnderpromotion())

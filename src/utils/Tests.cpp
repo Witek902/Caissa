@@ -2090,7 +2090,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // mate in 1, more than 218 moves possible
     {
-        param.limits.maxDepth = 5;
+        param.limits.maxDepth = 8;
         param.numPvLines = 1;
 
         game.Reset(Position("QQQQQQBk/Q6B/Q6Q/Q6Q/Q6Q/Q6Q/Q6Q/KQQQQQQQ w - - 0 1"));

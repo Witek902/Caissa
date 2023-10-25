@@ -39,6 +39,9 @@ struct SearchLimits
     // maximum allowed searched nodes
     uint64_t maxNodes = UINT64_MAX;
 
+    // maximum allowed searched nodes (soft limit, checked every iterative deepening step)
+    uint64_t maxNodesSoft = UINT64_MAX;
+
     // maximum allowed base search depth (excluding quiescence, extensions, etc.)
     uint16_t maxDepth = UINT16_MAX;
 
@@ -99,6 +102,7 @@ struct SearchParam
     // probe tablebases at the root
     bool useRootTablebase = true;
 
+    bool allowPruningInPvNodes = true;
     bool useAspirationWindows = true;
 
     // use colors in console output to make it more readable

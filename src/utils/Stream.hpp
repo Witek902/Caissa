@@ -76,6 +76,7 @@ public:
     FileOutputStream(const char* filePath);
     bool IsOpen() const;
     bool Seek(uint64_t pos);
+    void Flush();
     virtual uint64_t GetSize() override;
     virtual bool Write(const void* data, size_t size) override;
     virtual bool IsOK() const override;
