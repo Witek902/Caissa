@@ -275,6 +275,7 @@ void MoveOrderer::ScoreMoves(
     const NodeCacheEntry* nodeCacheEntry) const
 {
     const Position& pos = node.position;
+    const auto& opponentSide = pos.GetOpponentSide();
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
@@ -364,7 +365,6 @@ void MoveOrderer::ScoreMoves(
                     {
                         // bonus for creating threats
                         const Bitboard pawnAttacks = Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove());
-                        const auto& opponentSide = pos.GetOpponentSide();
                              if (pawnAttacks & opponentSide.king)       score += 10000;
                         else if (pawnAttacks & opponentSide.pawns)      score += 1000;
                         else if (pawnAttacks & opponentSide.queens)     score += 8000;
@@ -373,7 +373,11 @@ void MoveOrderer::ScoreMoves(
                         else if (pawnAttacks & opponentSide.knights)    score += 4000;
                     }
                     break;
-                case Piece::Knight: [[fallthrough]];
+                case Piece::Knight:
+                    if (Bitboard::GetKnightAttacks(move.ToSquare()) & (opponentSide.rooks | opponentSide.queens | opponentSide.king)) score += 4000;
+                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
+                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
+                    break;
                 case Piece::Bishop:
                     if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
                     if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
