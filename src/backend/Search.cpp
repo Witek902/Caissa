@@ -1932,7 +1932,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce more if TT move is recapture
             if (ttRecapture) r++;
 
-            if (node->isCutNode) r++;
+            if (node->isCutNode) r += 2;
 
             // reduce less if move is a check
             if (childNode.isInCheck) r--;
