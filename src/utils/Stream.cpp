@@ -151,6 +151,14 @@ bool FileOutputStream::Seek(uint64_t pos)
     return false;
 }
 
+void FileOutputStream::Flush()
+{
+    if (mFile != nullptr)
+    {
+        fflush(mFile);
+    }
+}
+
 uint64_t FileOutputStream::GetSize()
 {
     const long originalPos = ftell(mFile);
