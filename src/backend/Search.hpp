@@ -350,11 +350,16 @@ private:
     std::vector<ThreadDataPtr> mThreadData;
 
     static constexpr uint32_t LMRTableSize = 64;
-    uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
+    uint16_t mLMRTable_Quiet[LMRTableSize][LMRTableSize];
+    uint16_t mLMRTable_Noisy[LMRTableSize][LMRTableSize];
 
-    INLINE uint8_t GetDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    INLINE uint16_t GetQuietDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
-        return mMoveReductionTable[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+        return mLMRTable_Quiet[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+    }
+    INLINE uint16_t GetNoisyDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    {
+        return mLMRTable_Noisy[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
 
     void BuildMoveReductionTable();
