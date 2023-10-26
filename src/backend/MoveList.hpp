@@ -42,20 +42,19 @@ public:
         numMoves = 0;
     }
 
-    void Push(const Move move)
+    INLINE void Push(const Move move)
     {
-        if (numMoves < MaxMoves)
-        {
-            // check for duplicate moves
-            for (uint32_t i = 0; i < numMoves; ++i)
-            {
-                ASSERT(move != entries[i].move);
-            }
+        ASSERT(numMoves < MaxMoves);
 
-            uint32_t index = numMoves++;
-            entries[index].move = move;
-            entries[index].score = INT32_MIN;
+        // check for duplicate moves
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            ASSERT(move != entries[i].move);
         }
+
+        uint32_t index = numMoves++;
+        entries[index].move = move;
+        entries[index].score = INT32_MIN;
     }
 
     INLINE void RemoveByIndex(uint32_t index)

@@ -228,6 +228,7 @@ INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 template<MoveGenerationMode mode, Color sideToMove>
 inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
+    constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
 
@@ -235,8 +236,11 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
     const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
 
-    Bitboard filter = ~currentSide.Occupied(); // can't capture own piece
-    filter &= mode == MoveGenerationMode::Captures ? occupiedByOpponent : ~occupiedByOpponent;
+    Bitboard filter;
+    if constexpr (isCapture)
+        filter = occupiedByOpponent;
+    else
+        filter = ~occupiedSquares;
 
     GeneratePawnMoveList<mode, sideToMove>(pos, outMoveList);
 
@@ -245,7 +249,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
         const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & filter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::Make(fromIndex, Square(toIndex), Piece::Knight, Piece::None, mode == MoveGenerationMode::Captures));
+            outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
         });
     });
 
@@ -254,7 +258,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
         const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & filter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::Make(fromIndex, Square(toIndex), Piece::Rook, Piece::None, mode == MoveGenerationMode::Captures));
+            outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
         });
     });
 
@@ -263,7 +267,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
         const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & filter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::Make(fromIndex, toIndex, Piece::Bishop, Piece::None, mode == MoveGenerationMode::Captures));
+            outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
         });
     });
 
@@ -272,7 +276,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
         const Bitboard attackBitboard = filter & Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares);
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::Make(fromIndex, Square(toIndex), Piece::Queen, Piece::None, mode == MoveGenerationMode::Captures));
+            outMoveList.Push(Move::MakeSimple<Piece::Queen, isCapture>(fromIndex, Square(toIndex)));
         });
     });
 
