@@ -3,6 +3,7 @@
 #include "MovePicker.hpp"
 #include "Game.hpp"
 #include "MoveList.hpp"
+#include "Material.hpp"
 #include "Evaluate.hpp"
 #include "TranspositionTable.hpp"
 #include "Tablebase.hpp"
@@ -236,6 +237,7 @@ void Search::Clear()
         threadData->moveOrderer.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
+        memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
     }
 }
 
@@ -966,6 +968,27 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
+ScoreType Search::ThreadData::GetMaterialScoreCorrection(const Position& pos) const
+{
+    const MaterialKey key = pos.GetMaterialKey();
+    const int32_t index = Murmur3(key.value) % MatCorrectionTableSize;
+    return matScoreCorrection[index] / MatCorrectionScale;
+}
+
+void Search::ThreadData::AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore)
+{
+    const MaterialKey key = pos.GetMaterialKey();
+    const int32_t index = Murmur3(key.value) % MatCorrectionTableSize;
+    int16_t& d = matScoreCorrection[index];
+
+    int32_t diff = std::clamp<int32_t>(MatCorrectionScale * (trueScore - evalScore), -32000, 32000);
+    if (pos.GetSideToMove() == Color::Black) diff = -diff;
+
+    // exponential average
+    const int32_t blendFactor = 256; // TODO should be dependent on time control?
+    d = static_cast<int16_t>((d * (blendFactor - 1) + diff) / blendFactor);
+}
+
 INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
 {
     int32_t contempt = searchParam.staticContempt;
@@ -979,7 +1002,7 @@ INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm
     return contempt;
 }
 
-INLINE static ScoreType AdjustEvalScore(const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
 {
     // TODO analyze history moves, scale down when moving same piece all the time
 
@@ -991,6 +1014,10 @@ INLINE static ScoreType AdjustEvalScore(const NodeInfo& node, const Color rootSt
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
+
+        // apply 50% of the material score correction term
+        const ScoreType matScoreCorrection = threadData.GetMaterialScoreCorrection(node.position) / 2;
+        adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
 
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
@@ -1086,7 +1113,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(*node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1459,7 +1486,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // in case of singular search, there should be static value passed from parent search
         ASSERT(node->staticEval != InvalidValue);
         // adjust static eval based on node path
-        eval = AdjustEvalScore(*node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
+        eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
     }
     else
     {
@@ -1486,7 +1513,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        eval = AdjustEvalScore(*node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
+        eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
         // try to use TT score for better evaluation estimate
         if (std::abs(ttScore) < KnownWinValue)
@@ -2155,6 +2182,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
+
+        // if we beat alpha, adjust material score
+        if (node->depth >= 1 &&
+            !node->isInCheck &&
+            bestMove.IsQuiet() &&
+            (bounds == TTEntry::Bounds::Exact || (bounds == TTEntry::Bounds::Lower && bestValue > node->staticEval)))
+        {
+            thread.AdjustMaterialScore(node->position, node->staticEval, bestValue);
+        }
     }
 
 #ifdef ENABLE_SEARCH_TRACE
