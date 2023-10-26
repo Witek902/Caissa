@@ -109,6 +109,18 @@ struct Move
         };
     }
 
+    template<Piece piece, bool isCapture>
+    INLINE static constexpr Move MakeSimple(Square fromSquare, Square toSquare)
+    {
+        return
+        {
+            ((uint32_t)fromSquare.mIndex) |
+            ((uint32_t)toSquare.mIndex << 6) |
+            ((uint32_t)piece << 16) |
+            ((uint32_t)isCapture << 20)
+        };
+    }
+
     INLINE static constexpr const Move Invalid()
     {
         return { 0 };
