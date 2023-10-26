@@ -27,11 +27,14 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t MaxExtension = 2;
-static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale, 46);
-DEFINE_PARAM(LateMoveReductionBias, 63);
+
+
+DEFINE_PARAM(LateMoveReductionScale_Quiet, 146);
+DEFINE_PARAM(LateMoveReductionBias_Quiet, 70);
+DEFINE_PARAM(LateMoveReductionScale_Noisy, 73);
+DEFINE_PARAM(LateMoveReductionBias_Noisy, 35);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 8);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
@@ -207,23 +210,26 @@ void Search::StopWorkerThreads()
 
 void Search::BuildMoveReductionTable()
 {
-    const float scale = static_cast<float>(LateMoveReductionScale) / 100.0f;
-    const float bias = static_cast<float>(LateMoveReductionBias) / 100.0f;
+    const float scaleQuiet = static_cast<float>(LateMoveReductionScale_Quiet) / 100.0f;
+    const float biasQuiet = static_cast<float>(LateMoveReductionBias_Quiet) / 100.0f;
+    const float scaleNoisy = static_cast<float>(LateMoveReductionScale_Noisy) / 100.0f;
+    const float biasNoisy = static_cast<float>(LateMoveReductionBias_Noisy) / 100.0f;
 
     // clear first row and column
     for (uint32_t i = 0; i < LMRTableSize; ++i)
     {
-        mMoveReductionTable[i][0] = 0;
-        mMoveReductionTable[0][i] = 0;
+        mLMRTable_Quiet[i][0] = 0;
+        mLMRTable_Quiet[0][i] = 0;
+        mLMRTable_Noisy[i][0] = 0;
+        mLMRTable_Noisy[0][i] = 0;
     }
 
     for (uint32_t depth = 1; depth < LMRTableSize; ++depth)
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
-            ASSERT(reduction <= 64);
-            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
+            mLMRTable_Quiet[depth][moveIndex] = (uint16_t)std::max<int32_t>(int32_t(biasQuiet + scaleQuiet * Log(float(depth)) * Log(float(moveIndex))), 0);
+            mLMRTable_Noisy[depth][moveIndex] = (uint16_t)std::max<int32_t>(int32_t(biasNoisy + scaleNoisy * Log(float(depth)) * Log(float(moveIndex))), 0);
         }
     }
 }
@@ -1889,14 +1895,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
 
+        int32_t newDepth = node->depth + moveExtension;
+
+        ScoreType score = InvalidValue;
+
         // Late Move Reductions
-        int32_t r = 0;
         if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > (1u + isPvNode + isRootNode))
+            moveIndex > (1u + isPvNode))
         {
+            int32_t r = 1;
             if (move.IsQuiet())
             {
-                r = GetDepthReduction(node->depth, moveIndex);
+                r = GetQuietDepthReduction(node->depth, moveIndex);
 
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r++;
@@ -1917,7 +1927,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
             else
             {
-                r = GetDepthReduction(node->depth, moveIndex) / 2;
+                r = GetNoisyDepthReduction(node->depth, moveIndex) / 2;
 
                 // reduce more if eval is not improving
                 if (!isImproving) r++;
@@ -1936,40 +1946,37 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // reduce less if move is a check
             if (childNode.isInCheck) r--;
+
+            // limit reduction, don't drop into QS
+            r = std::clamp(r, 1, newDepth);
+
+            // PVS search at reduced depth
+            {
+                childNode.depth = static_cast<int16_t>(newDepth - r);
+                childNode.alpha = -alpha - 1;
+                childNode.beta = -alpha;
+                childNode.isCutNode = true;
+                score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+            }
+
+            // PVS search at full depth
+            if (r > 1 && score > alpha) [[unlikely]]
+            {
+                childNode.depth = static_cast<int16_t>(newDepth - 1);
+                childNode.alpha = -alpha - 1;
+                childNode.beta = -alpha;
+                childNode.isCutNode = !node->isCutNode;
+                score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+            }
         }
-
-        // limit reduction, don't drop into QS
-        r = std::min(r, MaxDepthReduction);
-        r = std::clamp(r, 0, node->depth + moveExtension - 1);
-
-        ScoreType score = InvalidValue;
-
-        bool doFullDepthSearch = !(isPvNode && moveIndex == 1);
-
-        // PVS search at reduced depth
-        if (r > 0)
+        else if (moveIndex > 1 || !isPvNode)
         {
-            ASSERT(moveIndex > 1);
-
-            childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1 - r);
-            childNode.alpha = -alpha - 1;
-            childNode.beta = -alpha;
-            childNode.isCutNode = true;
-
-            score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-            doFullDepthSearch = score > alpha;
-        }
-
-        // PVS search at full depth
-        if (doFullDepthSearch) [[unlikely]]
-        {
-            childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1);
+            childNode.depth = static_cast<int16_t>(newDepth - 1);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = !node->isCutNode;
-
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
         }
@@ -1980,11 +1987,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (moveIndex == 1 ||
                 (score > alpha && (isRootNode || score < beta)))
             {
-                childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1);
+                childNode.depth = static_cast<int16_t>(newDepth - 1);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isCutNode = false;
-
                 score = -NegaMax<NodeType::PV>(thread, &childNode, ctx);
             }
         }
