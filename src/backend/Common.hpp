@@ -363,6 +363,16 @@ inline uint8_t ReverseBits(uint8_t x)
     return (lookup[x & 0xf] << 4) | lookup[x >> 4];
 }
 
+inline uint64_t Murmur3(uint64_t k)
+{
+    k ^= k >> 33;
+    k *= 0xff51afd7ed558ccdull;
+    k ^= k >> 33;
+    k *= 0xc4ceb9fe1a85ec53ull;
+    k ^= k >> 33;
+    return k;
+}
+
 class SpinLock
 {
 public:
