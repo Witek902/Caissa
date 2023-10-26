@@ -335,12 +335,19 @@ private:
 
         NodeInfo searchStack[MaxSearchDepth];
 
+        static constexpr int32_t MatCorrectionScale = 256;
+        static constexpr uint32_t MatCorrectionTableSize = 2048;
+        int16_t matScoreCorrection[MatCorrectionTableSize];
+
         ThreadData();
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
+
+        ScoreType GetMaterialScoreCorrection(const Position& pos) const;
+        void AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore);
 
         uint32_t GetRandomUint();
     };
@@ -360,6 +367,8 @@ private:
     void BuildMoveReductionTable();
 
     static void WorkerThreadCallback(ThreadData* threadData);
+
+    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam);
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
