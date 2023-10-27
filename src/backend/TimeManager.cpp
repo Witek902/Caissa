@@ -6,22 +6,30 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 50);
-DEFINE_PARAM(MovesLeftSteepness, 20);
+DEFINE_PARAM(MovesLeftMidpoint, 45);
+DEFINE_PARAM(MovesLeftSteepness, 22);
 DEFINE_PARAM(IdealTimeFactor, 83);
 
-static float EstimateMovesLeft(const uint32_t moves)
+static float EstimateMovesLeft(const Position& pos)
 {
-    // based on LeelaChessZero
+    float movesLeft = 0.0f;
+
+    // move count term based on LeelaChessZero
+    const uint32_t moves = pos.GetMoveCount();
     const float midpoint = static_cast<float>(MovesLeftMidpoint);
     const float steepness = static_cast<float>(MovesLeftSteepness) / 10.0f;
-    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
+    movesLeft += midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
+
+    // piece count term
+    movesLeft += pos.GetNumPiecesExcludingKing() / 2.0f;
+
+    return movesLeft;
 }
 
 void TimeManager::Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
     const int32_t moveOverhead = data.moveOverhead;
-    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition().GetMoveCount());
+    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition());
 
     // soft limit
     if (data.remainingTime != INT32_MAX)
