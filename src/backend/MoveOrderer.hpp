@@ -5,55 +5,6 @@
 struct NodeInfo;
 struct NodeCacheEntry;
 
-template<uint32_t Size>
-struct KillerMoves
-{
-    Move moves[Size];
-
-    INLINE void Clear()
-    {
-        for (uint32_t i = 0; i < Size; ++i)
-        {
-            moves[i] = Move::Invalid();
-        }
-    }
-
-    void Push(const Move move)
-    {
-        for (uint32_t i = 0; i < Size; ++i)
-        {
-            if (move == moves[i])
-            {
-                // move to the front
-                for (uint32_t j = i; j > 0; j--)
-                {
-                    moves[j] = moves[j - 1];
-                }
-
-                moves[0] = move;
-                return;
-            }
-        }
-
-        for (uint32_t j = Size; j-- > 1u; )
-        {
-            moves[j] = moves[j - 1];
-        }
-        moves[0] = move;
-    }
-
-    int32_t Find(const Move move) const
-    {
-        for (uint32_t i = 0; i < Size; ++i)
-        {
-            if (move == moves[i])
-            {
-                return (int32_t)i;
-            }
-        }
-        return -1;
-    }
-};
 
 class MoveOrderer
 {
@@ -69,8 +20,6 @@ public:
     static constexpr int32_t KillerMoveBonus        = 1000000;
     static constexpr int32_t LosingCaptureValue     = -4000;
 
-    static constexpr uint32_t NumKillerMoves        = 2;
-
     using CounterType = int16_t;
     using PieceSquareHistory = CounterType[6][64];
     using PieceSquareHistoryPtr = PieceSquareHistory*;
@@ -84,7 +33,7 @@ public:
 
     CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
 
-    INLINE const KillerMoves<NumKillerMoves>& GetKillerMoves(uint32_t treeHeight) const
+    INLINE const Move GetKillerMove(uint32_t treeHeight) const
     {
         return killerMoves[treeHeight];
     }
@@ -95,13 +44,13 @@ public:
     INLINE void ClearKillerMoves(uint32_t depth)
     {
         ASSERT(depth < MaxSearchDepth);
-        killerMoves[depth].Clear();
+        killerMoves[depth] = Move::Invalid();
     }
 
     INLINE void UpdateKillerMove(uint32_t depth, const Move move)
     {
         ASSERT(depth < MaxSearchDepth);
-        killerMoves[depth].Push(move);
+        killerMoves[depth] = move;
     }
 
     // assign scores to move list
@@ -122,5 +71,5 @@ private:
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
 
-    KillerMoves<NumKillerMoves> killerMoves[MaxSearchDepth];
+    Move killerMoves[MaxSearchDepth];
 };
