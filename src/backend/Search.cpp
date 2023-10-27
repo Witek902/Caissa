@@ -1542,6 +1542,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         isImproving = evalImprovement >= 0;
     }
 
+    // adjust move history based on static eval change between current and previous position
+    if (node->previousMove.IsValid() && node->previousMove.IsQuiet() &&
+        !node->isInCheck && !(node-1)->isInCheck)
+    {
+        const int32_t bonus = std::clamp(-4 * int32_t((node - 1)->staticEval + node->staticEval), -200, 200);
+        thread.moveOrderer.UpdateQuietMovesHistory(*(node - 1), node->previousMove, bonus);
+    }
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
