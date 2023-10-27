@@ -82,22 +82,16 @@ void MoveOrderer::DebugPrint() const
         uint32_t lastValidDepth = 0;
         for (uint32_t d = 0; d < MaxSearchDepth; ++d)
         {
-            for (uint32_t i = 0; i < NumKillerMoves; ++i)
+            if (killerMoves[d].IsValid())
             {
-                if (killerMoves[d].moves[i].IsValid())
-                {
-                    lastValidDepth = std::max(lastValidDepth, d);
-                }
+                lastValidDepth = std::max(lastValidDepth, d);
             }
         }
 
         for (uint32_t d = 0; d < lastValidDepth; ++d)
         {
             std::cout << d;
-            for (uint32_t i = 0; i < NumKillerMoves; ++i)
-            {
-                std::cout << "\t" << killerMoves[d].moves[i].ToString() << " ";
-            }
+            std::cout << "\t" << killerMoves[d].ToString() << " ";
             std::cout << std::endl;
         }
         std::cout << std::endl;
@@ -336,7 +330,7 @@ void MoveOrderer::ScoreMoves(
         else if (withQuiets) // non-capture
         {
             // killer moves should be filtered by move picker
-            ASSERT(killerMoves[node.height].Find(move) < 0);
+            ASSERT(killerMoves[node.height] != move);
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];

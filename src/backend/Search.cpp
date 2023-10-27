@@ -606,11 +606,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             }
             printf("Winning capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.winningCaptureCutoffs, 100.0f * float(stats.winningCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
-            for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
-            {
-                const uint64_t value = stats.killerMoveBetaCutoffs[i];
-                printf("Killer move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
-            }
+            printf("Killer move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.killerMoveBetaCutoffs, 100.0f * float(stats.killerMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
             printf("Bad capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.badCaptureCutoffs, 100.0f * float(stats.badCaptureCutoffs) / float(stats.totalBetaCutoffs));
 
@@ -2071,9 +2067,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (moveScore == MoveOrderer::TTMoveValue - static_cast<int32_t>(i))
                         ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
 
-                for (uint32_t i = 0; i < MoveOrderer::NumKillerMoves; ++i)
-                    if (moveScore == MoveOrderer::KillerMoveBonus - static_cast<int32_t>(i))
-                        ctx.stats.killerMoveBetaCutoffs[i]++, ttOrKiller = true;
+                if (moveScore == MoveOrderer::KillerMoveBonus)
+                    ctx.stats.killerMoveBetaCutoffs++, ttOrKiller = true;
 
                 if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
                 else if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
