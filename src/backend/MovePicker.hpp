@@ -16,8 +16,7 @@ public:
         TTMove = 0,
         GenerateCaptures,
         Captures,
-        Killer1,
-        Killer2,
+        Killer,
         GenerateQuiets,
         PickQuiets,
         End,
@@ -53,7 +52,7 @@ private:
     uint32_t m_moveIndex = 0;
     Stage m_stage = Stage::TTMove;
 
-    Move m_killerMoves[2] = { Move::Invalid(), Move::Invalid() };
+    Move m_killerMove = Move::Invalid();
 
     MoveList m_moves;
 };

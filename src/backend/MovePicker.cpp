@@ -60,38 +60,20 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 return false;
             }
 
-            m_stage = Stage::Killer1;
+            m_stage = Stage::Killer;
             [[fallthrough]];
         }
 
-        case Stage::Killer1:
-        {
-            m_stage = Stage::Killer2;
-            Move move = m_moveOrderer.GetKillerMoves(node.height).moves[0];
-            if (move.IsValid() && move != m_ttMove)
-            {
-                move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
-                {
-                    m_killerMoves[0] = move;
-                    outMove = move;
-                    outScore = MoveOrderer::KillerMoveBonus;
-                    return true;
-                }
-            }
-            [[fallthrough]];
-        }
-
-        case Stage::Killer2:
+        case Stage::Killer:
         {
             m_stage = Stage::GenerateQuiets;
-            Move move = m_moveOrderer.GetKillerMoves(node.height).moves[1];
+            Move move = m_moveOrderer.GetKillerMove(node.height);
             if (move.IsValid() && move != m_ttMove)
             {
                 move = m_position.MoveFromPacked(move);
                 if (move.IsValid() && !move.IsCapture())
                 {
-                    m_killerMoves[1] = move;
+                    m_killerMove = move;
                     outMove = move;
                     outScore = MoveOrderer::KillerMoveBonus - 1;
                     return true;
@@ -109,8 +91,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
 
                 // remove PV and TT moves from generated list
                 m_moves.RemoveMove(m_ttMove);
-                m_moves.RemoveMove(m_killerMoves[0]);
-                m_moves.RemoveMove(m_killerMoves[1]);
+                m_moves.RemoveMove(m_killerMove);
 
                 m_moveOrderer.ScoreMoves(node, game, m_moves, true, m_nodeCacheEntry);
             }
