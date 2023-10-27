@@ -237,7 +237,7 @@ struct SearchStats
     uint64_t winningCaptureCutoffs = 0;
     uint64_t goodCaptureCutoffs = 0;
     uint64_t badCaptureCutoffs = 0;
-    uint64_t killerMoveBetaCutoffs[MoveOrderer::NumKillerMoves] = { };
+    uint64_t killerMoveBetaCutoffs = { };
     uint64_t quietCutoffs = 0;
 
     uint64_t evalHistogram[EvalHistogramBins] = { 0 };
