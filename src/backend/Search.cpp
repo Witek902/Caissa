@@ -27,7 +27,6 @@ static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
-static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
@@ -55,7 +54,6 @@ DEFINE_PARAM(AspirationWindowEnd, 12);
 DEFINE_PARAM(AspirationWindowStep, 3);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
-DEFINE_PARAM(SingularExtensionScoreMarigin, 4);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 25);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 90);
@@ -1663,14 +1661,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
 
-    int32_t extension = 0;
-
-    // check extension
-    if (node->isInCheck)
-    {
-        extension++;
-    }
-
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
 
@@ -1802,33 +1792,26 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
+        int32_t moveExtension = 0;
 
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
-
-        // Singular move detection
         if constexpr (!isRootNode)
         {
+            // promotion extension
+            if (node->isInCheck || move.GetPromoteTo() == Piece::Queen)
+            {
+                moveExtension = 1;
+            }
+
+            // singular move detection
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
+                node->height < 2 * thread.rootDepth &&
                 node->depth >= SingularExtensionMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - 2)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node->depth);
+                const ScoreType singularBeta = std::max<ScoreType>(-CheckmateValue, ttScore - node->depth);
 
                 const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const int16_t originalDepth = node->depth;
@@ -1851,28 +1834,24 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (singularScore < singularBeta)
                 {
-                    if (node->height < 2 * thread.rootDepth)
-                    {
-                        moveExtension++;
-
-                        // double extension if singular score is way below beta
-                        if constexpr (!isPvNode)
-                            if (node->doubleExtensions < 8 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension++;
-                    }
+                    moveExtension = 1;
+                    // double extension if singular score is way below beta
+                    if constexpr (!isPvNode)
+                        if (node->doubleExtensions < 8 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            moveExtension = 2;
                 }
-                else if (singularScore >= beta)
+                else if (singularBeta >= beta)
                 {
                     // if second best move beats current beta, there most likely would be beta cutoff
                     // when searching it at full depth
 #ifdef ENABLE_SEARCH_TRACE
-                    trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
+                    trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularBeta);
 #endif // ENABLE_SEARCH_TRACE
-                    return singularScore;
+                    return singularBeta;
                 }
                 else if (ttScore >= beta)
                 {
-                    moveExtension--;
+                    moveExtension = -1 + isPvNode;
                 }
             }
         }
@@ -1894,16 +1873,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ReportCurrentMove(move, node->depth, moveIndex + node->pvIndex);
                 }
             }
-        }
-
-        // avoid extending search too much (maximum 2x depth at root node)
-        if (node->height < 2 * thread.rootDepth)
-        {
-            moveExtension = std::clamp(moveExtension, 0, MaxExtension);
-        }
-        else
-        {
-            moveExtension = 0;
         }
 
         childNode.staticEval = InvalidValue;
