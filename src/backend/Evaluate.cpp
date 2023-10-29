@@ -248,7 +248,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     }
 
     // apply scaling based on game phase
-    finalValue = finalValue * (96 + gamePhase) / 128;
+    finalValue = finalValue * (192 + gamePhase) / 256;
 
     // saturate eval value so it doesn't exceed KnownWinValue
     if (finalValue > c_evalSaturationTreshold)
