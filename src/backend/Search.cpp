@@ -1674,8 +1674,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
 
-    const bool ttCapture = ttMove.IsValid() && position.IsCapture(ttMove);
-    const bool ttRecapture = ttCapture && node->previousMove.IsCapture() && node->previousMove.ToSquare() == ttMove.ToSquare();
+    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
 
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
@@ -1919,17 +1918,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // Late Move Reductions
         int32_t r = 0;
         if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > (1u + isPvNode + isRootNode))
+            moveIndex > 1 &&
+            (!isPvNode || move.IsQuiet()))
         {
+            r = GetDepthReduction(node->depth, moveIndex);
+
             if (move.IsQuiet())
             {
-                r = GetDepthReduction(node->depth, moveIndex);
-
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r++;
-
-                // reduce more if eval is not improving
-                if (!isImproving) r++;
 
                 // reduce more if TT move is capture
                 if (ttCapture) r++;
@@ -1940,26 +1937,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less based on move stat score
                 r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
 
-                if (node->isInCheck && move.GetPiece() == Piece::King) r--;
+                if (node->isCutNode) r += 2;
             }
             else
             {
-                r = GetDepthReduction(node->depth, moveIndex) / 2;
-
-                // reduce more if eval is not improving
-                if (!isImproving) r++;
-
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r--;
 
                 // reduce bad captures more
                 if (moveScore < MoveOrderer::GoodCaptureValue) r++;
+
+                if (node->isCutNode) r++;
             }
 
-            // reduce more if TT move is recapture
-            if (ttRecapture) r++;
-
-            if (node->isCutNode) r++;
+            // reduce more if eval is not improving
+            if (!isImproving) r++;
 
             // reduce less if move is a check
             if (childNode.isInCheck) r--;
