@@ -6,22 +6,16 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 50);
-DEFINE_PARAM(MovesLeftSteepness, 20);
+DEFINE_PARAM(MovesLeft, 20);
 DEFINE_PARAM(IdealTimeFactor, 83);
-
-static float EstimateMovesLeft(const uint32_t moves)
-{
-    // based on LeelaChessZero
-    const float midpoint = static_cast<float>(MovesLeftMidpoint);
-    const float steepness = static_cast<float>(MovesLeftSteepness) / 10.0f;
-    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
-}
+DEFINE_PARAM(MaxTimeFactor, 400);
 
 void TimeManager::Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
+    UNUSED(game);
+
     const int32_t moveOverhead = data.moveOverhead;
-    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition().GetMoveCount());
+    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : MovesLeft;
 
     // soft limit
     if (data.remainingTime != INT32_MAX)
@@ -33,7 +27,8 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         const float idealTime = std::clamp(idealTimeFactor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement,
             0.0f, margin * (float)data.remainingTime);
 
-        const float maxTime = std::clamp((data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement,
+        const float maxTimeFactor = static_cast<float>(MaxTimeFactor) / 100.0f;
+        const float maxTime = std::clamp(maxTimeFactor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement,
             0.0f, margin * (float)data.remainingTime);
 
 #ifndef CONFIGURATION_FINAL
