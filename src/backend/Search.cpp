@@ -31,8 +31,8 @@ static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale, 46);
-DEFINE_PARAM(LateMoveReductionBias, 63);
+DEFINE_PARAM(LateMoveReductionScale, 43);
+DEFINE_PARAM(LateMoveReductionBias, 56);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 8);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
@@ -44,9 +44,9 @@ DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
 DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
-DEFINE_PARAM(LateMovePruningBase, 3);
+DEFINE_PARAM(LateMovePruningBase, 4);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 128);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 
 DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
@@ -55,28 +55,28 @@ DEFINE_PARAM(AspirationWindowEnd, 12);
 DEFINE_PARAM(AspirationWindowStep, 3);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
-DEFINE_PARAM(SingularExtensionScoreMarigin, 4);
+DEFINE_PARAM(SingularExtensionScoreMarigin, 2);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 25);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 90);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 89);
 
 DEFINE_PARAM(BetaPruningDepth, 7);
-DEFINE_PARAM(BetaMarginMultiplier, 139);
+DEFINE_PARAM(BetaMarginMultiplier, 130);
 DEFINE_PARAM(BetaMarginBias, 5);
 
 DEFINE_PARAM(AlphaPruningDepth, 5);
-DEFINE_PARAM(AlphaMarginMultiplier, 256);
-DEFINE_PARAM(AlphaMarginBias, 1270);
+DEFINE_PARAM(AlphaMarginMultiplier, 259);
+DEFINE_PARAM(AlphaMarginBias, 1287);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 124);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 58);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 122);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 60);
 
 DEFINE_PARAM(RazoringStartDepth, 3);
-DEFINE_PARAM(RazoringMarginMultiplier, 138);
-DEFINE_PARAM(RazoringMarginBias, 20);
+DEFINE_PARAM(RazoringMarginMultiplier, 152);
+DEFINE_PARAM(RazoringMarginBias, 19);
 
-DEFINE_PARAM(ReductionStatOffset, 7500);
-DEFINE_PARAM(ReductionStatDiv, 8192);
+DEFINE_PARAM(ReductionStatOffset, 7761);
+DEFINE_PARAM(ReductionStatDiv, 8771);
 
 class SearchTrace
 {
