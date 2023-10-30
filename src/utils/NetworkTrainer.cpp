@@ -39,8 +39,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cMinBatchSize = 16 * 1024;
-static const uint32_t cMaxBatchSize = 16 * 1024;
+static const uint32_t cBatchSize = 16 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -308,7 +307,7 @@ static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeura
         entry.whiteFeatures.data(), numWhiteFeatures,
         entry.blackFeatures.data(), numBlackFeatures,
         entry.networkVariant);
-    const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)nn::OutputScale * c_nnOutputToCentiPawns / 100.0f;
+    const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)(nn::OutputScale * nn::WeightScale) * c_nnOutputToCentiPawns / 100.0f;
     return EvalToExpectedGameScore(scaledPackedNetworkOutput);
 }
 #endif // USE_PACKED_NET
@@ -480,42 +479,6 @@ void NetworkTrainer::Validate(size_t iteration)
         << std::endl;
 
     m_network.PrintStats();
-}
-
-void NetworkTrainer::BlendLastLayerWeights()
-{
-    const float blendFactor = 1.0e-4f;
-
-    for (uint32_t i = 0; i < nn::AccumulatorSize * 2; ++i)
-    {
-        // load weights
-        float weights[nn::NumVariants];
-        for (uint32_t variant = 0; variant < nn::NumVariants; ++variant)
-        {
-            weights[variant] = m_lastLayerWeights->m_variants[variant].m_weights[i];
-        }
-
-        // blend weights with neighboring buckets
-        float blendedWeights[nn::NumVariants];
-        for (uint32_t materialGroup = 0; materialGroup < 2; ++materialGroup)
-        {
-            const uint32_t offset = nn::NumPieceCountBuckets * materialGroup;
-
-            blendedWeights[offset] = (weights[offset] + weights[offset + 1] * blendFactor) / (1.0f + blendFactor);
-            blendedWeights[offset + nn::NumPieceCountBuckets - 1] = (weights[offset + nn::NumPieceCountBuckets - 1] + weights[offset + nn::NumPieceCountBuckets - 2] * blendFactor) / (1.0f + blendFactor);
-
-            for (uint32_t j = 1; j + 1 < nn::NumPieceCountBuckets; ++j)
-            {
-                blendedWeights[offset + j] = (weights[offset + j] + (weights[offset + j + 1] + weights[offset + j - 1]) * blendFactor) / (1.0f + 2.0f * blendFactor);
-            }
-        }
-
-        // store blended weights
-        for (uint32_t variant = 0; variant < nn::NumVariants; ++variant)
-        {
-            m_lastLayerWeights->m_variants[variant].m_weights[i] = blendedWeights[variant];
-        }
-    }
 }
 
 template<typename WeightType, typename BiasType>
@@ -709,16 +672,22 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
+static volatile float g_learningRateScale = 1.0f;
+static volatile float g_lambdaScale = 0.9f;
+static volatile float g_weightDecay = 0.01f;
+
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-21.pnn"))
+    /*
+    if (!m_packedNet.LoadFromFile("eval21-wld1-19.7B-lr0.005.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
     }
     UnpackNetwork();
+    */
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -732,10 +701,10 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 0.25f;
-    const float minLearningRate = 0.1f;
-    const float maxLambda = 0.2f;
-    const float minLambda = 0.1f;
+    const float maxLearningRate = 0.005f;
+    const float minLearningRate = 0.005f;
+    const float maxLambda = 1.0f;
+    const float minLambda = 1.0f;
 
     //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
@@ -746,8 +715,8 @@ bool NetworkTrainer::Train()
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
         const float warmup = iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
-        const float learningRate = warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
-        const float lambda = std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
+        const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
+        const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
         if (iteration == 0)
         {
@@ -758,8 +727,6 @@ bool NetworkTrainer::Train()
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
         prevIterationStartTime = iterationStartTime;
-
-        BlendLastLayerWeights();
 
         // use validation set from previous iteration as training set in the current one
         ParallelFor("PrepareBatch", cNumTrainingVectorsPerIteration, [&batch, this](const TaskContext&, uint32_t i)
@@ -788,11 +755,11 @@ bool NetworkTrainer::Train()
             taskBuilder.Task("Train", [this, iteration, kingBucketMask, &epoch, &batch, learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
-                params.optimizer = nn::Optimizer::Adadelta;
+                params.optimizer = nn::Optimizer::Adam;
                 params.iteration = epoch;
-                params.batchSize = iteration < 5 ? cMinBatchSize : cMaxBatchSize;
+                params.batchSize = cBatchSize;
                 params.learningRate = learningRate;
-                params.weightDecay = 1.0e-5f;
+                params.weightDecay = g_weightDecay;
 
                 if (kingBucketMask != UINT64_MAX)
                 {

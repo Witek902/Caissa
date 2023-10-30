@@ -1,6 +1,5 @@
 #include "WeightsStorage.hpp"
 #include "Gradient.hpp"
-#include "../HaltonSequence.hpp"
 #include "../minitrace/minitrace.h"
 
 #include <algorithm>
@@ -37,25 +36,18 @@ void WeightsStorage::Init(uint32_t numActiveNeurons, float bias)
         memset(variant.m_gradientMoment1.data(), 0, sizeof(float) * variant.m_gradientMoment1.size());
         memset(variant.m_gradientMoment2.data(), 0, sizeof(float) * variant.m_gradientMoment2.size());
 
-        const float scale = sqrtf(2.0f / (float)numActiveNeurons);
-
-        //std::random_device rd;
-        //std::mt19937 gen(rd());
+        std::random_device rd;
+        std::mt19937 gen(rd());
 
         // Xavier weights initialization
-        //std::normal_distribution<float> weightDistr(0.0f, sqrtf(2.0f / (float)numActiveNeurons));
-
-        HaltonSequence haltonSequence;
-        haltonSequence.Initialize(m_inputSize);
+        std::normal_distribution<float> weightDistr(0.0f, 2.0f / (float)numActiveNeurons);
 
         for (uint32_t j = 0; j < m_outputSize; ++j)
         {
             for (uint32_t i = 0; i < m_inputSize; ++i)
             {
-                const float u = static_cast<float>(haltonSequence.GetDouble(i));
-                variant.m_weights[m_outputSize * i + j] = (u - 0.5f) * scale;
+                variant.m_weights[m_outputSize * i + j] = weightDistr(gen);
             }
-            haltonSequence.NextSample();
         }
 
         for (size_t j = 0; j < m_outputSize; j++)
@@ -188,7 +180,7 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, uint32_t inputIndex
 
         const float cBeta1 = 0.9f;
         const float cBeta2 = 0.999f;
-        const float cEpsilon = 1.0e-10f;
+        const float cEpsilon = 1.0e-8f;
 
         const float cIter = (float)(options.iteration + 1);
         const float cBeta1Mult = 1.0f / (1.0f - powf(cBeta1, cIter));

@@ -79,16 +79,14 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 8;
+static constexpr uint32_t CurrentVersion = 9;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 5;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 1024;
 static constexpr uint32_t OutputSize = 1;
-static constexpr uint32_t NumMaterialGroups = 2; // queen / no-queen
-static constexpr uint32_t NumPieceCountBuckets = 8; // piece count buckets
-static constexpr uint32_t NumVariants = NumMaterialGroups * NumPieceCountBuckets;
+static constexpr uint32_t NumVariants = 8;
 
 static constexpr uint8_t KingBucketIndex[64] =
 {
@@ -96,7 +94,7 @@ static constexpr uint8_t KingBucketIndex[64] =
     0, 0, 1, 1, 1, 1, 0, 0,
     2, 2, 3, 3, 3, 3, 2, 2,
     2, 2, 3, 3, 3, 3, 2, 2,
-    2, 2, 3, 3, 3, 3, 2, 2,
+    4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 4, 4, 4, 4, 4, 4,
