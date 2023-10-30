@@ -68,9 +68,8 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
             const ScoreType moveScore = game.GetMoveScores()[i];
 
             if (move.IsQuiet() &&                                   // best move must be quiet
-                (i >= 2 || pos.GetNumPieces() < 32) &&
                 pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 1200 || std::abs(Evaluate(pos)) < 2000) &&   // skip unbalanced positions
+                !((moveScore > 1200 && Evaluate(pos) > 600) || (moveScore < -1200 && Evaluate(pos) < -600)) && // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};

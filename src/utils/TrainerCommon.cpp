@@ -152,14 +152,8 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             }
 
             // skip early moves
-            constexpr uint32_t maxEarlyMoveCount = 12;
-            if (outEntry.pos.moveCount < maxEarlyMoveCount)
-            {
-                const float earlyMoveSkipProb = 0.95f * (float)(maxEarlyMoveCount - outEntry.pos.moveCount - 1) / (float)maxEarlyMoveCount;
-                std::bernoulli_distribution skippingDistr(earlyMoveSkipProb);
-                if (skippingDistr(gen))
-                    continue;
-            }
+            if (outEntry.pos.moveCount < 10)
+                continue;
 
             // skip based on piece count
             {
@@ -193,6 +187,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         }
         else
         {
+            /*
             // skip based on kings placement (prefer king on further ranks)
             {
                 const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
@@ -201,6 +196,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (skippingDistr(gen))
                     continue;
             }
+            */
 
             // skip based on WDL
             // the idea is to skip positions where for instance eval is high, but game result is loss
