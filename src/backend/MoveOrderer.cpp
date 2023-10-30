@@ -169,6 +169,7 @@ void MoveOrderer::NewSearch()
 void MoveOrderer::Clear()
 {
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
+    memset(checkEvasionHistory, 0, sizeof(checkEvasionHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
@@ -214,6 +215,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const Bitboard threats = node.threats.allThreats;
 
+    PieceSquareHistory& checkEvasionHistoryTable = checkEvasionHistory[node.position.GetCurrentSide().GetKingSquare().Index()];
+
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
@@ -229,6 +232,11 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+
+        if (node.isInCheck)
+        {
+            UpdateHistoryCounter(checkEvasionHistoryTable[piece][to], delta);
+        }
     }
 }
 
@@ -290,6 +298,8 @@ void MoveOrderer::ScoreMoves(
             prevMove = game.GetMoves().back();
         }
     }
+
+    const PieceSquareHistory& checkEvasionHistoryTable = checkEvasionHistory[node.position.GetCurrentSide().GetKingSquare().Index()];
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -354,6 +364,9 @@ void MoveOrderer::ScoreMoves(
             if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
             if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to];
             if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to];
+
+            // check evasion
+            if (node.isInCheck) score += checkEvasionHistoryTable[piece][to];
 
             switch (move.GetPiece())
             {
