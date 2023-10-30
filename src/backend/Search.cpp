@@ -64,10 +64,6 @@ DEFINE_PARAM(BetaPruningDepth, 7);
 DEFINE_PARAM(BetaMarginMultiplier, 130);
 DEFINE_PARAM(BetaMarginBias, 5);
 
-DEFINE_PARAM(AlphaPruningDepth, 5);
-DEFINE_PARAM(AlphaMarginMultiplier, 259);
-DEFINE_PARAM(AlphaMarginBias, 1287);
-
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 122);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 60);
 
@@ -90,7 +86,6 @@ public:
         TBHit,
         TTCutoff,
         BetaPruning,
-        AlphaPruning,
         Razoring,
         NullMovePruning,
         SingularPruning,
@@ -111,7 +106,6 @@ public:
         case ExitReason::TBHit:                 exitReasonStr = "TBHit"; break;
         case ExitReason::TTCutoff:              exitReasonStr = "TTCutoff"; break;
         case ExitReason::BetaPruning:           exitReasonStr = "BetaPruning"; break;
-        case ExitReason::AlphaPruning:          exitReasonStr = "AlphaPruning"; break;
         case ExitReason::Razoring:              exitReasonStr = "Razoring"; break;
         case ExitReason::NullMovePruning:       exitReasonStr = "NullMovePruning"; break;
         case ExitReason::SingularPruning:       exitReasonStr = "SingularPruning"; break;
@@ -1555,18 +1549,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
 #ifdef ENABLE_SEARCH_TRACE
                 trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
-#endif // ENABLE_SEARCH_TRACE
-                return eval;
-            }
-
-            // Alpha Pruning
-            if (node->depth <= AlphaPruningDepth &&
-                alpha < KnownWinValue &&
-                eval > -KnownWinValue &&
-                eval + AlphaMarginBias + AlphaMarginMultiplier * node->depth <= alpha)
-            {
-#ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::AlphaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
                 return eval;
             }
