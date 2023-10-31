@@ -51,7 +51,7 @@ DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
 DEFINE_PARAM(AspirationWindowStart, 30);
-DEFINE_PARAM(AspirationWindowEnd, 12);
+DEFINE_PARAM(AspirationWindowEnd, 10);
 DEFINE_PARAM(AspirationWindowStep, 3);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
@@ -729,7 +729,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
-            thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
+            thread.avgScores[pvIndex] = ScoreType((3 * (int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 4);
         }
 
         if (abortSearch)
