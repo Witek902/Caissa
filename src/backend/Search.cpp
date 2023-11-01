@@ -1570,62 +1570,55 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Reductions
-            if (eval >= beta + (node->depth < 4 ? 20 : 0) &&
+            if (eval >= beta &&
                 node->staticEval >= beta &&
+                !node->isNullMove &&
                 node->depth >= NullMoveReductionsStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
-                // don't allow null move if parent or grandparent node was null move
-                bool doNullMove = !node->isNullMove;
-                if (node->height > 0 && (node - 1)->isNullMove) doNullMove = false;
+                // start prefetching child node's TT entry
+                ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
 
-                if (doNullMove)
+                const int32_t r =
+                    NullMoveReductions_NullMoveDepthReduction +
+                    node->depth / 4 +
+                    std::min(3, int32_t(eval - beta) / 256) + isImproving;
+
+                NodeInfo& childNode = *(node + 1);
+                childNode.Clear();
+                childNode.pvIndex = node->pvIndex;
+                childNode.position = position;
+                childNode.alpha = -beta;
+                childNode.beta = -beta + 1;
+                childNode.isNullMove = true;
+                childNode.isCutNode = !node->isCutNode;
+                childNode.doubleExtensions = node->doubleExtensions;
+                childNode.height = node->height + 1;
+                childNode.depth = static_cast<int16_t>(node->depth - r);
+                childNode.nnContext.MarkAsDirty();
+
+                childNode.position.DoNullMove();
+                childNode.position.ComputeThreats(childNode.threats);
+
+                ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                if (nullMoveScore >= beta)
                 {
-                    // start prefetching child node's TT entry
-                    ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
+                    if (nullMoveScore >= TablebaseWinValue)
+                        nullMoveScore = beta;
 
-                    const int32_t r =
-                        NullMoveReductions_NullMoveDepthReduction +
-                        node->depth / 4 +
-                        std::min(3, int32_t(eval - beta) / 256) + isImproving;
-
-                    NodeInfo& childNode = *(node + 1);
-                    childNode.Clear();
-                    childNode.pvIndex = node->pvIndex;
-                    childNode.position = position;
-                    childNode.alpha = -beta;
-                    childNode.beta = -beta + 1;
-                    childNode.isNullMove = true;
-                    childNode.isCutNode = !node->isCutNode;
-                    childNode.doubleExtensions = node->doubleExtensions;
-                    childNode.height = node->height + 1;
-                    childNode.depth = static_cast<int16_t>(node->depth - r);
-                    childNode.nnContext.MarkAsDirty();
-
-                    childNode.position.DoNullMove();
-                    childNode.position.ComputeThreats(childNode.threats);
-
-                    ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-
-                    if (nullMoveScore >= beta)
+                    if (std::abs(beta) < KnownWinValue && node->depth < 10)
                     {
-                        if (nullMoveScore >= TablebaseWinValue)
-                            nullMoveScore = beta;
-
-                        if (std::abs(beta) < KnownWinValue && node->depth < 10)
-                        {
 #ifdef ENABLE_SEARCH_TRACE
-                            trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
+                        trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
 #endif // ENABLE_SEARCH_TRACE
-                            return nullMoveScore;
-                        }
+                        return nullMoveScore;
+                    }
 
-                        node->depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
+                    node->depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
 
-                        if (node->depth <= 0)
-                        {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-                        }
+                    if (node->depth <= 0)
+                    {
+                        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
                     }
                 }
             }
