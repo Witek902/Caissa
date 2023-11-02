@@ -1853,7 +1853,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
                 else if (ttScore >= beta)
                 {
-                    moveExtension--;
+                    moveExtension = -1;
                 }
             }
         }
@@ -1880,11 +1880,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // avoid extending search too much (maximum 2x depth at root node)
         if (node->height < 2 * thread.rootDepth)
         {
-            moveExtension = std::clamp(moveExtension, 0, MaxExtension);
-        }
-        else
-        {
-            moveExtension = 0;
+            moveExtension = std::min(moveExtension, MaxExtension);
         }
 
         childNode.staticEval = InvalidValue;
