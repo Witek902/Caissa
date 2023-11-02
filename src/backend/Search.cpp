@@ -28,11 +28,10 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t MaxExtension = 2;
-static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
 DEFINE_PARAM(LateMoveReductionScale, 43);
-DEFINE_PARAM(LateMoveReductionBias, 56);
+DEFINE_PARAM(LateMoveReductionBias, 18);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 8);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
@@ -202,8 +201,8 @@ void Search::StopWorkerThreads()
 
 void Search::BuildMoveReductionTable()
 {
-    const float scale = static_cast<float>(LateMoveReductionScale) / 100.0f;
-    const float bias = static_cast<float>(LateMoveReductionBias) / 100.0f;
+    const float scale = LMRScale * static_cast<float>(LateMoveReductionScale) / 100.0f;
+    const float bias = LMRScale * static_cast<float>(LateMoveReductionBias) / 100.0f;
 
     // clear first row and column
     for (uint32_t i = 0; i < LMRTableSize; ++i)
@@ -217,8 +216,7 @@ void Search::BuildMoveReductionTable()
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
             const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
-            ASSERT(reduction <= 64);
-            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
+            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 255);
         }
     }
 }
@@ -1905,6 +1903,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             r = GetDepthReduction(node->depth, moveIndex);
 
+            // randomize, use node stat score as seed
+            r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LMRScale) / LMRScale;
+
             if (move.IsQuiet())
             {
                 // reduce non-PV nodes more
@@ -1940,7 +1941,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         // limit reduction, don't drop into QS
-        r = std::min(r, MaxDepthReduction);
         r = std::clamp(r, 0, node->depth + moveExtension - 1);
 
         ScoreType score = InvalidValue;

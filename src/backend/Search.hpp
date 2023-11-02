@@ -356,6 +356,7 @@ private:
 
     std::vector<ThreadDataPtr> mThreadData;
 
+    static constexpr int32_t LMRScale = 8;
     static constexpr uint32_t LMRTableSize = 64;
     uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
 
