@@ -6,9 +6,17 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Pawns.hpp"
 #include "Search.hpp"
+#include "Tuning.hpp"
 
 #include <fstream>
 #include <memory>
+
+DEFINE_PARAM(EvalScale_Offset, 738);
+DEFINE_PARAM(EvalScale_PawnValue, 21);
+DEFINE_PARAM(EvalScale_KnightValue, 43);
+DEFINE_PARAM(EvalScale_BishopValue, 40);
+DEFINE_PARAM(EvalScale_RookValue, 52);
+DEFINE_PARAM(EvalScale_QueenValue, 105);
 
 #if defined(CAISSA_EVALFILE)
 
@@ -225,11 +233,13 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         }
     }
 
-    // 0 - endgame, 64 - opening
-    const int32_t gamePhase = std::min(64,
-        3 * (whiteKnights + blackKnights + whiteBishops + blackBishops) +
-        5 * (whiteRooks   + blackRooks) +
-        10 * (whiteQueens  + blackQueens));
+    const int32_t gamePhase =
+        EvalScale_Offset +
+        EvalScale_PawnValue * (whitePawns + blackPawns) +
+        EvalScale_KnightValue * (whiteKnights + blackKnights) +
+        EvalScale_BishopValue * (whiteBishops + blackBishops) +
+        EvalScale_RookValue * (whiteRooks + blackRooks) +
+        EvalScale_QueenValue * (whiteQueens + blackQueens);
 
     int32_t finalValue = 0;
 
@@ -248,7 +258,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     }
 
     // apply scaling based on game phase
-    finalValue = finalValue * (96 + gamePhase) / 128;
+    finalValue = finalValue * gamePhase / 1024;
 
     // saturate eval value so it doesn't exceed KnownWinValue
     if (finalValue > c_evalSaturationTreshold)
