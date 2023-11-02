@@ -202,16 +202,15 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
-    const uint32_t color = (uint32_t)node.position.GetSideToMove();
-
     // don't update uncertain moves
-    if (numMoves <= 1 && node.depth < 2)
+    if (numMoves <= 1 && node.depth < 3)
     {
         return;
     }
 
     const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusQuadratic * node.depth * node.depth, QuietBonusLimit);
 
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
