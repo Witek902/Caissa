@@ -245,7 +245,8 @@ const NodeCache& Search::GetNodeCache() const
     return mThreadData.front()->nodeCache;
 }
 
-bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode)
+template<bool isRootNode>
+bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx)
 {
     SearchParam& param = ctx.searchParam;
 
@@ -254,7 +255,8 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         return true;
     }
 
-    if (!param.isPonder.load(std::memory_order_acquire))
+    // don't abort search on non-main thread
+    if (thread.isMainThread && !param.isPonder.load(std::memory_order_acquire))
     {
         if (param.limits.maxNodes < UINT64_MAX &&
             ctx.stats.nodes > param.limits.maxNodes)
@@ -265,7 +267,7 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         }
 
         // check inner nodes periodically
-        if (isRootNode || (thread.stats.nodesTotal % 256 == 0))
+        if ((thread.stats.nodesTotal % 256 == 0) || isRootNode)
         {
             if (param.limits.maxTime.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
@@ -697,7 +699,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam);
 
             // stop search only at depth 2 and more
-            if (depth > 1 && CheckStopCondition(thread, searchContext, true))
+            if (depth > 1 && CheckStopCondition<true>(thread, searchContext))
             {
                 abortSearch = true;
                 break;
@@ -807,7 +809,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ScoreType score = NegaMax<NodeType::Root>(thread, &rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-            if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
+            if (score < singularBeta || CheckStopCondition<true>(thread, searchContext))
             {
                 param.stopSearch = true;
                 break;
@@ -835,7 +837,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         param.depth >= static_cast<uint32_t>(AspirationWindowDepthStart) &&
         param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
-        !CheckStopCondition(thread, param.searchContext, true))
+        !CheckStopCondition<true>(thread, param.searchContext))
     {
         alpha = std::max<int32_t>(param.previousScore - window, -InfValue);
         beta = std::min<int32_t>(param.previousScore + window, InfValue);
@@ -896,7 +898,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             if (depth > 1 && depth + 3 > param.depth) depth--;
         }
 
-        const bool stopSearch = param.depth > 1 && CheckStopCondition(thread, param.searchContext, true);
+        const bool stopSearch = param.depth > 1 && CheckStopCondition<true>(thread, param.searchContext);
         const bool isMainThread = param.threadID == 0;
 
         ASSERT(!pvLine.moves.empty());
@@ -1248,7 +1250,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             if (node->isInCheck) break; // try only one check evasion
         }
 
-        if (CheckStopCondition(thread, ctx, false)) [[unlikely]]
+        if (CheckStopCondition<false>(thread, ctx)) [[unlikely]]
         {
             // abort search of further moves
             searchAborted = true;
@@ -2066,7 +2068,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         if constexpr (!isRootNode)
         {
-            if (CheckStopCondition(thread, ctx, false))
+            if (CheckStopCondition<false>(thread, ctx)) [[unlikely]]
             {
                 // abort search of further moves
                 searchAborted = true;
@@ -2140,7 +2142,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // don't write if:
     // - time is exceeded as evaluation may be inaccurate
     // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
-    if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
+    if (!filteredSomeMove && !CheckStopCondition<false>(thread, ctx))
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
