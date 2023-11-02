@@ -383,5 +383,6 @@ private:
     ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
 
     // returns true if the search needs to be aborted immediately
-    static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);
+    template<bool isRootNode>
+    static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx);
 };
