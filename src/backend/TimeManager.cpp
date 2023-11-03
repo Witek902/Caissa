@@ -68,7 +68,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     }
 }
 
-void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, SearchLimits& limits)
+void TimeManager::Update(const Game&, const TimeManagerUpdateData& data, SearchLimits& limits)
 {
     const uint32_t startDepth = 5;
 
@@ -88,23 +88,12 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Se
 
     const int32_t prevScore = data.depth > startDepth ? data.prevResult[0].score : 0;
     const int32_t currScore = data.currResult[0].score;
-    const Move currMove = data.currResult[0].moves[0];
 
     TimePoint t = limits.idealTime;
 
     if (data.depth == startDepth)
     {
         const int32_t goodScoreTreshold = 300;
-
-        // reduce time on recapture
-        if (std::abs(currScore) < goodScoreTreshold &&
-            currMove.IsCapture() &&
-            game.GetPosition().StaticExchangeEvaluation(currMove, 100))
-        {
-            const int32_t staticRootEval = Evaluate(game.GetPosition()) * ColorMultiplier(game.GetSideToMove());
-            if (currScore > staticRootEval + 500) t *= 0.5;
-            if (currScore > staticRootEval + 250) t *= 0.75;
-        }
 
         // reduce time on good position
         if (currScore > goodScoreTreshold) t *= 0.5 + 0.5 * pow(2.0, -(currScore - goodScoreTreshold) / 100.0);
