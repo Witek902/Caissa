@@ -804,7 +804,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.filteredMove = primaryMove;
             rootNode.nnContext.MarkAsDirty();
 
-            ScoreType score = NegaMax<NodeType::Root>(thread, &rootNode, searchContext);
+            ScoreType score = NegaMax<NodeType::NonPV>(thread, &rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
             if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
@@ -1475,13 +1475,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         eval = node->staticEval = InvalidValue;
         EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
     }
-    else if (node->filteredMove.IsValid())
-    {
-        // in case of singular search, there should be static value passed from parent search
-        ASSERT(node->staticEval != InvalidValue);
-        // adjust static eval based on node path
-        eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
-    }
     else
     {
         if (node->staticEval == InvalidValue)
@@ -1509,14 +1502,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // adjust static eval based on node path
         eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
-        // try to use TT score for better evaluation estimate
-        if (std::abs(ttScore) < KnownWinValue)
+        if (!node->filteredMove.IsValid())
         {
-            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > eval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < eval) ||
-                (ttEntry.bounds == TTEntry::Bounds::Exact))
+            // try to use TT score for better evaluation estimate
+            if (std::abs(ttScore) < KnownWinValue)
             {
-                eval = ttScore;
+                if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > eval) ||
+                    (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < eval) ||
+                    (ttEntry.bounds == TTEntry::Bounds::Exact))
+                {
+                    eval = ttScore;
+                }
             }
         }
     }
