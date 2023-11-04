@@ -26,15 +26,12 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
-        // don't use more than 50% of remaining time
-        const float margin = 0.5f;
-
         const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
-        const float idealTime = std::clamp(idealTimeFactor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement,
-            0.0f, margin * (float)data.remainingTime);
+        float idealTime = idealTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
+        float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
-        const float maxTime = std::clamp((data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement,
-            0.0f, margin * (float)data.remainingTime);
+        idealTime = std::clamp(idealTime, 0.0f, (float)data.remainingTime - moveOverhead);
+        maxTime = std::clamp(maxTime, 0.0f, (float)data.remainingTime - moveOverhead);
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
@@ -49,22 +46,11 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
-    // hard limit
-    int32_t hardLimitMs = std::min(data.remainingTime, data.moveTime);
-    if (hardLimitMs != INT32_MAX)
+    // fixed move time
+    if (data.moveTime != INT32_MAX)
     {
-        hardLimitMs = std::max(0, hardLimitMs - moveOverhead);
-        const TimePoint hardLimitTimePoint = TimePoint::FromSeconds(hardLimitMs * 0.001f);
-
-        if (!limits.maxTime.IsValid() ||
-            limits.maxTime >= hardLimitTimePoint)
-        {
-            limits.maxTime = hardLimitTimePoint;
-        }
-
-#ifndef CONFIGURATION_FINAL
-        std::cout << "info string hardLimitTime=" << hardLimitMs << "ms" << std::endl;
-#endif // CONFIGURATION_FINAL
+        limits.idealTime = TimePoint::FromSeconds(0.001f * data.moveTime);
+        limits.maxTime = TimePoint::FromSeconds(0.001f * data.moveTime);
     }
 }
 
