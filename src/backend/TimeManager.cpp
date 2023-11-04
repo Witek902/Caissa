@@ -6,65 +6,48 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 50);
-DEFINE_PARAM(MovesLeftSteepness, 20);
-DEFINE_PARAM(IdealTimeFactor, 83);
-
-static float EstimateMovesLeft(const uint32_t moves)
-{
-    // based on LeelaChessZero
-    const float midpoint = static_cast<float>(MovesLeftMidpoint);
-    const float steepness = static_cast<float>(MovesLeftSteepness) / 10.0f;
-    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
-}
-
 void TimeManager::Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
+    UNUSED(game);
+
     const int32_t moveOverhead = data.moveOverhead;
-    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition().GetMoveCount());
 
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
-        // don't use more than 50% of remaining time
-        const float margin = 0.5f;
+        float idealTime, maxTime;
 
-        const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
-        const float idealTime = std::clamp(idealTimeFactor * (data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement,
-            0.0f, margin * (float)data.remainingTime);
+        if (data.movesToGo != UINT32_MAX) // "remainingTime / movesToGo + increment" time control
+        {
+            idealTime = 2.0f * (data.remainingTime - moveOverhead) / (data.movesToGo + 5) + (float)data.timeIncrement;
+            maxTime = 10.0f * (data.remainingTime - moveOverhead) / (data.movesToGo + 10) + (float)data.timeIncrement;
+        }
+        else // "remainingTime + increment" time control
+        {
+            idealTime = (data.remainingTime - moveOverhead) / 20.0f + (float)data.timeIncrement / 2.0f;
+            maxTime = (data.remainingTime - moveOverhead) / 5.0f + (float)data.timeIncrement / 2.0f;
+        }
 
-        const float maxTime = std::clamp((data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement,
-            0.0f, margin * (float)data.remainingTime);
+        // clamp to max remaining time
+        idealTime = std::clamp(idealTime, 0.0f, (float)data.remainingTime - moveOverhead);
+        maxTime = std::clamp(maxTime, 0.0f, (float)data.remainingTime - moveOverhead);
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 
         limits.idealTime = TimePoint::FromSeconds(0.001f * idealTime);
-
-        // abort search if significantly exceeding ideal allocated time
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
 
         // activate root singularity search after some portion of estimated time passed
         limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
-    // hard limit
-    int32_t hardLimitMs = std::min(data.remainingTime, data.moveTime);
-    if (hardLimitMs != INT32_MAX)
+    // fixed move time
+    if (data.moveTime != INT32_MAX)
     {
-        hardLimitMs = std::max(0, hardLimitMs - moveOverhead);
-        const TimePoint hardLimitTimePoint = TimePoint::FromSeconds(hardLimitMs * 0.001f);
-
-        if (!limits.maxTime.IsValid() ||
-            limits.maxTime >= hardLimitTimePoint)
-        {
-            limits.maxTime = hardLimitTimePoint;
-        }
-
-#ifndef CONFIGURATION_FINAL
-        std::cout << "info string hardLimitTime=" << hardLimitMs << "ms" << std::endl;
-#endif // CONFIGURATION_FINAL
+        limits.idealTime = TimePoint::FromSeconds(0.001f * data.moveTime);
+        limits.maxTime = TimePoint::FromSeconds(0.001f * data.moveTime);
     }
 }
 
