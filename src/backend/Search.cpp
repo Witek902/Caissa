@@ -748,7 +748,18 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
         {
-            const TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+
+            // compute fraction of nodes spent on searching best move
+            if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
+            {
+                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                {
+                    data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
+                        (static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum)) : 0.0f;
+                }
+            }
+
             TimeManager::Update(game, data, searchContext.searchParam.limits);
         }
 
