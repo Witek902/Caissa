@@ -112,10 +112,19 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Se
         {
             if (data.prevResult[0].moves[i] != data.currResult[0].moves[i])
             {
-                t *= 1.0 + 0.075 / (1 + i);
+                t *= 1.0 + 0.05 / (i + 1);
                 break;
             }
         }
+    }
+
+    // decrease time if nodes fraction spent on best move is high
+    if (data.bestMoveNodeFraction > 0.8f)
+    {
+#ifndef CONFIGURATION_FINAL
+        std::cout << "best move nodes fraction: " << data.bestMoveNodeFraction << std::endl;
+#endif // CONFIGURATION_FINAL
+        t *= 1.0f - 0.25f * pow(5.0f * data.bestMoveNodeFraction - 4.0f, 3.0f);
     }
 
     if (t != limits.idealTime)
