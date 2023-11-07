@@ -105,11 +105,11 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Se
     // increase time if PV line changes
     {
         const size_t pvLength = std::min(data.prevResult[0].moves.size(), data.currResult[0].moves.size());
-        for (size_t i = 0; i < std::min<size_t>(pvLength, 8); ++i)
+        for (size_t i = 0; i < std::min<size_t>(pvLength, 10); ++i)
         {
             if (data.prevResult[0].moves[i] != data.currResult[0].moves[i])
             {
-                t *= 1.0 + 0.075 / (1 + i);
+                t *= 1.0 + 0.1 / (1 + i);
                 break;
             }
         }
