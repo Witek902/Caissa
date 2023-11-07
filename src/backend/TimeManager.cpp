@@ -102,16 +102,12 @@ void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, Se
     // increase time if score dropped
     if (currScore < prevScore) t *= pow(2.0, std::clamp(prevScore - currScore, -1000, 1000) / 1000.0);
 
-    // increase time if PV line changes
+    // increase time if best move changes
+    if (!data.prevResult[0].moves.empty() && !data.currResult[0].moves.empty())
     {
-        const size_t pvLength = std::min(data.prevResult[0].moves.size(), data.currResult[0].moves.size());
-        for (size_t i = 0; i < std::min<size_t>(pvLength, 8); ++i)
+        if (data.prevResult[0].moves[0] != data.currResult[0].moves[0])
         {
-            if (data.prevResult[0].moves[i] != data.currResult[0].moves[i])
-            {
-                t *= 1.0 + 0.075 / (1 + i);
-                break;
-            }
+            t *= 1.075;
         }
     }
 
