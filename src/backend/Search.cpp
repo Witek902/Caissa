@@ -1323,7 +1323,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // maximum search depth reached, enter quiescence search to find final evaluation
-    if (node->depth <= 0)
+    if (node->depth <= 0 && !node->isInCheck)
     {
         return QuiescenceNegaMax<nodeType>(thread, node, ctx);
     }
