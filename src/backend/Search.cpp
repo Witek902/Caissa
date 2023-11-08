@@ -41,7 +41,6 @@ DEFINE_PARAM(SingularitySearchScoreStep, 25);
 
 DEFINE_PARAM(NullMoveReductionsStartDepth, 2);
 DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
-DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
 DEFINE_PARAM(LateMovePruningBase, 4);
@@ -1624,7 +1623,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.isCutNode = !node->isCutNode;
                     childNode.doubleExtensions = node->doubleExtensions;
                     childNode.height = node->height + 1;
-                    childNode.depth = static_cast<int16_t>(node->depth - r);
+                    childNode.depth = std::max<int16_t>(0, static_cast<int16_t>(node->depth - r));
                     childNode.nnContext.MarkAsDirty();
 
                     childNode.position.DoNullMove();
@@ -1636,21 +1635,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     {
                         if (nullMoveScore >= TablebaseWinValue)
                             nullMoveScore = beta;
-
-                        if (std::abs(beta) < KnownWinValue && node->depth < 10)
+                        if (node->depth < 12)
                         {
 #ifdef ENABLE_SEARCH_TRACE
                             trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
 #endif // ENABLE_SEARCH_TRACE
                             return nullMoveScore;
                         }
-
-                        node->depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
-
-                        if (node->depth <= 0)
-                        {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-                        }
+                        // do verification search
+                        node->depth = std::max<int16_t>(1, node->depth - static_cast<int16_t>(r));
                     }
                 }
             }
