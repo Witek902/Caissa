@@ -448,7 +448,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
             const PvLine& pvLine = threadData->pvLines.front();
 
-            if ((threadData->depthCompleted > bestDepth && pvLine.score > bestScore) ||
+            if ((threadData->depthCompleted >= bestDepth && pvLine.score > bestScore) ||
                 (threadData->depthCompleted > bestDepth && !IsMate(bestScore)) ||
                 (IsMate(pvLine.score) && pvLine.score > bestScore))
             {
@@ -457,6 +457,22 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
                 bestThreadIndex = i;
             }
         }
+
+#ifndef CONFIGURATION_FINAL
+        if (param.numThreads > 1)
+        {
+            for (uint32_t i = 0; i < param.numThreads; ++i)
+            {
+                const ThreadDataPtr& threadData = mThreadData[i];
+                const PvLine& pvLine = threadData->pvLines.front();
+                std::cout << "info string thread " << i
+                    << " completed depth " << threadData->depthCompleted
+                    << " move " << pvLine.moves.front().ToString() << " score " << pvLine.score;
+                if (i == bestThreadIndex) std::cout << " (selected)";
+                std::cout << std::endl;
+            }
+        }
+#endif // CONFIGURATION_FINAL
 
         outResult = std::move(mThreadData[bestThreadIndex]->pvLines);
     }
@@ -753,8 +769,13 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         }
 
         // remember PV lines so they can be used in next iteration
-        thread.depthCompleted = depth;
         thread.pvLines = std::move(tempResult);
+
+        if (!param.stopSearch)
+        {
+            // search stopped due to hard time limit is not considered fully completed
+            thread.depthCompleted = depth;
+        }
 
         if (isMainThread &&
             !param.isPonder.load(std::memory_order_acquire))
