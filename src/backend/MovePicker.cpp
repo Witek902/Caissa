@@ -5,7 +5,7 @@
 #include "TranspositionTable.hpp"
 #include "Search.hpp"
 
-bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove, int32_t& outScore)
+bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore)
 {
     switch (m_stage)
     {
@@ -31,7 +31,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
 
-            m_moveOrderer.ScoreMoves(node, game, m_moves, false);
+            m_moveOrderer.ScoreMoves(node, m_moves, false);
 
             [[fallthrough]];
         }
@@ -112,7 +112,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 m_moves.RemoveMove(m_killerMoves[0]);
                 m_moves.RemoveMove(m_killerMoves[1]);
 
-                m_moveOrderer.ScoreMoves(node, game, m_moves, true, m_nodeCacheEntry);
+                m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
             }
             [[fallthrough]];
         }

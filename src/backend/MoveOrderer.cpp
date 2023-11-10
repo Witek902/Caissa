@@ -19,8 +19,6 @@ DEFINE_PARAM(CaptureBonusLinear, 65);
 DEFINE_PARAM(CaptureBonusQuadratic, 1);
 DEFINE_PARAM(CaptureBonusLimit, 2318);
 
-DEFINE_PARAM(RecaptureBonus, 100000);
-
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
 MoveOrderer::MoveOrderer()
@@ -119,7 +117,7 @@ void MoveOrderer::DebugPrint() const
                 for (uint32_t file = 0; file < 8; ++file)
                 {
                     const uint32_t square = 8 * (7 - rank) + file;
-                    const CounterType count = capturesHistory[0][piece][capturedPiece][square];
+                    const CounterType count = capturesHistory[0][0][piece][capturedPiece][square];
                     std::cout << std::fixed << std::setw(8) << count;
                 }
                 std::cout << std::endl;
@@ -244,6 +242,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     }
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
 
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth + CaptureBonusQuadratic * depth * depth, CaptureBonusLimit);
 
@@ -251,6 +250,8 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     {
         const Move move = moves[i];
         ASSERT(move.IsCapture());
+
+        const bool isRecapture = prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare();
 
         const int32_t delta = move == bestMove ? bonus : -bonus;
 
@@ -263,13 +264,12 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
-        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+        UpdateHistoryCounter(capturesHistory[color][isRecapture][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
     }
 }
 
 void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
-    const Game& game,
     MoveList& moves,
     bool withQuiets,
     const NodeCacheEntry* nodeCacheEntry) const
@@ -278,18 +278,7 @@ void MoveOrderer::ScoreMoves(
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
-
-    Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
-
-    // at the root node, obtain previous move from the game data
-    if (node.height == 0)
-    {
-        ASSERT(!prevMove.IsValid());
-        if (!game.GetMoves().empty())
-        {
-            prevMove = game.GetMoves().back();
-        }
-    }
+    const Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -328,17 +317,12 @@ void MoveOrderer::ScoreMoves(
             {
                 const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
+                const bool isRecapture = prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare();
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
+                const int32_t historyScore = ((int32_t)capturesHistory[color][isRecapture][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
                 ASSERT(historyScore >= 0);
                 score += historyScore;
-            }
-
-            // bonus for capturing previously moved piece
-            if (prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare())
-            {
-                score += RecaptureBonus;
             }
         }
         else if (withQuiets) // non-capture
