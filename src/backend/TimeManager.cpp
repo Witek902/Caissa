@@ -18,6 +18,17 @@ static float EstimateMovesLeft(const uint32_t moves)
     return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
+static float GetTimeFactor(const Position& pos)
+{
+    const int32_t numQueens = (pos.Whites().queens | pos.Blacks().queens).Count();
+    const int32_t numRooks = (pos.Whites().rooks | pos.Blacks().rooks).Count();
+    const int32_t numBishops = (pos.Whites().bishops | pos.Blacks().bishops).Count();
+    const int32_t numKnights = (pos.Whites().knights | pos.Blacks().knights).Count();
+    const int32_t numPawns = (pos.Whites().pawns | pos.Blacks().pawns).Count();
+
+    return 0.8f + 0.05f * numQueens + 0.02f * numRooks + 0.02f * numBishops + 0.02f * numKnights + 0.005f * numPawns;
+}
+
 void TimeManager::Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
     const int32_t moveOverhead = data.moveOverhead;
@@ -27,7 +38,10 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     if (data.remainingTime != INT32_MAX)
     {
         const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
-        float idealTime = idealTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
+
+        const float timeFactor = GetTimeFactor(game.GetPosition());
+
+        float idealTime = timeFactor * idealTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
         float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
         idealTime = std::clamp(idealTime, 0.0f, (float)data.remainingTime - moveOverhead);
