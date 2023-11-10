@@ -973,14 +973,14 @@ static void RunPositionTests()
         MoveList allMoves;
         GenerateMoveList<MoveGenerationMode::Captures>(pos, allMoves);
         GenerateMoveList<MoveGenerationMode::Quiets>(pos, allMoves);
-        moveOrderer->ScoreMoves(node, Game(), allMoves);
+        moveOrderer->ScoreMoves(node, allMoves);
 
         int32_t moveScore = 0;
         Move move;
         uint32_t moveIndex = 0;
 
         MovePicker movePicker(pos, *moveOrderer, nullptr, Move::Invalid(), true);
-        while (movePicker.PickMove(node, Game(), move, moveScore))
+        while (movePicker.PickMove(node, move, moveScore))
         {
             bool found = false;
             for (uint32_t i = 0; i < allMoves.Size(); ++i)
