@@ -157,6 +157,9 @@ void MoveOrderer::NewSearch()
 {
     const CounterType scaleDownFactor = 2;
 
+    for (uint32_t i = 0; i < sizeof(quietPawnMoveHistory) / sizeof(CounterType); ++i)
+        reinterpret_cast<CounterType*>(quietPawnMoveHistory)[i] /= scaleDownFactor;
+
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
 
@@ -168,6 +171,7 @@ void MoveOrderer::NewSearch()
 
 void MoveOrderer::Clear()
 {
+    memset(quietPawnMoveHistory, 0, sizeof(quietPawnMoveHistory));
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
@@ -182,7 +186,11 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
     ASSERT(to < 64);
-    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
+
+    if (move.GetPiece() == Piece::Pawn)
+        return quietPawnMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][to];
+    else
+        return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
 }
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
@@ -223,7 +231,10 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
         
-        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to], delta);
+        if (move.GetPiece() == Piece::Pawn)
+            UpdateHistoryCounter(quietPawnMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][to], delta);
+        else
+            UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -347,7 +358,10 @@ void MoveOrderer::ScoreMoves(
             ASSERT(killerMoves[node.height].Find(move) < 0);
 
             // history heuristics
-            score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
+            if (move.GetPiece() == Piece::Pawn)
+                score += quietPawnMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][to];
+            else
+                score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
