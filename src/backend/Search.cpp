@@ -672,8 +672,26 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
 
+    uint16_t startDepth = 1;
+    if (numPvLines == 1)
+    {
+        TTEntry ttEntry;
+        if (param.transpositionTable.Read(game.GetPosition(), ttEntry) &&
+            ttEntry.IsValid() &&
+            ttEntry.move.IsValid() &&
+            game.GetPosition().IsMoveLegal(game.GetPosition().MoveFromPacked(ttEntry.move)))
+        {
+            // if this position was already searched, increase starting depth
+            if (ttEntry.depth > 4)
+            {
+                startDepth = std::max<uint16_t>(startDepth, (uint16_t)ttEntry.depth - 4);
+            }
+        }
+    }
+
+
     // main iterative deepening loop
-    for (uint16_t depth = 1; depth <= param.limits.maxDepth; ++depth)
+    for (uint16_t depth = startDepth; depth <= param.limits.maxDepth; ++depth)
     {
         SearchResult tempResult;
         tempResult.resize(numPvLines);
