@@ -1179,7 +1179,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     Move captureMovesTried[MoveList::MaxMoves];
     uint32_t numCaptureMovesTried = 0;
 
-    while (movePicker.PickMove(*node, ctx.game, move, moveScore))
+    while (movePicker.PickMove(*node, move, moveScore))
     {
         if (bestValue > -TablebaseWinValue)
         {
@@ -1707,7 +1707,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     int32_t generatedSoFarScores[MoveList::MaxMoves];
 #endif // VALIDATE_MOVE_PICKER
 
-    while (movePicker.PickMove(*node, ctx.game, move, moveScore))
+    while (movePicker.PickMove(*node, move, moveScore))
     {
         // start prefetching child node's TT entry
         ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
