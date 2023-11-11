@@ -791,13 +791,6 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-static const int32_t pawnValue = 100;
-static const int32_t knightValue = 300;
-static const int32_t bishopValue = 300;
-static const int32_t rookValue = 500;
-static const int32_t queenValue = 900;
-static const int32_t kingValue = INT32_MAX;
-
 int32_t Position::BestPossibleMoveValue() const
 {
     int32_t value = 0;
@@ -823,12 +816,12 @@ int32_t Position::BestPossibleMoveValue() const
 static const int32_t c_seePieceValues[] =
 {
     0, // none
-    pawnValue,
-    knightValue,
-    bishopValue,
-    rookValue,
-    queenValue,
-    kingValue,
+    100,
+    300,
+    300,
+    500,
+    1000,
+    1000000,
 };
 
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
