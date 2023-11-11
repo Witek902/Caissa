@@ -71,7 +71,7 @@ inline float EvalToDrawProbability(float eval, uint32_t ply)
 // convert evaluation score (in pawns) to expected game score
 inline float EvalToExpectedGameScore(float eval)
 {
-    return 1.0f / (1.0f + powf(10.0, -eval / 3.875f));
+    return 1.0f / (1.0f + powf(10.0, -eval / 4.0f));
 }
 
 // convert evaluation score (in centipawns) to expected game score
