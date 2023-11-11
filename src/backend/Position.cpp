@@ -5,6 +5,7 @@
 #include "Evaluate.hpp"
 #include "MoveGen.hpp"
 #include "NeuralNetworkEvaluator.hpp"
+#include "Tuning.hpp"
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -820,16 +821,11 @@ int32_t Position::BestPossibleMoveValue() const
     return value;
 }
 
-static const int32_t c_seePieceValues[] =
-{
-    0, // none
-    pawnValue,
-    knightValue,
-    bishopValue,
-    rookValue,
-    queenValue,
-    kingValue,
-};
+DEFINE_PARAM(SEE_PawnValue, 100);
+DEFINE_PARAM(SEE_KnightValue, 300);
+DEFINE_PARAM(SEE_BishopValue, 300);
+DEFINE_PARAM(SEE_RookValue, 500);
+DEFINE_PARAM(SEE_QueenValue, 900);
 
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
 {
@@ -837,6 +833,17 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     const Square fromSquare = move.FromSquare();
 
     int32_t balance = -treshold;
+
+    const int32_t c_seePieceValues[] =
+    {
+        0, // none
+        SEE_PawnValue,
+        SEE_KnightValue,
+        SEE_BishopValue,
+        SEE_RookValue,
+        SEE_QueenValue,
+        1000000, // king
+    };
 
     if (move.IsCapture())
     {
