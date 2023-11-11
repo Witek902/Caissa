@@ -672,22 +672,20 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 1.0f;
-static volatile float g_lambdaScale = 0.9f;
-static volatile float g_weightDecay = 0.01f;
+static volatile float g_learningRateScale = 0.1f;
+static volatile float g_lambdaScale = 0.05f;
+static volatile float g_weightDecay = 0.002f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    /*
-    if (!m_packedNet.LoadFromFile("eval21-wld1-19.7B-lr0.005.pnn"))
+    if (!m_packedNet.LoadFromFile("eval23-20B.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
     }
     UnpackNetwork();
-    */
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -701,8 +699,8 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 0.005f;
-    const float minLearningRate = 0.005f;
+    const float maxLearningRate = 0.001f;
+    const float minLearningRate = 0.001f;
     const float maxLambda = 1.0f;
     const float minLambda = 1.0f;
 
@@ -714,7 +712,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
+        const float warmup = iteration < 20.0f ? (float)(iteration + 1) / 20.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
