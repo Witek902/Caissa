@@ -48,11 +48,8 @@ DEFINE_PARAM(LateMovePruningBase, 4);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 
-DEFINE_PARAM(AspirationWindowDepthStart, 5);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
-DEFINE_PARAM(AspirationWindowStart, 30);
-DEFINE_PARAM(AspirationWindowEnd, 12);
-DEFINE_PARAM(AspirationWindowStep, 3);
+DEFINE_PARAM(AspirationWindow, 12);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
 DEFINE_PARAM(SingularExtensionScoreMarigin, 2);
@@ -850,18 +847,13 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
     uint32_t depth = param.depth;
-
-    // decrease aspiration window with increasing depth
-    int32_t window = AspirationWindowStart - (param.depth - AspirationWindowDepthStart) * AspirationWindowStep;
-    window = std::max<int32_t>(AspirationWindowEnd, window);
-    ASSERT(window > 0);
+    int32_t window = AspirationWindow;
 
     // increase window based on score
-    window += std::abs(param.previousScore) / 10;
+    window += std::abs(param.previousScore) / 16;
 
     // start applying aspiration window at given depth
     if (param.searchParam.useAspirationWindows &&
-        param.depth >= static_cast<uint32_t>(AspirationWindowDepthStart) &&
         param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(thread, param.searchContext, true))
