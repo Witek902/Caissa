@@ -19,14 +19,12 @@ bool EnableLargePagesSupport()
     // open process token
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
     {
-        std::cerr << "OpenProcessToken failed, error code: " << GetLastError() << std::endl;
         return false;
     }
 
     // get the luid
     if (!LookupPrivilegeValueW(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
     {
-        std::cerr << "LookupPrivilegeValue failed, error code: " << GetLastError() << std::endl;
         return false;
     }
 
@@ -47,9 +45,7 @@ bool EnableLargePagesSupport()
 
     CloseHandle(hToken);
 
-#ifndef CONFIGURATION_FINAL
-    std::cout << "Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
-#endif // CONFIGURATION_FINAL
+    std::cout << "info string Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
 
     return true;
 }

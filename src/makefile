@@ -1,5 +1,5 @@
 EXE                = caissa
-VERSION            = 1.13.15
+VERSION            = 1.14
 EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-24.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
@@ -51,8 +51,10 @@ AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
 BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
 AVX512FLAGS   = $(BMI2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
+# for OpenBench
 ob:
 	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+
 bmi2:
 	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
 avx2:
@@ -64,7 +66,14 @@ sse2:
 avx512:
 	$(CC)   $(SRC) -march=core-avx2 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
 
-pgo:
+# Profile-guided optimization builds
+bmi2_pgo:
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_GENERATE)
+	$(BENCH)
+	$(PGO_MERGE)
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_USE)
+	$(CLEAN)
+avx2_pgo:
 	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
