@@ -27,11 +27,13 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     if (data.remainingTime != INT32_MAX)
     {
         const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
-        float idealTime = idealTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
+        float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
         float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
-        idealTime = std::clamp(idealTime, 0.0f, (float)data.remainingTime - moveOverhead);
-        maxTime = std::clamp(maxTime, 0.0f, (float)data.remainingTime - moveOverhead);
+        const float minMoveTime = 0.00001f;
+        const float timeMargin = 0.5f;
+        maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
+        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
