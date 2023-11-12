@@ -1560,7 +1560,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Futility/Beta Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
-                //eval >= beta && eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving) + node->moveStatScore / 400))
                 eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
@@ -1787,19 +1786,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
             }
 
-            // Static Exchange Evaluation pruning
-            // skip all moves that are bad according to SEE
+            // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
             // the higher depth is, the less aggressive pruning is
-            if (move.IsCapture())
+            if (move.ToSquare().GetBitboard() & node->threats.allThreats)
             {
-                if (node->depth <= 4 &&
-                    moveScore < MoveOrderer::GoodCaptureValue &&
-                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
-            }
-            else
-            {
-                if (node->depth <= 8 &&
-                    !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
+                if (move.IsCapture())
+                {
+                    if (node->depth <= 4 &&
+                        moveScore < MoveOrderer::GoodCaptureValue &&
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                }
+                else
+                {
+                    if (node->depth <= 8 &&
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
+                }
             }
         }
 
