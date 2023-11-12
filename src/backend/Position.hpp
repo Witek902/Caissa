@@ -102,7 +102,7 @@ struct Threats
 };
 
 // class representing whole board state
-class alignas(32) Position
+class alignas(64) Position
 {
 public:
     static const char* InitPositionFEN;
