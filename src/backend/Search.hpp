@@ -157,6 +157,7 @@ struct NodeInfo
 
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
+    int32_t cutoffCount = 0;
 
     bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
@@ -337,7 +338,7 @@ private:
 
         AccumulatorCache accumulatorCache;
 
-        NodeInfo searchStack[MaxSearchDepth];
+        NodeInfo searchStack[MaxSearchDepth + 2];
 
         static constexpr int32_t MatCorrectionScale = 256;
         static constexpr uint32_t MatCorrectionTableSize = 2048;
