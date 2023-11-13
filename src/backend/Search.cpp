@@ -71,6 +71,8 @@ DEFINE_PARAM(RazoringMarginBias, 19);
 DEFINE_PARAM(ReductionStatOffset, 7761);
 DEFINE_PARAM(ReductionStatDiv, 8771);
 
+static uint64_t s_evalCount = 0;
+
 class SearchTrace
 {
 public:
@@ -548,6 +550,8 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
     ss << " nodes " << numNodes;
     if (timeInSeconds > 0.01f && numNodes > 100) ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
+    ss << " evals " << s_evalCount;
+    if (timeInSeconds > 0.01f && s_evalCount > 100) ss << " eps " << (int64_t)((double)s_evalCount / (double)timeInSeconds);
     ss << " hashfull " << param.searchParam.transpositionTable.GetHashFull();
     if (param.searchContext.stats.tbHits) ss << " tbhits " << param.searchContext.stats.tbHits;
     ss << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
@@ -651,6 +655,8 @@ void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNum
 
 void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats)
 {
+    s_evalCount = 0;
+
     const bool isMainThread = threadID == 0;
     ThreadData& thread = *(mThreadData[threadID]);
 
@@ -1109,6 +1115,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            s_evalCount++;
 
 #ifdef USE_EVAL_PROBING
             if (ctx.searchParam.evalProbingInterface)
@@ -1505,6 +1512,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+            s_evalCount++;
 
 #ifdef USE_EVAL_PROBING
             if (ctx.searchParam.evalProbingInterface)
