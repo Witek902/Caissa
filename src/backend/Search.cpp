@@ -884,6 +884,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.depth = static_cast<int16_t>(depth);
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
+        thread.searchStack[0].cutoffCount = 0;
+        thread.searchStack[1].cutoffCount = 0;
 
 #ifdef ENABLE_SEARCH_TRACE
         SearchTrace::OnRootSearchBegin();
@@ -1379,6 +1381,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     // clear killer moves for next ply
     thread.moveOrderer.ClearKillerMoves(node->height + 1);
+    (node + 2)->cutoffCount = 0;
 
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
@@ -1953,6 +1956,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r++;
             }
 
+            // reduce more if there's a lot of cutoffs in next ply
+            if ((node + 1)->cutoffCount > 3) r++;
+
             // reduce more if eval is not improving
             if (!isImproving) r++;
 
@@ -2058,6 +2064,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
+                node->cutoffCount += 1 + !(move != ttMove);
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
