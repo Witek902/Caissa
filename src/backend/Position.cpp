@@ -400,12 +400,25 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 
 bool Position::IsMate() const
 {
-    return IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u) && (mHalfMoveCount < 100);
+    return IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u);
 }
 
 bool Position::IsStalemate() const
 {
     return !IsInCheck(mSideToMove) && (GetNumLegalMoves() == 0u);
+}
+
+bool Position::IsFiftyMoveRuleDraw() const
+{
+    if (mHalfMoveCount >= 100)
+    {
+        if (IsInCheck())
+        {
+            return GetNumLegalMoves() > 0u;
+        }
+        return true;
+    }
+    return false;
 }
 
 bool Position::IsMoveLegal(const Move& move) const
