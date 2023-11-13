@@ -1318,10 +1318,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // clear PV line
     node->pvLength = 0;
 
-    // update stats
-    thread.stats.OnNodeEnter(node->height + 1);
-    ctx.stats.Append(thread.stats);
-
     const Position& position = node->position;
 
     ScoreType alpha = node->alpha;
@@ -1335,6 +1331,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             alpha = 0;
             if (alpha >= beta)
             {
+                // update stats
+                thread.stats.OnNodeEnter(node->height + 1);
+                ctx.stats.Append(thread.stats);
 #ifdef ENABLE_SEARCH_TRACE
                 trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
 #endif // ENABLE_SEARCH_TRACE
@@ -1348,6 +1347,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         return QuiescenceNegaMax<nodeType>(thread, node, ctx);
     }
+
+    // update stats
+    thread.stats.OnNodeEnter(node->height + 1);
+    ctx.stats.Append(thread.stats);
 
     if constexpr (!isRootNode)
     {
