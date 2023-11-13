@@ -1156,6 +1156,7 @@ bool UniversalChessInterface::Command_Benchmark()
         "rnb1k2r/pp1pbpp1/2p1p2p/7B/4P2n/3P3P/q1PN1PPB/1R1QK1NR w Kkq - 4 5",
         "rnbq1rk1/ppp1bppp/4p3/3n4/2B1N3/5N2/PPPP1PPP/R1BQR1K1 w - - 8 9",
         "rnbqkb1r/1p3p2/p3p1p1/2ppP1P1/3P2P1/2P4p/PP5P/RNBQKB1R w KQkq - 0 6",
+        "3r3k/7p/2Q5/8/2B2PK1/6P1/4P3/5q2 b - - 98 99",
     };
 
     const uint32_t maxDepth = 12;

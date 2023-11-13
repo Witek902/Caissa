@@ -199,6 +199,9 @@ public:
     // check if side to move has no legal moves
     bool IsStalemate() const;
 
+    // check if position is drawn due to fifty move rule
+    bool IsFiftyMoveRuleDraw() const;
+
     // check if position is relatively quiet (no immediate winning captures and promotions)
     bool IsQuiet() const;
     

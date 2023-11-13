@@ -1353,7 +1353,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         // Check for draw
         // Skip root node as we need some move to be reported in PV
-        if (node->position.GetHalfMoveCount() >= 100 ||
+        if (node->position.IsFiftyMoveRuleDraw() ||
             CheckInsufficientMaterial(node->position) ||
             SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
         {

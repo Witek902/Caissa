@@ -115,7 +115,7 @@ bool Game::IsDrawn() const
         return true;
     }
 
-    if (mPosition.GetHalfMoveCount() >= 100)
+    if (mPosition.IsFiftyMoveRuleDraw())
     {
         return true;
     }
@@ -207,7 +207,7 @@ std::string Game::ToPGN(bool includeScores) const
     {
         resultStr = "1/2-1/2";
         if (GetRepetitionCount(GetPosition()) >= 2) terminationStr = "3-fold repetition";
-        else if (GetPosition().GetHalfMoveCount() >= 100) terminationStr = "50 moves rule";
+        else if (GetPosition().IsFiftyMoveRuleDraw()) terminationStr = "50 moves rule";
         else if (CheckInsufficientMaterial(GetPosition())) terminationStr = "insufficient material";
         else terminationStr = "unknown";
     }

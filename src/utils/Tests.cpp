@@ -1273,6 +1273,27 @@ static void RunPositionTests()
         }
     }
 
+    // IsMate / IsFiftyMoveRuleDraw
+    {
+        {
+            const Position pos("7k/7p/2Q5/8/2Br1PK1/6P1/4P3/5q2 w - - 99 100");
+            TEST_EXPECT(!pos.IsMate());
+            TEST_EXPECT(!pos.IsFiftyMoveRuleDraw());
+        }
+
+        {
+            const Position pos("7k/7p/5Q2/8/2Br1PK1/6P1/4P3/5q2 b - - 100 100");
+            TEST_EXPECT(pos.IsMate());
+            TEST_EXPECT(!pos.IsFiftyMoveRuleDraw());
+        }
+
+        {
+            const Position pos("5r1k/7p/3Q4/8/2B2PK1/6P1/4P3/5q2 b - - 100 100");
+            TEST_EXPECT(!pos.IsMate());
+            TEST_EXPECT(pos.IsFiftyMoveRuleDraw());
+        }
+    }
+
     // Passed pawns
     {
         const Position pos("k7/5pP1/1P2P3/pP6/P7/3pP3/1P2p1Pp/K7 w - - 0 1");
@@ -1942,6 +1963,19 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result[1].score == CheckmateValue - 1);
         TEST_EXPECT(result[2].score == CheckmateValue - 1);
         TEST_EXPECT(result[3].score == CheckmateValue - 1);
+    }
+
+    // mate in one
+    {
+        param.limits.maxDepth = 12;
+        param.numPvLines = UINT32_MAX;
+
+        game.Reset(Position("7k/7p/2Q5/8/2Br1PK1/6P1/4P3/5q2 w - - 99 100"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 36);
+        TEST_EXPECT(result[0].score == CheckmateValue - 1);
+        TEST_EXPECT(result[1].score == 0);
     }
 
     // mate in two
