@@ -44,7 +44,7 @@ DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
 DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
-DEFINE_PARAM(LateMovePruningBase, 4);
+DEFINE_PARAM(LateMovePruningBase, 5);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 
