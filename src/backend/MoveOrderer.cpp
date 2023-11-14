@@ -19,8 +19,6 @@ DEFINE_PARAM(CaptureBonusLinear, 65);
 DEFINE_PARAM(CaptureBonusQuadratic, 1);
 DEFINE_PARAM(CaptureBonusLimit, 2318);
 
-DEFINE_PARAM(RecaptureBonus, 100000);
-
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
 MoveOrderer::MoveOrderer()
@@ -333,12 +331,6 @@ void MoveOrderer::ScoreMoves(
                 const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
                 ASSERT(historyScore >= 0);
                 score += historyScore;
-            }
-
-            // bonus for capturing previously moved piece
-            if (prevMove.IsValid() && move.ToSquare() == prevMove.ToSquare())
-            {
-                score += RecaptureBonus;
             }
         }
         else if (withQuiets) // non-capture
