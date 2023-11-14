@@ -106,12 +106,13 @@ void MoveOrderer::DebugPrint() const
     }
 
     std::cout << std::endl;
-    std::cout << "=== CAPTURE HISTORY ===" << std::endl;
+    std::cout << "=== CAPTURE SQUARE HISTORY ===" << std::endl;
 
-    for (uint32_t piece = 0; piece < 6; ++piece)
+    for (uint32_t capturedPiece = 0; capturedPiece < 5; ++capturedPiece)
     {
-        for (uint32_t capturedPiece = 0; capturedPiece < 5; ++capturedPiece)
+        for (uint32_t piece = 0; piece < 6; ++piece)
         {
+
             std::cout << PieceToChar(Piece(piece + 1)) << 'x' << PieceToChar(Piece(capturedPiece + 1)) << std::endl;
 
             for (uint32_t rank = 0; rank < 8; ++rank)
@@ -119,12 +120,25 @@ void MoveOrderer::DebugPrint() const
                 for (uint32_t file = 0; file < 8; ++file)
                 {
                     const uint32_t square = 8 * (7 - rank) + file;
-                    const CounterType count = capturesHistory[0][piece][capturedPiece][square];
+                    const CounterType count = capturesSquareHistory[0][piece][capturedPiece][square];
                     std::cout << std::fixed << std::setw(8) << count;
                 }
                 std::cout << std::endl;
             }
             std::cout << std::endl;
+        }
+    }
+
+    std::cout << std::endl;
+    std::cout << "=== CAPTURE HISTORY ===" << std::endl;
+
+    for (uint32_t capturedPiece = 0; capturedPiece < 5; ++capturedPiece)
+    {
+        for (uint32_t piece = 0; piece < 6; ++piece)
+        {
+            std::cout << PieceToChar(Piece(piece + 1)) << 'x' << PieceToChar(Piece(capturedPiece + 1)) << " ";
+            const CounterType count = capturesHistory[0][piece][capturedPiece];
+            std::cout << std::fixed << std::setw(8) << count << std::endl;
         }
     }
 
@@ -160,8 +174,8 @@ void MoveOrderer::NewSearch()
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
 
-    for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
-        reinterpret_cast<CounterType*>(capturesHistory)[i] /= scaleDownFactor;
+    for (uint32_t i = 0; i < sizeof(capturesSquareHistory) / sizeof(CounterType); ++i)
+        reinterpret_cast<CounterType*>(capturesSquareHistory)[i] /= scaleDownFactor;
 
     memset(killerMoves, 0, sizeof(killerMoves));
 }
@@ -171,6 +185,7 @@ void MoveOrderer::Clear()
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
+    memset(capturesSquareHistory, 0, sizeof(capturesSquareHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -263,7 +278,8 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
-        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx], delta / 2);
+        UpdateHistoryCounter(capturesSquareHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
     }
 }
 
@@ -330,9 +346,8 @@ void MoveOrderer::ScoreMoves(
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
-                ASSERT(historyScore >= 0);
-                score += historyScore;
+                score += ((int32_t)capturesHistory[color][pieceIdx][capturedIdx] - INT16_MIN) / 256;
+                score += ((int32_t)capturesSquareHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
             }
 
             // bonus for capturing previously moved piece
