@@ -127,7 +127,6 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
 
         // shuffle the training data
         {
-            std::random_device randomDevice;
             std::mt19937 randomGenerator;
             std::shuffle(entries.begin(), entries.end(), randomGenerator);
         }

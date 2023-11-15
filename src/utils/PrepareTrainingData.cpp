@@ -118,7 +118,6 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
     // shuffle the training data
     {
-        std::random_device randomDevice;
         std::mt19937 randomGenerator;
         std::shuffle(entries.begin(), entries.end(), randomGenerator);
     }
