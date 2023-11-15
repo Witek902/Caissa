@@ -209,13 +209,14 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 
     const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusQuadratic * node.depth * node.depth, QuietBonusLimit);
+    const int32_t malus = -bonus * 3 / 4;
 
     const Bitboard threats = node.threats.allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
-        const int32_t delta = move == bestMove ? bonus : -bonus;
+        const int32_t delta = move == bestMove ? bonus : malus;
 
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
@@ -244,13 +245,14 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth + CaptureBonusQuadratic * depth * depth, CaptureBonusLimit);
+    const int32_t malus = -bonus * 3 / 4;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
         ASSERT(move.IsCapture());
 
-        const int32_t delta = move == bestMove ? bonus : -bonus;
+        const int32_t delta = move == bestMove ? bonus : malus;
 
         const Piece captured = node.position.GetCapturedPiece(move);
         ASSERT(captured > Piece::None);
