@@ -1215,20 +1215,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         moveIndex++;
 
-        // Move Count Pruning
-        // skip everything after some sane amount of moves has been tried
-        // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -TablebaseWinValue)
-        {
-                 if (node->depth < -4 && moveIndex > 1) break;
-            else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth <  0 && moveIndex > 3) break;
-        }
-
         childNode.previousMove = move;
         childNode.isInCheck = childNode.position.IsInCheck();
         childNode.position.ComputeThreats(childNode.threats);
-
         childNode.staticEval = InvalidValue;
         childNode.alpha = -beta;
         childNode.beta = -alpha;
@@ -1274,6 +1263,16 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             // abort search of further moves
             searchAborted = true;
             break;
+        }
+
+        // Move Count Pruning
+        // skip everything after some sane amount of moves has been tried
+        // there shouldn't be many "good" captures available in a "normal" chess positions
+        if (bestValue > -TablebaseWinValue)
+        {
+                 if (node->depth < -4 && moveIndex >= 1) break;
+            else if (node->depth < -2 && moveIndex >= 2) break;
+            else if ( node->depth < 0 && moveIndex >= 3) break;
         }
     }
 
