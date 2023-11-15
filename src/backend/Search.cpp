@@ -1644,6 +1644,65 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     }
                 }
             }
+
+            // Probcut
+            const ScoreType probBeta = beta + 200;
+            if (node->depth >= 5 &&
+                abs(beta) < TablebaseWinValue &&
+                !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probBeta))
+            {
+                NodeInfo& childNode = *(node + 1);
+                childNode.Clear();
+                childNode.height = node->height + 1;
+                childNode.pvIndex = node->pvIndex;
+                childNode.doubleExtensions = node->doubleExtensions;
+                childNode.nnContext.MarkAsDirty();
+                childNode.alpha = -probBeta;
+                childNode.beta = -probBeta + 1;
+                childNode.isCutNode = !node->isCutNode;
+
+                const ScoreType seeThreshold = probBeta - node->staticEval;
+                MovePicker movePicker(position, thread.moveOrderer, nullptr,
+                    (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
+
+                int32_t moveScore = 0;
+                Move move;
+                while (movePicker.PickMove(*node, ctx.game, move, moveScore))
+                {
+                    if (moveScore < MoveOrderer::GoodCaptureValue && seeThreshold >= 0) continue;
+                    if (!position.StaticExchangeEvaluation(move, seeThreshold)) continue;
+
+                    // start prefetching child node's TT entry
+                    ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
+
+                    childNode.position = position;
+                    if (!childNode.position.DoMove(move, childNode.nnContext))
+                        continue;
+
+                    childNode.depth = 0;
+                    childNode.previousMove = move;
+                    childNode.isInCheck = childNode.position.IsInCheck();
+                    childNode.position.ComputeThreats(childNode.threats);
+
+                    // quick verification search
+                    ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                    ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+                    // verification search
+                    if (score >= probBeta)
+                    {
+                        childNode.depth = node->depth - 4;
+                        score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                    }
+
+                    // prbcut failed
+                    if (score >= probBeta)
+                    {
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                        return score;
+                    }
+                }
+            }
         }
     }
 
