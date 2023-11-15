@@ -2120,18 +2120,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // update move orderer
     if (bestValue >= beta)
     {
-        if (!nodeCacheEntry || nodeCacheEntry->nodesSum < 10000)
+        if (bestMove.IsQuiet())
         {
-            if (bestMove.IsQuiet())
-            {
-                thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
-                thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
-            }
-            else if (bestMove.IsCapture())
-            {
-                thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
-            }
+            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
+            thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
         }
+        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
 
 #ifdef COLLECT_SEARCH_STATS
