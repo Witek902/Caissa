@@ -1027,12 +1027,12 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        // scale down when approaching 50-move draw
-        adjustedScore = adjustedScore * (128 - std::max(0, (int32_t)node.position.GetHalfMoveCount() - 4)) / 128;
-
         // apply 50% of the material score correction term
         const ScoreType matScoreCorrection = threadData.GetMaterialScoreCorrection(node.position) / 2;
         adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
+
+        // scale down when approaching 50-move draw
+        adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
 
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
