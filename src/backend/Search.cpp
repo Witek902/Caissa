@@ -246,15 +246,15 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
 {
     SearchParam& param = ctx.searchParam;
 
-    if (param.stopSearch.load(std::memory_order_relaxed))
+    if (param.stopSearch.load(std::memory_order_relaxed)) [[unlikely]]
     {
         return true;
     }
 
-    if (!param.isPonder.load(std::memory_order_acquire))
+    if (thread.isMainThread && !param.isPonder.load(std::memory_order_acquire))
     {
         if (param.limits.maxNodes < UINT64_MAX &&
-            ctx.stats.nodes > param.limits.maxNodes)
+            ctx.stats.nodes > param.limits.maxNodes) [[unlikely]]
         {
             // nodes limit exceeded
             param.stopSearch = true;
@@ -262,11 +262,11 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         }
 
         // check inner nodes periodically
-        if (isRootNode || (thread.stats.nodesTotal % 256 == 0))
+        if (isRootNode || (thread.stats.nodesTotal % 512 == 0)) [[unlikely]]
         {
             if (param.limits.maxTime.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
-                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.maxTime)
+                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.maxTime) [[unlikely]]
             {
                 // time limit exceeded
                 param.stopSearch = true;
