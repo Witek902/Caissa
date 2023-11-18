@@ -1195,7 +1195,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
             // skip very bad captures
             if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move, -120))
+                !position.StaticExchangeEvaluation(move))
                 break;
         }
 
