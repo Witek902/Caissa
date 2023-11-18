@@ -52,8 +52,7 @@ DEFINE_PARAM(AspirationWindowMaxSize, 500);
 DEFINE_PARAM(AspirationWindow, 12);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 6);
-DEFINE_PARAM(SingularExtensionScoreMarigin, 2);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 25);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 20);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 89);
 
@@ -1888,7 +1887,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - 2)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - SingularExtensionScoreMarigin - node->depth);
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
 
                 const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const int16_t originalDepth = node->depth;
@@ -1917,7 +1916,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
-                            if (node->doubleExtensions < 8 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
                                 moveExtension++;
                     }
                 }
