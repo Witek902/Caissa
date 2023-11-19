@@ -39,9 +39,9 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 400);
 DEFINE_PARAM(SingularitySearchScoreStep, 25);
 
-DEFINE_PARAM(NullMoveReductionsStartDepth, 2);
-DEFINE_PARAM(NullMoveReductions_NullMoveDepthReduction, 4);
-DEFINE_PARAM(NullMoveReductions_ReSearchDepthReduction, 4);
+DEFINE_PARAM(NullMovePruningStartDepth, 2);
+DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3);
+DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
 DEFINE_PARAM(LateMovePruningBase, 4);
@@ -1583,10 +1583,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
             }
 
-            // Null Move Reductions
+            // Null Move Pruning
             if (eval >= beta + (node->depth < 4 ? 20 : 0) &&
                 node->staticEval >= beta &&
-                node->depth >= NullMoveReductionsStartDepth &&
+                node->depth >= NullMovePruningStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
                 // don't allow null move if parent or grandparent node was null move
@@ -1599,8 +1599,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
 
                     const int32_t r =
-                        NullMoveReductions_NullMoveDepthReduction +
-                        node->depth / 4 +
+                        NullMovePruning_NullMoveDepthReduction +
+                        node->depth / 3 +
                         std::min(3, int32_t(eval - beta) / 256) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
@@ -1634,7 +1634,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                             return nullMoveScore;
                         }
 
-                        node->depth -= static_cast<uint16_t>(NullMoveReductions_ReSearchDepthReduction);
+                        node->depth -= static_cast<uint16_t>(NullMovePruning_ReSearchDepthReduction);
 
                         if (node->depth <= 0)
                         {
