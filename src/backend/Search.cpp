@@ -1375,9 +1375,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     ASSERT(node->isInCheck == position.IsInCheck(position.GetSideToMove()));
 
-    // clear killer moves for next ply
-    thread.moveOrderer.ClearKillerMoves(node->height + 1);
-
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue;
@@ -1704,6 +1701,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
     }
+
+    // clear killer moves for next ply
+    thread.moveOrderer.ClearKillerMoves(node->height + 1);
 
     // reduce depth if position was not found in transposition table
     if (node->depth >= 3 + 4 * node->isCutNode && !ttEntry.IsValid())
