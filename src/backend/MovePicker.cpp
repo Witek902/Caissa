@@ -75,7 +75,7 @@ bool MovePicker::PickMove(const NodeInfo& node, const Game& game, Move& outMove,
                 {
                     m_killerMove = move;
                     outMove = move;
-                    outScore = MoveOrderer::KillerMoveBonus - 1;
+                    outScore = MoveOrderer::KillerMoveBonus;
                     return true;
                 }
             }

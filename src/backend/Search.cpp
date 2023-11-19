@@ -1992,7 +1992,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (ttCapture) r++;
 
                 // reduce good moves less
-                if (moveScore >= MoveOrderer::KillerMoveBonus - 1) r -= 2;
+                if (moveScore >= MoveOrderer::KillerMoveBonus) r -= 2;
 
                 // reduce less based on move stat score
                 r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
