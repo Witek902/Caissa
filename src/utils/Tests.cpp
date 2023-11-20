@@ -1975,7 +1975,7 @@ void RunSearchTests(uint32_t numThreads)
 
         TEST_EXPECT(result.size() == 36);
         TEST_EXPECT(result[0].score == CheckmateValue - 1);
-        TEST_EXPECT(result[1].score == 0);
+        TEST_EXPECT(std::abs(result[1].score) <= 2);
     }
 
     // mate in two
@@ -2143,7 +2143,7 @@ void RunSearchTests(uint32_t numThreads)
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 1);
-        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(std::abs(result[0].score) <= 2);
     }
 
     ASSERT(param.numThreads == numThreads); // don't modify number of threads!

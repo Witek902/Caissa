@@ -353,7 +353,7 @@ private:
         ScoreType GetMaterialScoreCorrection(const Position& pos) const;
         void AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore);
 
-        uint32_t GetRandomUint();
+        INLINE ScoreType DrawScore() const { return 2 - static_cast<ScoreType>(stats.nodesTotal % 4); }
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
