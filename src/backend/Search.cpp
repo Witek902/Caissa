@@ -1535,6 +1535,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
     }
+    node->eval = eval;
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
@@ -1543,10 +1544,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         int32_t evalImprovement = 0;
 
-        if (node->height > 1 && (node - 2)->staticEval != InvalidValue)
-            evalImprovement = node->staticEval - (node - 2)->staticEval;
-        else if (node->height > 3 && (node - 4)->staticEval != InvalidValue)
-            evalImprovement = node->staticEval - (node - 4)->staticEval;
+        if (node->height > 1 && (node - 2)->eval != InvalidValue)
+            evalImprovement = eval - (node - 2)->eval;
+        else if (node->height > 3 && (node - 4)->eval != InvalidValue)
+            evalImprovement = eval - (node - 4)->eval;
 
         isImproving = evalImprovement >= 0;
     }
