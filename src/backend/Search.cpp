@@ -969,15 +969,6 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
     return pvMove;
 }
 
-uint32_t Search::ThreadData::GetRandomUint()
-{
-    // Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs"
-    randomSeed ^= randomSeed << 13;
-    randomSeed ^= randomSeed >> 17;
-    randomSeed ^= randomSeed << 5;
-    return randomSeed;
-}
-
 ScoreType Search::ThreadData::GetMaterialScoreCorrection(const Position& pos) const
 {
     const MaterialKey key = pos.GetMaterialKey();
@@ -1060,7 +1051,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // Not checking for draw by repetition in the quiescence search
     if (CheckInsufficientMaterial(node->position))
     {
-        return 0;
+        return thread.DrawScore();
     }
 
     const Position& position = node->position;
@@ -1323,7 +1314,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
         {
-            alpha = 0;
+            alpha = thread.DrawScore();
             if (alpha >= beta)
             {
                 // update stats
@@ -1358,7 +1349,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef ENABLE_SEARCH_TRACE
             trace.OnNodeExit(SearchTrace::ExitReason::Draw, 0);
 #endif // ENABLE_SEARCH_TRACE
-            return 0;
+            return thread.DrawScore();
         }
 
         // mate distance pruning
