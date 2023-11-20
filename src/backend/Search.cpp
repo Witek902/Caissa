@@ -1057,8 +1057,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     thread.stats.OnNodeEnter(node->height + 1);
     ctx.stats.Append(thread.stats);
 
-    // Not checking for draw by repetition in the quiescence search
-    if (CheckInsufficientMaterial(node->position))
+    // Check for draw
+    if (node->position.IsFiftyMoveRuleDraw() ||
+        CheckInsufficientMaterial(node->position) ||
+        SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
     {
         return 0;
     }
