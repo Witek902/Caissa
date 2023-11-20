@@ -153,6 +153,7 @@ struct NodeInfo
     ScoreType alpha;
     ScoreType beta;
 
+    ScoreType eval = InvalidValue;
     ScoreType staticEval = InvalidValue;
 
     Move previousMove = Move::Invalid();
