@@ -43,7 +43,7 @@ public:
 
     INLINE void ClearKillerMoves(uint32_t depth)
     {
-        ASSERT(depth < MaxSearchDepth);
+        ASSERT(depth <= MaxSearchDepth);
         killerMoves[depth] = Move::Invalid();
     }
 
@@ -71,5 +71,5 @@ private:
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
 
-    Move killerMoves[MaxSearchDepth];
+    Move killerMoves[MaxSearchDepth + 1];
 };
