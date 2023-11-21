@@ -1155,6 +1155,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
 
+    // guard against overflowing the search stack
+    if (node->height >= MaxSearchDepth - 1) [[unlikely]]
+    {
+        return node->isInCheck ? 0 : bestValue;
+    }
+
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.pvIndex = node->pvIndex;
@@ -1534,6 +1540,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
             }
         }
+    }
+
+    // guard against overflowing the search stack
+    if (node->height >= MaxSearchDepth - 1) [[unlikely]]
+    {
+        return node->isInCheck ? 0 : eval;
     }
 
     // check how much static evaluation improved between current position and position in previous turn
