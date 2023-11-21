@@ -51,7 +51,7 @@ DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 DEFINE_PARAM(AspirationWindowMaxSize, 500);
 DEFINE_PARAM(AspirationWindow, 12);
 
-DEFINE_PARAM(SingularExtensionMinDepth, 6);
+DEFINE_PARAM(SingularExtensionMinDepth, 4);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 20);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 89);
