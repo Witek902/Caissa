@@ -452,7 +452,7 @@ static constexpr ScoreType KnownWinValue        = 20000;
 
 static constexpr uint16_t MaxSearchDepth    = 256;
 
-static constexpr ScoreType DrawScoreRandomness = 2;
+static constexpr ScoreType DrawScoreRandomness = 12;
 
 // initialize all engine subsystems
 EXPORT void InitEngine();
