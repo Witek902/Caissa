@@ -1498,7 +1498,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (node->isInCheck)
     {
         eval = node->staticEval = InvalidValue;
-        EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
+
+        if (!node->isCutNode)
+        {
+            EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
+        }
     }
     else
     {
@@ -1516,9 +1520,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
-        else if (node->isPvNodeFromPrevIteration)
+        else if (!node->isCutNode)
         {
-            // always evaluate on PV line so the NN accumulator is up to date
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
         }
 
