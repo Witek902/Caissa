@@ -1036,6 +1036,21 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     return static_cast<ScoreType>(adjustedScore);
 }
 
+static ScoreType DrawScore(const Position& pos)
+{
+    const auto& currentSide = pos.GetCurrentSide();
+    const auto& opponentSide = pos.GetOpponentSide();
+
+    // this works kind of like dynamic contempt - increase the score when drawing side has less material
+    return static_cast<ScoreType>(std::clamp<int32_t>(
+        10 * ((int32_t)opponentSide.queens.Count() - (int32_t)currentSide.queens.Count()) +
+        5 * ((int32_t)opponentSide.rooks.Count() - (int32_t)currentSide.rooks.Count()) +
+        3 * ((int32_t)opponentSide.bishops.Count() - (int32_t)currentSide.bishops.Count()) +
+        3 * ((int32_t)opponentSide.knights.Count() - (int32_t)currentSide.knights.Count()) +
+        1 * ((int32_t)opponentSide.pawns.Count() - (int32_t)currentSide.pawns.Count()),
+        -DrawScoreRandomness, DrawScoreRandomness));
+}
+
 template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
@@ -1060,7 +1075,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // Not checking for draw by repetition in the quiescence search
     if (CheckInsufficientMaterial(node->position))
     {
-        return 0;
+        return DrawScore(node->position);
     }
 
     const Position& position = node->position;
@@ -1358,7 +1373,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef ENABLE_SEARCH_TRACE
             trace.OnNodeExit(SearchTrace::ExitReason::Draw, 0);
 #endif // ENABLE_SEARCH_TRACE
-            return 0;
+            return DrawScore(node->position);
         }
 
         // mate distance pruning

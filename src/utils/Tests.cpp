@@ -2143,7 +2143,7 @@ void RunSearchTests(uint32_t numThreads)
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 1);
-        TEST_EXPECT(result[0].score == 0);
+        TEST_EXPECT(std::abs(result[0].score) <= DrawScoreRandomness);
     }
 
     ASSERT(param.numThreads == numThreads); // don't modify number of threads!
