@@ -756,7 +756,18 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
         {
-            const TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+
+            // compute fraction of nodes spent on searching best move
+            if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
+            {
+                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                {
+                    data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
+                        (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
+                }
+            }
+
             TimeManager::Update(game, data, searchContext.searchParam.limits);
         }
 
@@ -773,9 +784,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             !param.isPonder.load(std::memory_order_acquire))
         {
             // check soft time limit every depth iteration
-            if (param.limits.idealTime.IsValid() &&
+            if (param.limits.idealTimeCurrent.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
-                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTime)
+                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTimeCurrent)
             {
                 param.stopSearch = true;
                 break;
