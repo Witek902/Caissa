@@ -21,6 +21,7 @@ struct TimeManagerUpdateData
     uint32_t depth;
     const SearchResult& currResult;
     const SearchResult& prevResult;
+    double bestMoveNodeFraction = 0.0;
 };
 
 class TimeManager
