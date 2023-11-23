@@ -58,14 +58,11 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
 
 void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits)
 {
-    ASSERT(!data.currResult.empty());
-    ASSERT(!data.currResult[0].moves.empty());
-
-    if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
+    if (!limits.idealTimeBase.IsValid())
     {
         return;
     }
-    
+
     // don't update TM at low depths
     if (data.depth < 5)
     {
@@ -76,10 +73,16 @@ void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits
     const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
     const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
 
+    // decrease time if best move is not changing
+    const double bestMoveStabilityFactor = 1.2 - 0.04 * std::min(10u, data.bestMoveStability);
+
+    // update time
     limits.idealTimeCurrent = limits.idealTimeBase;
-    limits.idealTimeCurrent *= nodeCountFactor;
+    limits.idealTimeCurrent *= nodeCountFactor * bestMoveStabilityFactor;
 
 #ifndef CONFIGURATION_FINAL
+    std::cout << "info string nodeCountFactor " << nodeCountFactor << std::endl;
+    std::cout << "info string bestMoveStabilityFactor " << bestMoveStabilityFactor << std::endl;
     std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 }
