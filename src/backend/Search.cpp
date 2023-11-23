@@ -660,6 +660,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.nodeCache.OnNewSearch();
 
     uint32_t mateCounter = 0;
+    uint32_t bestMoveStability = 0;
 
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
@@ -750,25 +751,32 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
-        const ScoreType primaryMoveScore = tempResult.front().score;
-        const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
+        const ScoreType bestMoveScore = tempResult.front().score;
+        const Move bestMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
+
+        if (!thread.pvLines.empty() && !thread.pvLines[0].moves.empty() && thread.pvLines[0].moves[0] == bestMove)
+            bestMoveStability++;
+        else
+            bestMoveStability = 0;
 
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
         {
-            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            TimeManagerUpdateData data;
+            data.depth = depth;
+            data.bestMoveStability = bestMoveStability;
 
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
             {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(bestMove))
                 {
                     data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
                         (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
                 }
             }
 
-            TimeManager::Update(data, searchContext.searchParam.limits);
+            TimeManager::Update(data, param.limits);
         }
 
         // remember PV lines so they can be used in next iteration
@@ -812,10 +820,10 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         // check for singular root move
         if (isMainThread &&
-            primaryMove.IsValid() &&
+            bestMove.IsValid() &&
             numPvLines == 1 &&
             depth >= SingularitySearchMinDepth &&
-            std::abs(primaryMoveScore) < 1000 &&
+            std::abs(bestMoveScore) < 1000 &&
             param.limits.rootSingularityTime.IsValid() &&
             param.limits.startTimePoint.IsValid() &&
             TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.rootSingularityTime)
@@ -823,7 +831,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
 
             const uint16_t singularDepth = depth / 2;
-            const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
+            const ScoreType singularBeta = bestMoveScore - (ScoreType)scoreTreshold;
 
             NodeInfo& rootNode = thread.searchStack[0];
             rootNode = NodeInfo{};
@@ -833,7 +841,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.depth = singularDepth;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
-            rootNode.filteredMove = primaryMove;
+            rootNode.filteredMove = bestMove;
             rootNode.nnContext.MarkAsDirty();
 
             ScoreType score = NegaMax<NodeType::NonPV>(thread, &rootNode, searchContext);
