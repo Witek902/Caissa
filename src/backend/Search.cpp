@@ -528,7 +528,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
     if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)        ss << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
     else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)  ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
-    else                                                                ss << " score cp " << pvLine.score;
+    else                                                                ss << " score cp " << NormalizeEval(pvLine.score);
 
     if (param.searchParam.showWDL)
     {

@@ -46,18 +46,31 @@ bool LoadMainNeuralNetwork(const char* path);
 // equal to 400/ln(10) = 173.7177...
 static constexpr int32_t c_nnOutputToCentiPawns = 174;
 
+namespace wld
+{
+    // WLD model by Vondele
+    // coefficients computed with https://github.com/vondele/WLD_model on 60+0.6s games
+    constexpr double as[] = {   1.88054041,    2.39467539,   -3.78019886,  153.49644002 };
+    constexpr double bs[] = {  -4.24993229,   31.21455804,  -59.09168702,   68.89719592 };
+    constexpr int32_t NormalizeToPawnValue = 153;
+}
+
+inline int32_t NormalizeEval(int32_t eval)
+{
+    if (eval >= KnownWinValue || eval <= -KnownWinValue)
+        return eval;
+    else
+        return eval * 100 / wld::NormalizeToPawnValue;
+}
+
 // convert evaluation score (in pawns) to win probability
 inline float EvalToWinProbability(float eval, uint32_t ply)
 {
-    // WLD model by Vondele
-    // coefficients computed with https://github.com/vondele/WLD_model on 40+0.4s games
-    constexpr float as[] = { -2.75620963f,   23.36150241f,  -16.44238914f,  145.42527562f };
-    constexpr float bs[] = { -3.64843596f,   30.76831543f,  -64.62008085f,   89.99394988f };
-    
-    const float m = std::min(240u, ply) / 64.0f;
-    const float a = ((as[0] * m + as[1]) * m + as[2]) * m + as[3];
-    const float b = ((bs[0] * m + bs[1]) * m + bs[2]) * m + bs[3];
-    return 1.0f / (1.0f + expf((a - 100.0f * eval) / b));
+    using namespace wld;
+    const double m = std::min(240u, ply) / 64.0;
+    const double a = ((as[0] * m + as[1]) * m + as[2]) * m + as[3];
+    const double b = ((bs[0] * m + bs[1]) * m + bs[2]) * m + bs[3];
+    return static_cast<float>(1.0 / (1.0 + exp((a - 100.0 * eval) / b)));
 }
 
 // convert evaluation score (in pawns) to draw probability
