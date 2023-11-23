@@ -74,7 +74,7 @@ void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits
 
     // decrease time if nodes fraction spent on best move is high
     const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
-    const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
+    const double nodeCountFactor = sqrt(nonBestMoveNodeFraction) * 1.8 + 0.2;
 
     limits.idealTimeCurrent = limits.idealTimeBase;
     limits.idealTimeCurrent *= nodeCountFactor;
