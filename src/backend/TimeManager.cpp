@@ -39,7 +39,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
 
-        limits.idealTime = TimePoint::FromSeconds(0.001f * idealTime);
+        limits.idealTimeBase = limits.idealTimeCurrent = TimePoint::FromSeconds(0.001f * idealTime);
 
         // abort search if significantly exceeding ideal allocated time
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
@@ -51,78 +51,35 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     // fixed move time
     if (data.moveTime != INT32_MAX)
     {
-        limits.idealTime = TimePoint::FromSeconds(0.001f * data.moveTime);
+        limits.idealTimeBase = limits.idealTimeCurrent = TimePoint::FromSeconds(0.001f * data.moveTime);
         limits.maxTime = TimePoint::FromSeconds(0.001f * data.moveTime);
     }
 }
 
-void TimeManager::Update(const Game& game, const TimeManagerUpdateData& data, SearchLimits& limits)
+void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits)
 {
-    const uint32_t startDepth = 5;
-
     ASSERT(!data.currResult.empty());
     ASSERT(!data.currResult[0].moves.empty());
 
-    if (!limits.idealTime.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
+    if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
     {
         return;
     }
     
     // don't update TM at low depths
-    if (data.depth < startDepth)
+    if (data.depth < 5)
     {
         return;
     }
 
-    const int32_t prevScore = data.depth > startDepth ? data.prevResult[0].score : 0;
-    const int32_t currScore = data.currResult[0].score;
-    const Move currMove = data.currResult[0].moves[0];
+    // decrease time if nodes fraction spent on best move is high
+    const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
+    const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
 
-    TimePoint t = limits.idealTime;
+    limits.idealTimeCurrent = limits.idealTimeBase;
+    limits.idealTimeCurrent *= nodeCountFactor;
 
-    if (data.depth == startDepth)
-    {
-        const int32_t goodScoreTreshold = 300;
-
-        // reduce time on recapture
-        if (std::abs(currScore) < goodScoreTreshold &&
-            currMove.IsCapture() &&
-            game.GetPosition().StaticExchangeEvaluation(currMove, 100))
-        {
-            const int32_t staticRootEval = Evaluate(game.GetPosition()) * ColorMultiplier(game.GetSideToMove());
-            if (currScore > staticRootEval + 500) t *= 0.5;
-            if (currScore > staticRootEval + 250) t *= 0.75;
-        }
-
-        // reduce time on good position
-        if (currScore > goodScoreTreshold) t *= 0.5 + 0.5 * pow(2.0, -(currScore - goodScoreTreshold) / 100.0);
-
-        // reduce time more on winning position
-        if (currScore > KnownWinValue) t *= 0.5;
-    }
-
-    // increase time if score dropped
-    if (currScore < prevScore) t *= pow(2.0, std::clamp(prevScore - currScore, -1000, 1000) / 1000.0);
-
-    // increase time if PV line changes
-    {
-        const size_t pvLength = std::min(data.prevResult[0].moves.size(), data.currResult[0].moves.size());
-        for (size_t i = 0; i < std::min<size_t>(pvLength, 8); ++i)
-        {
-            if (data.prevResult[0].moves[i] != data.currResult[0].moves[i])
-            {
-                t *= 1.0 + 0.075 / (1 + i);
-                break;
-            }
-        }
-    }
-
-    if (t != limits.idealTime)
-    {
 #ifndef CONFIGURATION_FINAL
-        std::cout << "info string ideal time " << t.ToSeconds() * 1000.0f << " ms" << std::endl;
+    std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
 #endif // CONFIGURATION_FINAL
-
-        limits.idealTime = t;
-    }
 }

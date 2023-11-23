@@ -21,6 +21,7 @@ struct TimeManagerUpdateData
     uint32_t depth;
     const SearchResult& currResult;
     const SearchResult& prevResult;
+    double bestMoveNodeFraction = 0.0;
 };
 
 class TimeManager
@@ -30,5 +31,5 @@ public:
     static void Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits);
 
     // update time limits after one search iteration
-    static void Update(const Game& game, const TimeManagerUpdateData& data, SearchLimits& limits);
+    static void Update(const TimeManagerUpdateData& data, SearchLimits& limits);
 };
