@@ -6,15 +6,17 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(MovesLeftMidpoint, 50);
-DEFINE_PARAM(MovesLeftSteepness, 20);
-DEFINE_PARAM(IdealTimeFactor, 83);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 50);
+DEFINE_PARAM(TM_MovesLeftSteepness, 186);
+DEFINE_PARAM(TM_IdealTimeFactor, 819);
+DEFINE_PARAM(TM_NodesCountScale, 208);
+DEFINE_PARAM(TM_NodesCountOffset, 46);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
     // based on LeelaChessZero
-    const float midpoint = static_cast<float>(MovesLeftMidpoint);
-    const float steepness = static_cast<float>(MovesLeftSteepness) / 10.0f;
+    const float midpoint = static_cast<float>(TM_MovesLeftMidpoint);
+    const float steepness = static_cast<float>(TM_MovesLeftSteepness) / 100.0f;
     return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
@@ -26,7 +28,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
-        const float idealTimeFactor = static_cast<float>(IdealTimeFactor) / 100.0f;
+        const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
         float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
         float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
@@ -74,7 +76,9 @@ void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits
 
     // decrease time if nodes fraction spent on best move is high
     const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
-    const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
+    const double scale = static_cast<double>(TM_NodesCountScale) / 100.0;
+    const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
+    const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
 
     limits.idealTimeCurrent = limits.idealTimeBase;
     limits.idealTimeCurrent *= nodeCountFactor;
