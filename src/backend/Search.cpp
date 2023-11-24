@@ -660,6 +660,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.nodeCache.OnNewSearch();
 
     uint32_t mateCounter = 0;
+    int32_t decayingScoreDiff = 0;
 
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
@@ -756,19 +757,48 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
         {
-            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
-
-            // compute fraction of nodes spent on searching best move
-            if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
+            if (depth >= 5) // don't update TM at low depths
             {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                // compute score difference between current and previous iteration
+                if (!tempResult.empty() && !thread.pvLines.empty() && !thread.pvLines.front().moves.empty())
                 {
-                    data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
-                        (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
+                    const int32_t prevScore = thread.pvLines.front().score;
+                    decayingScoreDiff = std::max<int32_t>(decayingScoreDiff, std::abs(primaryMoveScore - prevScore));
                 }
+
+                // compute fraction of nodes spent on searching best move
+                double bestMoveNodeFraction = 0.0;
+                if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
+                {
+                    if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                    {
+                        bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
+                            (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
+                    }
+                }
+
+                // decrease time if nodes fraction spent on best move is high
+                const double nonBestMoveNodeFraction = 1.0 - bestMoveNodeFraction;
+                const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
+
+                // increase time if score is changing
+                const double scoreChangeFactor = std::clamp(0.2 + 0.02 * decayingScoreDiff, 0.5, 1.5);
+
+                SearchLimits& limits = searchContext.searchParam.limits;
+                limits.idealTimeCurrent = limits.idealTimeBase;
+                limits.idealTimeCurrent *= nodeCountFactor;
+                limits.idealTimeCurrent *= scoreChangeFactor;
+
+#ifndef CONFIGURATION_FINAL
+                std::cout << "score change " << decayingScoreDiff << std::endl;
+                std::cout
+                    << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms"
+                    << " (node count factor: " << nodeCountFactor
+                    << ", score change factor " << scoreChangeFactor << ")" << std::endl;
+#endif // CONFIGURATION_FINAL
             }
 
-            TimeManager::Update(data, searchContext.searchParam.limits);
+            decayingScoreDiff = std::max<int32_t>(0, decayingScoreDiff - 5);
         }
 
         // remember PV lines so they can be used in next iteration

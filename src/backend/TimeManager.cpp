@@ -55,31 +55,3 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         limits.maxTime = TimePoint::FromSeconds(0.001f * data.moveTime);
     }
 }
-
-void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits)
-{
-    ASSERT(!data.currResult.empty());
-    ASSERT(!data.currResult[0].moves.empty());
-
-    if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
-    {
-        return;
-    }
-    
-    // don't update TM at low depths
-    if (data.depth < 5)
-    {
-        return;
-    }
-
-    // decrease time if nodes fraction spent on best move is high
-    const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
-    const double nodeCountFactor = nonBestMoveNodeFraction * 2.0 + 0.5;
-
-    limits.idealTimeCurrent = limits.idealTimeBase;
-    limits.idealTimeCurrent *= nodeCountFactor;
-
-#ifndef CONFIGURATION_FINAL
-    std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
-#endif // CONFIGURATION_FINAL
-}
