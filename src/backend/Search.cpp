@@ -2202,7 +2202,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (bestMove.IsQuiet())
         {
             thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
-            thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
+            if constexpr (!isRootNode)
+                thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
         }
         thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
