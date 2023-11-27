@@ -25,7 +25,6 @@
 static const float PvLineReportDelay = 0.005f;
 static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
-static const uint32_t MateCountStopCondition = 7;
 
 static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
@@ -659,8 +658,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.moveOrderer.NewSearch();
     thread.nodeCache.OnNewSearch();
 
-    uint32_t mateCounter = 0;
-
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
 
@@ -714,19 +711,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
-            // update mate counter
-            if (pvIndex == 0)
-            {
-                if (IsMate(pvLine.score))
-                {
-                    mateCounter++;
-                }
-                else
-                {
-                    mateCounter = 0;
-                }
-            }
-
             // store for multi-PV filtering in next iteration
 #ifndef CONFIGURATION_FINAL
             for (const Move prevMove : searchContext.excludedRootMoves)
@@ -750,7 +734,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
-        const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
@@ -795,51 +778,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             // check soft node limit
             if (param.limits.maxNodesSoft < UINT64_MAX &&
                 searchContext.stats.nodes > param.limits.maxNodesSoft)
-            {
-                param.stopSearch = true;
-                break;
-            }
-
-            // stop the search if found mate in multiple depths in a row
-            if (!param.limits.analysisMode &&
-                mateCounter >= MateCountStopCondition &&
-                param.limits.maxDepth == UINT16_MAX)
-            {
-                param.stopSearch = true;
-                break;
-            }
-        }
-
-        // check for singular root move
-        if (isMainThread &&
-            primaryMove.IsValid() &&
-            numPvLines == 1 &&
-            depth >= SingularitySearchMinDepth &&
-            std::abs(primaryMoveScore) < 1000 &&
-            param.limits.rootSingularityTime.IsValid() &&
-            param.limits.startTimePoint.IsValid() &&
-            TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.rootSingularityTime)
-        {
-            const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
-
-            const uint16_t singularDepth = depth / 2;
-            const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
-
-            NodeInfo& rootNode = thread.searchStack[0];
-            rootNode = NodeInfo{};
-            rootNode.position = game.GetPosition();
-            rootNode.isInCheck = rootNode.position.IsInCheck();
-            rootNode.position.ComputeThreats(rootNode.threats);
-            rootNode.depth = singularDepth;
-            rootNode.alpha = singularBeta - 1;
-            rootNode.beta = singularBeta;
-            rootNode.filteredMove = primaryMove;
-            rootNode.nnContext.MarkAsDirty();
-
-            ScoreType score = NegaMax<NodeType::NonPV>(thread, &rootNode, searchContext);
-            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-            if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
             {
                 param.stopSearch = true;
                 break;

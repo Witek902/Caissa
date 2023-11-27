@@ -43,9 +43,6 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
 
         // abort search if significantly exceeding ideal allocated time
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
-
-        // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
     // fixed move time
