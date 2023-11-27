@@ -477,6 +477,8 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     {
         *outStats = globalStats;
     }
+
+    param.stopSearch = false;
 }
 
 void Search::WorkerThreadCallback(ThreadData* threadData)
@@ -846,6 +848,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             }
         }
     }
+
+    // make sure all threads are stopped
+    param.stopSearch = true;
 }
 
 PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
