@@ -31,7 +31,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
         const float minMoveTime = 0.00001f;
-        const float timeMargin = 0.5f;
+        const float timeMargin = 0.75f;
         maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
 
