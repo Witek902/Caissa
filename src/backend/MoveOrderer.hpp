@@ -29,8 +29,6 @@ public:
     void NewSearch();
     void Clear();
 
-    void InitContinuationHistoryPointers(NodeInfo& node);
-
     CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
 
     INLINE const Move GetKillerMove(uint32_t treeHeight) const
@@ -63,12 +61,11 @@ public:
 
     void DebugPrint() const;
 
-private:
 
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][2][2][64][64];          // stm, from-threated, to-threated, from-square, to-square
-    PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
+    PieceSquareHistory continuationHistory[2][2][6][64];    // prev is capture, prev stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
 
     Move killerMoves[MaxSearchDepth + 1];
