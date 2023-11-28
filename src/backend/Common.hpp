@@ -122,6 +122,7 @@
 
     INLINE uint32_t FirstBitSet(uint16_t x)
     {
+        ASSERT(x != 0);
 #ifdef USE_POPCNT
         unsigned long index;
         _BitScanForward(&index, x);
@@ -141,6 +142,7 @@
 
     INLINE uint32_t FirstBitSet(uint32_t x)
     {
+        ASSERT(x != 0);
 #ifdef USE_POPCNT
         unsigned long index;
         _BitScanForward(&index, x);
@@ -161,6 +163,7 @@
 
     INLINE uint32_t FirstBitSet(uint64_t x)
     {
+        ASSERT(x != 0);
 #if defined(USE_POPCNT) && defined(_WIN64)
         unsigned long index;
         _BitScanForward64(&index, x);
@@ -182,6 +185,7 @@
 
     INLINE uint32_t LastBitSet(uint32_t x)
     {
+        ASSERT(x != 0);
 #ifdef USE_POPCNT
         unsigned long index;
         _BitScanReverse(&index, x);
@@ -199,6 +203,7 @@
 
     INLINE uint32_t LastBitSet(uint64_t x)
     {
+        ASSERT(x != 0);
 #if defined(USE_POPCNT) && defined(_WIN64)
         unsigned long index;
         _BitScanReverse64(&index, x);
@@ -239,21 +244,25 @@
 
     INLINE uint32_t FirstBitSet(uint16_t x)
     {
+        ASSERT(x != 0);
         return (uint32_t)__builtin_ctz(x);
     }
 
     INLINE uint32_t FirstBitSet(uint32_t x)
     {
+        ASSERT(x != 0);
         return (uint32_t)__builtin_ctz(x);
     }
 
     INLINE uint32_t FirstBitSet(uint64_t x)
     {
+        ASSERT(x != 0);
         return (uint32_t)__builtin_ctzll(x);
     }
 
     INLINE uint32_t LastBitSet(uint64_t x)
     {
+        ASSERT(x != 0);
         return 63u ^ (uint32_t)__builtin_clzll(x);
     }
 
