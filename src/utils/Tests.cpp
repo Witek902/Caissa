@@ -1879,7 +1879,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // mate in one
     {
-        param.limits.maxDepth = 12;
+        param.limits.maxDepth = 16;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("k7/7Q/1K6/8/8/8/8/8 w - - 0 1"));
@@ -1894,7 +1894,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // mate in one
     {
-        param.limits.maxDepth = 12;
+        param.limits.maxDepth = 16;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("7k/7p/2Q5/8/2Br1PK1/6P1/4P3/5q2 w - - 99 100"));
