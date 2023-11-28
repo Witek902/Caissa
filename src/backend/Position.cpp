@@ -219,11 +219,10 @@ Square Position::GetLongCastleRookSquare(const Square kingSquare, uint8_t castli
 {
     constexpr uint8_t mask[] = { 0b00000000, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111 };
     const uint32_t longCastleMask = castlingRights & mask[kingSquare.File()];
-    const uint8_t longCastleBitIndex = (uint8_t)FirstBitSet(longCastleMask);
-
     if (longCastleMask)
     {
         ASSERT(PopCount(longCastleMask) == 1);
+        const uint8_t longCastleBitIndex = (uint8_t)FirstBitSet(longCastleMask);
         return Square(longCastleBitIndex, kingSquare.Rank());
     }
 
@@ -234,11 +233,10 @@ Square Position::GetShortCastleRookSquare(const Square kingSquare, uint8_t castl
 {
     constexpr uint8_t mask[] = { 0b11111110, 0b11111100, 0b11111000, 0b11110000, 0b11100000, 0b11000000, 0b10000000, 0b00000000 };
     const uint32_t shortCastleMask = castlingRights & mask[kingSquare.File()];
-    const uint8_t shortCastleBitIndex = (uint8_t)FirstBitSet(shortCastleMask);
-
     if (shortCastleMask)
     {
         ASSERT(PopCount(shortCastleMask) == 1);
+        const uint8_t shortCastleBitIndex = (uint8_t)FirstBitSet(shortCastleMask);
         return Square(shortCastleBitIndex, kingSquare.Rank());
     }
 
