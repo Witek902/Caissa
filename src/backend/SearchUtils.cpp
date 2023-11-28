@@ -74,7 +74,7 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
         return false;
     }
 
-    if (node.isNullMove || node.previousMove.IsCapture() || node.previousMove.IsPromotion())
+    if (node.isNullMove || node.prevMove.IsCapture() || node.prevMove.IsPromotion())
     {
         return false;
     }
@@ -90,8 +90,8 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
         // go up the tree, abort on any null move or capture
         if (currNode->height < 2) break;
         if (currNode->isNullMove || parentNode->isNullMove) break;
-        if (currNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
-        if (parentNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
+        if (currNode->prevMove.IsCapture() || currNode->prevMove.GetPiece() == Piece::Pawn) break;
+        if (parentNode->prevMove.IsCapture() || currNode->prevMove.GetPiece() == Piece::Pawn) break;
 
         currNode = currNode - 2;
 
@@ -153,9 +153,9 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPv
     {
         // don't need to check more moves if reached pawn push or capture,
         // because these moves are irreversible
-        if (prevNode->previousMove.IsValid())
+        if (prevNode->prevMove.IsValid())
         {
-            if (prevNode->previousMove.GetPiece() == Piece::Pawn || prevNode->previousMove.IsCapture())
+            if (prevNode->prevMove.GetPiece() == Piece::Pawn || prevNode->prevMove.IsCapture())
             {
                 return false;
             }

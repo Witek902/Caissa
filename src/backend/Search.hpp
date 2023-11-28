@@ -158,7 +158,7 @@ struct NodeInfo
 
     ScoreType staticEval = InvalidValue;
 
-    Move previousMove = Move::Invalid();
+    Move prevMove = Move::Invalid();
     int32_t moveStatScore = 0;
 
     bool isPvNodeFromPrevIteration = false;
@@ -166,7 +166,7 @@ struct NodeInfo
     bool isNullMove = false;
     bool isInCheck = false;
 
-    MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
+    MoveOrderer::PieceSquareHistory* continuationHistory = nullptr;
 
     NNEvaluatorContext nnContext;
 
@@ -178,23 +178,20 @@ struct NodeInfo
 
     INLINE void Clear()
     {
-        pvIndex = 0;
         filteredMove = PackedMove::Invalid();
+        pvIndex = 0;
+        doubleExtensions = 0;
+        depth = 0;
+        height = 0;
         staticEval = InvalidValue;
-        previousMove = Move::Invalid();
+        prevMove = Move::Invalid();
         moveStatScore = 0;
         isPvNodeFromPrevIteration = false;
-        isInCheck = false;
-        isNullMove = false;
         isCutNode = false;
-        doubleExtensions = 0;
+        isNullMove = false;
+        isInCheck = false;
+        continuationHistory = nullptr;
         nnContext.MarkAsDirty();
-        continuationHistories[0] = nullptr;
-        continuationHistories[1] = nullptr;
-        continuationHistories[2] = nullptr;
-        continuationHistories[3] = nullptr;
-        continuationHistories[4] = nullptr;
-        continuationHistories[5] = nullptr;
     }
 };
 
@@ -331,7 +328,6 @@ private:
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
-        uint32_t randomSeed;                // seed for random number generator
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
@@ -340,7 +336,8 @@ private:
 
         AccumulatorCache accumulatorCache;
 
-        NodeInfo searchStack[MaxSearchDepth];
+        static constexpr uint32_t StackSizeMargin = 8; // for continuation history
+        NodeInfo searchStack[MaxSearchDepth + StackSizeMargin];
 
         static constexpr int32_t MatCorrectionScale = 256;
         static constexpr uint32_t MatCorrectionTableSize = 2048;
