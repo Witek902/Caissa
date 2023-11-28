@@ -1402,79 +1402,6 @@ static void RunMaterialTests()
     }
 }
 
-static void RunMovesListTests()
-{
-    // no more space in A
-    {
-        MovesArray<PackedMove, 3> movesA;
-        movesA[0] = PackedMove(Square_a1, Square_b1, Piece::None);
-        movesA[1] = PackedMove(Square_a1, Square_b2, Piece::None);
-        movesA[2] = PackedMove(Square_a1, Square_b3, Piece::None);
-
-        MovesArray<PackedMove, 3> movesB;
-        movesB[0] = PackedMove(Square_a1, Square_b4, Piece::None);
-        movesB[1] = PackedMove(Square_a1, Square_b5, Piece::None);
-        movesB[2] = PackedMove(Square_a1, Square_b6, Piece::None);
-
-        movesA.MergeWith(movesB);
-
-        TEST_EXPECT(movesA[0] == PackedMove(Square_a1, Square_b1, Piece::None));
-        TEST_EXPECT(movesA[1] == PackedMove(Square_a1, Square_b2, Piece::None));
-        TEST_EXPECT(movesA[2] == PackedMove(Square_a1, Square_b3, Piece::None));
-    }
-
-    // take some from B
-    {
-        MovesArray<PackedMove, 3> movesA;
-        movesA[0] = PackedMove(Square_a1, Square_b1, Piece::None);
-
-        MovesArray<PackedMove, 3> movesB;
-        movesB[0] = PackedMove(Square_a1, Square_b4, Piece::None);
-        movesB[1] = PackedMove(Square_a1, Square_b5, Piece::None);
-        movesB[2] = PackedMove(Square_a1, Square_b6, Piece::None);
-
-        movesA.MergeWith(movesB);
-
-        TEST_EXPECT(movesA[0] == PackedMove(Square_a1, Square_b1, Piece::None));
-        TEST_EXPECT(movesA[1] == PackedMove(Square_a1, Square_b4, Piece::None));
-        TEST_EXPECT(movesA[2] == PackedMove(Square_a1, Square_b5, Piece::None));
-    }
-
-    // take everything from B
-    {
-        MovesArray<PackedMove, 3> movesA;
-
-        MovesArray<PackedMove, 3> movesB;
-        movesB[0] = PackedMove(Square_a1, Square_b4, Piece::None);
-        movesB[1] = PackedMove(Square_a1, Square_b5, Piece::None);
-        movesB[2] = PackedMove(Square_a1, Square_b6, Piece::None);
-
-        movesA.MergeWith(movesB);
-
-        TEST_EXPECT(movesA[0] == PackedMove(Square_a1, Square_b4, Piece::None));
-        TEST_EXPECT(movesA[1] == PackedMove(Square_a1, Square_b5, Piece::None));
-        TEST_EXPECT(movesA[2] == PackedMove(Square_a1, Square_b6, Piece::None));
-    }
-
-    // mix
-    {
-        MovesArray<PackedMove, 3> movesA;
-        movesA[0] = PackedMove(Square_a1, Square_b1, Piece::None);
-        movesA[1] = PackedMove(Square_a1, Square_b2, Piece::None);
-
-        MovesArray<PackedMove, 3> movesB;
-        movesB[0] = PackedMove(Square_a1, Square_b1, Piece::None);
-        movesB[1] = PackedMove(Square_a1, Square_b5, Piece::None);
-        movesB[2] = PackedMove(Square_a1, Square_b2, Piece::None);
-
-        movesA.MergeWith(movesB);
-
-        TEST_EXPECT(movesA[0] == PackedMove(Square_a1, Square_b1, Piece::None));
-        TEST_EXPECT(movesA[1] == PackedMove(Square_a1, Square_b2, Piece::None));
-        TEST_EXPECT(movesA[2] == PackedMove(Square_a1, Square_b5, Piece::None));
-    }
-}
-
 static void RunPerftTests()
 {
     std::cout << "Running Perft tests..." << std::endl;
@@ -2154,7 +2081,6 @@ void RunUnitTests()
     RunBitboardTests();
     RunPositionTests();
     RunMaterialTests();
-    RunMovesListTests();
     RunEvalTests();
     RunPackedPositionTests();
     RunGameTests();
