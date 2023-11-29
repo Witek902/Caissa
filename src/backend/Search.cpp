@@ -1820,20 +1820,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveStatScore = 0;
-
-        if (move.IsQuiet())
-        {
-            // compute move stat score using some of history counters
-            const uint32_t piece = (uint32_t)move.GetPiece() - 1;
-            const uint32_t to = move.ToSquare().Index();
-            moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
-            if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
-
-            quietMoveIndex++;
-        }
+        if (move.IsQuiet()) quietMoveIndex++;
 
         const bool doPruning = isPvNode ? ctx.searchParam.allowPruningInPvNodes : true;
 
@@ -1858,7 +1845,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
                     node->depth < 9 &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
+                    moveScore < GetHistoryPruningTreshold(node->depth))
                 {
                     continue;
                 }
@@ -1867,7 +1854,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < 9 &&
-                    node->staticEval + 32 * node->depth * node->depth + moveStatScore / 512 < alpha)
+                    node->staticEval + 32 * node->depth * node->depth + moveScore / 512 < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
@@ -2000,7 +1987,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.isInCheck = childNode.position.IsInCheck();
         childNode.position.ComputeThreats(childNode.threats);
         childNode.previousMove = move;
-        childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node->doubleExtensions + (moveExtension >= 2);
 
@@ -2026,7 +2012,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (moveScore >= MoveOrderer::KillerMoveBonus) r -= 2;
 
                 // reduce less based on move stat score
-                r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
+                {
+                    // compute move stat score using some of history counters
+                    int32_t moveStatScore = 0;
+                    const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+                    const uint32_t to = move.ToSquare().Index();
+                    moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
+                    if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
+                    if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
+                    if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
+
+                    r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
+                }
 
                 if (node->isCutNode) r += 2;
             }
