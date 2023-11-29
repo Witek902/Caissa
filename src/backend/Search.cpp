@@ -44,7 +44,7 @@ DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3);
 DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
-DEFINE_PARAM(LateMovePruningBase, 4);
+DEFINE_PARAM(LateMovePruningBase, 5);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 
@@ -139,8 +139,8 @@ private:
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
-        LateMovePruningBase + depth * depth :
-        LateMovePruningBase + depth * depth / 2;
+        (LateMovePruningBase + depth * depth) :
+        (LateMovePruningBase + depth * depth / 2);
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
@@ -1821,7 +1821,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         int32_t moveStatScore = 0;
-
         if (move.IsQuiet())
         {
             // compute move stat score using some of history counters
@@ -1841,36 +1840,30 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            if constexpr (!isRootNode)
+            {
+                // Late Move Pruning - skip quiet moves that are far in the list
+                if (moveIndex >= GetLateMovePruningTreshold(node->depth, isImproving))
+                {
+                    movePicker.SkipQuiets();
+                }
+            }
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
-                // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
-                {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
-                }
-
-                // History Pruning
-                // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
+                // History Pruning - if a move score is really bad, do not consider this move at low depth
+                if (node->depth < 9 &&
                     moveStatScore < GetHistoryPruningTreshold(node->depth))
                 {
-                    continue;
+                    movePicker.SkipQuiets();
                 }
 
-                // Futility Pruning
-                // skip quiet move that have low chance to beat alpha
+                // Futility Pruning - skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < 9 &&
                     node->staticEval + 32 * node->depth * node->depth + moveStatScore / 512 < alpha)
                 {
                     movePicker.SkipQuiets();
-                    if (quietMoveIndex > 1) continue;
                 }
             }
 
@@ -2000,7 +1993,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.isInCheck = childNode.position.IsInCheck();
         childNode.position.ComputeThreats(childNode.threats);
         childNode.previousMove = move;
-        childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node->doubleExtensions + (moveExtension >= 2);
 
