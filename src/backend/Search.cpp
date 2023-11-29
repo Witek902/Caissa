@@ -44,7 +44,7 @@ DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3);
 DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2);
-DEFINE_PARAM(LateMovePruningBase, 4);
+DEFINE_PARAM(LateMovePruningBase, 8);
 DEFINE_PARAM(HistoryPruningLinearFactor, 252);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
 
@@ -139,8 +139,8 @@ private:
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
-        LateMovePruningBase + depth * depth :
-        LateMovePruningBase + depth * depth / 2;
+        (LateMovePruningBase + depth * depth) :
+        ((LateMovePruningBase + depth * depth) / 2);
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
