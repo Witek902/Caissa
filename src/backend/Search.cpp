@@ -1880,14 +1880,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (move.IsCapture())
                 {
-                    if (node->depth <= 4 &&
-                        moveScore < MoveOrderer::GoodCaptureValue &&
+                    if (moveScore < MoveOrderer::GoodCaptureValue &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
                 }
                 else
                 {
-                    if (node->depth <= 8 &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
+                    if (!position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
                 }
             }
         }
