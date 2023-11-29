@@ -225,11 +225,12 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         }
     }
 
-    // 0 - endgame, 64 - opening
-    const int32_t gamePhase = std::min(64,
+    // 0 - endgame, 80 - opening
+    const int32_t gamePhase = std::min(80,
+        (whitePawns + blackPawns) +
         3 * (whiteKnights + blackKnights + whiteBishops + blackBishops) +
-        5 * (whiteRooks   + blackRooks) +
-        10 * (whiteQueens  + blackQueens));
+        5 * (whiteRooks + blackRooks) +
+        10 * (whiteQueens + blackQueens));
 
     int32_t finalValue = 0;
 
@@ -248,7 +249,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     }
 
     // apply scaling based on game phase
-    finalValue = finalValue * (96 + gamePhase) / 128;
+    finalValue = finalValue * (216 + gamePhase) / 256;
 
     // saturate eval value so it doesn't exceed KnownWinValue
     if (finalValue > c_evalSaturationTreshold)
