@@ -31,44 +31,46 @@ static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale, 43);
-DEFINE_PARAM(LateMoveReductionBias, 56);
+DEFINE_PARAM(LateMoveReductionScale_Quiets, 43, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Quiets, 56, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Captures, 43, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Captures, 56, 20, 80);
 
-DEFINE_PARAM(SingularitySearchMinDepth, 8);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 400);
-DEFINE_PARAM(SingularitySearchScoreStep, 25);
+DEFINE_PARAM(SingularitySearchMinDepth, 8, 5, 20);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 200, 100, 400);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 400, 200, 500);
+DEFINE_PARAM(SingularitySearchScoreStep, 25, 10, 50);
 
-DEFINE_PARAM(NullMovePruningStartDepth, 2);
-DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3);
-DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4);
+DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
+DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
+DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4, 1, 5);
 
-DEFINE_PARAM(LateMoveReductionStartDepth, 2);
-DEFINE_PARAM(LateMovePruningBase, 4);
-DEFINE_PARAM(HistoryPruningLinearFactor, 252);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 126);
+DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
+DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
+DEFINE_PARAM(HistoryPruningLinearFactor, 252, 100, 500);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 126, 50, 200);
 
-DEFINE_PARAM(AspirationWindowMaxSize, 500);
-DEFINE_PARAM(AspirationWindow, 12);
+DEFINE_PARAM(AspirationWindowMaxSize, 500, 200, 1000);
+DEFINE_PARAM(AspirationWindow, 12, 6, 20);
 
-DEFINE_PARAM(SingularExtensionMinDepth, 6);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 20);
+DEFINE_PARAM(SingularExtensionMinDepth, 6, 4, 10);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 20, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 89);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 89, 50, 150);
 
-DEFINE_PARAM(BetaPruningDepth, 7);
-DEFINE_PARAM(BetaMarginMultiplier, 130);
-DEFINE_PARAM(BetaMarginBias, 5);
+DEFINE_PARAM(BetaPruningDepth, 7, 5, 10);
+DEFINE_PARAM(BetaMarginMultiplier, 130, 100, 200);
+DEFINE_PARAM(BetaMarginBias, 5, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 122);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 60);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 122, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 60, 50, 200);
 
-DEFINE_PARAM(RazoringStartDepth, 3);
-DEFINE_PARAM(RazoringMarginMultiplier, 152);
-DEFINE_PARAM(RazoringMarginBias, 19);
+DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
+DEFINE_PARAM(RazoringMarginMultiplier, 152, 100, 200);
+DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7761);
-DEFINE_PARAM(ReductionStatDiv, 8771);
+DEFINE_PARAM(ReductionStatOffset, 7761, 5000, 15000);
+DEFINE_PARAM(ReductionStatDiv, 8771, 5000, 15000);
 
 class SearchTrace
 {
@@ -168,7 +170,6 @@ void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
 Search::Search()
 {
     BuildMoveReductionTable();
-
     mThreadData.emplace_back(std::make_unique<ThreadData>());
     mThreadData.front()->isMainThread = true;
 }
@@ -196,16 +197,12 @@ void Search::StopWorkerThreads()
     mThreadData.erase(mThreadData.begin() + 1, mThreadData.end());
 }
 
-void Search::BuildMoveReductionTable()
+void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bias)
 {
-    const float scale = static_cast<float>(LateMoveReductionScale) / 100.0f;
-    const float bias = static_cast<float>(LateMoveReductionBias) / 100.0f;
-
     // clear first row and column
     for (uint32_t i = 0; i < LMRTableSize; ++i)
     {
-        mMoveReductionTable[i][0] = 0;
-        mMoveReductionTable[0][i] = 0;
+        table[i][0] = table[0][i] = 0;
     }
 
     for (uint32_t depth = 1; depth < LMRTableSize; ++depth)
@@ -214,9 +211,20 @@ void Search::BuildMoveReductionTable()
         {
             const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
             ASSERT(reduction <= 64);
-            mMoveReductionTable[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
+            table[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
     }
+}
+
+void Search::BuildMoveReductionTable()
+{
+    BuildMoveReductionTable(mMoveReductionTable_Quiets,
+        static_cast<float>(LateMoveReductionScale_Quiets) / 100.0f,
+        static_cast<float>(LateMoveReductionBias_Quiets) / 100.0f);
+
+    BuildMoveReductionTable(mMoveReductionTable_Captures,
+        static_cast<float>(LateMoveReductionScale_Captures) / 100.0f,
+        static_cast<float>(LateMoveReductionBias_Captures) / 100.0f);
 }
 
 void Search::Clear()
@@ -2012,10 +2020,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             moveIndex > 1 &&
             (!isPvNode || move.IsQuiet()))
         {
-            r = GetDepthReduction(node->depth, moveIndex);
-
             if (move.IsQuiet())
             {
+                r = GetQuietsDepthReduction(node->depth, moveIndex);
+
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r++;
 
@@ -2032,6 +2040,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
             else
             {
+                r = GetCapturesDepthReduction(node->depth, moveIndex);
+
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r--;
 
