@@ -364,14 +364,21 @@ private:
     std::vector<ThreadDataPtr> mThreadData;
 
     static constexpr uint32_t LMRTableSize = 64;
-    uint8_t mMoveReductionTable[LMRTableSize][LMRTableSize];
+    using LMRTableType = uint8_t[LMRTableSize][LMRTableSize];
+    LMRTableType mMoveReductionTable_Quiets;
+    LMRTableType mMoveReductionTable_Captures;
 
-    INLINE uint8_t GetDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    INLINE uint8_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
-        return mMoveReductionTable[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+        return mMoveReductionTable_Quiets[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+    }
+    INLINE uint8_t GetCapturesDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    {
+        return mMoveReductionTable_Captures[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
 
     void BuildMoveReductionTable();
+    void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
