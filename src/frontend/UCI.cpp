@@ -192,7 +192,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #ifdef ENABLE_TUNING
         for (const TunableParameter& param : g_TunableParameters)
         {
-            std::cout << "option name " << param.m_name << " type spin default " << (*param.m_valuePtr) << "\n";
+            std::cout << "option name " << param.m_name << " type spin default " << param.m_value << "\n";
         }
 #endif // ENABLE_TUNING
         std::cout << "uciok" << std::endl;
@@ -296,6 +296,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_Benchmark();
     }
+#ifdef ENABLE_TUNING
+    else if (command == "printparams")
+    {
+        PrintParametersForTuning();
+    }
+#endif // ENABLE_TUNING
 #ifndef CONFIGURATION_FINAL
     else if (command == "moveordererstats")
     {
@@ -918,8 +924,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         {
             if (name == param.m_name)
             {
-                // TODO clamp to min/max
-                *param.m_valuePtr = atoi(value.c_str());
+                param.m_value = std::clamp(atoi(value.c_str()), param.m_min, param.m_max);
                 return true;
             }
         }
