@@ -771,7 +771,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
             {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
+                uint32_t index;
+                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove, index))
                 {
                     data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
                         (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
@@ -1773,7 +1774,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
-    if (node->height < 3)
+    if (node->height < 3 || node->isPvNodeFromPrevIteration)
     {
         nodeCacheEntry = thread.nodeCache.GetEntry(position, node->height);
     }
@@ -2264,6 +2265,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, node->depth, bounds, bestMove);
+
+        if (nodeCacheEntry) nodeCacheEntry->SetBestMove(bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
