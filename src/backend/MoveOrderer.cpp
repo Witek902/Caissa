@@ -9,15 +9,15 @@
 #include <limits>
 #include <iomanip>
 
-DEFINE_PARAM(QuietBonusOffset, -109, -200, 200);
-DEFINE_PARAM(QuietBonusLinear, 150, 50, 200);
+DEFINE_PARAM(QuietBonusOffset, -94, -200, 200);
+DEFINE_PARAM(QuietBonusLinear, 155, 50, 200);
 DEFINE_PARAM(QuietBonusQuadratic, 1, 0, 4);
-DEFINE_PARAM(QuietBonusLimit, 2271, 1000, 4000);
+DEFINE_PARAM(QuietBonusLimit, 1957, 1000, 4000);
 
-DEFINE_PARAM(CaptureBonusOffset, 33, 0, 200);
-DEFINE_PARAM(CaptureBonusLinear, 65, 40, 200);
-DEFINE_PARAM(CaptureBonusQuadratic, 1, 0, 4);
-DEFINE_PARAM(CaptureBonusLimit, 2318, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 39, 0, 200);
+DEFINE_PARAM(CaptureBonusLinear, 69, 40, 200);
+DEFINE_PARAM(CaptureBonusQuadratic, 0, 0, 4);
+DEFINE_PARAM(CaptureBonusLimit, 2387, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
