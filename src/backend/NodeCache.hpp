@@ -11,6 +11,7 @@ struct NodeCacheEntry
     struct MoveInfo
     {
         Move move = Move::Invalid();
+        bool isBestMove = false;
         uint64_t nodesSearched = 0;
     };
 
@@ -23,10 +24,11 @@ struct NodeCacheEntry
     Position position;
     MoveInfo moves[MaxMoves];
 
-    const MoveInfo* GetMove(const Move move) const;
+    const MoveInfo* GetMove(const Move move, uint32_t& index) const;
 
     void ScaleDown();
     void AddMoveStats(const Move& move, uint64_t numNodes);
+    void SetBestMove(const Move& move);
     void PrintMoves() const;
 };
 
