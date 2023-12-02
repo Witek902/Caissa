@@ -178,7 +178,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, GetOppositeColor(pos.GetSideToMove()));
     ASSERT(numTheirFeatures <= maxFeatures);
 
-    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
+    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, 0);
 }
 
 template<Color perspective>
@@ -420,7 +420,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
     const nn::Accumulator& ourAccumulator = node.accumulator[(uint32_t)node.position.GetSideToMove()];
     const nn::Accumulator& theirAccumulator = node.accumulator[(uint32_t)node.position.GetSideToMove() ^ 1u];
-    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, 0);
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {

@@ -436,6 +436,11 @@ void NeuralNetworkTrainer::Init(NeuralNetwork& network)
     }
 }
 
+static float ErrorDerivative(float error, float power = 2.0f)
+{
+    return power * powf(fabsf(error), power - 1.0f) * (error >= 0.0f ? 1.0f : -1.0f);
+}
+
 size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& trainingSet, const TrainParams& params, threadpool::TaskBuilder* taskBuilder)
 {
     const size_t numBatches = (trainingSet.size() + params.batchSize - 1) / params.batchSize;
@@ -465,13 +470,13 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
 
             // train last node
             {
-                const float errorScale = 2.0f;
+                const float lossPower = 2.0f;
 
                 // compute gradient (error derivative)
                 if (vec.output.mode == OutputMode::Single)
                 {
                     ASSERT(ctx.tempValues.size() == 1u);
-                    ctx.tempValues[0] = errorScale * (ctx.tempValues[0] - vec.output.singleValue);
+                    ctx.tempValues[0] = ErrorDerivative(ctx.tempValues[0] - vec.output.singleValue, lossPower);
                 }
                 else if (vec.output.mode == OutputMode::Full)
                 {
@@ -479,7 +484,7 @@ size_t NeuralNetworkTrainer::Train(NeuralNetwork& network, const TrainingSet& tr
                     for (size_t i = 0; i < ctx.tempValues.size(); i++)
                     {
                         // compute gradient (error derivative)
-                        ctx.tempValues[i] = errorScale * (ctx.tempValues[i] - vec.output.floatValues[i]);
+                        ctx.tempValues[i] = ErrorDerivative(ctx.tempValues[i] - vec.output.floatValues[i], lossPower);
                     }
                 }
                 else
