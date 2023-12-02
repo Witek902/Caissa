@@ -140,6 +140,13 @@ void NetworkTrainer::InitNetwork()
     m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 32 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
+    for (uint32_t i = 1; i < nn::NumKingBuckets; ++i)
+    {
+        memcpy(m_featureTransformerWeights->m_variants[0].m_weights.data() + i * 12 * 64 * accumulatorSize,
+            m_featureTransformerWeights->m_variants[0].m_weights.data(),
+            12 * 64 * accumulatorSize * sizeof(float));
+    }
+
     //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * accumulatorSize, 1);
     //layer1Weights->m_weightsRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerWeightQuantizationScale;
     //layer1Weights->m_biasRange = (float)std::numeric_limits<nn::HiddenLayerWeightType>::max() / nn::HiddenLayerBiasQuantizationScale;
@@ -207,7 +214,7 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
         outEntry.blackFeatures.emplace_back(blackFeatures[i]);
 
-    outEntry.networkVariant = GetNetworkVariant(pos);
+    outEntry.networkVariant = 0; // GetNetworkVariant(pos);
 }
 
 static void TrainingEntryToNetworkInput(const TrainingEntry& entry, nn::InputDesc& inputDesc)
@@ -672,20 +679,22 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 0.1f;
-static volatile float g_lambdaScale = 0.05f;
-static volatile float g_weightDecay = 0.002f;
+static volatile float g_learningRateScale = 1.0f;
+static volatile float g_lambdaScale = 0.75f;
+static volatile float g_weightDecay = 0.001f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval23-20B.pnn"))
+    /*
+    if (!m_packedNet.LoadFromFile("eval-24.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
     }
     UnpackNetwork();
+    */
 
     if (!m_dataLoader.Init(m_randomGenerator))
     {
@@ -704,6 +713,7 @@ bool NetworkTrainer::Train()
     const float maxLambda = 1.0f;
     const float minLambda = 1.0f;
 
+    //uint64_t kingBucketMask = (1 << 0) | (1 << 1);
     //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
 
@@ -712,7 +722,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 20.0f ? (float)(iteration + 1) / 20.0f : 1.0f;
+        const float warmup = 1.0f; // iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
@@ -721,6 +731,14 @@ bool NetworkTrainer::Train()
             if (!GenerateTrainingSet(m_trainingSet, kingBucketMask, lambda))
                 return false;
         }
+
+        /*
+        if (iteration % 6000 == 5999)
+        {
+            g_learningRateScale *= 0.5f;
+            if (g_learningRateScale < 0.001f) g_learningRateScale = 0.001f;
+        }
+        */
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();

@@ -86,7 +86,7 @@ static constexpr uint32_t NumKingBuckets = 5;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 1024;
 static constexpr uint32_t OutputSize = 1;
-static constexpr uint32_t NumVariants = 8;
+static constexpr uint32_t NumVariants = 1;
 
 static constexpr uint8_t KingBucketIndex[64] =
 {

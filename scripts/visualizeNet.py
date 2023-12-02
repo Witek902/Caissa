@@ -102,6 +102,7 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
+    numKingBuckets = 5
     kingBucket = 0
 
     for i in range(768):
@@ -114,18 +115,18 @@ def main():
             boardViewPixels[marginSize + x, marginSize + j * (8 + marginSize) + y] = color
 
     # last layer weights
-    #lastLayerWeightsDataOffset = dataOffset = headerSize + roundUpToMultiple(2 * (layerSize1 * (layerSize0 + 1)), 64)
-    #for variant in range(layerVariants1):
-    #    for j in range(layerSize1):
-    #        dataOffset = lastLayerWeightsDataOffset + variant * roundUpToMultiple(2 * layerSize1 + 4, 64) + 2 * j
-    #        (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
-    #        color = weightToColor(weight)
-    #
-    #        xOffset = marginSize + (12 + variant) * (8 + marginSize)
-    #        yOffset = marginSize + j * (8 + marginSize)
-    #        for x in range(8):
-    #            for y in range(8):
-    #                boardViewPixels[xOffset + x, yOffset + y] = color
+    lastLayerWeightsDataOffset = headerSize + 2 * accumulatorSize * (12 * 64 * numKingBuckets + 1)
+    for variant in range(layerVariants1):
+        for j in range(accumulatorSize):
+            dataOffset = lastLayerWeightsDataOffset + variant * roundUpToMultiple(2 * (layerSize1 + 1), 64) + 2 * j
+            (weight,) = struct.unpack("h", data[dataOffset:(dataOffset+2)])
+            color = weightToColor(weight)
+    
+            xOffset = marginSize + (12 + variant) * (8 + marginSize)
+            yOffset = marginSize + j * (8 + marginSize)
+            for x in range(8):
+                for y in range(8):
+                    boardViewPixels[xOffset + x, yOffset + y] = color
 
     rawViewImg.save('rawView.png')
     boardViewImg.save('boardView.png')

@@ -4,6 +4,7 @@
 
 #include "../backend/Math.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
@@ -12,6 +13,11 @@ static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 
 bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingDataPath)
 {
+#ifdef _MSC_VER
+    // increase max open files limit
+    _setmaxstdio(2048);
+#endif // _MSC_VER
+
     uint64_t totalDataSize = 0;
 
     mCDF.push_back(0.0);
@@ -145,14 +151,14 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             // skip drawn game based half-move counter
             if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
             {
-                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
+                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 100.0f;
                 std::bernoulli_distribution skippingDistr(hmcSkipProb);
                 if (skippingDistr(gen))
                     continue;
             }
 
             // skip early moves
-            if (outEntry.pos.moveCount < 10)
+            if (outEntry.pos.moveCount <= 8)
                 continue;
 
             // skip based on piece count
@@ -173,6 +179,17 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
+
+        // skip known endgames
+        {
+            int32_t endgameScore = 0;
+            int32_t endgamceScale = 0;
+            if (EvaluateEndgame(outPosition, endgameScore, endgamceScale)
+                && (endgameScore == 0 || endgameScore > KnownWinValue || endgameScore < -KnownWinValue))
+            {
+                continue;
+            }
+        }
 
         // filter by king bucket
         if (kingBucketMask != UINT64_MAX)
