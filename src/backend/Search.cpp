@@ -1926,7 +1926,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - 2)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth / 2);
 
                 const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const int16_t originalDepth = node->depth;
@@ -1934,7 +1934,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType originalBeta = node->beta;
 
                 node->isPvNodeFromPrevIteration = false;
-                node->depth = node->depth / 2 - 1;
+                node->depth = (node->depth - 1) / 2;
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
