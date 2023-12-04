@@ -56,7 +56,6 @@ public:
     // assign scores to move list
     void ScoreMoves(
         const NodeInfo& node,
-        const Game& game,
         MoveList& moves,
         bool withQuiets = true,
         const NodeCacheEntry* nodeCacheEntry = nullptr) const;
