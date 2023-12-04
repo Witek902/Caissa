@@ -1250,6 +1250,15 @@ static void RunPositionTests()
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -300));
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -299));
         }
+
+        // en passant
+        {
+            Position pos("rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3");
+            const Move move = pos.MoveFromString("e5d6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+        }
     }
 
     // IsStaleMate
