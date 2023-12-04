@@ -846,7 +846,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
     if (move.IsCapture())
     {
-        const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(toSquare);
+        const Piece capturedPiece = GetCapturedPiece(move);
         balance += c_seePieceValues[(uint32_t)capturedPiece];
         if (balance < 0) return false;
     }
