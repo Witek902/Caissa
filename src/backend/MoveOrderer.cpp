@@ -162,6 +162,7 @@ void MoveOrderer::Clear()
 {
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
+    memset(captureContinuationHistory, 0, sizeof(captureContinuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
@@ -239,6 +240,16 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth + CaptureBonusQuadratic * depth * depth, CaptureBonusLimit);
 
+    PieceSquareHistory* captureContinuation = nullptr;
+    if (!node.isNullMove && node.previousMove.IsValid())
+    {
+        const uint32_t prevPiece = (uint32_t)node.previousMove.GetPiece() - 1;
+        const uint32_t prevTo = node.previousMove.ToSquare().Index();
+        ASSERT(prevPiece < 6);
+        ASSERT(prevTo < 64);
+        captureContinuation = &(captureContinuationHistory[color][prevPiece][prevTo]);
+    }
+
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
@@ -256,6 +267,8 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
         UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+
+        if (captureContinuation) UpdateHistoryCounter((*captureContinuation)[pieceIdx][move.ToSquare().Index()], delta);
     }
 }
 
@@ -281,6 +294,16 @@ void MoveOrderer::ScoreMoves(
         {
             prevMove = game.GetMoves().back();
         }
+    }
+
+    const PieceSquareHistory* captureContinuation = nullptr;
+    if (!node.isNullMove && node.previousMove.IsValid())
+    {
+        const uint32_t prevPiece = (uint32_t)node.previousMove.GetPiece() - 1;
+        const uint32_t prevTo = node.previousMove.ToSquare().Index();
+        ASSERT(prevPiece < 6);
+        ASSERT(prevTo < 64);
+        captureContinuation = &(captureContinuationHistory[color][prevPiece][prevTo]);
     }
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
@@ -316,16 +339,18 @@ void MoveOrderer::ScoreMoves(
             // most valuable victim first
             score += 6 * (int32_t)capturedPiece * UINT16_MAX / 128;
 
+            const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
+            const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
+            ASSERT(capturedIdx < 5);
+            ASSERT(pieceIdx < 6);
+
             // capture history
-            {
-                const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
-                const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
-                ASSERT(capturedIdx < 5);
-                ASSERT(pieceIdx < 6);
-                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
-                ASSERT(historyScore >= 0);
-                score += historyScore;
-            }
+            const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
+            ASSERT(historyScore >= 0);
+            score += historyScore;
+
+            // capture continuation history
+            if (captureContinuation) score += ((*captureContinuation)[pieceIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
         }
         else if (withQuiets) // non-capture
         {
