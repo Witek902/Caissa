@@ -281,21 +281,16 @@ bool Position::IsSquareVisible(const Square square, const Color color) const
     const SidePosition& side = GetSide(color);
 
     if (Bitboard::GetKingAttacks(square) & side.king) return true;
-
     if (Bitboard::GetKnightAttacks(square) & side.knights) return true;
-
     if (Bitboard::GetPawnAttacks(square, GetOppositeColor(color)) & side.pawns) return true;
 
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
-
-    if (side.bishops | side.queens)
+    const Bitboard potentialBishopAttacks = Bitboard::GetBishopAttacks(square) & (side.bishops | side.queens);
+    const Bitboard potentialRookAttacks = Bitboard::GetRookAttacks(square) & (side.rooks | side.queens);
+    if (potentialBishopAttacks || potentialRookAttacks)
     {
-        if (Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens)) return true;
-    }
-
-    if (side.rooks | side.queens)
-    {
-        if (Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens)) return true;
+        const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
+        if (potentialBishopAttacks && Bitboard::GenerateBishopAttacks(square, occupiedSquares) & potentialBishopAttacks) return true;
+        if (potentialRookAttacks && Bitboard::GenerateRookAttacks(square, occupiedSquares) & potentialRookAttacks) return true;
     }
 
     return false;
