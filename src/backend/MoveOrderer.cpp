@@ -261,7 +261,6 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
 void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
-    const Game& game,
     MoveList& moves,
     bool withQuiets,
     const NodeCacheEntry* nodeCacheEntry) const
@@ -270,18 +269,6 @@ void MoveOrderer::ScoreMoves(
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
-
-    Move prevMove = !node.isNullMove ? node.previousMove : Move::Invalid();
-
-    // at the root node, obtain previous move from the game data
-    if (node.height == 0)
-    {
-        ASSERT(!prevMove.IsValid());
-        if (!game.GetMoves().empty())
-        {
-            prevMove = game.GetMoves().back();
-        }
-    }
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {

@@ -1029,7 +1029,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
 
-    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, mGame, moves, true, nodeCacheEntry);
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves, true, nodeCacheEntry);
 
     moves.Sort();
     PrintMoveList(mGame.GetPosition(), moves);
