@@ -940,48 +940,18 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator&
     ASSERT(GetLayerSize(2) <= MaxNeuronsInHiddenLayers);
     ASSERT(GetLayerSize(3) <= MaxNeuronsInHiddenLayers);
 
-    //if (numActiveLayers == 2)
-    {
-        constexpr uint32_t lastLayerIdx = 1;
+    constexpr uint32_t weightSize = sizeof(LastLayerWeightType);
+    constexpr uint32_t biasSize = sizeof(LastLayerBiasType);
+    constexpr uint32_t weightsBlockSize = 2u * nn::AccumulatorSize * weightSize;
 
-        const void* weights;
-        const void* biases;
-        GetLayerWeightsAndBiases(lastLayerIdx, variant, weights, biases);
+    const uint8_t* weights = layerDataPointers[1] + variant * RoundUp<uint32_t, CACHELINE_SIZE>(weightsBlockSize + biasSize);
+    const uint8_t* biases = weights + weightsBlockSize;
 
-        return LinearLayer_Accum_SingleOutput(
-            reinterpret_cast<const LastLayerWeightType*>(weights),
-            reinterpret_cast<const LastLayerBiasType*>(biases),
-            stmAccum.values,
-            nstmAccum.values);
-    }
-    /*
-    else
-    {
-        alignas(CACHELINE_SIZE) IntermediateType tempA[AccumulatorSize];
-        alignas(CACHELINE_SIZE) int32_t tempB[MaxNeuronsInHiddenLayers];
-
-        // apply activation function on the accumulator
-        ClippedReLU_Accum(GetLayerSize(1), tempA, accumulator.values);
-
-        // hidden layers
-        for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
-        {
-            const uint32_t thisLayerSize = GetLayerSize(i);
-            const uint32_t nextLayerSize = GetLayerSize(i + 1);
-
-            const HiddenLayerWeightType* weights = GetLayerWeights<HiddenLayerWeightType>(i, variant);
-            const HiddenLayerBiasType* biases = GetLayerBiases<HiddenLayerBiasType>(i, variant);
-
-            LinearLayer(weights, biases, thisLayerSize, nextLayerSize, tempB, tempA);
-            ClippedReLU_32(nextLayerSize, tempA, tempB);
-        }
-
-        const uint32_t lastLayerIdx = numActiveLayers - 1;
-        const LastLayerWeightType* weights = GetLayerWeights<LastLayerWeightType>(lastLayerIdx, variant);
-        const LastLayerBiasType* biases = GetLayerBiases<LastLayerBiasType>(lastLayerIdx, variant);
-        return LinearLayer_SingleOutput(weights, biases, GetLayerSize(lastLayerIdx), tempA);
-    }
-    */
+    return LinearLayer_Accum_SingleOutput(
+        reinterpret_cast<const LastLayerWeightType*>(weights),
+        reinterpret_cast<const LastLayerBiasType*>(biases),
+        stmAccum.values,
+        nstmAccum.values);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const
