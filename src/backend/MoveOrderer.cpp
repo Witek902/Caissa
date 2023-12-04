@@ -288,10 +288,14 @@ void MoveOrderer::ScoreMoves(
 
         int32_t score = 0;
 
-        if (move.IsCapture())
+        if (move.IsEnPassant())
+        {
+            score = WinningCaptureValue; // high priority for en-passant
+        }
+        else if (move.IsCapture())
         {
             const Piece attackingPiece = move.GetPiece();
-            const Piece capturedPiece = pos.GetCapturedPiece(move);
+            const Piece capturedPiece = pos.GetOpponentSide().GetPieceAtSquare(move.ToSquare());
             ASSERT(capturedPiece > Piece::None);
             ASSERT(capturedPiece < Piece::King);
 
