@@ -1603,7 +1603,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef ENABLE_SEARCH_TRACE
                 trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
 #endif // ENABLE_SEARCH_TRACE
-                return eval;
+                return (eval + beta) / 2;
             }
 
             // Razoring
