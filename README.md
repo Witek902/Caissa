@@ -13,16 +13,16 @@ Strong, UCI command-line chess engine, written from scratch in C++ in developmen
 
 Caissa is listed on many chess engines ranking lists:
 
-* [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) - **3838** (#6) (version 1.13.1)
-* [CCRL Chess324](https://www.computerchess.org.uk/ccrl/Chess324/rating_list_all.html) - **3619** (#7) (version 1.13.1)
+* [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) - **3870** (#6) (version 1.14.1)
+* [CCRL Chess324](https://www.computerchess.org.uk/ccrl/Chess324/rating_list_all.html) - **3639** (#6) (version 1.14)
 * [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) - **3479** (#10) (version 1.13.1 4CPU)
-* [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) - **3591** (#12) (version 1.12 1CPU)
-* [SPCC UHO-Top15](https://www.sp-cc.de) - **3596** (#10) (version 1.13.1)
-* [IpMan Chess 10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) - **3432** (#15) (version 1.13.1 avx512)
+* [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) - **3682** (#7) (version 1.14.1 8CPU)
+* [SPCC UHO-Top15](https://www.sp-cc.de) - **3630** (#8) (version 1.14)
+* [IpMan Chess 10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) - **3461** (#14) (version 1.14.1 avx512)
 * [IpMan Chess 10+1 (i9-7980XE)](https://ipmanchess.yolasite.com/i9-7980xe.php) - **3386** (#20) (version 1.11 avx512)
 * [IpMan Chess 5+0](https://ipmanchess.yolasite.com/i7-11800h.php) - **3381** (#28) (version 1.8)
 * [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) - **3472** (#12) (version 1.13)
-* [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) - **3502** (#15) (version 1.12)
+* [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) - **3513** (#10) (version 1.13.1)
 * [CEGT 5+3](http://www.cegt.net/5Plus3Rating/BestVersionsNEW/rangliste.html) - **3530** (#9) (version 1.13.1)
 * [FGRL](http://www.fastgm.de/60-0.60.html) - **3253** (#18) (version 1.5)
 
@@ -56,12 +56,11 @@ The games are generated with the utility [SelfPlay.cpp](https://github.com/Witek
 
 ### Provided EXE versions
 
-* **AVX-512** - Fastest, requires a x64 CPU with AVX-512 instruction set support. May not be supported.
-* **BMI2** - Fast, requires a x64 CPU with AVX2 and BMI2 instruction set support. Supported by majority of CPUs. Recommended for modern CPUs.
-* **AVX2** - Fast, requires a x64 CPU with AVX2 instruction set support. May be faster than BMI2 on some CPUs that support both AVX2 and BMI2.
+* **AVX-512** - Fastest, requires a x64 CPU with AVX-512 instruction set support. May not be supported on consumer-grade CPUs.
+* **BMI2** - Fast, requires a x64 CPU with AVX2 and BMI2 instruction set support. Supported by majority of modern CPUs.
+* **AVX2** - Fast, requires a x64 CPU with AVX2 instruction set support. May be faster than BMI2 on some older CPUs (e.g. Intel Haswell processors).
 * **POPCNT** - Slower, requires a x64 CPU with SSE4 and POPCNT instruction set support. For older CPUs.
 * **Legacy** - Slowest, requires any x64 CPU. For very old x64 CPUs.
-
 
 ## Features
 
@@ -111,11 +110,22 @@ The projects comprises following modules:
 
 ## Compilation
 
-### Linux
+### Linux - makefile
 
-To compile for Linux use CMake:
+To compile for Linux just call `make` in `src` directory:
 ```
-mkdir build; cd build
+cd src
+make -j
+```
+**NOTE:** This will compile the default AVX2/BMI2 version.
+
+
+### Linux - CMake
+
+To compile for Linux using CMake:
+```
+mkdir build
+cd build
 cmake -DCMAKE_BUILD_TYPE=Final ..
 make -j
 ```
@@ -127,8 +137,8 @@ There are three configurations supported:
 * **Release** - development version with asserts enabled and with optimizations enabled for better performance
 * **Debug** - development version with asserts enabled and optimizations disabled
 
-### Windows
+### Windows - Visual Studio
 
 To compile for Windows, use `GenerateVisualStudioSolution.bat` to generate Visual Studio solution. The only tested Visual Studio version is 2022. Using CMake directly in Visual Studio was not tested.
 
-After compilation make sure you copy appropriate neural net file from `data/neuralNets` directory to location where executable file is generated (`build/bin` on Linux or `build\bin\x64\<Configuration>` on Windows).
+**NOTE:** After compilation make sure you copy appropriate neural net file from `data/neuralNets` directory to location where executable file is generated (`build/bin` on Linux or `build\bin\x64\<Configuration>` on Windows).
