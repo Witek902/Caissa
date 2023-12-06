@@ -17,28 +17,33 @@ using namespace threadpool;
 
 // #define OUTPUT_TEXT_FILE
 
+static std::mutex g_mutex;
+
 static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::string& outputPath)
 {
     std::vector<PositionEntry> entries;
     std::vector<Move> moves;
 
+    if (std::filesystem::exists(outputPath))
+    {
+        std::unique_lock<std::mutex> lock(g_mutex);
+        std::cout << "INFO: Output training data file " << outputPath << " already exists. Skipping" << std::endl;
+        return true;
+    }
+
     FileInputStream gamesFile(inputPath.c_str());
     if (!gamesFile.IsOpen())
     {
+        std::unique_lock<std::mutex> lock(g_mutex);
         std::cout << "ERROR: Failed to load selfplay data file: " << inputPath << std::endl;
         return false;
-    }
-
-    if (std::filesystem::exists(outputPath))
-    {
-        std::cout << "INFO: Output training data file " << outputPath << " already exists. Skipping" << std::endl;
-        return true;
     }
 
 #ifndef OUTPUT_TEXT_FILE
     FileOutputStream trainingDataFile(outputPath.c_str());
     if (!trainingDataFile.IsOpen())
     {
+        std::unique_lock<std::mutex> lock(g_mutex);
         std::cout << "ERROR: Failed to load output training data file: " << outputPath << std::endl;
         return false;
     }
@@ -69,7 +74,8 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
             if (move.IsQuiet() &&                                   // best move must be quiet
                 pos.GetNumPieces() >= 4 &&
-                !((moveScore > 1200 && Evaluate(pos) > 600) || (moveScore < -1200 && Evaluate(pos) < -600)) && // skip unbalanced positions
+                !((moveScore > 1000 && Evaluate(pos) > 400) ||
+                  (moveScore < -1000 && Evaluate(pos) < -400)) && // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};
@@ -114,7 +120,10 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
         numGames++;
     }
 
-    std::cout << "Parsed " << numGames << " games from " << inputPath << ", extracted " << numPositions << " positions" << std::endl;
+    {
+        std::unique_lock<std::mutex> lock(g_mutex);
+        std::cout << "Parsed " << numGames << " games from " << inputPath << ", extracted " << numPositions << " positions" << std::endl;
+    }
 
     // shuffle the training data
     {
@@ -145,6 +154,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
     if (!trainingDataFile.Write(entries.data(), entries.size() * sizeof(PositionEntry)))
     {
+        std::unique_lock<std::mutex> lock(g_mutex);
         std::cout << "ERROR: Failed to write training data file: " << outputPath << std::endl;
         return false;
     }
@@ -167,7 +177,10 @@ void PrepareTrainingData(const std::vector<std::string>& args)
 
         for (const auto& path : std::filesystem::directory_iterator(gamesPath))
         {
-            std::cout << "Loading " << path.path().string() << "..." << std::endl;
+            {
+                std::unique_lock<std::mutex> lock(g_mutex);
+                std::cout << "Loading " << path.path().string() << "..." << std::endl;
+            }
 
             taskBuilder.Task("LoadPositions", [path, &trainingDataPath](const TaskContext&)
             {

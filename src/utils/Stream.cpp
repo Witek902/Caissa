@@ -75,6 +75,15 @@ FileInputStream::FileInputStream(const char* filePath)
     mSize = GetSize();
 }
 
+FileInputStream::~FileInputStream()
+{
+    if (mFile)
+    {
+        fclose(mFile);
+        mFile = nullptr;
+    }
+}
+
 bool FileInputStream::IsOpen() const
 {
     return mFile != nullptr;
@@ -133,6 +142,15 @@ FileOutputStream::FileOutputStream(const char* filePath)
     {
         perror(filePath);
         return;
+    }
+}
+
+FileOutputStream::~FileOutputStream()
+{
+    if (mFile)
+    {
+        fclose(mFile);
+        mFile = nullptr;
     }
 }
 
