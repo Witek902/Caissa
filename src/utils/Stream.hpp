@@ -56,7 +56,7 @@ class FileInputStream : public InputStream
 {
 public:
     FileInputStream(const char* filePath);
-    virtual ~FileInputStream() = default;
+    virtual ~FileInputStream();
     bool IsOpen() const;
     virtual uint64_t GetPosition() const override;
     bool SetPosition(uint64_t offset);
@@ -74,6 +74,7 @@ class FileOutputStream : public OutputStream
 {
 public:
     FileOutputStream(const char* filePath);
+    virtual ~FileOutputStream();
     bool IsOpen() const;
     bool Seek(uint64_t pos);
     void Flush();
