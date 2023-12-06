@@ -24,13 +24,13 @@
 
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 8;
-static const uint32_t c_minNodes = 10000;
-static const uint32_t c_maxNodes = 10000;
+static const uint32_t c_minNodes = 8000;
+static const uint32_t c_maxNodes = 8000;
 static const uint32_t c_maxDepth = 24;
 static const int32_t c_maxEval = 1200;
-static const int32_t c_openingMaxEval = 800;
+static const int32_t c_openingMaxEval = 500;
 static const int32_t c_multiPv = 3;
-static const int32_t c_multiPvMaxPly = 0;
+static const int32_t c_multiPvMaxPly = 2;
 static const int32_t c_multiPvScoreTreshold = 50;
 static const uint32_t c_minRandomMoves = 1;
 static const uint32_t c_maxRandomMoves = 8;
@@ -113,8 +113,8 @@ static bool SelfPlayThreadFunc(
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    Search search;
-    TranspositionTable tt(c_transpositionTableSize);
+    Search search[2];
+    TranspositionTable tt[2] = { c_transpositionTableSize, c_transpositionTableSize };
 
     const std::string outputFileName = DATA_PATH "selfplayGames/selfplay_" +
         std::to_string(nameSeed) + "_" +
@@ -172,8 +172,10 @@ static bool SelfPlayThreadFunc(
 
         // start new game
         Game game;
-        tt.Clear();
-        search.Clear();
+        tt[0].Clear();
+        tt[1].Clear();
+        search[0].Clear();
+        search[1].Clear();
         game.Reset(openingPos);
 
         int32_t multiPvScoreTreshold = c_multiPvScoreTreshold;
@@ -186,9 +188,11 @@ static bool SelfPlayThreadFunc(
 
         for (;; ++halfMoveNumber)
         {
+            const uint32_t searchIndex = halfMoveNumber % 2;
+
             const bool playBlunder = std::bernoulli_distribution(c_blunderProbability)(gen);
 
-            SearchParam searchParam{ tt };
+            SearchParam searchParam{ tt[searchIndex]};
             searchParam.debugLog = false;
             searchParam.allowPruningInPvNodes = false;
             searchParam.useRootTablebase = false;
@@ -199,8 +203,8 @@ static bool SelfPlayThreadFunc(
             searchParam.limits.maxNodesSoft = c_minNodes + (c_maxNodes - c_minNodes) * std::max(0, 80 - halfMoveNumber) / 80;
 
             searchResult.clear();
-            tt.NextGeneration();
-            search.DoSearch(game, searchParam, searchResult);
+            tt[searchIndex].NextGeneration();
+            search[searchIndex].DoSearch(game, searchParam, searchResult);
 
             ASSERT(!searchResult.empty());
 
@@ -264,9 +268,7 @@ static bool SelfPlayThreadFunc(
             }
 
             // adjudicate win
-            if (!isCheck &&
-                game.GetPosition().GetNumPieces() < 20 &&
-                halfMoveNumber >= 20)
+            if (!isCheck)
             {
                 if (moveScore > c_maxEval && eval > c_maxEval / 2)
                 {
