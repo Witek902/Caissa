@@ -8,7 +8,6 @@ class Position;
 
 struct TTEntry
 {
-    static constexpr uint32_t NumMoves = 1;
     static constexpr uint32_t GenerationBits = 6;
     static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
 

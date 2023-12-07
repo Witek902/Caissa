@@ -18,6 +18,7 @@ public:
     static constexpr int32_t PromotionValue         = 5000000;
     static constexpr int32_t PromotionValues[]      = { 0, 0, -30000000, -40000000, -40000000, PromotionValue, 0 };
     static constexpr int32_t KillerMoveBonus        = 1000000;
+    static constexpr int32_t CounterMoveBonus       = KillerMoveBonus - 1;
     static constexpr int32_t LosingCaptureValue     = -4000;
 
     using CounterType = int16_t;
@@ -33,7 +34,9 @@ public:
 
     CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
 
-    INLINE const Move GetKillerMove(uint32_t treeHeight) const
+    Move GetCounterMove(const NodeInfo& node) const;
+
+    INLINE Move GetKillerMove(uint32_t treeHeight) const
     {
         return killerMoves[treeHeight];
     }
@@ -69,6 +72,7 @@ private:
     CounterType quietMoveHistory[2][2][2][64][64];          // stm, from-threated, to-threated, from-square, to-square
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
+    Move counterMoves[2][6][64];                            // stm, piece, to-square
 
     Move killerMoves[MaxSearchDepth + 1];
 };

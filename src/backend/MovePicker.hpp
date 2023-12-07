@@ -17,6 +17,7 @@ public:
         GenerateCaptures,
         Captures,
         Killer,
+        Counter,
         GenerateQuiets,
         PickQuiets,
         End,
@@ -53,6 +54,7 @@ private:
     Stage m_stage = Stage::TTMove;
 
     Move m_killerMove = Move::Invalid();
+    Move m_counterMove = Move::Invalid();
 
     MoveList m_moves;
 };
