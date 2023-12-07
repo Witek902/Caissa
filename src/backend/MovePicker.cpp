@@ -66,7 +66,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
         case Stage::Killer:
         {
-            m_stage = Stage::GenerateQuiets;
+            m_stage = Stage::Counter;
             Move move = m_moveOrderer.GetKillerMove(node.height);
             if (move.IsValid() && move != m_ttMove)
             {
@@ -82,6 +82,24 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             [[fallthrough]];
         }
 
+        case Stage::Counter:
+        {
+            m_stage = Stage::GenerateQuiets;
+            Move move = m_moveOrderer.GetCounterMove(node);
+            if (move.IsValid() && move != m_ttMove && move != m_killerMove)
+            {
+                move = m_position.MoveFromPacked(move);
+                if (move.IsValid() && !move.IsCapture())
+                {
+                    m_counterMove = move;
+                    outMove = move;
+                    outScore = MoveOrderer::CounterMoveBonus;
+                    return true;
+                }
+            }
+            [[fallthrough]];
+        }
+
         case Stage::GenerateQuiets:
         {
             m_stage = Stage::PickQuiets;
@@ -89,9 +107,10 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             {
                 GenerateMoveList<MoveGenerationMode::Quiets>(m_position, m_moves);
 
-                // remove PV and TT moves from generated list
+                // remove played moves from generated list
                 m_moves.RemoveMove(m_ttMove);
                 m_moves.RemoveMove(m_killerMove);
+                m_moves.RemoveMove(m_counterMove);
 
                 m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
             }

@@ -608,14 +608,11 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             }
             average /= stats.totalBetaCutoffs;
             printf("Average cutoff move index: %.3f\n", average);
-            for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
-            {
-                const uint64_t value = stats.ttMoveBetaCutoffs[i];
-                printf("TT-move #%d beta cutoffs : %" PRIu64 " (%.2f%%)\n", i, value, 100.0f * float(value) / float(stats.totalBetaCutoffs));
-            }
+            printf("TT-move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.ttMoveBetaCutoffs, 100.0f * float(stats.ttMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Winning capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.winningCaptureCutoffs, 100.0f * float(stats.winningCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Killer move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.killerMoveBetaCutoffs, 100.0f * float(stats.killerMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
+            printf("Counter move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.counterMoveBetaCutoffs, 100.0f * float(stats.counterMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
             printf("Bad capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.badCaptureCutoffs, 100.0f * float(stats.badCaptureCutoffs) / float(stats.totalBetaCutoffs));
 
@@ -2031,7 +2028,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (ttCapture) r++;
 
                 // reduce good moves less
-                if (moveScore >= MoveOrderer::KillerMoveBonus) r -= 2;
+                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= 2;
 
                 // reduce less based on move stat score
                 r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
@@ -2160,19 +2157,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
                 ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
-
-                bool ttOrKiller = false;
-                for (uint32_t i = 0; i < TTEntry::NumMoves; ++i)
-                    if (moveScore == MoveOrderer::TTMoveValue - static_cast<int32_t>(i))
-                        ctx.stats.ttMoveBetaCutoffs[i]++, ttOrKiller = true;
-
-                if (moveScore == MoveOrderer::KillerMoveBonus)
-                    ctx.stats.killerMoveBetaCutoffs++, ttOrKiller = true;
-
-                if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
-                else if (!ttOrKiller && move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
-                else if (!ttOrKiller && move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue) ctx.stats.badCaptureCutoffs++;
-                else if (!ttOrKiller && move.IsQuiet()) ctx.stats.quietCutoffs++;
+                if (moveScore == MoveOrderer::TTMoveValue) ctx.stats.ttMoveBetaCutoffs++;
+                else if (moveScore == MoveOrderer::KillerMoveBonus) ctx.stats.killerMoveBetaCutoffs++;
+                else if (moveScore == MoveOrderer::CounterMoveBonus) ctx.stats.counterMoveBetaCutoffs++;
+                else if (move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
+                else if (move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
+                else if (move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue) ctx.stats.badCaptureCutoffs++;
+                else if (move.IsQuiet()) ctx.stats.quietCutoffs++;
 #endif // COLLECT_SEARCH_STATS
 
                 break;

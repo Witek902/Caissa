@@ -163,6 +163,7 @@ void MoveOrderer::Clear()
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
+    memset(counterMoves, 0, sizeof(counterMoves));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -175,6 +176,18 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
     ASSERT(from < 64);
     ASSERT(to < 64);
     return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
+}
+
+Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
+{
+    if (node.previousMove.IsValid())
+    {
+        const Move prevMove = node.previousMove;
+        const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
+        const uint32_t to = prevMove.ToSquare().Index();
+        return counterMoves[(uint32_t)node.position.GetSideToMove()][piece][to];
+    }
+    return Move::Invalid();
 }
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
@@ -195,6 +208,15 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(moves[0].IsQuiet());
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
+
+    // update counter move
+    if (bestMove.IsQuiet() && node.previousMove.IsValid())
+    {
+        const Move prevMove = node.previousMove;
+        const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
+        const uint32_t to = prevMove.ToSquare().Index();
+        counterMoves[color][piece][to] = bestMove;
+    }
 
     // don't update uncertain moves
     if (numMoves <= 1 && node.depth < 2)
