@@ -11,12 +11,14 @@
 
 DEFINE_PARAM(QuietBonusOffset, -94, -200, 200);
 DEFINE_PARAM(QuietBonusLinear, 155, 50, 200);
-DEFINE_PARAM(QuietBonusQuadratic, 1, 0, 4);
 DEFINE_PARAM(QuietBonusLimit, 1957, 1000, 4000);
+
+DEFINE_PARAM(QuietMalusOffset, -80, -200, 200);
+DEFINE_PARAM(QuietMalusLinear, 206, 50, 200);
+DEFINE_PARAM(QuietMalusLimit, 1800, 1000, 4000);
 
 DEFINE_PARAM(CaptureBonusOffset, 39, 0, 200);
 DEFINE_PARAM(CaptureBonusLinear, 69, 40, 200);
-DEFINE_PARAM(CaptureBonusQuadratic, 0, 0, 4);
 DEFINE_PARAM(CaptureBonusLimit, 2387, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
@@ -224,14 +226,15 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusQuadratic * node.depth * node.depth, QuietBonusLimit);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth, QuietBonusLimit);
+    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth, QuietMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
-        const int32_t delta = move == bestMove ? bonus : -bonus;
+        const int32_t delta = move == bestMove ? bonus : malus;
 
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
@@ -259,7 +262,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
-    const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth + CaptureBonusQuadratic * depth * depth, CaptureBonusLimit);
+    const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
