@@ -31,14 +31,14 @@ static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 80);
-DEFINE_PARAM(LateMoveReductionBias_Quiets, 54, 20, 80);
-DEFINE_PARAM(LateMoveReductionScale_Captures, 40, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
+DEFINE_PARAM(LateMoveReductionBias_Quiets, 51, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
 DEFINE_PARAM(LateMoveReductionBias_Captures, 56, 20, 80);
 
-DEFINE_PARAM(SingularitySearchMinDepth, 8, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 190, 100, 400);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 429, 200, 500);
+DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 183, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 419, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 29, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
@@ -47,30 +47,30 @@ DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
-DEFINE_PARAM(HistoryPruningLinearFactor, 243, 100, 500);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 129, 50, 200);
+DEFINE_PARAM(HistoryPruningLinearFactor, 240, 100, 500);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
 
-DEFINE_PARAM(AspirationWindowMaxSize, 500, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 11, 6, 20);
+DEFINE_PARAM(AspirationWindowMaxSize, 501, 200, 1000);
+DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 20, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 19, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 91, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 97, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
-DEFINE_PARAM(BetaMarginMultiplier, 126, 100, 200);
+DEFINE_PARAM(BetaMarginMultiplier, 125, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 123, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 58, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 126, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 53, 50, 150);
 
 DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
-DEFINE_PARAM(RazoringMarginMultiplier, 146, 100, 200);
-DEFINE_PARAM(RazoringMarginBias, 18, 0, 25);
+DEFINE_PARAM(RazoringMarginMultiplier, 148, 100, 200);
+DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7868, 5000, 15000);
-DEFINE_PARAM(ReductionStatDiv, 9353, 5000, 15000);
+DEFINE_PARAM(ReductionStatOffset, 7856, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 9692, 6000, 12000);
 
 class SearchTrace
 {
