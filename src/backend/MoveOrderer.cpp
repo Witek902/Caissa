@@ -9,17 +9,26 @@
 #include <limits>
 #include <iomanip>
 
-DEFINE_PARAM(QuietBonusOffset, -94, -200, 200);
-DEFINE_PARAM(QuietBonusLinear, 155, 50, 200);
-DEFINE_PARAM(QuietBonusLimit, 1957, 1000, 4000);
+DEFINE_PARAM(QuietBonusOffset, -98, -200, 50);
+DEFINE_PARAM(QuietBonusLinear, 162, 75, 200);
+DEFINE_PARAM(QuietBonusLimit, 1984, 1000, 4000);
 
-DEFINE_PARAM(QuietMalusOffset, -80, -200, 200);
-DEFINE_PARAM(QuietMalusLinear, 206, 50, 200);
-DEFINE_PARAM(QuietMalusLimit, 1800, 1000, 4000);
+DEFINE_PARAM(QuietMalusOffset, -79, -200, 50);
+DEFINE_PARAM(QuietMalusLinear, 156, 75, 200);
+DEFINE_PARAM(QuietMalusLimit, 1961, 1000, 4000);
 
-DEFINE_PARAM(CaptureBonusOffset, 39, 0, 200);
-DEFINE_PARAM(CaptureBonusLinear, 69, 40, 200);
-DEFINE_PARAM(CaptureBonusLimit, 2387, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 39, 0, 150);
+DEFINE_PARAM(CaptureBonusLinear, 73, 20, 150);
+DEFINE_PARAM(CaptureBonusLimit, 2448, 1000, 4000);
+
+DEFINE_PARAM(CaptureMalusOffset, 36, 0, 150);
+DEFINE_PARAM(CaptureMalusLinear, 67, 20, 150);
+DEFINE_PARAM(CaptureMalusLimit, 2187, 1000, 4000);
+
+DEFINE_PARAM(ContinuationHistoryScale0, 1012, 512, 2048);
+DEFINE_PARAM(ContinuationHistoryScale1, 1041, 512, 2048);
+DEFINE_PARAM(ContinuationHistoryScale3, 1024, 512, 2048);
+DEFINE_PARAM(ContinuationHistoryScale5, 990, 512, 2048);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
@@ -263,13 +272,14 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
+    const int32_t malus = -std::min<int32_t>(CaptureMalusOffset + CaptureMalusLinear * depth, CaptureMalusLimit);
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
         ASSERT(move.IsCapture());
 
-        const int32_t delta = move == bestMove ? bonus : -bonus;
+        const int32_t delta = move == bestMove ? bonus : malus;
 
         const Piece captured = node.position.GetCapturedPiece(move);
         ASSERT(captured > Piece::None);
@@ -348,10 +358,10 @@ void MoveOrderer::ScoreMoves(
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][from][to];
 
             // continuation history
-            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to] * ContinuationHistoryScale0 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to] * ContinuationHistoryScale1 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] * ContinuationHistoryScale3 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] * ContinuationHistoryScale5 / 1024;
 
             switch (move.GetPiece())
             {
