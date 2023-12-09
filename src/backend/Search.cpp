@@ -31,14 +31,14 @@ static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
 DEFINE_PARAM(LateMoveReductionBias_Quiets, 54, 20, 80);
-DEFINE_PARAM(LateMoveReductionScale_Captures, 40, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Captures, 40, 20, 70);
 DEFINE_PARAM(LateMoveReductionBias_Captures, 56, 20, 80);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 8, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 190, 100, 400);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 429, 200, 500);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 190, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 429, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 29, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
@@ -59,18 +59,18 @@ DEFINE_PARAM(SingularDoubleExtensionMarigin, 20, 10, 30);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 91, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
-DEFINE_PARAM(BetaMarginMultiplier, 126, 100, 200);
+DEFINE_PARAM(BetaMarginMultiplier, 126, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 123, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 58, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 58, 50, 150);
 
 DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 146, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 18, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7868, 5000, 15000);
-DEFINE_PARAM(ReductionStatDiv, 9353, 5000, 15000);
+DEFINE_PARAM(ReductionStatOffset, 7868, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 9353, 6000, 12000);
 
 class SearchTrace
 {
