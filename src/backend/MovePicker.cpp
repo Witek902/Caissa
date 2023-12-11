@@ -105,7 +105,18 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             m_stage = Stage::PickQuiets;
             if (m_generateQuiets)
             {
-                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, m_moves);
+                // at low depth, only generate moves that do not hang pieces
+                Bitboard knightBishopMoveFilter = 0;
+                Bitboard rookMoveFilter = 0;
+                Bitboard queenMoveFilter = 0;
+                if (node.height > 0 && !node.isInCheck)
+                {
+                    if (node.depth <= 1) knightBishopMoveFilter = node.threats.attackedByPawns;
+                    if (node.depth <= 2) rookMoveFilter = node.threats.attackedByMinors;
+                    if (node.depth <= 3) queenMoveFilter = node.threats.attackedByRooks;
+                }
+
+                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, m_moves, knightBishopMoveFilter, rookMoveFilter, queenMoveFilter);
 
                 // remove played moves from generated list
                 m_moves.RemoveMove(m_ttMove);
