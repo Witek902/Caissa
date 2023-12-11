@@ -226,7 +226,8 @@ INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+inline void GenerateMoveList(const Position& pos, MoveList& outMoveList,
+    const Bitboard knightBishopMoveFilter = 0, const Bitboard rookMoveFilter = 0, const Bitboard queenMoveFilter = 0)
 {
     constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
     const SidePosition& currentSide = pos.GetSide(sideToMove);
@@ -246,7 +247,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 
     currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
-        const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & filter;
+        const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & filter & ~knightBishopMoveFilter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
@@ -255,7 +256,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 
     currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
-        const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & filter;
+        const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & filter & ~knightBishopMoveFilter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
@@ -264,7 +265,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 
     currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
-        const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & filter;
+        const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & filter & ~rookMoveFilter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
@@ -273,7 +274,7 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 
     currentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
-        const Bitboard attackBitboard = filter & Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares);
+        const Bitboard attackBitboard = Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares) & filter & ~queenMoveFilter;
         attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
         {
             outMoveList.Push(Move::MakeSimple<Piece::Queen, isCapture>(fromIndex, Square(toIndex)));
@@ -284,15 +285,16 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 }
 
 template<MoveGenerationMode mode>
-INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList,
+    const Bitboard knightBishopMoveFilter = 0, const Bitboard rookMoveFilter = 0, const Bitboard queenMoveFilter = 0)
 {
     if (pos.GetSideToMove() == Color::White)
     {
-        GenerateMoveList<mode, Color::White>(pos, outMoveList);
+        GenerateMoveList<mode, Color::White>(pos, outMoveList, knightBishopMoveFilter, rookMoveFilter, queenMoveFilter);
     }
     else
     {
-        GenerateMoveList<mode, Color::Black>(pos, outMoveList);
+        GenerateMoveList<mode, Color::Black>(pos, outMoveList, knightBishopMoveFilter, rookMoveFilter, queenMoveFilter);
     }
 }
 
