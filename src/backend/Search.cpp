@@ -138,11 +138,12 @@ private:
     const NodeInfo& m_node;
 };
 
+template<bool isPvNode>
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
-    return improving ?
-        LateMovePruningBase + depth * depth :
-        LateMovePruningBase + depth * depth / 2;
+    uint32_t treshold = LateMovePruningBase + depth * depth;
+    if constexpr (isPvNode) treshold += 4;
+    return improving ? treshold : (treshold / 2);
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
@@ -1851,7 +1852,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Late Move Pruning
                 // skip quiet moves that are far in the list
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
+                if (quietMoveIndex >= GetLateMovePruningTreshold<isPvNode>(node->depth, isImproving))
                 {
                     // if we're in quiets stage, skip everything
                     if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
