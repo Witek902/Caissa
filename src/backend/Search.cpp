@@ -1592,10 +1592,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Futility/Beta Pruning
-            if (node->depth <= BetaPruningDepth &&
+            const int32_t rfpDepth = isImproving ? (node->depth / 2) : node->depth;
+            if (rfpDepth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta &&
-                eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
+                eval >= beta + BetaMarginBias + BetaMarginMultiplier * rfpDepth)
             {
 #ifdef ENABLE_SEARCH_TRACE
                 trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
