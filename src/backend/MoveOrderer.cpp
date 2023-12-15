@@ -393,6 +393,8 @@ void MoveOrderer::ScoreMoves(
                 case Piece::Queen:
                     if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
                     if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
+                    // bonus for escaping trap
+                    else if ((node.threats.allThreats & Bitboard::GetKingAttacks(move.FromSquare())) == Bitboard::GetKingAttacks(move.FromSquare())) score += 8000;
                     break;
                 case Piece::King:
                     if (pos.GetOurCastlingRights())             score -= 6000;
