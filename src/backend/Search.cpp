@@ -1454,6 +1454,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // accept TT cutoff from shallower search if the score is way below alpha
                 return alpha;
             }
+
+            // Reverse Futility Pruning (early)
+            if (!node->filteredMove.IsValid() && !node->isInCheck &&
+                node->depth <= BetaPruningDepth &&
+                std::abs(ttScore) < KnownWinValue &&
+                (ttEntry.bounds == TTEntry::Bounds::Lower || ttEntry.bounds == TTEntry::Bounds::Exact) &&
+                ttScore >= beta + BetaMarginBias + BetaMarginMultiplier * node->depth)
+            {
+#ifdef ENABLE_SEARCH_TRACE
+                trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
+#endif // ENABLE_SEARCH_TRACE
+                return ttScore;
+            }
         }
     }
 
@@ -1591,7 +1604,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
-            // Futility/Beta Pruning
+            // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta &&
