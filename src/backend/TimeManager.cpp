@@ -48,7 +48,7 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
 
         // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
+        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.05f);
 
         limits.timeIncrementRatio = 0.0f;
     }
