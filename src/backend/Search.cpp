@@ -1052,8 +1052,8 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        // apply 50% of the material score correction term
-        const ScoreType matScoreCorrection = threadData.GetMaterialScoreCorrection(node.position) / 2;
+        // apply 75% of the material score correction term
+        const ScoreType matScoreCorrection = threadData.GetMaterialScoreCorrection(node.position) * 3 / 4;
         adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
 
         // scale down when approaching 50-move draw
