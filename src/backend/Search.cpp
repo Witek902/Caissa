@@ -1301,6 +1301,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         return -CheckmateValue + (ScoreType)node->height;
     }
 
+    // idea from Stockfish
+    if (std::abs(bestValue) <= KnownWinValue && bestValue > beta)
+    {
+        bestValue = (3 * bestValue + beta) / 4;
+    }
+
     // store value in transposition table
     if (!searchAborted)
     {
