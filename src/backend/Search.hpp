@@ -20,8 +20,6 @@
 #define COLLECT_SEARCH_STATS
 #endif // CONFIGURATION_FINAL
 
-// #define USE_EVAL_PROBING
-
 struct SearchLimits
 {
     // a time point where search started
@@ -54,18 +52,6 @@ struct SearchLimits
 
     float timeIncrementRatio = 0.0f;
 };
-
-#ifdef USE_EVAL_PROBING
-
-// Utility that allows for collecting evaluated positions during the search
-// This is used for collecting positions for parameter tuning
-class EvalProbingInterface
-{
-public:
-    virtual void ReportPosition(const Position& pos, ScoreType eval) = 0;
-};
-
-#endif // USE_EVAL_PROBING
 
 struct SearchParam
 {
@@ -119,11 +105,6 @@ struct SearchParam
 
     // show win/draw/loss probabilities along with classic cp score
     bool showWDL = false;
-
-#ifdef USE_EVAL_PROBING
-    // optional eval probing interface
-    EvalProbingInterface* evalProbingInterface = nullptr;
-#endif // USE_EVAL_PROBING
 };
 
 struct PvLine
