@@ -1763,14 +1763,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
 
-    int32_t extension = 0;
-
-    // check extension
-    if (node->isInCheck)
-    {
-        extension++;
-    }
-
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
 
@@ -1906,21 +1898,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
-
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
+        int32_t moveExtension = 0;
 
         // Singular move detection
         if constexpr (!isRootNode)
@@ -1976,7 +1954,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
                 else if (ttScore >= beta)
                 {
-                    moveExtension--;
+                    moveExtension = -1;
                 }
             }
         }
@@ -1998,16 +1976,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ReportCurrentMove(move, node->depth, moveIndex + node->pvIndex);
                 }
             }
-        }
-
-        // avoid extending search too much (maximum 2x depth at root node)
-        if (node->height < 2 * thread.rootDepth)
-        {
-            moveExtension = std::clamp(moveExtension, 0, MaxExtension);
-        }
-        else
-        {
-            moveExtension = 0;
         }
 
         childNode.staticEval = InvalidValue;
