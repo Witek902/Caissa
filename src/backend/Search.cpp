@@ -2033,16 +2033,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r++;
 
-                // reduce more if TT move is capture
-                if (ttCapture) r++;
-
                 // reduce good moves less
                 if (moveScore >= MoveOrderer::CounterMoveBonus) r -= 2;
 
                 // reduce less based on move stat score
                 r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
-
-                if (node->isCutNode) r += 2;
             }
             else
             {
@@ -2053,9 +2048,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce bad captures more
                 if (moveScore < MoveOrderer::GoodCaptureValue) r++;
-
-                if (node->isCutNode) r++;
             }
+
+            // reduce more if the node is expected to be cut-node
+            if (node->isCutNode) r += 2;
+
+            // reduce more if TT move is capture
+            if (ttCapture) r++;
 
             // reduce more if eval is not improving
             if (!isImproving) r++;
