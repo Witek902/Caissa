@@ -19,7 +19,6 @@
 #include <thread>
 #include <math.h>
 
-// #define ENABLE_SEARCH_TRACE
 // #define VALIDATE_MOVE_PICKER
 
 static const float PvLineReportDelay = 0.005f;
@@ -27,7 +26,6 @@ static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 
-static const int32_t MaxExtension = 2;
 static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
@@ -902,10 +900,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
 
-#ifdef ENABLE_SEARCH_TRACE
-        SearchTrace::OnRootSearchBegin();
-#endif
-
         pvLine.score = NegaMax<NodeType::Root>(thread, &rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
@@ -1135,13 +1129,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
 
-#ifdef USE_EVAL_PROBING
-            if (ctx.searchParam.evalProbingInterface)
-            {
-                ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
-            }
-#endif // USE_EVAL_PROBING
-
             node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1342,10 +1329,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     else
         ASSERT(node->alpha < node->beta);
 
-#ifdef ENABLE_SEARCH_TRACE
-    SearchTrace trace(node);
-#endif // ENABLE_SEARCH_TRACE
-
     // clear PV line
     node->pvLength = 0;
 
@@ -1365,9 +1348,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // update stats
                 thread.stats.OnNodeEnter(node->height + 1);
                 ctx.stats.Append(thread.stats);
-#ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::GameCycle, alpha);
-#endif // ENABLE_SEARCH_TRACE
                 return alpha;
             }
         }
@@ -1391,9 +1371,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             CheckInsufficientMaterial(node->position) ||
             SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
         {
-#ifdef ENABLE_SEARCH_TRACE
-            trace.OnNodeExit(SearchTrace::ExitReason::Draw, 0);
-#endif // ENABLE_SEARCH_TRACE
             return 0;
         }
 
@@ -1401,12 +1378,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node->height, alpha);
         beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node->height - 1, beta);
         if (alpha >= beta)
-        {
-#ifdef ENABLE_SEARCH_TRACE
-            trace.OnNodeExit(SearchTrace::ExitReason::MateDistancePruning, alpha);
-#endif // ENABLE_SEARCH_TRACE
             return alpha;
-        }
     }
 
     ASSERT(node->isInCheck == position.IsInCheck(position.GetSideToMove()));
@@ -1448,12 +1420,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
 
                 if (ttCutoffValue != InvalidValue)
-                {
-#ifdef ENABLE_SEARCH_TRACE
-                    trace.OnNodeExit(SearchTrace::ExitReason::TTCutoff, ttCutoffValue);
-#endif // ENABLE_SEARCH_TRACE
                     return ttCutoffValue;
-                }
             }
             else if ((ttEntry.bounds == TTEntry::Bounds::Upper || ttEntry.bounds == TTEntry::Bounds::Exact) &&
                 ttEntry.depth < node->depth && node->depth - ttEntry.depth < 5 &&
@@ -1515,10 +1482,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
                 }
-
-#ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::TBHit, tbValue);
-#endif // ENABLE_SEARCH_TRACE
                 return tbValue;
             }
         }
@@ -1540,14 +1503,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-
-#ifdef USE_EVAL_PROBING
-            if (ctx.searchParam.evalProbingInterface)
-            {
-                ctx.searchParam.evalProbingInterface->ReportPosition(position, evalScore);
-            }
-#endif // USE_EVAL_PROBING
-
             node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
         }
         else if (!node->isCutNode)
@@ -1606,9 +1561,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
-#ifdef ENABLE_SEARCH_TRACE
-                trace.OnNodeExit(SearchTrace::ExitReason::BetaPruning, alpha);
-#endif // ENABLE_SEARCH_TRACE
                 return eval;
             }
 
@@ -1620,12 +1572,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
                 if (qScore < beta)
-                {
-#ifdef ENABLE_SEARCH_TRACE
-                    trace.OnNodeExit(SearchTrace::ExitReason::Razoring, qScore);
-#endif // ENABLE_SEARCH_TRACE
                     return qScore;
-                }
             }
 
             // Null Move Pruning
@@ -1672,12 +1619,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                             nullMoveScore = beta;
 
                         if (std::abs(beta) < KnownWinValue && node->depth < 10)
-                        {
-#ifdef ENABLE_SEARCH_TRACE
-                            trace.OnNodeExit(SearchTrace::ExitReason::NullMovePruning, nullMoveScore);
-#endif // ENABLE_SEARCH_TRACE
                             return nullMoveScore;
-                        }
 
                         node->depth -= static_cast<uint16_t>(NullMovePruning_ReSearchDepthReduction);
 
@@ -1957,27 +1899,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->height < 2 * thread.rootDepth)
                     {
-                        moveExtension++;
-
+                        moveExtension = 1;
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
                             if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension++;
+                                moveExtension = 2;
                     }
                 }
-                else if (singularScore >= beta)
-                {
-                    // if second best move beats current beta, there most likely would be beta cutoff
-                    // when searching it at full depth
-#ifdef ENABLE_SEARCH_TRACE
-                    trace.OnNodeExit(SearchTrace::ExitReason::SingularPruning, singularScore);
-#endif // ENABLE_SEARCH_TRACE
-                    return singularScore;
-                }
+                // if second best move beats current beta, there most likely would be beta cutoff
+                // when searching it at full depth
+                else if (singularBeta >= beta)
+                    return singularBeta;
                 else if (ttScore >= beta)
-                {
-                    moveExtension--;
-                }
+                    moveExtension = -1 + isPvNode;
+                else if (node->isCutNode)
+                    moveExtension = -1;
             }
         }
 
@@ -1998,16 +1934,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ReportCurrentMove(move, node->depth, moveIndex + node->pvIndex);
                 }
             }
-        }
-
-        // avoid extending search too much (maximum 2x depth at root node)
-        if (node->height < 2 * thread.rootDepth)
-        {
-            moveExtension = std::clamp(moveExtension, 0, MaxExtension);
-        }
-        else
-        {
-            moveExtension = 0;
         }
 
         childNode.staticEval = InvalidValue;
@@ -2197,17 +2123,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (!searchAborted && moveIndex == 0u)
     {
         if (filteredSomeMove)
-        {
             bestValue = -InfValue;
-        }
         else
-        {
             bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->height : 0;
-        }
 
-#ifdef ENABLE_SEARCH_TRACE
-        trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue);
-#endif // ENABLE_SEARCH_TRACE
         return bestValue;
     }
 
@@ -2279,8 +2198,5 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
-#ifdef ENABLE_SEARCH_TRACE
-    trace.OnNodeExit(SearchTrace::ExitReason::Regular, bestValue, bestMoves[0]);
-#endif // ENABLE_SEARCH_TRACE
     return bestValue;
 }
