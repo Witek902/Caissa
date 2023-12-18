@@ -305,6 +305,15 @@ void MoveOrderer::ScoreMoves(
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
+    // reverse move is a move undoing move in previous turn
+    PackedMove reverseMove = PackedMove::Invalid();
+    if (withQuiets && node.height >= 2 && !node.isNullMove)
+    {
+        const Move prevPrevMove = (&node - 1)->previousMove;
+        if (!prevPrevMove.IsCapture())
+            reverseMove = PackedMove(prevPrevMove.ToSquare(), prevPrevMove.FromSquare());
+    }
+
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.GetMove(i);
@@ -398,6 +407,9 @@ void MoveOrderer::ScoreMoves(
                     if (pos.GetOurCastlingRights())             score -= 6000;
                     break;
             }
+
+            // penalize move that is reverse of previous move
+            if (move == reverseMove) score -= 5000;
 
             // use node cache for scoring moves near the root
             if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
