@@ -1059,6 +1059,25 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
 
+        // scale down when no progress is made
+        const uint32_t historyOffset = 12;
+        if (node.height >= historyOffset)
+        {
+            const Position& prevPos = (&node - historyOffset)->position;
+            const uint32_t diffCount = (
+                (prevPos.Whites().pawns ^ node.position.Whites().pawns) |
+                (prevPos.Whites().knights ^ node.position.Whites().knights) |
+                (prevPos.Whites().bishops ^ node.position.Whites().bishops) |
+                (prevPos.Whites().rooks ^ node.position.Whites().rooks) |
+                (prevPos.Whites().queens ^ node.position.Whites().queens) |
+                (prevPos.Blacks().pawns ^ node.position.Blacks().pawns) |
+                (prevPos.Blacks().knights ^ node.position.Blacks().knights) |
+                (prevPos.Blacks().bishops ^ node.position.Blacks().bishops) |
+                (prevPos.Blacks().rooks ^ node.position.Blacks().rooks) |
+                (prevPos.Blacks().queens ^ node.position.Blacks().queens)).Count();
+            adjustedScore = adjustedScore * (64 - historyOffset + diffCount) / 64;
+        }
+
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
     }
