@@ -335,29 +335,20 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
 template<Color perspective>
 INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-    const uint32_t refreshCost = node.position.GetNumPieces();
+    const Position& pos = node.position;
 
     uint32_t kingSide, kingBucket;
-
     if constexpr (perspective == Color::White)
-        GetKingSideAndBucket(node.position.Whites().GetKingSquare(), kingSide, kingBucket);
+        GetKingSideAndBucket(pos.Whites().GetKingSquare(), kingSide, kingBucket);
     else
-        GetKingSideAndBucket(node.position.Blacks().GetKingSquare().FlippedRank(), kingSide, kingBucket);
+        GetKingSideAndBucket(pos.Blacks().GetKingSquare().FlippedRank(), kingSide, kingBucket);
 
     AccumulatorCache::KingBucket& kingBucketCache = cache.kingBuckets[(uint32_t)perspective][kingBucket + kingSide * nn::NumKingBuckets];
 
     // find closest parent node that has valid accumulator
-    uint32_t updateCost = 0;
     const NodeInfo* prevAccumNode = nullptr;
     for (const NodeInfo* nodePtr = &node; ; --nodePtr)
     {
-        updateCost += nodePtr->nnContext.numDirtyPieces;
-        if (updateCost > refreshCost)
-        {
-            // update cost higher than refresh cost, incremental update not worth it
-            break;
-        }
-
         uint32_t newKingSide, newKingBucket;
         if constexpr (perspective == Color::White)
             GetKingSideAndBucket(static_cast<const Position&>(nodePtr->position).Whites().GetKingSquare(), newKingSide, newKingBucket);
