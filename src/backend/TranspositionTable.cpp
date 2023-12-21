@@ -194,13 +194,6 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 
             if (hash == posKey && data.bounds != TTEntry::Bounds::Invalid)
             {
-                if (data.generation != generation)
-                {
-                    // update entry generation
-                    data.generation = generation;
-                    cluster.entries[i].Store(hash, data);
-                }
-
                 outEntry = data;
                 return true;
             }
