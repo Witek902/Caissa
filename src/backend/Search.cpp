@@ -39,7 +39,7 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMin, 183, 100, 300);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 419, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 29, 10, 50);
 
-DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
+DEFINE_PARAM(NullMovePruningStartDepth, 3, 1, 10);
 DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
 
@@ -1576,57 +1576,50 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? 20 : 0) &&
-                node->staticEval >= beta &&
+            if (eval >= beta &&
                 node->depth >= NullMovePruningStartDepth &&
+                !node->isNullMove &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
-                // don't allow null move if parent or grandparent node was null move
-                bool doNullMove = !node->isNullMove;
-                if (node->height > 0 && (node - 1)->isNullMove) doNullMove = false;
+                // start prefetching child node's TT entry
+                ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
 
-                if (doNullMove)
+                const int32_t r =
+                    NullMovePruning_NullMoveDepthReduction +
+                    node->depth / 3 +
+                    std::min(3, int32_t(eval - beta) / 256) + isImproving;
+
+                NodeInfo& childNode = *(node + 1);
+                childNode.Clear();
+                childNode.pvIndex = node->pvIndex;
+                childNode.position = position;
+                childNode.alpha = -beta;
+                childNode.beta = -beta + 1;
+                childNode.isNullMove = true;
+                childNode.isCutNode = !node->isCutNode;
+                childNode.doubleExtensions = node->doubleExtensions;
+                childNode.height = node->height + 1;
+                childNode.depth = static_cast<int16_t>(node->depth - r);
+                childNode.nnContext.MarkAsDirty();
+
+                childNode.position.DoNullMove();
+                childNode.position.ComputeThreats(childNode.threats);
+
+                ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+
+                if (nullMoveScore >= beta)
                 {
-                    // start prefetching child node's TT entry
-                    ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
+                    if (nullMoveScore >= TablebaseWinValue)
+                        nullMoveScore = beta;
 
-                    const int32_t r =
-                        NullMovePruning_NullMoveDepthReduction +
-                        node->depth / 3 +
-                        std::min(3, int32_t(eval - beta) / 256) + isImproving;
+                    if (std::abs(beta) < KnownWinValue && node->depth < 10)
+                        return nullMoveScore;
 
-                    NodeInfo& childNode = *(node + 1);
-                    childNode.Clear();
-                    childNode.pvIndex = node->pvIndex;
-                    childNode.position = position;
-                    childNode.alpha = -beta;
-                    childNode.beta = -beta + 1;
-                    childNode.isNullMove = true;
-                    childNode.isCutNode = !node->isCutNode;
-                    childNode.doubleExtensions = node->doubleExtensions;
-                    childNode.height = node->height + 1;
-                    childNode.depth = static_cast<int16_t>(node->depth - r);
-                    childNode.nnContext.MarkAsDirty();
+                    node->depth -= static_cast<uint16_t>(NullMovePruning_ReSearchDepthReduction);
 
-                    childNode.position.DoNullMove();
-                    childNode.position.ComputeThreats(childNode.threats);
-
-                    ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-
-                    if (nullMoveScore >= beta)
+                    if (node->depth <= 0)
                     {
-                        if (nullMoveScore >= TablebaseWinValue)
-                            nullMoveScore = beta;
-
-                        if (std::abs(beta) < KnownWinValue && node->depth < 10)
-                            return nullMoveScore;
-
-                        node->depth -= static_cast<uint16_t>(NullMovePruning_ReSearchDepthReduction);
-
-                        if (node->depth <= 0)
-                        {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-                        }
+                        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
                     }
                 }
             }
