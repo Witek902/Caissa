@@ -1065,6 +1065,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 {
     ASSERT(node->height < MaxSearchDepth);
     ASSERT(!node->filteredMove.IsValid());
+    ASSERT(node->isInCheck == node->position.IsInCheck());
 
     constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
 
@@ -1244,8 +1245,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
 
         childNode.previousMove = move;
-        childNode.isInCheck = childNode.position.IsInCheck();
         childNode.position.ComputeThreats(childNode.threats);
+        childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+        ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
 
         childNode.staticEval = InvalidValue;
         childNode.alpha = -beta;
@@ -1359,6 +1361,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return QuiescenceNegaMax<nodeType>(thread, node, ctx);
     }
 
+    ASSERT(node->isInCheck == position.IsInCheck());
+
     // update stats
     thread.stats.OnNodeEnter(node->height + 1);
     ctx.stats.Append(thread.stats);
@@ -1380,8 +1384,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (alpha >= beta)
             return alpha;
     }
-
-    ASSERT(node->isInCheck == position.IsInCheck(position.GetSideToMove()));
 
     // clear killer moves for next ply
     thread.moveOrderer.ClearKillerMoves(node->height + 1);
@@ -1667,8 +1669,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                     childNode.depth = 0;
                     childNode.previousMove = move;
-                    childNode.isInCheck = childNode.position.IsInCheck();
                     childNode.position.ComputeThreats(childNode.threats);
+                    childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+                    ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
 
                     // quick verification search
                     ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
@@ -1937,8 +1940,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         childNode.staticEval = InvalidValue;
-        childNode.isInCheck = childNode.position.IsInCheck();
         childNode.position.ComputeThreats(childNode.threats);
+        childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
