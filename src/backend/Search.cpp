@@ -1083,10 +1083,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     ctx.stats.Append(thread.stats);
 
     // Not checking for draw by repetition in the quiescence search
-    if (CheckInsufficientMaterial(node->position))
-    {
+    if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
         return 0;
-    }
 
     const Position& position = node->position;
 
@@ -1193,7 +1191,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     Move bestMove = Move::Invalid();
     int32_t moveIndex = 0;
-    bool searchAborted = false;
 
     Move captureMovesTried[MoveList::MaxMoves];
     uint32_t numCaptureMovesTried = 0;
@@ -1288,32 +1285,20 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
             if (node->isInCheck) break; // try only one check evasion
         }
-
-        if (CheckStopCondition(thread, ctx, false)) [[unlikely]]
-        {
-            // abort search of further moves
-            searchAborted = true;
-            break;
-        }
     }
 
     // no legal moves - checkmate
-    if (!searchAborted && node->isInCheck && moveIndex == 0)
+    if (node->isInCheck && moveIndex == 0)
     {
         return -CheckmateValue + (ScoreType)node->height;
     }
 
     // store value in transposition table
-    if (!searchAborted)
-    {
-        const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
-
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, bounds, bestMove);
-
+    const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
+    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, bounds, bestMove);
 #ifdef COLLECT_SEARCH_STATS
-        ctx.stats.ttWrites++;
+    ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
-    }
 
     return bestValue;
 }
