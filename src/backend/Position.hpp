@@ -256,6 +256,7 @@ public:
     INLINE const SidePosition& GetSide(const Color color) const { return color == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
     INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
+    INLINE const Square GetCurrentSideKingSquare() const { return GetCurrentSide().GetKingSquare(); }
 
     INLINE uint8_t GetWhitesCastlingRights() const { return mCastlingRights[0]; }
     INLINE uint8_t GetBlacksCastlingRights() const { return mCastlingRights[1]; }
