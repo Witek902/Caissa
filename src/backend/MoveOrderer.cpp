@@ -25,11 +25,6 @@ DEFINE_PARAM(CaptureMalusOffset, 36, 0, 150);
 DEFINE_PARAM(CaptureMalusLinear, 67, 20, 150);
 DEFINE_PARAM(CaptureMalusLimit, 2187, 1000, 4000);
 
-DEFINE_PARAM(ContinuationHistoryScale0, 1012, 512, 2048);
-DEFINE_PARAM(ContinuationHistoryScale1, 1041, 512, 2048);
-DEFINE_PARAM(ContinuationHistoryScale3, 1024, 512, 2048);
-DEFINE_PARAM(ContinuationHistoryScale5, 990, 512, 2048);
-
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
 MoveOrderer::MoveOrderer()
@@ -358,10 +353,10 @@ void MoveOrderer::ScoreMoves(
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 
             // continuation history
-            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to] * ContinuationHistoryScale0 / 1024;
-            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to] * ContinuationHistoryScale1 / 1024;
-            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] * ContinuationHistoryScale3 / 1024;
-            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] * ContinuationHistoryScale5 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] / 2;
+            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] / 2;
 
             switch (move.GetPiece())
             {
