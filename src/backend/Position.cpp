@@ -4,7 +4,6 @@
 #include "Material.hpp"
 #include "Evaluate.hpp"
 #include "MoveGen.hpp"
-#include "NeuralNetworkEvaluator.hpp"
 
 const char* Position::InitPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 

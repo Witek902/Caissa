@@ -7,8 +7,8 @@
 #include "Time.hpp"
 #include "Memory.hpp"
 #include "Score.hpp"
-#include "NeuralNetworkEvaluator.hpp"
 #include "NodeCache.hpp"
+#include "Accumulator.hpp"
 
 #include <atomic>
 #include <memory>
@@ -318,7 +318,7 @@ private:
 
         NodeCache nodeCache;
 
-        AccumulatorCache accumulatorCache;
+        nn::AccumulatorCache accumulatorCache;
 
         NodeInfo searchStack[MaxSearchDepth];
 

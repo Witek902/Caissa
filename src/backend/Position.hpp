@@ -7,6 +7,43 @@
 #include <string>
 #include <vector>
 
+struct DirtyPiece
+{
+    Piece piece;
+    Color color;
+    Square fromSquare;
+    Square toSquare;
+};
+
+// promotion with capture
+static constexpr uint32_t MaxNumDirtyPieces = 3;
+
+struct NNEvaluatorContext
+{
+    // indicates which accumulator is dirty
+    bool accumDirty[2];
+
+    // added and removed pieces information
+    DirtyPiece dirtyPieces[MaxNumDirtyPieces];
+    uint32_t numDirtyPieces;
+
+    // cache NN output
+    int32_t nnScore;
+
+    NNEvaluatorContext()
+    {
+        MarkAsDirty();
+    }
+
+    INLINE void MarkAsDirty()
+    {
+        accumDirty[0] = true;
+        accumDirty[1] = true;
+        numDirtyPieces = 0;
+        nnScore = InvalidValue;
+    }
+};
+
 // class representing one side's pieces state
 struct alignas(16) SidePosition
 {

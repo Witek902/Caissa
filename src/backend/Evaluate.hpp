@@ -3,6 +3,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "Score.hpp"
+#include "PackedNeuralNetwork.hpp"
 
 #include <math.h>
 #include <algorithm>
@@ -10,12 +11,9 @@
 
 namespace nn
 {
-class PackedNeuralNetwork;
+struct AccumulatorCache;
 }
 using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
-
-struct DirtyPiece;
-struct AccumulatorCache;
 
 extern const char* c_DefaultEvalFile;
 
@@ -113,9 +111,35 @@ inline ScoreType ExpectedGameScoreToInternalEval(float score)
             -KnownWinValue + 1, KnownWinValue - 1);
 }
 
-ScoreType Evaluate(const Position& position);
-ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache);
+INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
+{
+    ASSERT(kingSquare.IsValid());
 
-void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache);
+    if (kingSquare.File() >= 4)
+    {
+        kingSquare = kingSquare.FlippedFile();
+        side = 1;
+    }
+    else
+    {
+        side = 0;
+    }
+
+    bucket = nn::KingBucketIndex[kingSquare.Index()];
+    ASSERT(bucket < nn::NumKingBuckets);
+}
+
+template<bool IncludePieceFeatures = false>
+uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);
+
+INLINE uint32_t GetNetworkVariant(const Position& pos)
+{
+    return std::min(pos.GetNumPiecesExcludingKing() / 4u, 7u);
+}
+
+ScoreType Evaluate(const Position& position);
+ScoreType Evaluate(NodeInfo& node, nn::AccumulatorCache& cache);
+
+void EnsureAccumulatorUpdated(NodeInfo& node, nn::AccumulatorCache& cache);
 
 bool CheckInsufficientMaterial(const Position& position);
