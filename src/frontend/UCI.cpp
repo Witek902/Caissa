@@ -2,7 +2,6 @@
 #include "../backend/Move.hpp"
 #include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/NeuralNetworkEvaluator.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Material.hpp"
@@ -13,7 +12,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.16.5"
+#define CAISSA_VERSION "1.16.6"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)

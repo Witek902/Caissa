@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PackedNeuralNetwork.hpp"
+#include "Bitboard.hpp"
 
 namespace nn {
 
@@ -187,5 +188,20 @@ struct alignas(CACHELINE_SIZE) Accumulator
     }
 
 };
+
+
+struct AccumulatorCache
+{
+    struct KingBucket
+    {
+        Accumulator accum;
+        Bitboard pieces[2][6]; // [color][piece type]
+    };
+    KingBucket kingBuckets[2][2 * NumKingBuckets]; // [side to move][king side * king bucket]
+    const PackedNeuralNetwork* currentNet = nullptr;
+
+    void Init(const PackedNeuralNetwork* net);
+};
+
 
 } // namespace nn

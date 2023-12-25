@@ -4,7 +4,6 @@
 
 #include "../backend/Math.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
 
