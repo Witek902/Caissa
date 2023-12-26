@@ -2180,7 +2180,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (node->depth >= 1 &&
             !node->isInCheck &&
             bestMove.IsQuiet() &&
-            (bounds == TTEntry::Bounds::Exact || (bounds == TTEntry::Bounds::Lower && bestValue > node->staticEval)))
+            (bounds == TTEntry::Bounds::Exact ||
+             (bounds == TTEntry::Bounds::Lower && bestValue > node->staticEval) ||
+             (bounds == TTEntry::Bounds::Upper && bestValue < node->staticEval)))
         {
             thread.AdjustMaterialScore(node->position, node->staticEval, bestValue);
         }
