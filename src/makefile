@@ -1,7 +1,7 @@
 EXE                = caissa
-VERSION            = 1.15
+VERSION            = 1.15.6
 EXE_NAME           = $(EXE)-$(VERSION)
-DEFAULT_EVALFILE   = ../data/neuralNets/eval-24.pnn
+DEFAULT_EVALFILE   = ../data/neuralNets/eval-28.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 CC                 = g++
 SRC                = backend/*.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
@@ -65,6 +65,8 @@ sse2:
 	$(CC)   $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
 avx512:
 	$(CC)   $(SRC) -march=core-avx2 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
+legacy:
+	$(CC)   $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
 
 # Profile-guided optimization builds
 bmi2_pgo:
