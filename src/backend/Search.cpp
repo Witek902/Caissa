@@ -49,7 +49,7 @@ DEFINE_PARAM(HistoryPruningLinearFactor, 240, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 501, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 10, 6, 20);
+DEFINE_PARAM(AspirationWindow, 6, 5, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 19, 10, 30);
@@ -865,7 +865,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t window = AspirationWindow;
 
     // increase window based on score
-    window += std::abs(param.previousScore) / 16;
+    window += std::abs(param.previousScore) / 8;
 
     // start applying aspiration window at given depth
     if (param.searchParam.useAspirationWindows &&
