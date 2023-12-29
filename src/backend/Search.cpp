@@ -864,9 +864,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     uint32_t depth = param.depth;
     int32_t window = AspirationWindow;
 
-    // increase window based on score
-    window += std::abs(param.previousScore) / 16;
-
     // start applying aspiration window at given depth
     if (param.searchParam.useAspirationWindows &&
         param.previousScore != InvalidValue &&
