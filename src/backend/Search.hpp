@@ -313,7 +313,6 @@ private:
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
-        uint32_t randomSeed;                // seed for random number generator
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
@@ -326,7 +325,7 @@ private:
 
         static constexpr int32_t EvalCorrectionScale = 256;
         static constexpr uint32_t MatCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
+        static constexpr uint32_t PawnStructureCorrectionTableSize = 2048;
         int16_t matScoreCorrection[MatCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
 
@@ -337,10 +336,8 @@ private:
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
 
-        ScoreType GetMaterialScoreCorrection(const Position& pos) const;
-        void AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore);
-
-        uint32_t GetRandomUint();
+        ScoreType GetEvalCorrection(const Position& pos) const;
+        void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
