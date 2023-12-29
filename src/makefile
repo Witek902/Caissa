@@ -53,7 +53,11 @@ AVX512FLAGS   = $(BMI2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
 # for OpenBench
 ob:
-	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+	$(BENCH)
+	$(PGO_MERGE)
+	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CLEAN)
 
 bmi2:
 	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
