@@ -1693,14 +1693,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
 
-    int32_t extension = 0;
-
-    // check extension
-    if (node->isInCheck)
-    {
-        extension++;
-    }
-
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
 
@@ -1836,21 +1828,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
+        int32_t moveExtension = 0;
 
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
 
         // Singular move detection
         if constexpr (!isRootNode)
@@ -1902,6 +1881,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     moveExtension = -1 + isPvNode;
                 else if (node->isCutNode)
                     moveExtension = -1;
+            }
+
+            if (moveExtension == 0)
+            {
+                // check extension
+                if (node->isInCheck) moveExtension = 1;
+
+                // promotion extension
+                if (move.GetPromoteTo() == Piece::Queen) moveExtension = 1;
+
+                // pawn advanced to 6th row so is about to promote
+                if (move.GetPiece() == Piece::Pawn &&
+                    move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
+                {
+                    moveExtension = 1;
+                }
             }
         }
 
