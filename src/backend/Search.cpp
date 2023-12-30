@@ -70,6 +70,8 @@ DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7856, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 9692, 6000, 12000);
 
+DEFINE_PARAM(EvalCorrectionTermMult, 128, 0, 256);
+
 class SearchTrace
 {
 public:
@@ -998,27 +1000,28 @@ ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
     const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
     const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    const int32_t color = (int32_t)pos.GetSideToMove();
+    return (matScoreCorrection[matIndex][color] + pawnStructureCorrection[pawnIndex][color]) / EvalCorrectionScale;
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
-    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
-    if (pos.GetSideToMove() == Color::Black) diff = -diff;
+    const int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
+    const int32_t color = (int32_t)pos.GetSideToMove();
 
     constexpr const int32_t blendFactor = 256; // TODO should be dependent on time control?
 
     // material
     {
         const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
+        int16_t& matScore = matScoreCorrection[index][color];
         matScore = static_cast<int16_t>((matScore * (blendFactor - 1) + diff) / blendFactor);
     }
 
     // pawn structure
     {
         const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
+        int16_t& pawnScore = pawnStructureCorrection[index][color];
         pawnScore = static_cast<int16_t>((pawnScore * (blendFactor - 1) + diff) / blendFactor);
     }
 }
@@ -1046,9 +1049,8 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        // apply 50% of the eval correction term
-        const ScoreType matScoreCorrection = threadData.GetEvalCorrection(node.position) / 2;
-        adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
+        // apply the eval correction term
+        adjustedScore += threadData.GetEvalCorrection(node.position) * EvalCorrectionTermMult / 256;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -2177,8 +2179,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
         // if we beat alpha, adjust material score
-        if (node->depth >= 1 &&
-            !node->isInCheck &&
+        if (!node->isInCheck &&
             bestMove.IsQuiet() &&
             (bounds == TTEntry::Bounds::Exact ||
              (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
