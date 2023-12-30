@@ -1370,8 +1370,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             return alpha;
     }
 
-    // clear killer moves for next ply
-    thread.moveOrderer.ClearKillerMoves(node->height + 1);
+    // clear killer moves for next turn
+    thread.moveOrderer.ClearKillerMoves(node->height + 2);
 
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
