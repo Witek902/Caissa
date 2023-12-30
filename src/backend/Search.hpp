@@ -327,8 +327,8 @@ private:
         static constexpr int32_t EvalCorrectionScale = 256;
         static constexpr uint32_t MaterialCorrectionTableSize = 2048;
         static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
-        int16_t matScoreCorrection[MaterialCorrectionTableSize];
-        int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
+        int16_t matScoreCorrection[MaterialCorrectionTableSize][2];
+        int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize][2];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
