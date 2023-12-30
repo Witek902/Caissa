@@ -325,9 +325,7 @@ private:
         NodeInfo searchStack[MaxSearchDepth];
 
         static constexpr int32_t EvalCorrectionScale = 256;
-        static constexpr uint32_t MatCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
-        int16_t matScoreCorrection[MatCorrectionTableSize];
+        static constexpr uint32_t PawnStructureCorrectionTableSize = 2048;
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
 
         ThreadData();
@@ -337,8 +335,8 @@ private:
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
 
-        ScoreType GetMaterialScoreCorrection(const Position& pos) const;
-        void AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore);
+        ScoreType GetEvalCorrection(const Position& pos) const;
+        void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
 
         uint32_t GetRandomUint();
     };

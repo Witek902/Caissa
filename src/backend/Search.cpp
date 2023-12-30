@@ -233,7 +233,6 @@ void Search::Clear()
         threadData->moveOrderer.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
-        memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
     }
 }
@@ -994,33 +993,22 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
-ScoreType Search::ThreadData::GetMaterialScoreCorrection(const Position& pos) const
+ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MatCorrectionTableSize;
     const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    return pawnStructureCorrection[pawnIndex] / EvalCorrectionScale;
 }
 
-void Search::ThreadData::AdjustMaterialScore(const Position& pos, ScoreType evalScore, ScoreType trueScore)
+void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
     int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
     if (pos.GetSideToMove() == Color::Black) diff = -diff;
 
     constexpr const int32_t blendFactor = 256; // TODO should be dependent on time control?
 
-    // material
-    {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MatCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (blendFactor - 1) + diff) / blendFactor);
-    }
-
-    // pawn structure
-    {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (blendFactor - 1) + diff) / blendFactor);
-    }
+    const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+    int16_t& pawnScore = pawnStructureCorrection[index];
+    pawnScore = static_cast<int16_t>((pawnScore * (blendFactor - 1) + diff) / blendFactor);
 }
 
 INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
@@ -1046,8 +1034,8 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        // apply 50% of the material score correction term
-        const ScoreType matScoreCorrection = threadData.GetMaterialScoreCorrection(node.position) / 2;
+        // apply 50% of the eval correction term
+        const ScoreType matScoreCorrection = threadData.GetEvalCorrection(node.position) / 2;
         adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
 
         // scale down when approaching 50-move draw
@@ -2176,15 +2164,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
 
-        // if we beat alpha, adjust material score
-        if (node->depth >= 1 &&
-            !node->isInCheck &&
-            bestMove.IsQuiet() &&
+        // update eval correction
+        if (!node->isInCheck && bestMove.IsQuiet() &&
             (bounds == TTEntry::Bounds::Exact ||
              (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
         {
-            thread.AdjustMaterialScore(node->position, node->staticEval, bestValue);
+            thread.UpdateEvalCorrection(node->position, node->staticEval, bestValue);
         }
     }
 
