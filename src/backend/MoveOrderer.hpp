@@ -21,6 +21,8 @@ public:
     static constexpr int32_t CounterMoveBonus       = KillerMoveBonus - 1;
     static constexpr int32_t LosingCaptureValue     = -4000;
 
+    static constexpr uint32_t KillersDepth          = MaxSearchDepth + 2;
+
     using CounterType = int16_t;
     using PieceSquareHistory = CounterType[6][64];
     using PieceSquareHistoryPtr = PieceSquareHistory*;
@@ -46,13 +48,13 @@ public:
 
     INLINE void ClearKillerMoves(uint32_t depth)
     {
-        ASSERT(depth <= MaxSearchDepth);
+        ASSERT(depth < KillersDepth);
         killerMoves[depth] = Move::Invalid();
     }
 
     INLINE void UpdateKillerMove(uint32_t depth, const Move move)
     {
-        ASSERT(depth < MaxSearchDepth);
+        ASSERT(depth < KillersDepth);
         killerMoves[depth] = move;
     }
 
@@ -74,5 +76,5 @@ private:
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
     Move counterMoves[2][6][64];                            // stm, piece, to-square
 
-    Move killerMoves[MaxSearchDepth + 1];
+    Move killerMoves[KillersDepth];
 };
