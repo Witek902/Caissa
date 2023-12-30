@@ -49,8 +49,6 @@ struct SearchLimits
 
     // in analysis mode full PV lines are searched
     bool analysisMode = false;
-
-    float timeIncrementRatio = 0.0f;
 };
 
 struct SearchParam
