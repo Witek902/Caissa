@@ -9,9 +9,10 @@
 DEFINE_PARAM(TM_MovesLeftMidpoint, 43, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 210, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 832, 700, 1000);
-DEFINE_PARAM(TM_NodesCountScaleA, 212, 160, 260); // inc / time = 0
-DEFINE_PARAM(TM_NodesCountScaleB, 188, 140, 240); // inc / time = 0.1
+DEFINE_PARAM(TM_NodesCountScale, 200, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 52, 10, 90);
+DEFINE_PARAM(TM_StabilityScale, 40, 0, 200);
+DEFINE_PARAM(TM_StabilityOffset, 1200, 1000, 2000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -21,7 +22,7 @@ static float EstimateMovesLeft(const uint32_t moves)
     return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
-void TimeManager::Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
+void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
     const int32_t moveOverhead = data.moveOverhead;
     const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition().GetMoveCount());
@@ -49,12 +50,6 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
 
         // activate root singularity search after some portion of estimated time passed
         limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
-
-        limits.timeIncrementRatio = 0.0f;
-    }
-    else
-    {
-        limits.timeIncrementRatio = (float)data.timeIncrement / (float)data.remainingTime;
     }
 
     // fixed move time
@@ -65,32 +60,42 @@ void TimeManager::Init(const Game& game, const TimeManagerInitData& data, Search
     }
 }
 
-void TimeManager::Update(const TimeManagerUpdateData& data, SearchLimits& limits)
+void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state)
 {
     ASSERT(!data.currResult.empty());
     ASSERT(!data.currResult[0].moves.empty());
 
     if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
-    {
         return;
-    }
     
     // don't update TM at low depths
     if (data.depth < 5)
-    {
         return;
+
+    limits.idealTimeCurrent = limits.idealTimeBase;
+
+    // decrease time if PV move is stable
+    {
+        // update PV move stability counter
+        if (data.prevResult[0].moves.front() == data.currResult[0].moves.front())
+            state.stabilityCounter++;
+        else
+            state.stabilityCounter = 0;
+
+        const double stabilityFactor = static_cast<double>(TM_StabilityScale) / 1000.0;
+        const double stabilityOffset = static_cast<double>(TM_StabilityOffset) / 1000.0;
+        const double stabilityTimeFactor = stabilityOffset - stabilityFactor * std::min(10u, state.stabilityCounter);
+        limits.idealTimeCurrent *= stabilityTimeFactor;
     }
 
     // decrease time if nodes fraction spent on best move is high
-    const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
-    const double scaleA = static_cast<double>(TM_NodesCountScaleA) / 100.0;
-    const double scaleB = static_cast<double>(TM_NodesCountScaleB) / 100.0;
-    const double scale = std::lerp(scaleA, scaleB, 10.0 * std::min(0.1f, limits.timeIncrementRatio));
-    const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
-    const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
-
-    limits.idealTimeCurrent = limits.idealTimeBase;
-    limits.idealTimeCurrent *= nodeCountFactor;
+    {
+        const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
+        const double scale = static_cast<double>(TM_NodesCountScale) / 100.0;
+        const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
+        const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
+        limits.idealTimeCurrent *= nodeCountFactor;
+    }
 
 #ifndef CONFIGURATION_FINAL
     std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
