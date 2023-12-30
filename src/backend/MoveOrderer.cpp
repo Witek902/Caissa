@@ -207,9 +207,9 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
-void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
+void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
 {
-    ASSERT(node.depth >= 0);
+    ASSERT(depth >= 0);
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
@@ -225,13 +225,11 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 
     // don't update uncertain moves
-    if (numMoves <= 1 && node.depth < 2)
-    {
+    if (numMoves <= 1 && depth < 2)
         return;
-    }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth, QuietBonusLimit);
-    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth, QuietMalusLimit);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * depth, QuietBonusLimit);
+    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * depth, QuietMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
@@ -253,16 +251,13 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 }
 
-void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
+void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth)
 {
-    // depth can be negative in QSearch
-    int32_t depth = std::max<int32_t>(0, node.depth);
+    ASSERT(depth >= 0);
 
     // don't update uncertain moves
     if (numMoves <= 1)
-    {
         return;
-    }
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 

@@ -1277,7 +1277,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 if (score >= beta)
                 {
                     if (bestMove.IsCapture())
-                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
+                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove, 0);
 
                     break;
                 }
@@ -2121,12 +2121,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // update move orderer
     if (bestValue >= beta)
     {
+        const int32_t depth = node->depth + (bestValue > beta + 100);
         if (bestMove.IsQuiet())
         {
-            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
+            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, depth);
             thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
         }
-        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
+        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove, depth);
     }
 
 #ifdef COLLECT_SEARCH_STATS
