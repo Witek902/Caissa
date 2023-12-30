@@ -666,6 +666,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.nodeCache.OnNewSearch();
 
     uint32_t mateCounter = 0;
+    TimeManagerState timeManagerState;
 
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
@@ -774,7 +775,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 }
             }
 
-            TimeManager::Update(data, searchContext.searchParam.limits);
+            UpdateTimeManager(data, searchContext.searchParam.limits, timeManagerState);
         }
 
         // remember PV lines so they can be used in next iteration

@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.15.6"
+#define CAISSA_VERSION "1.15.7"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -590,7 +590,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         data.movesToGo = movesToGo;
         data.moveOverhead = mOptions.moveOverhead;
 
-        TimeManager::Init(mGame, data, mSearchCtx->searchParam.limits);
+        InitTimeManager(mGame, data, mSearchCtx->searchParam.limits);
     }
 
     if (mateSearchDepth > 0)

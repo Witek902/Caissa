@@ -24,12 +24,13 @@ struct TimeManagerUpdateData
     double bestMoveNodeFraction = 0.0;
 };
 
-class TimeManager
+struct TimeManagerState
 {
-public:
-    // init time limits at the beginning of a search
-    static void Init(const Game& game, const TimeManagerInitData& data, SearchLimits& limits);
-
-    // update time limits after one search iteration
-    static void Update(const TimeManagerUpdateData& data, SearchLimits& limits);
+    uint32_t stabilityCounter = 0;
 };
+
+// init time limits at the beginning of a search
+void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLimits& limits);
+
+// update time limits after one search iteration
+void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state);
