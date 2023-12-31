@@ -1957,6 +1957,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
 
                 if (node->isCutNode) r += 2;
+
+                // reduce more if eval is very different from root eval
+                if (thread.rootDepth > 1 && node->height % 2 == 0 && eval - thread.pvLines[node->pvIndex].score > 150)
+                    r++;
             }
             else
             {
