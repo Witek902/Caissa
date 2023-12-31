@@ -6,13 +6,13 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(TM_MovesLeftMidpoint, 43, 30, 60);
-DEFINE_PARAM(TM_MovesLeftSteepness, 210, 150, 260);
-DEFINE_PARAM(TM_IdealTimeFactor, 832, 700, 1000);
-DEFINE_PARAM(TM_NodesCountScale, 200, 160, 260);
-DEFINE_PARAM(TM_NodesCountOffset, 52, 10, 90);
-DEFINE_PARAM(TM_StabilityScale, 40, 0, 200);
-DEFINE_PARAM(TM_StabilityOffset, 1200, 1000, 2000);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
+DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
+DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
+DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
+DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
+DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
+DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {

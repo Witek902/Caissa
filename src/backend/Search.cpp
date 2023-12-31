@@ -30,14 +30,21 @@ static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
 DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Quiets, 51, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Quiets, 50, 20, 80);
 DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Captures, 56, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
+
+DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
+DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
+
+DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
+DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
+DEFINE_PARAM(FutilityPruningStatscoreDiv, 506, 128, 1024);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 183, 100, 300);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 419, 200, 600);
-DEFINE_PARAM(SingularitySearchScoreStep, 29, 10, 50);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 180, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 420, 200, 600);
+DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
 DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
@@ -45,30 +52,33 @@ DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
-DEFINE_PARAM(HistoryPruningLinearFactor, 240, 100, 500);
+DEFINE_PARAM(HistoryPruningLinearFactor, 237, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
 
-DEFINE_PARAM(AspirationWindowMaxSize, 501, 200, 1000);
+DEFINE_PARAM(AspirationWindowMaxSize, 498, 200, 1000);
 DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 19, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 97, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
-DEFINE_PARAM(BetaMarginMultiplier, 125, 80, 180);
+DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 126, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 53, 50, 150);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
 
 DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
-DEFINE_PARAM(RazoringMarginMultiplier, 148, 100, 200);
+DEFINE_PARAM(RazoringMarginMultiplier, 147, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7856, 5000, 12000);
-DEFINE_PARAM(ReductionStatDiv, 9692, 6000, 12000);
+DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
+
+DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
+DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
 class SearchTrace
 {
@@ -1007,20 +1017,18 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
     int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
     if (pos.GetSideToMove() == Color::Black) diff = -diff;
 
-    constexpr const int32_t blendFactor = 256; // TODO should be dependent on time control?
-
     // material
     {
         const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
         int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (blendFactor - 1) + diff) / blendFactor);
+        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
 
     // pawn structure
     {
         const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
         int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (blendFactor - 1) + diff) / blendFactor);
+        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
 }
 
@@ -1047,9 +1055,9 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
-        // apply 50% of the eval correction term
-        const ScoreType matScoreCorrection = threadData.GetEvalCorrection(node.position) / 2;
-        adjustedScore += node.position.GetSideToMove() == Color::White ? matScoreCorrection : -matScoreCorrection;
+        // apply eval correction term
+        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
+        adjustedScore += node.position.GetSideToMove() == Color::White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1620,8 +1628,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Probcut
-            const ScoreType probBeta = beta + 150;
-            if (node->depth >= 5 &&
+            const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
+            if (node->depth >= ProbcutStartDepth &&
                 abs(beta) < TablebaseWinValue &&
                 !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probBeta))
             {
@@ -1811,8 +1819,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Futility Pruning
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
-                    node->depth < 9 &&
-                    node->staticEval + 32 * node->depth * node->depth + moveStatScore / 512 < alpha)
+                    node->depth < FutilityPruningDepth &&
+                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
