@@ -325,8 +325,10 @@ private:
         static constexpr int32_t EvalCorrectionScale = 256;
         static constexpr uint32_t MaterialCorrectionTableSize = 2048;
         static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
+        static constexpr uint32_t PiecesCorrectionTableSize = 4096;
         int16_t matScoreCorrection[MaterialCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
+        int16_t piecesHashCorrection[PiecesCorrectionTableSize];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
@@ -335,6 +337,7 @@ private:
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
 
+        void PrefetchEvalCorrection(const Position& pos) const;
         ScoreType GetEvalCorrection(const Position& pos) const;
         void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
 
