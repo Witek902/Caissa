@@ -79,6 +79,7 @@ DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
 
 DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(HalfMoveCounterScaling, 192, 128, 1024);
 
 class SearchTrace
 {
@@ -1060,7 +1061,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         adjustedScore += node.position.GetSideToMove() == Color::White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw
-        adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
+        adjustedScore = adjustedScore * (HalfMoveCounterScaling - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / HalfMoveCounterScaling;
 
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
