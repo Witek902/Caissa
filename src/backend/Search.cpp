@@ -1626,64 +1626,65 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     }
                 }
             }
+        }
 
-            // Probcut
-            const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
-            if (node->depth >= ProbcutStartDepth &&
-                abs(beta) < TablebaseWinValue &&
-                !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probBeta))
+        // Probcut
+        const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
+        if (node->depth >= ProbcutStartDepth &&
+            abs(beta) < TablebaseWinValue &&
+            !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probBeta))
+        {
+            NodeInfo& childNode = *(node + 1);
+            childNode.Clear();
+            childNode.height = node->height + 1;
+            childNode.pvIndex = node->pvIndex;
+            childNode.doubleExtensions = node->doubleExtensions;
+            childNode.nnContext.MarkAsDirty();
+            childNode.alpha = -probBeta;
+            childNode.beta = -probBeta + 1;
+            childNode.isCutNode = !node->isCutNode;
+
+            const ScoreType seeThreshold = probBeta - node->staticEval;
+            MovePicker movePicker(position, thread.moveOrderer, nullptr,
+                (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
+
+            int32_t moveScore = 0;
+            Move move;
+            while (movePicker.PickMove(*node, move, moveScore))
             {
-                NodeInfo& childNode = *(node + 1);
-                childNode.Clear();
-                childNode.height = node->height + 1;
-                childNode.pvIndex = node->pvIndex;
-                childNode.doubleExtensions = node->doubleExtensions;
-                childNode.nnContext.MarkAsDirty();
-                childNode.alpha = -probBeta;
-                childNode.beta = -probBeta + 1;
-                childNode.isCutNode = !node->isCutNode;
+                if (move == node->filteredMove) continue;
+                if (moveScore < MoveOrderer::GoodCaptureValue && seeThreshold >= 0) continue;
+                if (!position.StaticExchangeEvaluation(move, seeThreshold)) continue;
 
-                const ScoreType seeThreshold = probBeta - node->staticEval;
-                MovePicker movePicker(position, thread.moveOrderer, nullptr,
-                    (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
+                // start prefetching child node's TT entry
+                ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
-                int32_t moveScore = 0;
-                Move move;
-                while (movePicker.PickMove(*node, move, moveScore))
+                childNode.position = position;
+                if (!childNode.position.DoMove(move, childNode.nnContext))
+                    continue;
+
+                childNode.depth = 0;
+                childNode.previousMove = move;
+                childNode.position.ComputeThreats(childNode.threats);
+                childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+                ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
+
+                // quick verification search
+                ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+                // verification search
+                if (score >= probBeta)
                 {
-                    if (moveScore < MoveOrderer::GoodCaptureValue && seeThreshold >= 0) continue;
-                    if (!position.StaticExchangeEvaluation(move, seeThreshold)) continue;
+                    childNode.depth = node->depth - 4;
+                    score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                }
 
-                    // start prefetching child node's TT entry
-                    ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
-
-                    childNode.position = position;
-                    if (!childNode.position.DoMove(move, childNode.nnContext))
-                        continue;
-
-                    childNode.depth = 0;
-                    childNode.previousMove = move;
-                    childNode.position.ComputeThreats(childNode.threats);
-                    childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
-                    ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
-
-                    // quick verification search
-                    ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-                    ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-                    // verification search
-                    if (score >= probBeta)
-                    {
-                        childNode.depth = node->depth - 4;
-                        score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-                    }
-
-                    // probcut failed
-                    if (score >= probBeta)
-                    {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
-                        return score;
-                    }
+                // probcut failed
+                if (score >= probBeta)
+                {
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                    return score;
                 }
             }
         }
