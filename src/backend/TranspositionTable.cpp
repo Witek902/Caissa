@@ -11,7 +11,7 @@
 #endif // USE_SSE
 
 static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
-static_assert(sizeof(TranspositionTable::TTCluster) == CACHELINE_SIZE, "Invalid TT cluster size");
+static_assert(sizeof(TranspositionTable::TTCluster) == 32, "Invalid TT cluster size");
 
 ScoreType ScoreToTT(ScoreType v, int32_t height)
 {
@@ -184,15 +184,14 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     {
         TTCluster& cluster = GetCluster(position.GetHash());
 
-        const uint32_t posKey = (uint32_t)position.GetHash();
+        const uint16_t posKey = (uint16_t)position.GetHash();
 
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
-            uint32_t hash;
-            TTEntry data;
-            cluster.entries[i].Load(hash, data);
+            const uint16_t key = cluster.entries[i].key;
+            const TTEntry data = cluster.entries[i].entry;
 
-            if (hash == posKey && data.bounds != TTEntry::Bounds::Invalid)
+            if (key == posKey && data.bounds != TTEntry::Bounds::Invalid)
             {
                 outEntry = data;
                 return true;
@@ -222,27 +221,26 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     }
 
     const uint64_t positionHash = position.GetHash();
-    const uint32_t positionKey = (uint32_t)positionHash;
+    const uint16_t positionKey = (uint16_t)positionHash;
 
     TTCluster& cluster = GetCluster(position.GetHash());
 
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;
-    uint32_t prevKey = 0;
+    uint16_t prevKey = 0;
     TTEntry prevEntry;
 
     // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
-        uint32_t hash;
-        TTEntry data;
-        cluster.entries[i].Load(hash, data);
+        const uint16_t key = cluster.entries[i].key;
+        const TTEntry data = cluster.entries[i].entry;
 
         // found entry with same hash or empty entry
-        if (hash == positionKey || !data.IsValid())
+        if (key == positionKey || !data.IsValid())
         {
             replaceIndex = i;
-            prevKey = hash;
+            prevKey = key;
             prevEntry = data;
             break;
         }
@@ -255,7 +253,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         {
             minRelevanceInCluster = entryRelevance;
             replaceIndex = i;
-            prevKey = hash;
+            prevKey = key;
             prevEntry = data;
         }
     }
@@ -276,7 +274,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
     entry.generation = generation;
 
-    cluster.entries[replaceIndex].Store(positionKey, entry);
+    cluster.entries[replaceIndex] = { positionKey, entry };
 }
 
 void TranspositionTable::PrintInfo() const
