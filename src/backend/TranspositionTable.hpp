@@ -52,27 +52,13 @@ class TranspositionTable
 public:
     struct InternalEntry
     {
-        uint32_t key;
+        uint16_t key;
         TTEntry entry;
-
-        INLINE void Load(uint32_t& outHash, TTEntry& outEntry) const
-        {
-            // Xor trick by Robert Hyatt and Tim Mann
-            outHash = key ^ entry.GetHash();
-            outEntry = entry;
-        }
-
-        INLINE void Store(uint32_t positionKey, const TTEntry newEntry)
-        {
-            // Xor trick by Robert Hyatt and Tim Mann
-            key = positionKey ^ newEntry.GetHash();
-            entry = newEntry;
-        }
     };
 
     // one cluster occupies one cache line
-    static constexpr uint32_t NumEntriesPerCluster = 5;
-    struct alignas(CACHELINE_SIZE) TTCluster
+    static constexpr uint32_t NumEntriesPerCluster = 3;
+    struct alignas(32) TTCluster
     {
         InternalEntry entries[NumEntriesPerCluster];
         uint16_t padding;
