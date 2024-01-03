@@ -1959,11 +1959,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce more if TT move is capture
                 if (ttCapture) r++;
 
-                // reduce good moves less
-                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= 2;
-
-                // reduce less based on move stat score
-                r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
+                if (moveScore >= MoveOrderer::CounterMoveBonus)
+                    // reduce good moves less
+                    r -= 2; 
+                else
+                    // reduce less based on move stat score
+                    r -= std::min(3, DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv));
 
                 if (node->isCutNode) r += 2;
             }
