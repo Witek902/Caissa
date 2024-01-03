@@ -1987,9 +1987,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (childNode.isInCheck) r--;
         }
 
+        int32_t newDepth = node->depth + moveExtension - 1;
+
         // limit reduction, don't drop into QS
         r = std::min(r, MaxDepthReduction);
-        r = std::clamp(r, 0, node->depth + moveExtension - 1);
+        r = std::clamp(r, 0, newDepth);
 
         ScoreType score = InvalidValue;
 
@@ -2000,7 +2002,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             ASSERT(moveIndex > 1);
 
-            childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1 - r);
+            childNode.depth = static_cast<int16_t>(newDepth - r);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = true;
@@ -2008,13 +2010,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-            doFullDepthSearch = score > alpha;
+            if (score > alpha)
+            {
+                doFullDepthSearch = true;
+                newDepth += (score > bestValue + 80);
+                newDepth -= (score < bestValue + newDepth);
+            }
+            else
+            {
+                doFullDepthSearch = false;
+            }
         }
 
         // PVS search at full depth
         if (doFullDepthSearch) [[unlikely]]
         {
-            childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1);
+            childNode.depth = static_cast<int16_t>(newDepth);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = !node->isCutNode;
@@ -2029,7 +2040,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (moveIndex == 1 ||
                 (score > alpha && (isRootNode || score < beta)))
             {
-                childNode.depth = static_cast<int16_t>(node->depth + moveExtension - 1);
+                childNode.depth = static_cast<int16_t>(newDepth);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isCutNode = false;

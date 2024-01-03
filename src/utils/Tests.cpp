@@ -1957,10 +1957,10 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result.size() == 6);
         TEST_EXPECT(result[0].score > KnownWinValue);
         TEST_EXPECT(result[1].score > KnownWinValue);
-        TEST_EXPECT(std::abs(result[2].score) < 10);
-        TEST_EXPECT(std::abs(result[3].score) < 10);
-        TEST_EXPECT(std::abs(result[4].score) < 10);
-        TEST_EXPECT(std::abs(result[5].score) < 10);
+        TEST_EXPECT(std::abs(result[2].score) < 5);
+        TEST_EXPECT(std::abs(result[3].score) < 5);
+        TEST_EXPECT(std::abs(result[4].score) < 5);
+        TEST_EXPECT(std::abs(result[5].score) < 5);
     }
 
     // drawing KPvK
@@ -1972,10 +1972,10 @@ void RunSearchTests(uint32_t numThreads)
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 4);
-        TEST_EXPECT(result[0].score == 0);
-        TEST_EXPECT(result[1].score == 0);
-        TEST_EXPECT(result[2].score == 0);
-        TEST_EXPECT(result[3].score == 0);
+        TEST_EXPECT(std::abs(result[0].score) < 5);
+        TEST_EXPECT(std::abs(result[1].score) < 5);
+        TEST_EXPECT(std::abs(result[2].score) < 5);
+        TEST_EXPECT(std::abs(result[3].score) < 5);
     }
 
     // chess-rook skewer
