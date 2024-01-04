@@ -1007,7 +1007,7 @@ uint32_t Search::ThreadData::GetRandomUint()
 
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
+    const int32_t matIndex = pos.GetMaterialKey().value % MaterialCorrectionTableDiv;
     const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
     return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
 }
@@ -1019,7 +1019,7 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
 
     // material
     {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
+        const int32_t index = pos.GetMaterialKey().value % MaterialCorrectionTableDiv;
         int16_t& matScore = matScoreCorrection[index];
         matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
