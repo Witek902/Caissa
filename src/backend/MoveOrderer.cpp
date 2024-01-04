@@ -325,10 +325,12 @@ void MoveOrderer::ScoreMoves(
             ASSERT(capturedPiece > Piece::None);
             ASSERT(capturedPiece < Piece::King);
 
-            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)     score = WinningCaptureValue;
-            else if (attackingPiece == capturedPiece)                   score = GoodCaptureValue;
-            else if (pos.StaticExchangeEvaluation(move))                score = GoodCaptureValue;
-            else                                                        score = LosingCaptureValue;
+            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
+                score = WinningCaptureValue;
+            else if (attackingPiece == capturedPiece || ((move.ToSquare().GetBitboard() & threats) == 0) || pos.StaticExchangeEvaluation(move))
+                score = GoodCaptureValue;
+            else
+                score = LosingCaptureValue;
 
             // most valuable victim first
             score += 6 * (int32_t)capturedPiece * UINT16_MAX / 128;
