@@ -754,7 +754,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
-            thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
+            thread.avgScores[pvIndex] = ScoreType((3 * (int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 4);
         }
 
         if (abortSearch)
