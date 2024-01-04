@@ -1557,6 +1557,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(eval, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
                 return eval;
             }
 
