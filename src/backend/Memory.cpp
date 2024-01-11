@@ -39,7 +39,6 @@ bool EnableLargePagesSupport()
     DWORD error = GetLastError();
     if (!status || (error != ERROR_SUCCESS))
     {
-        std::cerr << "AdjustTokenPrivileges failed, error code: " << error << std::endl;
         return false;
     }
 
