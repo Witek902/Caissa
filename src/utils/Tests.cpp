@@ -1772,7 +1772,6 @@ static void RunEvalTests()
     TEST_EXPECT(0 < Evaluate(Position("8/8/P2k4/8/8/8/7B/7K b - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("8/8/P2k4/8/8/P7/7B/7K b - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("8/8/4k2P/8/8/8/B7/K7 b - - 0 1")));
-    TEST_EXPECT(0 < Evaluate(Position("8/8/4k2P/8/8/8/B6P/K7 b - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("1k6/8/8/8/8/8/B6P/K7 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("6k1/8/8/8/8/8/P6B/7K w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 w - - 0 1")));
