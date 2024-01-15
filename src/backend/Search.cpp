@@ -2003,7 +2003,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             ASSERT(moveIndex > 1);
 
-            childNode.depth = static_cast<int16_t>(newDepth - r);
+            const int32_t lmrDepth = newDepth - r;
+            childNode.depth = static_cast<int16_t>(lmrDepth);
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = true;
@@ -2013,9 +2014,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                doFullDepthSearch = true;
-                newDepth += (score > bestValue + 80);
+                newDepth += (score > bestValue + 80) && (node->height < 2 * thread.rootDepth); // prevent search explosions
                 newDepth -= (score < bestValue + newDepth);
+                doFullDepthSearch = newDepth > lmrDepth;
             }
             else
             {
