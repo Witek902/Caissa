@@ -13,7 +13,7 @@ else
 endif
 
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -flto -std=c++20 -O3 -funroll-loops
+FLAGS = $(WFLAGS) -flto -std=c++17 -O3 -funroll-loops -fno-stack-protector -fno-math-errno -fno-exceptions
 LIBS =
 
 ifeq ($(EXT), .exe)
