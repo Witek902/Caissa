@@ -13,7 +13,7 @@ else
 endif
 
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -flto -std=c++20 -O3 -funroll-loops
+FLAGS = $(WFLAGS) -s -flto -std=c++20 -O3 -funroll-loops
 LIBS =
 
 ifeq ($(EXT), .exe)
@@ -36,10 +36,10 @@ endif
 # Try to detect windows environment by seeing
 # whether the shell filters out " or not.
 ifeq ($(shell echo "test"), "test")
-	BENCH = $(EXE_NAME)$(EXT) bench 15 > nul 2>&1
+	BENCH = $(EXE)$(EXT) bench 15 > nul 2>&1
 	CLEAN = rmdir /s /q $(PGO_DIR)
 else
-	BENCH = ./$(EXE_NAME) bench 15 > /dev/null 2>&1
+	BENCH = ./$(EXE) bench 15 > /dev/null 2>&1
 	CLEAN = $(RM) -rf $(PGO_DIR)
 endif
 
@@ -53,7 +53,11 @@ AVX512FLAGS   = $(BMI2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
 # for OpenBench
 ob:
-	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+	$(BENCH)
+	$(PGO_MERGE)
+	$(CC)   $(SRC) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CLEAN)
 
 bmi2:
 	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
@@ -70,16 +74,16 @@ legacy:
 
 # Profile-guided optimization builds
 bmi2_pgo:
-	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_GENERATE)
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_USE)
+	$(CC)   $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
 avx2_pgo:
-	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_GENERATE)
+	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)$(EXT) $(PGO_USE)
+	$(CC)   $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
 
 release:
