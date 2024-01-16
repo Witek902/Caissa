@@ -2027,7 +2027,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // PVS search at full depth
         if (doFullDepthSearch) [[unlikely]]
         {
-            childNode.depth = static_cast<int16_t>(newDepth);
+            childNode.depth = static_cast<int16_t>(newDepth - (r > 3));
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = !node->isCutNode;
