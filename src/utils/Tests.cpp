@@ -1947,7 +1947,7 @@ void RunSearchTests(uint32_t numThreads)
 
     // winning KPvK
     {
-        param.limits.maxDepth = 1;
+        param.limits.maxDepth = 5;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/5P2/5K2 w - - 0 1"));
