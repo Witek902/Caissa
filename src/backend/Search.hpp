@@ -309,6 +309,7 @@ private:
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
+        std::vector<ScoreType> histScores;  // primary move scores from each iterative deepening step (used for time management)
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
         uint32_t randomSeed;                // seed for random number generator
