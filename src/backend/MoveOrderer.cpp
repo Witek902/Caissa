@@ -9,21 +9,21 @@
 #include <limits>
 #include <iomanip>
 
-DEFINE_PARAM(QuietBonusOffset, -101, -200, 50);
-DEFINE_PARAM(QuietBonusLinear, 162, 75, 200);
-DEFINE_PARAM(QuietBonusLimit, 1978, 1000, 4000);
+DEFINE_PARAM(QuietBonusOffset, -99, -200, 50);
+DEFINE_PARAM(QuietBonusLinear, 172, 75, 200);
+DEFINE_PARAM(QuietBonusLimit, 1896, 1000, 4000);
 
-DEFINE_PARAM(QuietMalusOffset, -79, -200, 50);
-DEFINE_PARAM(QuietMalusLinear, 160, 75, 200);
-DEFINE_PARAM(QuietMalusLimit, 1950, 1000, 4000);
+DEFINE_PARAM(QuietMalusOffset, -70, -200, 50);
+DEFINE_PARAM(QuietMalusLinear, 166, 75, 200);
+DEFINE_PARAM(QuietMalusLimit, 1907, 1000, 4000);
 
-DEFINE_PARAM(CaptureBonusOffset, 38, 0, 150);
-DEFINE_PARAM(CaptureBonusLinear, 75, 20, 150);
-DEFINE_PARAM(CaptureBonusLimit, 2544, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 33, 0, 150);
+DEFINE_PARAM(CaptureBonusLinear, 79, 20, 150);
+DEFINE_PARAM(CaptureBonusLimit, 2563, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 38, 0, 150);
-DEFINE_PARAM(CaptureMalusLinear, 64, 20, 150);
-DEFINE_PARAM(CaptureMalusLimit, 2049, 1000, 4000);
+DEFINE_PARAM(CaptureMalusOffset, 24, 0, 150);
+DEFINE_PARAM(CaptureMalusLinear, 73, 20, 150);
+DEFINE_PARAM(CaptureMalusLimit, 1663, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 

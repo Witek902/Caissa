@@ -30,56 +30,56 @@ static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
 DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Quiets, 50, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Quiets, 47, 20, 80);
 DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Captures, 54, 20, 80);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
-DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
-DEFINE_PARAM(ProbcutBetaOffsetInCheck, 320, 100, 500);
+DEFINE_PARAM(ProbcutBetaOffset, 158, 80, 300);
+DEFINE_PARAM(ProbcutBetaOffsetInCheck, 276, 100, 500);
 
-DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
-DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
-DEFINE_PARAM(FutilityPruningStatscoreDiv, 506, 128, 1024);
+DEFINE_PARAM(FutilityPruningDepth, 10, 6, 15);
+DEFINE_PARAM(FutilityPruningScale, 31, 16, 64);
+DEFINE_PARAM(FutilityPruningStatscoreDiv, 521, 128, 1024);
 
-DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 180, 100, 300);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 420, 200, 600);
-DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
+DEFINE_PARAM(SingularitySearchMinDepth, 8, 5, 20);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 168, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 425, 200, 600);
+DEFINE_PARAM(SingularitySearchScoreStep, 28, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
 DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
-DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
+DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 4, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
-DEFINE_PARAM(HistoryPruningLinearFactor, 237, 100, 500);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
+DEFINE_PARAM(HistoryPruningLinearFactor, 270, 100, 500);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 145, 50, 200);
 
-DEFINE_PARAM(AspirationWindowMaxSize, 498, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 10, 6, 20);
+DEFINE_PARAM(AspirationWindowMaxSize, 536, 200, 1000);
+DEFINE_PARAM(AspirationWindow, 9, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 19, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 97, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
-DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
+DEFINE_PARAM(BetaMarginMultiplier, 102, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 121, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 57, 50, 150);
 
 DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
-DEFINE_PARAM(RazoringMarginMultiplier, 147, 100, 200);
-DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
+DEFINE_PARAM(RazoringMarginMultiplier, 151, 100, 200);
+DEFINE_PARAM(RazoringMarginBias, 18, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
-DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
+DEFINE_PARAM(ReductionStatOffset, 7681, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 9489, 6000, 12000);
 
-DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(EvalCorrectionScale, 529, 1, 1024);
+DEFINE_PARAM(EvalCorrectionBlendFactor, 232, 8, 512);
 
 class SearchTrace
 {
@@ -671,6 +671,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.depthCompleted = 0;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
+    thread.histScores.clear();
     thread.avgScores.clear();
     thread.avgScores.resize(numPvLines, 0);
     thread.moveOrderer.NewSearch();
@@ -772,9 +773,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
-        if (isMainThread && !param.limits.analysisMode)
+        if (isMainThread && !param.limits.analysisMode && depth >= 5)
         {
-            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines, thread.histScores };
 
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
@@ -791,6 +792,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         // remember PV lines so they can be used in next iteration
         thread.pvLines = std::move(tempResult);
+        thread.histScores.push_back(thread.pvLines.front().score);
 
         if (!param.stopSearch)
         {
