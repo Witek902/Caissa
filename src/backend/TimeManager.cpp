@@ -6,13 +6,21 @@
 
 #include <algorithm>
 
-DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 20, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
+
 DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
-DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
+
+DEFINE_PARAM(TM_NodesCountScale, 199, 160, 240);
 DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
-DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
-DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
+
+DEFINE_PARAM(TM_StabilityScale, 37, 0, 80);
+DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 1400);
+
+DEFINE_PARAM(TM_ScoreChangeFactorScale, 10, 0, 50);
+DEFINE_PARAM(TM_ScoreChangeFactorOffset, 800, 200, 1000);
+DEFINE_PARAM(TM_ScoreChangeMin, -5, -50, 0);
+DEFINE_PARAM(TM_ScoreChangeMax, 50, 0, 100);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -67,10 +75,6 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
 
     if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
         return;
-    
-    // don't update TM at low depths
-    if (data.depth < 5)
-        return;
 
     limits.idealTimeCurrent = limits.idealTimeBase;
 
@@ -86,6 +90,26 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double stabilityOffset = static_cast<double>(TM_StabilityOffset) / 1000.0;
         const double stabilityTimeFactor = stabilityOffset - stabilityFactor * std::min(10u, state.stabilityCounter);
         limits.idealTimeCurrent *= stabilityTimeFactor;
+    }
+
+    // decrease time if best move score is stable
+    {
+        const double scale = static_cast<double>(TM_ScoreChangeFactorScale) / 1000.0;
+        const double offset = static_cast<double>(TM_ScoreChangeFactorOffset) / 1000.0;
+
+        const size_t maxDepth = data.histScores.size();
+        ASSERT(maxDepth >= 3);
+        const ScoreType currScore = data.currResult[0].score;
+
+        int32_t scoreChange = 0;
+        scoreChange += std::clamp<int32_t>(data.histScores[maxDepth - 1] - currScore, TM_ScoreChangeMin, TM_ScoreChangeMax);
+        scoreChange += std::clamp<int32_t>(data.histScores[maxDepth - 3] - currScore, TM_ScoreChangeMin, TM_ScoreChangeMax);
+        const double scoreChangeFactor = scoreChange * scale + offset;
+        limits.idealTimeCurrent *= scoreChangeFactor;
+
+#ifndef CONFIGURATION_FINAL
+        std::cout << "info string scoreChangeFactor " << scoreChangeFactor << std::endl;
+#endif // CONFIGURATION_FINAL
     }
 
     // decrease time if nodes fraction spent on best move is high
