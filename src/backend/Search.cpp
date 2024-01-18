@@ -670,6 +670,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.depthCompleted = 0;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
+    thread.histScores.clear();
     thread.avgScores.clear();
     thread.avgScores.resize(numPvLines, 0);
     thread.moveOrderer.NewSearch();
@@ -771,9 +772,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
-        if (isMainThread && !param.limits.analysisMode)
+        if (isMainThread && !param.limits.analysisMode && depth >= 5)
         {
-            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            TimeManagerUpdateData data{ depth, tempResult, thread.pvLines, thread.histScores };
 
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
@@ -790,6 +791,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         // remember PV lines so they can be used in next iteration
         thread.pvLines = std::move(tempResult);
+        thread.histScores.push_back(thread.pvLines.front().score);
 
         if (!param.stopSearch)
         {
