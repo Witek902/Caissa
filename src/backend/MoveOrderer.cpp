@@ -358,42 +358,6 @@ void MoveOrderer::ScoreMoves(
             if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] / 2;
             if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] / 2;
 
-            switch (move.GetPiece())
-            {
-                case Piece::Pawn:
-                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
-                    // check if pushed pawn is protected by other pawn
-                    if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
-                    {
-                        // bonus for creating threats
-                        const Bitboard pawnAttacks = Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove());
-                        const auto& opponentSide = pos.GetOpponentSide();
-                             if (pawnAttacks & opponentSide.king)       score += 10000;
-                        else if (pawnAttacks & opponentSide.pawns)      score += 1000;
-                        else if (pawnAttacks & opponentSide.queens)     score += 8000;
-                        else if (pawnAttacks & opponentSide.rooks)      score += 6000;
-                        else if (pawnAttacks & opponentSide.bishops)    score += 4000;
-                        else if (pawnAttacks & opponentSide.knights)    score += 4000;
-                    }
-                    break;
-                case Piece::Knight: [[fallthrough]];
-                case Piece::Bishop:
-                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
-                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
-                    break;
-                case Piece::Rook:
-                    if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
-                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 8000;
-                    break;
-                case Piece::Queen:
-                    if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
-                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
-                    break;
-                case Piece::King:
-                    if (pos.GetOurCastlingRights())             score -= 6000;
-                    break;
-            }
-
             // use node cache for scoring moves near the root
             if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
             {
