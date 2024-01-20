@@ -25,8 +25,6 @@ DEFINE_PARAM(CaptureMalusOffset, 38, 0, 150);
 DEFINE_PARAM(CaptureMalusLinear, 64, 20, 150);
 DEFINE_PARAM(CaptureMalusLimit, 2049, 1000, 4000);
 
-static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-
 MoveOrderer::MoveOrderer()
 {
     Clear();
@@ -361,7 +359,7 @@ void MoveOrderer::ScoreMoves(
             switch (move.GetPiece())
             {
                 case Piece::Pawn:
-                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
+                    if (node.threats.allThreats & move.ToSquare())      score -= 1000;
                     // check if pushed pawn is protected by other pawn
                     if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
                     {
