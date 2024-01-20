@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.16.2"
+#define CAISSA_VERSION "1.16.3"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
