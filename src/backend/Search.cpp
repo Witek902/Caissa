@@ -1551,14 +1551,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
-            // Futility/Beta Pruning
+            // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(eval, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
-                return eval;
+                const ScoreType score = (eval + beta) / 2;
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
+                return score;
             }
 
             // Razoring
