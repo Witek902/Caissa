@@ -1982,6 +1982,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r++;
             }
 
+            if constexpr (!isPvNode) r += node->height < node->depth / 4;
+
             // reduce more if eval is not improving
             if (!isImproving) r++;
 
