@@ -331,7 +331,7 @@ void MoveOrderer::ScoreMoves(
             else                                                        score = LosingCaptureValue;
 
             // most valuable victim first
-            score += 6 * (int32_t)capturedPiece * UINT16_MAX / 128;
+            score += (int32_t)capturedPiece;
 
             // capture history
             {
