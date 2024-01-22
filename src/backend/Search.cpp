@@ -1955,8 +1955,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 r = GetQuietsDepthReduction(node->depth, moveIndex);
 
-                // reduce non-PV nodes more
-                if constexpr (!isPvNode) r++;
+                if constexpr (!isPvNode)
+                {
+                    r++; // reduce non-PV nodes more
+                }
+                else if (ttEntry.IsValid())
+                {
+                    r -= ttEntry.score > alpha;
+                    r -= ttEntry.score > beta && ttEntry.depth >= node->depth;
+                }
 
                 // reduce more if TT move is capture
                 if (ttCapture) r++;
