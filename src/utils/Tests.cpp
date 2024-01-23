@@ -970,10 +970,11 @@ static void RunPositionTests()
         const Position pos("k2r4/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
         const NodeInfo node{ pos };
 
-        MoveList allMoves;
+        MoveList allMoves, badMoves;
         GenerateMoveList<MoveGenerationMode::Captures>(pos, allMoves);
         GenerateMoveList<MoveGenerationMode::Quiets>(pos, allMoves);
-        moveOrderer->ScoreMoves(node, allMoves);
+        moveOrderer->ScoreMoves(node, allMoves, badMoves);
+        allMoves.Push(badMoves);
 
         int32_t moveScore = 0;
         Move move;
