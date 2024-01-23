@@ -57,6 +57,15 @@ public:
         entries[index].score = INT32_MIN;
     }
 
+    template<uint32_t MaxSize2>
+    INLINE void Push(const TMoveList<MaxSize2>& other)
+    {
+        ASSERT(numMoves + other.numMoves <= MaxMoves);
+
+        memcpy(entries + numMoves, other.entries, other.numMoves * sizeof(Entry));
+        numMoves += other.numMoves;
+    }
+
     INLINE void RemoveByIndex(uint32_t index)
     {
         ASSERT(index < numMoves);
