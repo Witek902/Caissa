@@ -245,6 +245,7 @@ void Search::Clear()
         threadData->stats = SearchThreadStats{};
         memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->pieceStructureCorrection, 0, sizeof(threadData->pieceStructureCorrection));
     }
 }
 
@@ -1008,8 +1009,9 @@ uint32_t Search::ThreadData::GetRandomUint()
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
     const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    const int32_t pawnStructIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+    const int32_t pieceStructIndex = (pos.GetHash() ^ pos.GetPawnsHash()) % PieceStructureCorrectionTableSize;
+    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnStructIndex] + pieceStructureCorrection[pieceStructIndex]) / EvalCorrectionScale;
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
@@ -1026,9 +1028,16 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
 
     // pawn structure
     {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
+        const int32_t pawnStructIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+        int16_t& pawnScore = pawnStructureCorrection[pawnStructIndex];
         pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+    }
+
+    // pieces structure
+    {
+        const int32_t pieceStructIndex = (pos.GetHash() ^ pos.GetPawnsHash()) % PieceStructureCorrectionTableSize;
+        int16_t& pieceScore = pieceStructureCorrection[pieceStructIndex];
+        pieceScore = static_cast<int16_t>((pieceScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
 }
 
@@ -2203,6 +2212,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (node->depth >= 1 &&
             !node->isInCheck &&
             bestMove.IsQuiet() &&
+            std::abs(bestValue) < 800 &&
             (bounds == TTEntry::Bounds::Exact ||
              (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
