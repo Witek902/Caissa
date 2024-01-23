@@ -2200,7 +2200,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
         // if we beat alpha, adjust material score
-        if (node->depth >= 1 &&
+        if (node->depth > 1 &&
             !node->isInCheck &&
             bestMove.IsQuiet() &&
             (bounds == TTEntry::Bounds::Exact ||
