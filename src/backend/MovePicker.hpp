@@ -20,6 +20,7 @@ public:
         Counter,
         GenerateQuiets,
         PickQuiets,
+        PickBadMoves,
         End,
     };
 
@@ -57,4 +58,5 @@ private:
     Move m_counterMove = Move::Invalid();
 
     MoveList m_moves;
+    MoveList m_badMoves;
 };

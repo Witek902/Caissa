@@ -292,6 +292,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
     MoveList& moves,
+    MoveList& badMoves,
     bool withQuiets,
     const NodeCacheEntry* nodeCacheEntry) const
 {
@@ -300,7 +301,7 @@ void MoveOrderer::ScoreMoves(
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
-    for (uint32_t i = 0; i < moves.Size(); ++i)
+    for (uint32_t i = 0; i < moves.numMoves; ++i)
     {
         const Move move = moves.GetMove(i);
         ASSERT(move.IsValid());
@@ -414,5 +415,11 @@ void MoveOrderer::ScoreMoves(
         }
 
         moves.entries[i].score = score;
+
+        if (score < 0)
+        {
+            badMoves.entries[badMoves.numMoves++] = moves.entries[i];
+            moves.entries[i--] = moves.entries[--moves.numMoves];
+        }
     }
 }

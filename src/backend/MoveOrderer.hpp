@@ -60,6 +60,7 @@ public:
     void ScoreMoves(
         const NodeInfo& node,
         MoveList& moves,
+        MoveList& badMoves,
         bool withQuiets = true,
         const NodeCacheEntry* nodeCacheEntry = nullptr) const;
 

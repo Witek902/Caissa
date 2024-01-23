@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.16.5"
+#define CAISSA_VERSION "1.16.6"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -1029,10 +1029,14 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
 
-    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves, true, nodeCacheEntry);
+    MoveList badMoves;
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves, badMoves, true, nodeCacheEntry);
 
     moves.Sort();
     PrintMoveList(mGame.GetPosition(), moves);
+
+    badMoves.Sort();
+    PrintMoveList(mGame.GetPosition(), badMoves);
 
     return true;
 }
