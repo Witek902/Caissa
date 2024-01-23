@@ -3,8 +3,6 @@
 #include "Square.hpp"
 #include "Piece.hpp"
 
-#include <iostream>
-
 struct PackedMove
 {
     // data layout is following:
