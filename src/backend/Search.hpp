@@ -327,6 +327,7 @@ private:
         static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
         int16_t matScoreCorrection[MaterialCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
+        int16_t psqtCorrection[2][5][64]; // color, piece type (without pawn), square
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;

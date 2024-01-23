@@ -77,7 +77,7 @@ DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
 
-DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
+DEFINE_PARAM(EvalCorrectionScale, 512, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
 class SearchTrace
@@ -245,6 +245,7 @@ void Search::Clear()
         threadData->stats = SearchThreadStats{};
         memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->psqtCorrection, 0, sizeof(threadData->psqtCorrection));
     }
 }
 
@@ -1007,9 +1008,21 @@ uint32_t Search::ThreadData::GetRandomUint()
 
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
+    int32_t psqtError = 0;
+    for (const Color c : {Color::White, Color::Black})
+    {
+        const auto& side = pos.GetSide(c);
+        const auto& table = psqtCorrection[(uint32_t)c];
+        side.knights.Iterate([&](const Square& square) INLINE_LAMBDA { psqtError += table[0][square.Index()]; });
+        side.bishops.Iterate([&](const Square& square) INLINE_LAMBDA { psqtError += table[1][square.Index()]; });
+        side.rooks.Iterate([&](const Square& square) INLINE_LAMBDA { psqtError += table[2][square.Index()]; });
+        side.queens.Iterate([&](const Square& square) INLINE_LAMBDA { psqtError += table[3][square.Index()]; });
+        psqtError += table[4][side.GetKingSquare().Index()];
+    }
+
     const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
     const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    return static_cast<ScoreType>((matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex] + psqtError) / EvalCorrectionScale);
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
@@ -1029,6 +1042,25 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
         const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
         int16_t& pawnScore = pawnStructureCorrection[index];
         pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+    }
+
+    // PSQT
+    for (const Color c : {Color::White, Color::Black})
+    {
+        const auto& side = pos.GetSide(c);
+        for (const Piece p : {Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen})
+        {
+            auto& table = psqtCorrection[(uint32_t)c][(uint32_t)p - (uint32_t)Piece::Knight];
+            side.GetPieceBitBoard(p).Iterate([&](const Square& square) INLINE_LAMBDA
+            {
+                int16_t& psqtErr = table[square.Index()];
+                psqtErr = static_cast<int16_t>((psqtErr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+            });
+        }
+        {
+            int16_t& psqtErr = psqtCorrection[(uint32_t)c][(uint32_t)Piece::King - (uint32_t)Piece::Knight][side.GetKingSquare().Index()];
+            psqtErr = static_cast<int16_t>((psqtErr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        }
     }
 }
 
