@@ -31,7 +31,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
 
-            m_moveOrderer.ScoreMoves(node, m_moves, false);
+            m_moveOrderer.ScoreMoves(node, m_moves, m_badMoves, false);
 
             [[fallthrough]];
         }
@@ -71,7 +71,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && move.IsQuiet() && move != m_ttMove)
                 {
                     m_killerMove = move;
                     outMove = move;
@@ -89,7 +89,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove && move != m_killerMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && move.IsQuiet() && move != m_ttMove && move != m_killerMove)
                 {
                     m_counterMove = move;
                     outMove = move;
@@ -112,7 +112,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
                 m_moves.RemoveMove(m_killerMove);
                 m_moves.RemoveMove(m_counterMove);
 
-                m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
+                m_moveOrderer.ScoreMoves(node, m_moves, m_badMoves, true, m_nodeCacheEntry);
             }
             [[fallthrough]];
         }
@@ -129,6 +129,26 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
                 ASSERT(outScore > INT32_MIN);
 
                 m_moves.RemoveByIndex(index);
+
+                return true;
+            }
+
+            m_stage = Stage::PickBadMoves;
+            break;
+        }
+
+        case Stage::PickBadMoves:
+        {
+            if (m_badMoves.Size() > 0)
+            {
+                const uint32_t index = m_badMoves.BestMoveIndex();
+                outMove = m_badMoves.GetMove(index);
+                outScore = m_badMoves.GetScore(index);
+
+                ASSERT(outMove.IsValid());
+                ASSERT(outScore > INT32_MIN);
+
+                m_badMoves.RemoveByIndex(index);
 
                 return true;
             }
