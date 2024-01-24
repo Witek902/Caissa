@@ -71,7 +71,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && move.IsQuiet())
                 {
                     m_killerMove = move;
                     outMove = move;
@@ -89,7 +89,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove && move != m_killerMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && move.IsQuiet() && move != m_killerMove)
                 {
                     m_counterMove = move;
                     outMove = move;
