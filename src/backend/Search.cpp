@@ -1500,6 +1500,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+
+            if (!ttEntry.IsValid())
+            {
+                ctx.searchParam.transpositionTable.Write(position, InvalidValue, node->staticEval, 0, TTEntry::Bounds::Upper);
+            }
         }
         else if (!node->isCutNode)
         {
