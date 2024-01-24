@@ -2178,17 +2178,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if constexpr (isPvNode)
         bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
 
+    const TTEntry::Bounds bounds =
+        bestValue >= beta ? TTEntry::Bounds::Lower :
+        bestValue > oldAlpha ? TTEntry::Bounds::Exact :
+        TTEntry::Bounds::Upper;
+
     // update transposition table
     // don't write if:
     // - time is exceeded as evaluation may be inaccurate
     // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
     if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
     {
-        const TTEntry::Bounds bounds =
-            bestValue >= beta ? TTEntry::Bounds::Lower :
-            bestValue > oldAlpha ? TTEntry::Bounds::Exact :
-            TTEntry::Bounds::Upper;
-
         // only PV nodes can have exact score
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
@@ -2198,17 +2198,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
+    }
 
-        // if we beat alpha, adjust material score
-        if (node->depth >= 1 &&
-            !node->isInCheck &&
-            bestMove.IsQuiet() &&
-            (bounds == TTEntry::Bounds::Exact ||
-             (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
-             (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
-        {
-            thread.UpdateEvalCorrection(node->position, node->staticEval, bestValue);
-        }
+    // adjust material score
+    if (!node->isInCheck &&
+        bestMove.IsQuiet() &&
+        std::abs(bestValue) < 2000 &&
+        (bounds & (bestValue >= node->staticEval ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper)) != TTEntry::Bounds::Invalid)
+    {
+        thread.UpdateEvalCorrection(node->position, node->staticEval, bestValue);
     }
 
     return bestValue;
