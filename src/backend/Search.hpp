@@ -372,7 +372,6 @@ private:
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
     PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
 
-    template<NodeType nodeType>
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
 
     template<NodeType nodeType>
