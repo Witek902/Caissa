@@ -386,7 +386,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
         SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
         outResult.resize(1);
-        outResult.front().score = QuiescenceNegaMax<NodeType::Root>(thread, &rootNode, searchContext);
+        outResult.front().score = QuiescenceNegaMax(thread, &rootNode, searchContext);
         SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
 
         // flush pending stats
@@ -1069,19 +1069,11 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     return static_cast<ScoreType>(adjustedScore);
 }
 
-template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
     ASSERT(node->height < MaxSearchDepth);
     ASSERT(!node->filteredMove.IsValid());
     ASSERT(node->isInCheck == node->position.IsInCheck());
-
-    constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
-
-    if constexpr (!isPvNode)
-        ASSERT(node->alpha == node->beta - 1);
-    else
-        ASSERT(node->alpha < node->beta);
 
     // clear PV line
     node->pvLength = 0;
@@ -1116,13 +1108,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-        // don't prune in PV nodes, because TT does not contain path information
-        if constexpr (!isPvNode)
-        {
-            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
-        }
+        if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
+        else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
+        else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
     }
 
     // do not consider stand pat if in check
@@ -1258,7 +1246,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         childNode.staticEval = InvalidValue;
         childNode.alpha = -beta;
         childNode.beta = -alpha;
-        const ScoreType score = -QuiescenceNegaMax<nodeType>(thread, &childNode, ctx);
+        const ScoreType score = -QuiescenceNegaMax(thread, &childNode, ctx);
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
         if (move.IsCapture())
@@ -1274,14 +1262,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             {
                 alpha = score;
                 bestMove = move;
-
-                // update PV line
-                if constexpr (isPvNode)
-                {
-                    node->pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-                    node->pvLine[0] = move;
-                    memcpy(node->pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
-                }
 
                 if (score >= beta)
                 {
@@ -1352,7 +1332,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // maximum search depth reached, enter quiescence search to find final evaluation
     if (node->depth <= 0)
     {
-        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+        return QuiescenceNegaMax(thread, node, ctx);
     }
 
     ASSERT(node->isInCheck == position.IsInCheck());
@@ -1568,7 +1548,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 beta < KnownWinValue &&
                 eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
-                const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                const ScoreType qScore = QuiescenceNegaMax(thread, node, ctx);
                 if (qScore < beta)
                     return qScore;
             }
@@ -1623,7 +1603,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                         if (node->depth <= 0)
                         {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                            return QuiescenceNegaMax(thread, node, ctx);
                         }
                     }
                 }
@@ -1670,7 +1650,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
 
                     // quick verification search
-                    ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
+                    ScoreType score = -QuiescenceNegaMax(thread, &childNode, ctx);
                     ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
                     // verification search
