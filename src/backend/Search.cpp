@@ -668,6 +668,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     // clear per-thread data for new search
     thread.stats = SearchThreadStats{};
     thread.depthCompleted = 0;
+    thread.readyToStop = false;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);
     thread.avgScores.clear();
@@ -797,16 +798,33 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             thread.depthCompleted = depth;
         }
 
-        if (isMainThread &&
-            !param.isPonder.load(std::memory_order_acquire))
+        // don't stop search in pondering mode
+        if (param.isPonder.load())
+            continue;
+
+        // check soft time limit every depth iteration
+        if (param.limits.idealTimeCurrent.IsValid() &&
+            param.limits.startTimePoint.IsValid() &&
+            TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTimeCurrent)
         {
-            // check soft time limit every depth iteration
-            if (param.limits.idealTimeCurrent.IsValid() &&
-                param.limits.startTimePoint.IsValid() &&
-                TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTimeCurrent)
+            thread.readyToStop = true;
+        }
+
+        if (isMainThread)
+        {
+            // stop the search if half of the threads reached soft time limit
+            if (param.limits.idealTimeCurrent.IsValid())
             {
-                param.stopSearch = true;
-                break;
+                uint32_t numThreadsReadyToStop = 0;
+                for (const ThreadDataPtr& threadData : mThreadData)
+                {
+                    numThreadsReadyToStop += threadData->readyToStop.load();
+                }
+                if (2u * numThreadsReadyToStop >= param.numThreads)
+                {
+                    param.stopSearch = true;
+                    break;
+                }
             }
 
             // check soft node limit

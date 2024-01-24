@@ -306,12 +306,13 @@ private:
 
         bool isMainThread = false;
 
-        uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
-        uint16_t depthCompleted = 0;        // recently completed search depth
-        SearchResult pvLines;               // principal variation lines from recently completed search iteration
-        std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
-        SearchThreadStats stats;            // per-thread search stats
-        uint32_t randomSeed;                // seed for random number generator
+        std::atomic<bool> readyToStop = false;  // set to true when soft time limit is reached by the thread
+        uint16_t rootDepth = 0;                 // search depth at the root node in current iterative deepening step
+        uint16_t depthCompleted = 0;            // recently completed search depth
+        SearchResult pvLines;                   // principal variation lines from recently completed search iteration
+        std::vector<ScoreType> avgScores;       // average scores for each PV line (used for aspiration windows)
+        SearchThreadStats stats;                // per-thread search stats
+        uint32_t randomSeed;                    // seed for random number generator
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
