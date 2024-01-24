@@ -2112,6 +2112,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (move.IsQuiet()) ctx.stats.quietCutoffs++;
 #endif // COLLECT_SEARCH_STATS
 
+                // update move orderer
+                if (bestMove.IsQuiet())
+                    thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
+                thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
+
                 break;
             }
 
@@ -2139,17 +2144,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->height : 0;
 
         return bestValue;
-    }
-
-    // update move orderer
-    if (bestValue >= beta)
-    {
-        if (bestMove.IsQuiet())
-        {
-            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
-            thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
-        }
-        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
 
 #ifdef COLLECT_SEARCH_STATS
