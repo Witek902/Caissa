@@ -50,12 +50,6 @@ public:
         killerMoves[depth] = Move::Invalid();
     }
 
-    INLINE void UpdateKillerMove(uint32_t depth, const Move move)
-    {
-        ASSERT(depth < MaxSearchDepth);
-        killerMoves[depth] = move;
-    }
-
     // assign scores to move list
     void ScoreMoves(
         const NodeInfo& node,

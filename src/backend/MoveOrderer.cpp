@@ -211,18 +211,22 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 {
     ASSERT(node.depth >= 0);
     ASSERT(numMoves > 0);
-    ASSERT(moves[0].IsQuiet());
+    ASSERT(bestMove.IsQuiet());
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     // update counter move
-    if (bestMove.IsQuiet() && node.previousMove.IsValid())
+    if (node.previousMove.IsValid())
     {
         const Move prevMove = node.previousMove;
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
         const uint32_t to = prevMove.ToSquare().Index();
         counterMoves[color][piece][to] = bestMove;
     }
+
+    // update killer move
+    ASSERT(node.height < MaxSearchDepth);
+    killerMoves[node.height] = bestMove;
 
     // don't update uncertain moves
     if (numMoves <= 1 && node.depth < 2)
@@ -243,7 +247,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
-        
+
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
