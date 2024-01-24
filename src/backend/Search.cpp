@@ -1962,6 +1962,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r++;
             }
 
+            // reduce more if there's many cutoffs in next ply
+            if (childNode.cutoffs < 4) r--;
+
             // reduce more if eval is not improving
             if (!isImproving) r++;
 
@@ -2077,6 +2080,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score >= beta)
             {
+                node->cutoffs++;
+
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
 
