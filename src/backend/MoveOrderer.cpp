@@ -228,32 +228,42 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(node.height < MaxSearchDepth);
     killerMoves[node.height] = bestMove;
 
-    // don't update uncertain moves
-    if (numMoves <= 1 && node.depth < 2)
-    {
-        return;
-    }
-
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth, QuietBonusLimit);
-    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth, QuietMalusLimit);
-
     const Bitboard threats = node.threats.allThreats;
 
-    for (uint32_t i = 0; i < numMoves; ++i)
+    // don't update uncertain moves
+    if (numMoves > 1 || node.depth > 2)
     {
-        const Move move = moves[i];
-        const int32_t delta = move == bestMove ? bonus : malus;
+        const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth, QuietBonusLimit);
 
-        const uint32_t piece = (uint32_t)move.GetPiece() - 1;
-        const uint32_t from = move.FromSquare().Index();
-        const uint32_t to = move.ToSquare().Index();
+        const uint32_t piece = (uint32_t)bestMove.GetPiece() - 1;
+        const uint32_t from = bestMove.FromSquare().Index();
+        const uint32_t to = bestMove.ToSquare().Index();
 
-        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
+        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][bestMove.FromTo()], bonus);
+        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], bonus);
+        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], bonus);
+        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], bonus);
+        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], bonus);
+    }
 
-        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+    {
+        const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth, QuietMalusLimit);
+
+        for (uint32_t i = 0; i < numMoves; ++i)
+        {
+            const Move move = moves[i];
+            if (move == bestMove) continue;
+
+            const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+            const uint32_t from = move.FromSquare().Index();
+            const uint32_t to = move.ToSquare().Index();
+
+            UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], malus);
+            if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], malus);
+            if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], malus);
+            if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], malus);
+            if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], malus);
+        }
     }
 }
 
