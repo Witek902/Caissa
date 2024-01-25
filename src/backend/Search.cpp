@@ -2094,7 +2094,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // update move orderer
                 if (bestMove.IsQuiet())
-                    thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove);
+                    thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, std::min(score - beta, 256));
                 thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
 
                 break;
