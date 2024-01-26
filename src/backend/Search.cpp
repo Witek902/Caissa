@@ -1217,6 +1217,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             if (move.IsCapture() &&
                 futilityBase > -KnownWinValue &&
                 futilityBase <= alpha &&
+                !position.GivesCheck_Approx(move) &&
                 !position.StaticExchangeEvaluation(move, 1))
             {
                 bestValue = std::max(bestValue, futilityBase);
