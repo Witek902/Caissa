@@ -1234,10 +1234,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
             continue;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
@@ -1751,9 +1748,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
-
 #ifdef VALIDATE_MOVE_PICKER
         for (uint32_t i = 0; i < numGeneratedMoves; ++i) ASSERT(generatedSoFar[i] != move);
         generatedSoFarScores[numGeneratedMoves] = moveScore;
@@ -1921,6 +1915,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!childNode.position.DoMove(move, childNode.nnContext))
             continue;
         moveIndex++;
+
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(childNode.position.GetHash());
 
         // report current move to UCI
         if constexpr (isRootNode)
