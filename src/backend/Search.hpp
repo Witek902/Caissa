@@ -323,8 +323,8 @@ private:
         NodeInfo searchStack[MaxSearchDepth];
 
         static constexpr int32_t EvalCorrectionScale = 256;
-        static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
+        static constexpr uint32_t MaterialCorrectionTableSize = 8 * 1024;
+        static constexpr uint32_t PawnStructureCorrectionTableSize = 64 * 1024;
         int16_t matScoreCorrection[MaterialCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
 
