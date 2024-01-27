@@ -146,6 +146,7 @@ struct NodeInfo
     bool isInCheck = false;
 
     MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
+    MoveOrderer::PieceSquareHistory* capturesContHistory = nullptr;
 
     NNEvaluatorContext nnContext;
 
@@ -174,6 +175,7 @@ struct NodeInfo
         continuationHistories[3] = nullptr;
         continuationHistories[4] = nullptr;
         continuationHistories[5] = nullptr;
+        capturesContHistory = nullptr;
     }
 };
 
