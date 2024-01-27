@@ -134,6 +134,15 @@ void MoveOrderer::DebugPrint() const
 void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
 {
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
+
+    if (node.previousMove.IsValid())
+    {
+        const uint32_t prevIsCapture = (uint32_t)node.previousMove.IsCapture();
+        const uint32_t prevPiece = (uint32_t)node.previousMove.GetPiece() - 1;
+        const uint32_t prevTo = node.previousMove.ToSquare().Index();
+        node.capturesContHistory = &(captureContHistory[prevIsCapture][color][prevPiece][prevTo]);
+    }
+
     const NodeInfo* nodePtr = &node;
     for (uint32_t i = 0; i < 6; ++i)
     {
@@ -276,16 +285,15 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         const int32_t delta = move == bestMove ? bonus : malus;
 
-        const Piece captured = node.position.GetCapturedPiece(move);
-        ASSERT(captured > Piece::None);
-        ASSERT(captured < Piece::King);
+        const uint32_t captured = (uint32_t)node.position.GetCapturedPiece(move) - 1;
+        const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+        const uint32_t to = move.ToSquare().Index();
 
-        const uint32_t capturedIdx = (uint32_t)captured - 1;
-        const uint32_t pieceIdx = (uint32_t)move.GetPiece() - 1;
+        ASSERT(piece < 6);
+        ASSERT(captured < 5);
+        UpdateHistoryCounter(capturesHistory[color][piece][captured][to], delta);
 
-        ASSERT(pieceIdx < 6);
-        ASSERT(capturedIdx < 5);
-        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+        if (PieceSquareHistory* h = node.capturesContHistory) UpdateHistoryCounter((*h)[piece][to], delta);
     }
 }
 
@@ -343,6 +351,9 @@ void MoveOrderer::ScoreMoves(
                 ASSERT(historyScore >= 0);
                 score += historyScore;
             }
+
+            // continuation history
+            if (const PieceSquareHistory* h = node.capturesContHistory) score += (*h)[piece][to];
         }
         else if (withQuiets) // non-capture
         {
