@@ -149,11 +149,13 @@ struct NodeInfo
 
     NNEvaluatorContext nnContext;
 
-    // first layer accumulators for both perspectives
-    nn::Accumulator accumulator[2];
+    const nn::Accumulator* accumulatorPtr[2] = { nullptr, nullptr };
 
     uint16_t pvLength = 0;
     PackedMove pvLine[MaxSearchDepth];
+
+    // accumulators for both perspectives
+    nn::Accumulator accumulatorData[2];
 
     INLINE void Clear()
     {
