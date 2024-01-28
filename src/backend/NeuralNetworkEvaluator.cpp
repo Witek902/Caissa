@@ -184,9 +184,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
 template<Color perspective>
 INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const NodeInfo* prevAccumNode, NodeInfo& node, AccumulatorCache::KingBucket& cache)
 {
+    constexpr uint32_t color = (uint32_t)perspective;
+
     ASSERT(prevAccumNode != &node);
-    nn::Accumulator& accumulator = node.accumulator[(uint32_t)perspective];
-    ASSERT(node.nnContext.accumDirty[(uint32_t)perspective]);
+    ASSERT(node.nnContext.accumDirty[color]);
 
     constexpr uint32_t maxChangedFeatures = 64;
     uint32_t numAddedFeatures = 0;
@@ -196,7 +197,7 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
 
     if (prevAccumNode)
     {
-        ASSERT(!prevAccumNode->nnContext.accumDirty[(uint32_t)perspective]);
+        ASSERT(!prevAccumNode->nnContext.accumDirty[color]);
 
         // build a list of features to be updated
         for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; --nodePtr)
@@ -278,12 +279,14 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
         
         if (numAddedFeatures == 0 && numRemovedFeatures == 0)
         {
-            accumulator = prevAccumNode->accumulator[(uint32_t)perspective];
+            // accumulator is unchanged, just point to the previous accumulator
+            node.accumulatorPtr[color] = prevAccumNode->accumulatorPtr[color];
         }
         else
         {
-            accumulator.Update(
-                prevAccumNode->accumulator[(uint32_t)perspective],
+            node.accumulatorPtr[color] = &node.accumulatorData[color];
+            node.accumulatorData[color].Update(
+                *(prevAccumNode->accumulatorPtr[color]),
                 network.GetAccumulatorWeights(),
                 numAddedFeatures, addedFeatures,
                 numRemovedFeatures, removedFeatures);
@@ -325,16 +328,18 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
 
-        accumulator = cache.accum;
+        node.accumulatorPtr[color] = &node.accumulatorData[color];
+        node.accumulatorData[color] = cache.accum;
     }
 
     // mark accumulator as computed
-    node.nnContext.accumDirty[(uint32_t)perspective] = false;
+    node.nnContext.accumDirty[color] = false;
 }
 
 template<Color perspective>
 INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
+    constexpr uint32_t color = (uint32_t)perspective;
     const Position& pos = node.position;
 
     uint32_t kingSide, kingBucket;
@@ -343,7 +348,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     else
         GetKingSideAndBucket(pos.Blacks().GetKingSquare().FlippedRank(), kingSide, kingBucket);
 
-    AccumulatorCache::KingBucket& kingBucketCache = cache.kingBuckets[(uint32_t)perspective][kingBucket + kingSide * nn::NumKingBuckets];
+    AccumulatorCache::KingBucket& kingBucketCache = cache.kingBuckets[color][kingBucket + kingSide * nn::NumKingBuckets];
 
     // find closest parent node that has valid accumulator
     const NodeInfo* prevAccumNode = nullptr;
@@ -361,7 +366,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
             break;
         }
 
-        if (!nodePtr->nnContext.accumDirty[(uint32_t)perspective])
+        if (!nodePtr->nnContext.accumDirty[color])
         {
             // found parent node with valid accumulator
             prevAccumNode = nodePtr;
@@ -383,7 +388,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     }
     else if (node.height > 0 && prevAccumNode &&
         parentInfo != prevAccumNode &&
-        parentInfo->nnContext.accumDirty[(uint32_t)perspective])
+        parentInfo->nnContext.accumDirty[color])
     {
         // two-stage update:
         // if parent node has invalid accumulator, update it first
@@ -409,8 +414,8 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     RefreshAccumulator<Color::White>(network, node, cache);
     RefreshAccumulator<Color::Black>(network, node, cache);
 
-    const nn::Accumulator& ourAccumulator = node.accumulator[(uint32_t)node.position.GetSideToMove()];
-    const nn::Accumulator& theirAccumulator = node.accumulator[(uint32_t)node.position.GetSideToMove() ^ 1u];
+    const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
+    const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
     const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
 
 #ifdef VALIDATE_NETWORK_OUTPUT
