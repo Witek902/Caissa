@@ -1691,6 +1691,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    // reduce depth if position was not found in transposition table (PV nodes)
+    if constexpr (isPvNode && !isRootNode)
+    {
+        if (!ttEntry.IsValid())
+            node->depth -= 2;
+
+        if (node->depth <= 0)
+            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+    }
+
     // reduce depth if position was not found in transposition table
     if (node->depth >= 3 + 4 * node->isCutNode && !ttEntry.IsValid())
     {
