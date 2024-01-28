@@ -1848,12 +1848,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         int32_t moveExtension = extension;
+        if constexpr (!isRootNode)
         {
             // promotion extension
             if (move.GetPromoteTo() == Piece::Queen)
-            {
                 moveExtension++;
-            }
 
             // pawn advanced to 6th row so is about to promote
             if (move.GetPiece() == Piece::Pawn &&
@@ -1861,11 +1860,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 moveExtension++;
             }
-        }
 
-        // Singular move detection
-        if constexpr (!isRootNode)
-        {
+            // Singular Move Extension
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
                 node->depth >= SingularExtensionMinDepth &&
@@ -1914,6 +1910,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (node->isCutNode)
                     moveExtension = -1;
             }
+        }
+        else // isRootNode
+        {
+            moveExtension = 0;
         }
 
         // do the move
