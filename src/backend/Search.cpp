@@ -67,6 +67,9 @@ DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
 DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
+DEFINE_PARAM(AlphaPruningDepth, 5, 4, 8);
+DEFINE_PARAM(AlphaPruningMargin, 2400, 2000, 4000);
+
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
 
@@ -1553,12 +1556,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
-                eval <= KnownWinValue &&
-                eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
                 const ScoreType score = (eval + beta) / 2;
                 ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
+                return score;
+            }
+
+            // Alpha Pruning
+            if (node->depth <= AlphaPruningDepth &&
+                eval + AlphaPruningMargin <= alpha)
+            {
+                const ScoreType score = (eval + alpha) / 2;
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, 0, TTEntry::Bounds::Upper);
                 return score;
             }
 
