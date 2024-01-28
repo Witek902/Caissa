@@ -1958,9 +1958,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r++;
 
-                // reduce more if TT move is capture
-                if (ttCapture) r++;
-
                 // reduce good moves less
                 if (moveScore >= MoveOrderer::CounterMoveBonus) r -= 2;
 
@@ -1981,6 +1978,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (node->isCutNode) r++;
             }
+
+            // reduce more if TT move is capture
+            if (ttCapture) r++;
 
             // reduce more if eval is not improving
             if (!isImproving) r++;
