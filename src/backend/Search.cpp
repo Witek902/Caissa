@@ -1406,17 +1406,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (ttEntry.depth >= node->depth &&
-                position.GetHalfMoveCount() < 80)
+            if (ttEntry.depth >= node->depth && position.GetHalfMoveCount() < 90)
             {
                 // transposition table cutoff
-                ScoreType ttCutoffValue = InvalidValue;
-                if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
-                else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = ttScore;
-                else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
-
-                if (ttCutoffValue != InvalidValue)
-                    return ttCutoffValue;
+                if ((ttEntry.bounds == TTEntry::Bounds::Exact) ||
+                    (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha) ||
+                    (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta))
+                    return (ttScore >= beta && std::abs(ttScore) < KnownWinValue) ? (ttScore + beta) / 2 : ttScore;
             }
             else if ((ttEntry.bounds == TTEntry::Bounds::Upper || ttEntry.bounds == TTEntry::Bounds::Exact) &&
                 ttEntry.depth < node->depth && node->depth - ttEntry.depth < 5 &&
