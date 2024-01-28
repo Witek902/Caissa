@@ -1500,6 +1500,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+
+            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
         }
         else if (!node->isCutNode)
         {
@@ -1557,9 +1559,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 eval >= beta &&
                 eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
             {
-                const ScoreType score = (eval + beta) / 2;
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
-                return score;
+                return (eval + beta) / 2;
             }
 
             // Razoring
