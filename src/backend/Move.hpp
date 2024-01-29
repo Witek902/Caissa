@@ -68,10 +68,10 @@ struct Move
     INLINE uint32_t FromTo() const              { return value & 0xFFF; }
     INLINE Piece GetPromoteTo() const           { return (Piece)((value >> 12) & 0xF); }
     INLINE Piece GetPiece() const               { return (Piece)((value >> 16) & 0xF); }
-    INLINE constexpr bool IsCapture() const     { return (value >> 20) & 1; }
-    INLINE constexpr bool IsEnPassant() const   { return (value >> 21) & 1; }
-    INLINE constexpr bool IsLongCastle() const  { return (value >> 22) & 1; }
-    INLINE constexpr bool IsShortCastle() const { return (value >> 23) & 1; }
+    INLINE constexpr bool IsCapture() const     { return value & (1u << 20); }
+    INLINE constexpr bool IsEnPassant() const   { return value & (1u << 21); }
+    INLINE constexpr bool IsLongCastle() const  { return value & (1u << 22); }
+    INLINE constexpr bool IsShortCastle() const { return value & (1u << 23); }
     INLINE constexpr bool IsCastling() const    { return (value >> 22) & 3; }
 
     // data layout is following:
@@ -166,6 +166,11 @@ struct Move
     {
         static_assert((int32_t)Piece::Rook - (int32_t)Piece::Knight == 2, "Unexpected piece order");
         return GetPromoteTo() >= Piece::Knight && GetPromoteTo() <= Piece::Rook;
+    }
+
+    INLINE bool IsIrreversible() const
+    {
+        return IsCapture() || GetPiece() == Piece::Pawn;
     }
 
     std::string ToString() const;
