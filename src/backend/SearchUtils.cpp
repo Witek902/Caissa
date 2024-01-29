@@ -70,14 +70,10 @@ void SearchUtils::Init()
 bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
 {
     if (node.position.GetHalfMoveCount() < 3)
-    {
         return false;
-    }
 
-    if (node.isNullMove || node.previousMove.IsCapture() || node.previousMove.IsPromotion())
-    {
+    if (node.isNullMove || node.previousMove.IsIrreversible())
         return false;
-    }
 
     const uint64_t originalKey = node.position.GetHash();
     const NodeInfo* currNode = &node - 1;
@@ -85,35 +81,35 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
 
     for (;;)
     {
-        const NodeInfo* parentNode = currNode - 1;
-
-        // go up the tree, abort on any null move or capture
+        // go up the tree, abort on any null move or irreversible move
         if (currNode->height < 2) break;
-        if (currNode->isNullMove || parentNode->isNullMove) break;
-        if (currNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
-        if (parentNode->previousMove.IsCapture() || currNode->previousMove.GetPiece() == Piece::Pawn) break;
 
-        currNode = currNode - 2;
+        if (currNode->isNullMove || currNode->previousMove.IsIrreversible()) break;
+        currNode = currNode - 1;
+        if (currNode->isNullMove || currNode->previousMove.IsIrreversible()) break;
+        currNode = currNode - 1;
 
+        ASSERT(node.position.GetSideToMove() != currNode->position.GetSideToMove());
         const uint64_t moveKey = originalKey ^ currNode->position.GetHash();
 
-        uint32_t index = CuckooTableSize;
+        uint32_t index = UINT32_MAX;
         if (gCuckooTable[CuckooIndex1(moveKey)] == moveKey) index = CuckooIndex1(moveKey);
         else if (gCuckooTable[CuckooIndex2(moveKey)] == moveKey) index = CuckooIndex2(moveKey);
 
-        if (index < CuckooTableSize)
-        {
-            ASSERT(node.position.GetSideToMove() != currNode->position.GetSideToMove());
-            const PackedMove move = gCuckooMoves[index];
-            if (!(Bitboard::GetBetween(move.FromSquare(), move.ToSquare()) & node.position.Occupied()))
-            {
-                const Bitboard occupied = node.position.GetCurrentSide().Occupied();
-                if (occupied & (move.FromSquare().GetBitboard() | move.ToSquare().GetBitboard()))
-                {
-                    return true;
-                }
-            }
-        }
+        // no move found in the table for given hash difference
+        if (index >= CuckooTableSize)
+            continue;
+
+        const PackedMove move = gCuckooMoves[index];
+        ASSERT(move.IsValid());
+
+        // move is not legal
+        if (Bitboard::GetBetween(move.FromSquare(), move.ToSquare()) & node.position.Occupied())
+            continue;
+
+        const Bitboard occupied = node.position.GetCurrentSide().Occupied();
+        if (occupied & (move.FromSquare().GetBitboard() | move.ToSquare().GetBitboard()))
+            return true;
     }
 
     return false;
