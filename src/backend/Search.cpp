@@ -59,7 +59,7 @@ DEFINE_PARAM(AspirationWindowMaxSize, 498, 200, 1000);
 DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 8, 2, 20);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
 
@@ -1888,6 +1888,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
+
                 const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
 
                 // restore node state
@@ -1904,7 +1905,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         moveExtension = 1;
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            if (node->doubleExtensions <= 10 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
                                 moveExtension = 2;
                     }
                 }
@@ -2137,7 +2138,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (!searchAborted && moveIndex == 0u)
     {
         if (filteredSomeMove)
-            bestValue = -InfValue;
+            bestValue = alpha;
         else
             bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->height : 0;
 
