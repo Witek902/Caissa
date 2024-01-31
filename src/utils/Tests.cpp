@@ -1846,9 +1846,9 @@ static void RunEvalTests()
 }
 
 // this test suite runs full search on well known/easy positions
-void RunSearchTests(uint32_t numThreads)
+void RunSearchTests()
 {
-    std::cout << "Running Search tests... (numThreads=" << numThreads << ")" << std::endl;
+    std::cout << "Running Search tests..." << std::endl;
 
     Search search;
     TranspositionTable tt{ 16 * 1024 * 1024 };
@@ -1858,7 +1858,6 @@ void RunSearchTests(uint32_t numThreads)
     SearchParam param{ tt };
     param.debugLog = false;
     param.numPvLines = UINT32_MAX;
-    param.numThreads = numThreads;
 
     // insufficient material draw
     {
@@ -2080,8 +2079,6 @@ void RunSearchTests(uint32_t numThreads)
         TEST_EXPECT(result.size() == 1);
         TEST_EXPECT(result[0].score == 0);
     }
-
-    ASSERT(param.numThreads == numThreads); // don't modify number of threads!
 }
 
 void RunUnitTests()
@@ -2093,8 +2090,7 @@ void RunUnitTests()
     RunPackedPositionTests();
     RunGameTests();
     RunPerftTests();
-    RunSearchTests(1); // single-threaded
-    RunSearchTests(4); // multi-threaded
+    RunSearchTests();
 }
 
 bool RunPerformanceTests(const std::vector<std::string>& paths)
