@@ -1549,6 +1549,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         isImproving = evalImprovement >= 0;
     }
 
+    const Move pvMove = isPvNode ? Move::Invalid() : thread.GetPvMove(*node);
+    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
+    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
@@ -1556,8 +1560,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta &&
-                eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
+                eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)) &&
+                (!ttMove.IsValid() || ttCapture))
             {
                 return (eval + beta) / 2;
             }
@@ -1711,11 +1715,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         extension++;
     }
-
-    const Move pvMove = thread.GetPvMove(*node);
-    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
-
-    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
 
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
