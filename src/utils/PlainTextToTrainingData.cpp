@@ -68,9 +68,9 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
             const std::string resultStr = line.substr(resultStart + 1, scoreStart - resultStart - 1);
 
             Game::Score gameScore = Game::Score::Unknown;
-            if (resultStr == "[1.0]" || resultStr == "[1-0]") gameScore = Game::Score::WhiteWins;
+            if (resultStr == "[1.0]" || resultStr == "[1]" || resultStr == "[1-0]") gameScore = Game::Score::WhiteWins;
             else if (resultStr == "[0.5]" || resultStr == "[1/2-1/2]") gameScore = Game::Score::Draw;
-            else if (resultStr == "[0.0]" || resultStr == "[0-1]") gameScore = Game::Score::BlackWins;
+            else if (resultStr == "[0.0]" || resultStr == "[0]" || resultStr == "[0-1]") gameScore = Game::Score::BlackWins;
             else
             {
                 std::cout << "Failed to parse game result: " << resultStr << std::endl;
