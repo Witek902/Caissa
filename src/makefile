@@ -1,5 +1,5 @@
 EXE                = caissa
-VERSION            = 1.16.9
+VERSION            = 1.16.10
 EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-32.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
