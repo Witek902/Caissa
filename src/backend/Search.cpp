@@ -36,6 +36,7 @@ DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
+DEFINE_PARAM(ProbcutBetaOffsetInCheck, 320, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
@@ -1700,6 +1701,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         node->depth--;
     }
 
+    const Move pvMove = thread.GetPvMove(*node);
+    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
+    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+
+    // in-check probcut (idea from Stockfish)
+    if constexpr (!isPvNode)
+    {
+        const ScoreType probCutBeta = ScoreType(beta + ProbcutBetaOffsetInCheck);
+        if (ttCapture && node->isInCheck &&
+            ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
+            ttEntry.depth >= node->depth - 4 && ttScore >= probCutBeta &&
+            std::abs(ttScore) < KnownWinValue && std::abs(node->beta) < KnownWinValue)
+            return probCutBeta;
+    }
+
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.height = node->height + 1;
@@ -1714,11 +1730,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         extension++;
     }
-
-    const Move pvMove = thread.GetPvMove(*node);
-    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
-
-    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
 
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
