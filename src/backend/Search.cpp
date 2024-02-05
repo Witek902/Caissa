@@ -1810,19 +1810,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            // Late Move Pruning
+            // skip moves that are far in the list
+            // the higher depth is, the less aggressive pruning is
+            if (moveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
+            {
+                movePicker.SkipQuiets();
+                if (move.IsQuiet()) continue;
+            }
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
-                // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
-                {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
-                }
-
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
