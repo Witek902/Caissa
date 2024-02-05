@@ -140,37 +140,6 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 continue;
         }
 
-        if (kingBucketMask != UINT64_MAX)
-        {
-            // skip drawn game based half-move counter
-            if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
-            {
-                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
-                std::bernoulli_distribution skippingDistr(hmcSkipProb);
-                if (skippingDistr(gen))
-                    continue;
-            }
-
-            // skip early moves
-            if (outEntry.pos.moveCount < 10)
-                continue;
-
-            // skip based on piece count
-            {
-                const int32_t numPieces = outEntry.pos.occupied.Count();
-
-                if (numPieces <= 3)
-                    continue;
-
-                if (numPieces <= 4 && std::bernoulli_distribution(0.9f)(gen))
-                    continue;
-
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);
-                if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
-                    continue;
-            }
-        }
-
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
 
@@ -187,16 +156,33 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         }
         else
         {
-            /*
-            // skip based on kings placement (prefer king on further ranks)
+            // skip drawn game based half-move counter
+            if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
             {
-                const float whiteKingProb = 1.0f - (float)outPosition.Whites().GetKingSquare().Rank() / 7.0f;
-                const float blackKingProb = (float)outPosition.Blacks().GetKingSquare().Rank() / 7.0f;
-                std::bernoulli_distribution skippingDistr(0.25f * Sqr(std::min(whiteKingProb, blackKingProb)));
+                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
+                std::bernoulli_distribution skippingDistr(hmcSkipProb);
                 if (skippingDistr(gen))
                     continue;
             }
-            */
+
+            const int32_t numPieces = outEntry.pos.occupied.Count();
+
+            // skip early moves
+            if (outEntry.pos.moveCount < 10 && numPieces > 24)
+                continue;
+
+            // skip based on piece count
+            {
+                if (numPieces <= 3)
+                    continue;
+
+                if (numPieces <= 4 && std::bernoulli_distribution(0.75f)(gen))
+                    continue;
+
+                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);
+                if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
+                    continue;
+            }
 
             // skip based on WDL
             // the idea is to skip positions where for instance eval is high, but game result is loss
