@@ -20,6 +20,11 @@ extern void AnalyzeGames();
 
 int main(int argc, const char* argv[])
 {
+#ifdef _MSC_VER
+    // increase max open files limit (required for neural net training)
+    _setmaxstdio(2048);
+#endif // _MSC_VER
+
     std::vector<std::string> args;
     {
         for (int32_t i = 1; i < argc; ++i)

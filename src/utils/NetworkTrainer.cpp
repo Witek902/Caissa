@@ -39,7 +39,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cBatchSize = 16 * 1024;
+static const uint32_t cBatchSize = 32 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -257,12 +257,12 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
 
         if (tbScore == Game::Score::Draw)
         {
-            const float tbDrawLambda = 0.05f;
+            const float tbDrawLambda = 0.0f;
             score = std::lerp(0.5f, score, tbDrawLambda);
         }
         else if (tbScore != Game::Score::Unknown)
         {
-            const float tbLambda = 0.25f;
+            const float tbLambda = 0.0f;
             const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
             score = std::lerp(wdlScore, score, tbLambda);
         }
@@ -430,6 +430,7 @@ void NetworkTrainer::Validate(size_t iteration)
             Position::InitPositionFEN,
             "rnbq1bnr/pppppppp/8/8/5k2/8/PPPPPPPP/RNBQKBNR w KQ - 0 1",         // black king in the center
             "r1bq1rk1/1pp2ppp/8/4pn2/B6b/1PN2P2/PBPP1P2/RQ2R1K1 w - - 1 12",
+            "8/1kN5/8/2B5/4K1bN/8/8/8 w - - 0 1", // should be 1
             "k7/ppp5/8/8/8/8/P7/K7 w - - 0 1",  // should be at least -200
             "7k/ppp5/8/8/8/8/P7/7K w - - 0 1",  // should be at least -200
             "7k/pp6/8/8/8/8/PP6/7K w - - 0 1",   // should be 0
@@ -441,7 +442,6 @@ void NetworkTrainer::Validate(size_t iteration)
             "4k3/5p2/2K1p3/1Q1rP3/8/8/8/8 w - - 0 1", // should be 0
             "8/8/8/5B1p/5p1r/4kP2/6K1/8 w - - 0 1", // should be 0
             "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
-            "rnbq1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNk w Q - 0 1",
         };
 
         for (const char* testPosition : s_testPositions)
@@ -672,15 +672,15 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 0.1f;
-static volatile float g_lambdaScale = 0.05f;
-static volatile float g_weightDecay = 0.002f;
+static volatile float g_learningRateScale = 0.2f;
+static volatile float g_lambdaScale = 0.00f;
+static volatile float g_weightDecay = 0.001f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval23-20B.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-33-4.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
@@ -693,14 +693,12 @@ bool NetworkTrainer::Train()
         return false;
     }
 
-    std::ofstream weightsFile("weights.txt", std::ios::out);
-
     std::vector<nn::TrainingVector> batch(cNumTrainingVectorsPerIteration);
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 0.001f;
-    const float minLearningRate = 0.001f;
+    const float maxLearningRate = 0.0001f;
+    const float minLearningRate = 0.0001f;
     const float maxLambda = 1.0f;
     const float minLambda = 1.0f;
 
