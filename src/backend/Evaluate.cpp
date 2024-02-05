@@ -23,7 +23,7 @@
 #else // !defined(CAISSA_EVALFILE)
 
     // use eval file
-    const char* c_DefaultEvalFile = "eval-32.pnn";
+    const char* c_DefaultEvalFile = "eval-33.pnn";
 
 #endif // defined(CAISSA_EVALFILE)
 
