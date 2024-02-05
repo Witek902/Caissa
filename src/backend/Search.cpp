@@ -2193,10 +2193,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
 
     // update transposition table
-    // don't write if:
-    // - time is exceeded as evaluation may be inaccurate
-    // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
-    if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
+    if (!filteredSomeMove)
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
