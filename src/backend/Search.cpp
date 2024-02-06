@@ -61,6 +61,7 @@ DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularCutoffTreshold, 200, 100, 300);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
 
@@ -1750,6 +1751,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     uint32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
+    bool singularCutoff = false;
 
     constexpr uint32_t maxMovesTried = 32;
     Move quietMovesTried[maxMovesTried];
@@ -1917,6 +1919,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         if constexpr (!isPvNode)
                             if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
                                 moveExtension = 2;
+                    }
+                    if constexpr (!isPvNode)
+                    {
+                        if (singularScore < singularBeta - SingularCutoffTreshold)
+                            singularCutoff = true;
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
@@ -2128,6 +2135,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 break;
             }
+
+            if (singularCutoff)
+                break;
 
             // reduce remaining moves more if we managed to find new best move
             if (node->depth > 2) node->depth--;
