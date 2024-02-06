@@ -1487,6 +1487,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    // start prefetching TT entry after TT move as early as possible
+    if (ttEntry.move.IsValid())
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(ttEntry.move));
+
     // evaluate position
     if (node->isInCheck)
     {
@@ -1766,7 +1770,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     while (movePicker.PickMove(*node, move, moveScore))
     {
         // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
+        if (move != ttMove)
+            ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
 #ifdef VALIDATE_MOVE_PICKER
         for (uint32_t i = 0; i < numGeneratedMoves; ++i) ASSERT(generatedSoFar[i] != move);

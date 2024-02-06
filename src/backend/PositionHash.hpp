@@ -17,6 +17,10 @@ INLINE static uint64_t GetSideToMoveZobristHash()
 
 INLINE static uint64_t GetPieceZobristHash(const Color color, const Piece piece, const uint32_t squareIndex)
 {
+    ASSERT((uint32_t)color < 2);
+    ASSERT((uint32_t)piece >= (uint32_t)Piece::Pawn && (uint32_t)piece <= (uint32_t)Piece::King);
+    ASSERT(squareIndex < 64);
+
     const uint32_t pieceIndex = (uint32_t)piece - (uint32_t)Piece::Pawn;
     const uint32_t offset = (uint32_t)color + 2 * (squareIndex + 64 * pieceIndex);
     ASSERT(offset < 2 * 6 * 64);
@@ -35,6 +39,7 @@ INLINE static uint64_t GetEnPassantFileZobristHash(uint32_t fileIndex)
 
 INLINE static uint64_t GetCastlingRightsZobristHash(const Color color, uint32_t rookIndex)
 {
+    ASSERT((uint32_t)color < 2);
     ASSERT(rookIndex < 8);
 
     // skip position hashes and en passant hashes

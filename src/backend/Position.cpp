@@ -101,20 +101,21 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     if (piece == Piece::Pawn) mPawnsHash ^= pieceHash;
 }
 
-uint64_t Position::HashAfterMove(const Move move) const
+uint64_t Position::HashAfterMove(const PackedMove move) const
 {
     ASSERT(move.IsValid());
 
+    const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(move.FromSquare());
+    if (movedPiece == Piece::None) [[unlikely]]
+        return 0;
+
     uint64_t hash = mHash ^ GetSideToMoveZobristHash();
+    hash ^= GetPieceZobristHash(mSideToMove, movedPiece, move.FromSquare().Index());
+    hash ^= GetPieceZobristHash(mSideToMove, movedPiece, move.ToSquare().Index());
 
-    hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.FromSquare().Index());
-    hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.ToSquare().Index());
-
-    if (move.IsCapture() && !move.IsEnPassant())
-    {
-        const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+    const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+    if (capturedPiece != Piece::None)
         hash ^= GetPieceZobristHash(GetOppositeColor(mSideToMove), capturedPiece, move.ToSquare().Index());
-    }
 
     return hash;
 }
