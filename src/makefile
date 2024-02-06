@@ -3,47 +3,51 @@ VERSION            = 1.17.5
 EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-33.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
-CC                 = g++
+CC                 = clang++
 SRC                = backend/*.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
 
-ifeq ($(OS), Windows_NT)
-	EXT = .exe
-else
-	EXT = 
-endif
-
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -s -flto -std=c++20 -O3 -funroll-loops
+FLAGS = $(WFLAGS) -flto -std=c++20 -O3 -funroll-loops
 LIBS =
 
-ifeq ($(EXT), .exe)
-	FLAGS += -static -static-libgcc -static-libstdc++
-	LIBS += -pthread
-else
-	LIBS += -lpthread
-endif
+# Detech compiler
+COMPILER_VERSION := $(shell $(CC) --version)
 
-ifneq ($(findstring g++, $(CC)),)
-	PGO_DIR = "pgo"
-	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
-	PGO_USE      = -fprofile-use=$(PGO_DIR)
-else ifneq ($(findstring clang++, $(CC)),)
+ifneq '' '$(findstring g++,$(COMPILER_VERSION))'
+	# using g++
+	PGO_DATA     = "pgo"
+	PGO_GENERATE = -fprofile-generate=$(PGO_DATA)
+	PGO_USE      = -fprofile-use=$(PGO_DATA)
+else ifneq '' '$(findstring clang,$(COMPILER_VERSION))'
+	# using clang
+	PGO_DATA     = *.profraw *.profdata
 	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
 	PGO_GENERATE = -fprofile-instr-generate
 	PGO_USE      = -fprofile-instr-use=caissa.profdata
 endif
 
-# Try to detect windows environment by seeing
-# whether the shell filters out " or not.
-ifeq ($(shell echo "test"), "test")
+ifeq ($(OS), Windows_NT)
+	# Windows
+	EXT = .exe
 	BENCH = $(EXE)$(EXT) bench 15 > nul 2>&1
-	CLEAN = rmdir /s /q $(PGO_DIR)
+	CLEAN = rmdir /s /q $(PGO_DATA)
+	LIBS += -pthread
+ifneq '' '$(findstring g++,$(COMPILER_VERSION))'
+	# using g++
+	FLAGS += -s -static-libgcc -static-libstdc++
+else ifneq '' '$(findstring clang,$(COMPILER_VERSION))'
+	# using clang
+	FLAGS += -D_CRT_SECURE_NO_WARNINGS -fuse-ld=lld
+endif
 else
+	# Linux
+	EXT =
 	BENCH = ./$(EXE) bench 15 > /dev/null 2>&1
-	CLEAN = $(RM) -rf $(PGO_DIR)
+	CLEAN = $(RM) -rf $(PGO_DATA)
+	LIBS += -lpthread
 endif
 
-COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL  -DNDEBUG -DCAISSA_VERSION=\"$(VERSION)\" -DCAISSA_EVALFILE=\"$(EVALFILE)\"
+COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL -DNDEBUG -DCAISSA_VERSION=\"$(VERSION)\" -DCAISSA_EVALFILE=\"$(EVALFILE)\"
 
 SSE2FLAGS     = $(COMMONFLAGS) -DUSE_SSE -DUSE_SSE2
 SSE4FLAGS     = $(SSE2FLAGS) -DUSE_SSE4 -DUSE_POPCNT

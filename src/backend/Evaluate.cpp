@@ -12,18 +12,33 @@
 
 #if defined(CAISSA_EVALFILE)
 
-    // embed eval file into executable
-    #define INCBIN_PREFIX
-    #define INCBIN_STYLE INCBIN_STYLE_CAMEL
-    #include "incbin.h"
-    INCBIN(Embed, CAISSA_EVALFILE);
+#ifdef _MSC_VER
+#define TEMP_MSVC
+#pragma push_macro("_MSC_VER")
+#undef _MSC_VER
+#endif
 
-    const char* c_DefaultEvalFile = "<empty>";
+// embed eval file into executable
+#define INCBIN_PREFIX
+#define INCBIN_STYLE INCBIN_STYLE_CAMEL
+#include "incbin.h"
+
+
+#ifdef TEMP_MSVC
+#pragma pop_macro("_MSC_VER")
+#undef TEMP_MSVC
+#endif
+
+namespace {
+INCBIN(Embed, CAISSA_EVALFILE);
+} // namespace
+
+const char* c_DefaultEvalFile = "<empty>";
 
 #else // !defined(CAISSA_EVALFILE)
 
-    // use eval file
-    const char* c_DefaultEvalFile = "eval-33.pnn";
+// use eval file
+const char* c_DefaultEvalFile = "eval-33.pnn";
 
 #endif // defined(CAISSA_EVALFILE)
 

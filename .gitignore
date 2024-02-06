@@ -9,4 +9,7 @@ releases/
 release/
 src/*.exe
 src/pgo/
+src/caissa
 CMakeSettings.json
+*.profdata
+*.profraw

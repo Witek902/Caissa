@@ -10,6 +10,7 @@
 #endif // NOMINMAX
 #include <Windows.h>
 
+#pragma comment(lib, "advapi32.lib")
 
 bool EnableLargePagesSupport()
 {

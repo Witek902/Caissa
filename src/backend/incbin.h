@@ -191,6 +191,9 @@
 #  elif defined(__MINGW32__) || defined(__MINGW64__)
 /* Mingw doesn't support this directive either */
 #    define INCBIN_TYPE(NAME)
+#  elif defined(_WIN32)
+// CIEKCE: this just doesn't work on windows at all
+#    define INCBIN_TYPE(NAME)
 #  else
 /* It's safe to use `@' on other architectures */
 #    define INCBIN_TYPE(NAME)    ".type " INCBIN_STRINGIZE(INCBIN_PREFIX) #NAME ", @object\n"
