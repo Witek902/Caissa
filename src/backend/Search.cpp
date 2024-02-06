@@ -380,7 +380,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode.position = game.GetPosition();
         rootNode.isInCheck = game.GetPosition().IsInCheck();
         rootNode.position.ComputeThreats(rootNode.threats);
-        rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
         rootNode.nnContext.MarkAsDirty();
@@ -900,7 +899,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
     rootNode.position.ComputeThreats(rootNode.threats);
-    rootNode.isPvNodeFromPrevIteration = true;
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext.MarkAsDirty();
 
@@ -979,7 +977,7 @@ Search::ThreadData::ThreadData()
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
 {
-    if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.filteredMove.IsValid())
+    if (pvLines.empty() || node.filteredMove.IsValid())
     {
         return Move::Invalid();
     }
@@ -1701,8 +1699,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         node->depth--;
     }
 
-    const Move pvMove = thread.GetPvMove(*node);
-    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
+    const PackedMove ttMove = ttEntry.move;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
 
     // in-check probcut (idea from Stockfish)
@@ -1889,12 +1886,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
 
-                const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const int16_t originalDepth = node->depth;
                 const ScoreType originalAlpha = node->alpha;
                 const ScoreType originalBeta = node->beta;
 
-                node->isPvNodeFromPrevIteration = false;
                 node->depth = node->depth / 2 - 1;
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
@@ -1902,7 +1897,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
 
                 // restore node state
-                node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
                 node->depth = originalDepth;
                 node->alpha = originalAlpha;
                 node->beta = originalBeta;
@@ -1954,7 +1948,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
-        childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node->doubleExtensions + (moveExtension >= 2);
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;

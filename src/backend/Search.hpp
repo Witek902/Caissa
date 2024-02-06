@@ -140,7 +140,6 @@ struct NodeInfo
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
 
-    bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
@@ -164,7 +163,6 @@ struct NodeInfo
         staticEval = InvalidValue;
         previousMove = Move::Invalid();
         moveStatScore = 0;
-        isPvNodeFromPrevIteration = false;
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
