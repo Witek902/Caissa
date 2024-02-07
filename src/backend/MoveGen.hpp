@@ -198,19 +198,18 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
 
     ASSERT(currentSide.king);
     const Square kingSquare = currentSide.GetKingSquare();
-    const Square opponentKingSquare = opponentSide.GetKingSquare();
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
 
     Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
     attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
-    attackBitboard &= ~Bitboard::GetKingAttacks(opponentKingSquare); // can't move to square controlled by opponent's king
+    attackBitboard &= ~threats; // can't move to a square controlled by the opponent
     attackBitboard &= mode == MoveGenerationMode::Captures ? occupiedByOpponent : ~occupiedByOpponent;
 
     // regular king moves
@@ -226,7 +225,7 @@ INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
     const SidePosition& currentSide = pos.GetSide(sideToMove);
@@ -280,38 +279,43 @@ inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
         });
     });
 
-    GenerateKingMoveList<mode, sideToMove>(pos, outMoveList);
+    GenerateKingMoveList<mode, sideToMove>(pos, threats, outMoveList);
 }
 
 template<MoveGenerationMode mode>
-INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == Color::White)
     {
-        GenerateMoveList<mode, Color::White>(pos, outMoveList);
+        GenerateMoveList<mode, Color::White>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateMoveList<mode, Color::Black>(pos, outMoveList);
+        GenerateMoveList<mode, Color::Black>(pos, threats, outMoveList);
     }
+}
+
+INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+{
+    GenerateMoveList<MoveGenerationMode::Captures>(pos, threats, outMoveList);
+    GenerateMoveList<MoveGenerationMode::Quiets>(pos, threats, outMoveList);
 }
 
 INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
-    GenerateMoveList<MoveGenerationMode::Captures>(pos, outMoveList);
-    GenerateMoveList<MoveGenerationMode::Quiets>(pos, outMoveList);
+    GenerateMoveList(pos, Bitboard::GetKingAttacks(pos.GetOpponentSide().GetKingSquare()), outMoveList);
 }
 
-INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == Color::White)
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Color::White>(pos, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::White>(pos, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, Color::White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::White>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Color::Black>(pos, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::Black>(pos, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, Color::Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::Black>(pos, threats, outMoveList);
     }
 }
