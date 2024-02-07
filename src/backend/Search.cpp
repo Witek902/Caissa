@@ -1861,25 +1861,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveExtension = extension;
+        int32_t moveExtension = 0;
+        if (node->height < 2 * thread.rootDepth && !isRootNode)
         {
+            moveExtension = extension;
+
             // promotion extension
             if (move.GetPromoteTo() == Piece::Queen)
-            {
                 moveExtension++;
-            }
 
             // pawn advanced to 6th row so is about to promote
             if (move.GetPiece() == Piece::Pawn &&
                 move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
                 moveExtension++;
-            }
-        }
 
-        // Singular move detection
-        if constexpr (!isRootNode)
-        {
+            // Singular Extensions
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
                 node->depth >= SingularExtensionMinDepth &&
@@ -1915,7 +1911,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         moveExtension = 1;
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            if (node->doubleExtensions <= 10 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
                                 moveExtension = 2;
                     }
                 }
