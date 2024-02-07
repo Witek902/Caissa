@@ -368,7 +368,7 @@ bool Position::GivesCheck_Approx(const Move move) const
 uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 {
     MoveList moves;
-    GenerateMoveList(*this, moves);
+    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
 
     if (moves.Size() == 0)
     {
@@ -969,7 +969,7 @@ bool Position::IsQuiet() const
     }
 
     MoveList moves;
-    GenerateMoveList<MoveGenerationMode::Captures>(*this, moves);
+    GenerateMoveList<MoveGenerationMode::Captures>(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
