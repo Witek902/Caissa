@@ -1877,7 +1877,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        // Singular move detection
+        // Singular Extensions
         if constexpr (!isRootNode)
         {
             if (!node->filteredMove.IsValid() &&
@@ -1913,10 +1913,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (node->height < 2 * thread.rootDepth)
                     {
                         moveExtension = 1;
-                        // double extension if singular score is way below beta
+                        // double/tripple extension if singular score is way below beta
                         if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension = 2;
+                            if (node->doubleExtensions <= 12 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                                moveExtension = 2 + (singularScore < singularBeta - 120 && !ttCapture);
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
