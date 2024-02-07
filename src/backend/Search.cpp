@@ -59,6 +59,7 @@ DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularTripleExtensionMarigin, 54, 30, 100);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
 
@@ -1881,7 +1882,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        // Singular move detection
+        // Singular Extensions
         if constexpr (!isRootNode)
         {
             if (!node->filteredMove.IsValid() &&
@@ -1917,10 +1918,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (node->height < 2 * thread.rootDepth)
                     {
                         moveExtension = 1;
-                        // double extension if singular score is way below beta
+                        // double/triple extension if singular score is way below beta
                         if constexpr (!isPvNode)
                             if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension = 2;
+                                moveExtension = 2 + (singularScore < singularBeta - SingularTripleExtensionMarigin && !ttCapture);
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
