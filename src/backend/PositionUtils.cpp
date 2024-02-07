@@ -694,8 +694,11 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                     bool ambiguousRank = false;
                     bool ambiguousPiece = false;
                     {
+                        Threats threats;
+                        ComputeThreats(threats);
+
                         MoveList moves;
-                        GenerateMoveList(*this, moves);
+                        GenerateMoveList(*this, threats.allThreats, moves);
 
                         for (uint32_t i = 0; i < moves.Size(); ++i)
                         {
@@ -930,8 +933,11 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
                 toSquare = shortCastleRookSquare;
             }
 
+            Threats threats;
+            ComputeThreats(threats);
+
             MoveList moves;
-            GenerateKingMoveList(*this, moves);
+            GenerateKingMoveList(*this, threats.allThreats, moves);
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -1124,8 +1130,11 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
 
         const Square toSquare((uint8_t)toFile, (uint8_t)toRank);
 
+        Threats threats;
+        ComputeThreats(threats);
+
         MoveList moves;
-        GenerateMoveList(*this, moves);
+        GenerateMoveList(*this, threats.allThreats, moves);
 
         for (uint32_t i = 0; i < moves.Size(); ++i)
         {
@@ -1273,7 +1282,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     }
 
     MoveList moveList;
-    GenerateMoveList(*this, moveList);
+    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moveList);
 
     uint64_t nodes = 0;
     for (uint32_t i = 0; i < moveList.Size(); i++)

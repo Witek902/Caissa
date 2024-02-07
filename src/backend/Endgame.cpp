@@ -246,7 +246,7 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore, int32_t
     if (pos.GetSideToMove() == Color::Black)
     {
         MoveList moves;
-        GenerateKingMoveList(pos, moves);
+        GenerateKingMoveList(pos, Bitboard::GetKingAttacks(pos.GetOpponentSide().GetKingSquare()), moves);
 
         // TODO this does not handle all cases
         // detect stalemate

@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.16.11"
+#define CAISSA_VERSION "1.16.12"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -1020,8 +1020,11 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 
 bool UniversalChessInterface::Command_ScoreMoves()
 {
+    Threats threats;
+    mGame.GetPosition().ComputeThreats(threats);
+
     MoveList moves;
-    GenerateMoveList(mGame.GetPosition(), moves);
+    GenerateMoveList(mGame.GetPosition(), threats.allThreats, moves);
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
