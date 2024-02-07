@@ -1020,8 +1020,11 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 
 bool UniversalChessInterface::Command_ScoreMoves()
 {
+    Threats threats;
+    mGame.GetPosition().ComputeThreats(threats);
+
     MoveList moves;
-    GenerateMoveList(mGame.GetPosition(), moves);
+    GenerateMoveList(mGame.GetPosition(), threats.allThreats, moves);
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
