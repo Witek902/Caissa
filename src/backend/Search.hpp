@@ -315,13 +315,9 @@ private:
         SearchThreadStats stats;            // per-thread search stats
         uint32_t randomSeed;                // seed for random number generator
 
-        // per-thread move orderer
         MoveOrderer moveOrderer;
-
         NodeCache nodeCache;
-
         AccumulatorCache accumulatorCache;
-
         NodeInfo searchStack[MaxSearchDepth];
 
         static constexpr int32_t EvalCorrectionScale = 256;
@@ -330,7 +326,7 @@ private:
         int16_t matScoreCorrection[MaterialCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
 
-        ThreadData();
+        ThreadData() = default;
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
 
@@ -339,8 +335,6 @@ private:
 
         ScoreType GetEvalCorrection(const Position& pos) const;
         void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
-
-        uint32_t GetRandomUint();
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
