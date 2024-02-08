@@ -1172,8 +1172,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 bestMove = move;
                 if (score >= beta)
                 {
-                    if (bestMove.IsCapture())
-                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
                     break;
                 }
             }
