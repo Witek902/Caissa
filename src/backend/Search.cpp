@@ -176,7 +176,6 @@ void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
 
 Search::Search()
 {
-    BuildMoveReductionTable();
     mThreadData.emplace_back(std::make_unique<ThreadData>());
     mThreadData.front()->isMainThread = true;
 }
@@ -204,7 +203,7 @@ void Search::StopWorkerThreads()
     mThreadData.erase(mThreadData.begin() + 1, mThreadData.end());
 }
 
-void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bias)
+void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bias, uint32_t numThreads)
 {
     // clear first row and column
     for (uint32_t i = 0; i < LMRTableSize; ++i)
@@ -216,22 +215,22 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
+            const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)) + Log(float(numThreads)));
             ASSERT(reduction <= 64);
             table[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
         }
     }
 }
 
-void Search::BuildMoveReductionTable()
+void Search::BuildMoveReductionTable(uint32_t numThreads)
 {
     BuildMoveReductionTable(mMoveReductionTable_Quiets,
         static_cast<float>(LateMoveReductionScale_Quiets) / 100.0f,
-        static_cast<float>(LateMoveReductionBias_Quiets) / 100.0f);
+        static_cast<float>(LateMoveReductionBias_Quiets) / 100.0f, numThreads);
 
     BuildMoveReductionTable(mMoveReductionTable_Captures,
         static_cast<float>(LateMoveReductionScale_Captures) / 100.0f,
-        static_cast<float>(LateMoveReductionBias_Captures) / 100.0f);
+        static_cast<float>(LateMoveReductionBias_Captures) / 100.0f, numThreads);
 }
 
 void Search::Clear()
@@ -362,9 +361,13 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         }
     }
 
-#ifdef ENABLE_TUNING
-    BuildMoveReductionTable();
+#ifndef ENABLE_TUNING
+    if (mPrevNumThreads != param.numThreads)
 #endif // ENABLE_TUNING
+    {
+        // rebuild move reduction tables if number of threads changed or if tuning is enabled
+        BuildMoveReductionTable(param.numThreads);
+    }
 
     SearchStats globalStats;
 
@@ -403,6 +406,8 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
     }
 
+    mPrevNumThreads = param.numThreads;
+
     // kick off worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
@@ -424,7 +429,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         }
         threadData->newTaskCV.notify_one();
     }
-        
+   
     // do search on main thread
     Search_Internal(0, numPvLines, game, param, globalStats);
 

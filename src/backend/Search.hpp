@@ -351,6 +351,7 @@ private:
     using LMRTableType = uint8_t[LMRTableSize][LMRTableSize];
     LMRTableType mMoveReductionTable_Quiets;
     LMRTableType mMoveReductionTable_Captures;
+    uint32_t mPrevNumThreads = 0;
 
     INLINE uint8_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
@@ -361,8 +362,8 @@ private:
         return mMoveReductionTable_Captures[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
 
-    void BuildMoveReductionTable();
-    void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
+    void BuildMoveReductionTable(uint32_t numThreads);
+    void BuildMoveReductionTable(LMRTableType& table, float scale, float bias, uint32_t numThreads);
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
