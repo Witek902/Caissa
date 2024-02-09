@@ -1961,9 +1961,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // Late Move Reductions
         int32_t r = 0;
-        if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > 1 &&
-            (!isPvNode || move.IsQuiet()))
+        if (node->depth >= LateMoveReductionStartDepth && moveIndex > 1)
         {
             if (move.IsQuiet())
             {
@@ -2029,8 +2027,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                newDepth += (score > bestValue + 80) && (node->height < 2 * thread.rootDepth); // prevent search explosions
-                newDepth -= (score < bestValue + newDepth);
+                newDepth += (score > bestValue + 80) && (node->height < 2 * thread.rootDepth) && !isPvNode;
+                newDepth -= (score < bestValue + newDepth) && !isPvNode;
                 doFullDepthSearch = newDepth > lmrDepth;
             }
             else
