@@ -25,8 +25,6 @@ static const float PvLineReportDelay = 0.005f;
 static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
-
-static const int32_t MaxDepthReduction = 12;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
 DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
@@ -2006,7 +2004,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         int32_t newDepth = node->depth + moveExtension - 1;
 
         // limit reduction, don't drop into QS
-        r = std::min(r, MaxDepthReduction);
         r = std::clamp(r, 0, newDepth);
 
         ScoreType score = InvalidValue;
