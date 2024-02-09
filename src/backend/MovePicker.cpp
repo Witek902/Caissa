@@ -119,7 +119,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
         case Stage::PickQuiets:
         {
-            if (m_moves.Size() > 0)
+            while (m_moves.Size() > 0)
             {
                 const uint32_t index = m_moves.BestMoveIndex();
                 outMove = m_moves.GetMove(index);
@@ -130,7 +130,8 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
                 m_moves.RemoveByIndex(index);
 
-                return true;
+                if (m_generateQuiets || !outMove.IsQuiet())
+                    return true;
             }
 
             m_stage = Stage::End;
