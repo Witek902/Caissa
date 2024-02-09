@@ -1004,6 +1004,14 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
+INLINE static bool OppCanWinMaterial(const Position& position, const Threats& threats)
+{
+    const auto& us = position.GetCurrentSide();
+    return (threats.attackedByRooks & us.queens) ||
+        (threats.attackedByMinors & (us.queens | us.rooks)) ||
+        (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
+}
+
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
     const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
@@ -1558,8 +1566,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta &&
-                eval >= (beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - isImproving)))
+                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))))
             {
                 return (eval + beta) / 2;
             }
