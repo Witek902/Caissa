@@ -2159,6 +2159,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return bestValue;
     }
 
+    if constexpr (!isPvNode)
+    {
+        // blend best move value with beta (idea from Stockfish)
+        ASSERT(node->depth > 0);
+        if (bestValue > beta && bestValue < KnownWinValue && beta > -KnownWinValue)
+            bestValue = (bestValue * (node->depth + 2) + beta) / (node->depth + 3);
+    }
+
     // update move orderer
     if (bestValue >= beta)
     {
