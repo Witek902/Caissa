@@ -4,8 +4,6 @@
 
 #include <string>
 
-#include "Color.hpp"
-
 enum class Piece : uint8_t
 {
     None,

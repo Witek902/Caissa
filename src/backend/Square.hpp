@@ -93,7 +93,7 @@ public:
     INLINE uint8_t RelativeRank(const Color color) const
     {
         const uint8_t rank = mIndex / 8u;
-        return color == Color::White ? rank : (7 - rank);
+        return color == White ? rank : (7 - rank);
     }
 
     INLINE Square North() const

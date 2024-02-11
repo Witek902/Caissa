@@ -583,10 +583,10 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     {
         TimeManagerInitData data;
         data.moveTime = moveTime;
-        data.remainingTime = mGame.GetSideToMove() == Color::White ? whiteRemainingTime : blacksRemainingTime;
-        data.timeIncrement = mGame.GetSideToMove() == Color::White ? whiteTimeIncrement : blacksTimeIncrement;
-        data.theirRemainingTime = mGame.GetSideToMove() == Color::White ? blacksRemainingTime : whiteRemainingTime;
-        data.theirTimeIncrement = mGame.GetSideToMove() == Color::White ? blacksTimeIncrement : whiteTimeIncrement;
+        data.remainingTime = mGame.GetSideToMove() == White ? whiteRemainingTime : blacksRemainingTime;
+        data.timeIncrement = mGame.GetSideToMove() == White ? whiteTimeIncrement : blacksTimeIncrement;
+        data.theirRemainingTime = mGame.GetSideToMove() == White ? blacksRemainingTime : whiteRemainingTime;
+        data.theirTimeIncrement = mGame.GetSideToMove() == White ? blacksTimeIncrement : whiteTimeIncrement;
         data.movesToGo = movesToGo;
         data.moveOverhead = mOptions.moveOverhead;
 

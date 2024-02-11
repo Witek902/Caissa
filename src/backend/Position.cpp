@@ -12,12 +12,11 @@ bool Position::s_enableChess960 = false;
 
 uint64_t Position::ComputeHash() const
 {
-    uint64_t hash = mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu;
+    uint64_t hash = mSideToMove == Black ? GetSideToMoveZobristHash() : 0llu;
 
-    for (uint32_t colorIdx = 0; colorIdx < 2; ++colorIdx)
+    for (Color color = 0; color < 2; ++color)
     {
-        const Color color = (Color)colorIdx;
-        const SidePosition& pos = mColors[colorIdx];
+        const SidePosition& pos = mColors[color];
 
         pos.pawns.Iterate([&](uint32_t square)   INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Pawn, square); });
         pos.knights.Iterate([&](uint32_t square) INLINE_LAMBDA { hash ^= GetPieceZobristHash(color, Piece::Knight, square); });
@@ -36,11 +35,11 @@ uint64_t Position::ComputeHash() const
     {
         if (GetWhitesCastlingRights() & (1 << i))
         {
-            hash ^= GetCastlingRightsZobristHash(Color::White, i);
+            hash ^= GetCastlingRightsZobristHash(White, i);
         }
         if (GetBlacksCastlingRights() & (1 << i))
         {
-            hash ^= GetCastlingRightsZobristHash(Color::Black, i);
+            hash ^= GetCastlingRightsZobristHash(Black, i);
         }
     }
 
@@ -50,7 +49,7 @@ uint64_t Position::ComputeHash() const
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Position::Position()
-    : mSideToMove(Color::White)
+    : mSideToMove(White)
     , mEnPassantSquare(Square::Invalid())
     , mCastlingRights{0,0}
     , mHalfMoveCount(0u)
@@ -63,7 +62,7 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
 {
     ASSERT(square.IsValid());
     ASSERT((uint8_t)piece <= (uint8_t)Piece::King);
-    ASSERT(color == Color::White || color == Color::Black);
+    ASSERT(color == White || color == Black);
 
     const Bitboard mask = square.GetBitboard();
     SidePosition& pos = GetSide(color);
@@ -113,7 +112,7 @@ uint64_t Position::HashAfterMove(const Move move) const
     if (move.IsCapture() && !move.IsEnPassant())
     {
         const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
-        hash ^= GetPieceZobristHash(GetOppositeColor(mSideToMove), capturedPiece, move.ToSquare().Index());
+        hash ^= GetPieceZobristHash(mSideToMove ^ 1, capturedPiece, move.ToSquare().Index());
     }
 
     return hash;
@@ -121,7 +120,7 @@ uint64_t Position::HashAfterMove(const Move move) const
 
 void Position::SetSideToMove(Color color)
 {
-    ASSERT(color == Color::White || color == Color::Black);
+    ASSERT(color == White || color == Black);
 
     if (mSideToMove != color)
     {
@@ -187,13 +186,13 @@ Bitboard Position::GetAttackedSquares(Color side) const
 
     if (currentSide.pawns)
     {
-        if (side == Color::White)
+        if (side == White)
         {
-            bitboard |= Bitboard::GetPawnsAttacks<Color::White>(currentSide.pawns);
+            bitboard |= Bitboard::GetPawnsAttacks<White>(currentSide.pawns);
         }
         else
         {
-            bitboard |= Bitboard::GetPawnsAttacks<Color::Black>(currentSide.pawns);
+            bitboard |= Bitboard::GetPawnsAttacks<Black>(currentSide.pawns);
         }
     }
 
@@ -260,8 +259,8 @@ const Bitboard Position::GetAttackers(const Square square, const Bitboard occupi
     if (knights)            bitboard |= Bitboard::GetKnightAttacks(square) & knights;
     if (rooks | queens)     bitboard |= Bitboard::GenerateRookAttacks(square, occupied) & (rooks | queens);
     if (bishops | queens)   bitboard |= Bitboard::GenerateBishopAttacks(square, occupied) & (bishops | queens);
-    if (Whites().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, Color::Black) & Whites().pawns;
-    if (Blacks().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, Color::White) & Blacks().pawns;
+    if (Whites().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, Black) & Whites().pawns;
+    if (Blacks().pawns)     bitboard |= Bitboard::GetPawnAttacks(square, White) & Blacks().pawns;
 
     return bitboard;
 }
@@ -276,7 +275,7 @@ const Bitboard Position::GetAttackers(const Square square, const Color color) co
     if (side.knights)               bitboard |= Bitboard::GetKnightAttacks(square) & side.knights;
     if (side.rooks | side.queens)   bitboard |= Bitboard::GenerateRookAttacks(square, occupiedSquares) & (side.rooks | side.queens);
     if (side.bishops | side.queens) bitboard |= Bitboard::GenerateBishopAttacks(square, occupiedSquares) & (side.bishops | side.queens);
-    if (side.pawns)                 bitboard |= Bitboard::GetPawnAttacks(square, GetOppositeColor(color)) & side.pawns;
+    if (side.pawns)                 bitboard |= Bitboard::GetPawnAttacks(square, color ^ 1) & side.pawns;
 
     return bitboard;
 }
@@ -287,7 +286,7 @@ bool Position::IsSquareVisible(const Square square, const Color color) const
 
     if (Bitboard::GetKingAttacks(square) & side.king) return true;
     if (Bitboard::GetKnightAttacks(square) & side.knights) return true;
-    if (Bitboard::GetPawnAttacks(square, GetOppositeColor(color)) & side.pawns) return true;
+    if (Bitboard::GetPawnAttacks(square, color ^ 1) & side.pawns) return true;
 
     const Bitboard potentialBishopAttacks = Bitboard::GetBishopAttacks(square) & (side.bishops | side.queens);
     const Bitboard potentialRookAttacks = Bitboard::GetRookAttacks(square) & (side.rooks | side.queens);
@@ -306,7 +305,7 @@ bool Position::IsInCheck() const
     const SidePosition& currentSide = GetCurrentSide();
 
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
-    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(mSideToMove));
+    return IsSquareVisible(Square(kingSquareIndex), mSideToMove ^ 1);
 }
 
 bool Position::IsInCheck(Color color) const
@@ -314,7 +313,7 @@ bool Position::IsInCheck(Color color) const
     const SidePosition& currentSide = GetSide(color);
 
     const uint32_t kingSquareIndex = FirstBitSet(currentSide.king);
-    return IsSquareVisible(Square(kingSquareIndex), GetOppositeColor(color));
+    return IsSquareVisible(Square(kingSquareIndex), color ^ 1);
 }
 
 bool Position::GivesCheck_Approx(const Move move) const
@@ -443,7 +442,7 @@ Square Position::ExtractEnPassantSquareFromMove(const Move& move) const
     if (from.Rank() == 1u && to.Rank() == 3u)
     {
         ASSERT(from.File() == to.File());
-        ASSERT(mSideToMove == Color::White);
+        ASSERT(mSideToMove == White);
 
         if ((to.File() > 0 && (to.West_Unsafe().GetBitboard() & oponentPawns)) ||
             (to.File() < 7 && (to.East_Unsafe().GetBitboard() & oponentPawns)))
@@ -455,7 +454,7 @@ Square Position::ExtractEnPassantSquareFromMove(const Move& move) const
     if (from.Rank() == 6u && to.Rank() == 4u)
     {
         ASSERT(from.File() == to.File());
-        ASSERT(mSideToMove == Color::Black);
+        ASSERT(mSideToMove == Black);
 
         if ((to.File() > 0 && (to.West_Unsafe().GetBitboard() & oponentPawns)) ||
             (to.File() < 7 && (to.East_Unsafe().GetBitboard() & oponentPawns)))
@@ -473,7 +472,7 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
     {
         if (mCastlingRights[0] & (1 << affectedSquare.File()))
         {
-            mHash ^= GetCastlingRightsZobristHash(Color::White, affectedSquare.File());
+            mHash ^= GetCastlingRightsZobristHash(White, affectedSquare.File());
             mCastlingRights[0] &= ~(1 << affectedSquare.File());
         }
     }
@@ -481,7 +480,7 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
     {
         if (mCastlingRights[1] & (1 << affectedSquare.File()))
         {
-            mHash ^= GetCastlingRightsZobristHash(Color::Black, affectedSquare.File());
+            mHash ^= GetCastlingRightsZobristHash(Black, affectedSquare.File());
             mCastlingRights[1] &= ~(1 << affectedSquare.File());
         }
     }
@@ -511,14 +510,14 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
             if (move.ToSquare().Rank() == 2)  captureSquare = Square(move.ToSquare().File(), 3u);
             ASSERT(captureSquare.IsValid());
 
-            RemovePiece(captureSquare, Piece::Pawn, GetOppositeColor(mSideToMove));
+            RemovePiece(captureSquare, Piece::Pawn, mSideToMove ^ 1);
 
-            nnContext.dirtyPieces[nnContext.numDirtyPieces++] = { Piece::Pawn, GetOppositeColor(mSideToMove), captureSquare, Square::Invalid() };
+            nnContext.dirtyPieces[nnContext.numDirtyPieces++] = { Piece::Pawn, (Color)(mSideToMove ^ 1), captureSquare, Square::Invalid() };
         }
         else // regular piece capture
         {
             const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
-            const Color capturedColor = GetOppositeColor(mSideToMove);
+            const Color capturedColor = mSideToMove ^ 1;
             RemovePiece(move.ToSquare(), capturedPiece, capturedColor);
 
             nnContext.dirtyPieces[nnContext.numDirtyPieces++] = { capturedPiece, capturedColor, move.ToSquare(), Square::Invalid() };
@@ -598,7 +597,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
         ClearRookCastlingRights(move.FromSquare());
     }
 
-    if (mSideToMove == Color::Black)
+    if (mSideToMove == Black)
         mMoveCount++;
 
     if (move.GetPiece() == Piece::Pawn || move.IsCapture())
@@ -608,7 +607,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
 
     const Color prevToMove = mSideToMove;
 
-    mSideToMove = GetOppositeColor(mSideToMove);
+    mSideToMove = mSideToMove ^ 1;
     mHash ^= GetSideToMoveZobristHash();
 
     // board position after the move must be valid
@@ -636,14 +635,14 @@ bool Position::DoNullMove()
 
     SetEnPassantSquare(Square::Invalid());
 
-    if (mSideToMove == Color::Black)
+    if (mSideToMove == Black)
     {
         mMoveCount++;
     }
 
     mHalfMoveCount++;
 
-    mSideToMove = GetOppositeColor(mSideToMove);
+    mSideToMove = mSideToMove ^ 1;
     mHash ^= GetSideToMoveZobristHash();
 
     ASSERT(IsValid());  // board position after the move must be valid
@@ -684,7 +683,7 @@ Position Position::SwappedColors() const
 
     result.mCastlingRights[0]       = mCastlingRights[1];
     result.mCastlingRights[1]       = mCastlingRights[0];
-    result.mSideToMove              = GetOppositeColor(mSideToMove);
+    result.mSideToMove              = mSideToMove ^ 1;
     result.mMoveCount               = mMoveCount;
     result.mHalfMoveCount           = mHalfMoveCount;
     result.mHash                    = 0;
@@ -827,7 +826,7 @@ int32_t Position::BestPossibleMoveValue() const
     else if (side.pawns)    value = std::max(c_pawnValue.mg, c_pawnValue.eg);
 
     // can promote to queen
-    if (GetCurrentSide().pawns & (mSideToMove == Color::White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
+    if (GetCurrentSide().pawns & (mSideToMove == White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
     {
         value += std::max(c_queenValue.mg, c_queenValue.eg) - std::min(c_pawnValue.mg, c_pawnValue.eg);
     }
@@ -884,12 +883,12 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
 
     for (;;)
     {
-        sideToMove = GetOppositeColor(sideToMove);
+        sideToMove ^= 1;
         allAttackers &= occupied;
 
         const SidePosition& side = GetSide(sideToMove);
-        const Bitboard ourAttackers = allAttackers & (sideToMove == Color::White ? whiteOccupied : blackOccupied);
-        const Bitboard theirAttackers = allAttackers & (sideToMove == Color::White ? blackOccupied : whiteOccupied);
+        const Bitboard ourAttackers = allAttackers & (sideToMove == White ? whiteOccupied : blackOccupied);
+        const Bitboard theirAttackers = allAttackers & (sideToMove == White ? blackOccupied : whiteOccupied);
 
         // no more attackers - side to move loses
         if (ourAttackers == 0) break;

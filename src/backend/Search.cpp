@@ -1022,7 +1022,7 @@ ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
     int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
-    if (pos.GetSideToMove() == Color::Black) diff = -diff;
+    if (pos.GetSideToMove() == Black) diff = -diff;
 
     // material
     {
@@ -1064,7 +1064,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
 
         // apply eval correction term
         const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
-        adjustedScore += node.position.GetSideToMove() == Color::White ? evalCorrection : -evalCorrection;
+        adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1143,8 +1143,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-
-            node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+            node->staticEval = evalScore;
 
 #ifdef COLLECT_SEARCH_STATS
             int32_t binIndex = (evalScore + SearchStats::EvalHistogramMaxValue) * SearchStats::EvalHistogramBins / (2 * SearchStats::EvalHistogramMaxValue);
@@ -1509,7 +1508,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-            node->staticEval = ColorMultiplier(position.GetSideToMove()) * evalScore;
+            node->staticEval = evalScore;
 
             ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
         }

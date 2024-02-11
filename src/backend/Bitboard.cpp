@@ -113,7 +113,7 @@ Bitboard Bitboard::GetBetween(const Square squareA, const Square squareB)
 }
 
 template<>
-Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
+Bitboard Bitboard::GetPawnAttacks<White>(const Square square)
 {
     Bitboard bitboard;
     bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) << 7u;
@@ -122,7 +122,7 @@ Bitboard Bitboard::GetPawnAttacks<Color::White>(const Square square)
 }
 
 template<>
-Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Square square)
+Bitboard Bitboard::GetPawnAttacks<Black>(const Square square)
 {
     Bitboard bitboard;
     bitboard = (square.GetBitboard() & ~Bitboard::FileBitboard<0u>()) >> 9u;
@@ -131,7 +131,7 @@ Bitboard Bitboard::GetPawnAttacks<Color::Black>(const Square square)
 }
 
 template<>
-Bitboard Bitboard::GetPawnsAttacks<Color::White>(const Bitboard pawns)
+Bitboard Bitboard::GetPawnsAttacks<White>(const Bitboard pawns)
 {
     Bitboard bitboard;
     bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) << 7u;
@@ -140,7 +140,7 @@ Bitboard Bitboard::GetPawnsAttacks<Color::White>(const Bitboard pawns)
 }
 
 template<>
-Bitboard Bitboard::GetPawnsAttacks<Color::Black>(const Bitboard pawns)
+Bitboard Bitboard::GetPawnsAttacks<Black>(const Bitboard pawns)
 {
     Bitboard bitboard;
     bitboard = (pawns & ~Bitboard::FileBitboard<0u>()) >> 9u;
@@ -150,9 +150,9 @@ Bitboard Bitboard::GetPawnsAttacks<Color::Black>(const Bitboard pawns)
 
 Bitboard Bitboard::GetPawnsAttacks(const Bitboard pawns, const Color color)
 {
-    return color == Color::White ?
-        GetPawnsAttacks<Color::Black>(pawns) :
-        GetPawnsAttacks<Color::White>(pawns);
+    return color == White ?
+        GetPawnsAttacks<Black>(pawns) :
+        GetPawnsAttacks<White>(pawns);
 }
 
 Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
@@ -370,8 +370,8 @@ void InitPawnAttacks()
     {
         const Square square(squareIndex);
 
-        gPawnAttacksBitboard[squareIndex][0] = Bitboard::GetPawnAttacks<Color::White>(square);
-        gPawnAttacksBitboard[squareIndex][1] = Bitboard::GetPawnAttacks<Color::Black>(square);
+        gPawnAttacksBitboard[squareIndex][0] = Bitboard::GetPawnAttacks<White>(square);
+        gPawnAttacksBitboard[squareIndex][1] = Bitboard::GetPawnAttacks<Black>(square);
     }
 }
 

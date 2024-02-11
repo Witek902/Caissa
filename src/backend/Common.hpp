@@ -451,6 +451,10 @@ static constexpr uint32_t MaxAllowedMoves = 280;
 template<uint32_t MaxSize> class TMoveList;
 using MoveList = TMoveList<MaxAllowedMoves>;
 
+using Color = uint8_t;
+static constexpr Color White = 0;
+static constexpr Color Black = 1;
+
 using ScoreType = int16_t;
 
 static constexpr ScoreType InfValue             = 32767;

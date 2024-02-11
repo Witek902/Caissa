@@ -28,21 +28,21 @@ template<MoveGenerationMode mode, Color sideToMove>
 INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
-    const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
+    const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
     const Bitboard occupiedByCurrent = currentSide.Occupied();
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
     const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
     const Bitboard emptySquares = ~occupiedSquares;
 
-    constexpr Direction pawnDirection = sideToMove == Color::White ? Direction::North : Direction::South;
-    constexpr Direction pawnRevDirection = sideToMove == Color::White ? Direction::South : Direction::North;
-    constexpr Bitboard promotionRank = sideToMove == Color::White ? Bitboard::RankBitboard<7>() : Bitboard::RankBitboard<0>();
-    constexpr Bitboard beforePromotionRank = sideToMove == Color::White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>();
+    constexpr Direction pawnDirection = sideToMove == White ? Direction::North : Direction::South;
+    constexpr Direction pawnRevDirection = sideToMove == White ? Direction::South : Direction::North;
+    constexpr Bitboard promotionRank = sideToMove == White ? Bitboard::RankBitboard<7>() : Bitboard::RankBitboard<0>();
+    constexpr Bitboard beforePromotionRank = sideToMove == White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>();
 
     if constexpr (mode == MoveGenerationMode::Quiets)
     {
-        constexpr Bitboard doublePushesRank = sideToMove == Color::White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
+        constexpr Bitboard doublePushesRank = sideToMove == White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
         const Bitboard singlePushes = currentSide.pawns.Shift<pawnDirection>() & emptySquares & ~promotionRank;
         const Bitboard doublePushes = singlePushes.Shift<pawnDirection>() & (emptySquares & doublePushesRank);
 
@@ -127,7 +127,7 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
 template<Color sideToMove, uint32_t MaxSize>
 inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& outMoveList)
 {
-    const uint8_t currentSideCastlingRights = sideToMove == Color::White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
+    const uint8_t currentSideCastlingRights = sideToMove == White ? pos.GetWhitesCastlingRights() : pos.GetBlacksCastlingRights();
 
     if (currentSideCastlingRights == 0u)
     {
@@ -135,13 +135,13 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
     }
 
     const SidePosition& currentSide = pos.GetSide(sideToMove);
-    const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
+    const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
     ASSERT(currentSide.king);
     const Square kingSquare = currentSide.GetKingSquare();
 
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
-    const Bitboard opponentAttacks = pos.GetAttackedSquares(GetOppositeColor(sideToMove));
+    const Bitboard opponentAttacks = pos.GetAttackedSquares(sideToMove ^ 1);
 
     // king can't be in check
     if ((currentSide.king & opponentAttacks) == 0u)
@@ -201,7 +201,7 @@ template<MoveGenerationMode mode, Color sideToMove>
 INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
-    const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
+    const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
     ASSERT(currentSide.king);
     const Square kingSquare = currentSide.GetKingSquare();
@@ -229,7 +229,7 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 {
     constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
     const SidePosition& currentSide = pos.GetSide(sideToMove);
-    const SidePosition& opponentSide = pos.GetSide(GetOppositeColor(sideToMove));
+    const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
     const Bitboard occupiedByCurrent = currentSide.Occupied();
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
@@ -285,13 +285,13 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 template<MoveGenerationMode mode>
 INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
-    if (pos.GetSideToMove() == Color::White)
+    if (pos.GetSideToMove() == White)
     {
-        GenerateMoveList<mode, Color::White>(pos, threats, outMoveList);
+        GenerateMoveList<mode, White>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateMoveList<mode, Color::Black>(pos, threats, outMoveList);
+        GenerateMoveList<mode, Black>(pos, threats, outMoveList);
     }
 }
 
@@ -308,14 +308,14 @@ INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 
 INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
-    if (pos.GetSideToMove() == Color::White)
+    if (pos.GetSideToMove() == White)
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Color::White>(pos, threats, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, White>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Color::Black>(pos, threats, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, Color::Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, Black>(pos, threats, outMoveList);
     }
 }

@@ -27,9 +27,6 @@
 
 #endif // defined(CAISSA_EVALFILE)
 
-
-#define S(mg, eg) PieceScore{ mg, eg }
-
 namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
@@ -131,13 +128,6 @@ bool TryLoadingDefaultEvalFile()
 #endif // defined(CAISSA_EVALFILE)
 }
 
-static int32_t InterpolateScore(const int32_t mgPhase, const TPieceScore<int32_t>& score)
-{
-    ASSERT(mgPhase >= 0 && mgPhase <= 64);
-    const int32_t egPhase = 64 - mgPhase;
-    return (score.mg * mgPhase + score.eg * egPhase) / 64;
-}
-
 bool CheckInsufficientMaterial(const Position& pos)
 {
     const Bitboard queensRooksPawns =
@@ -221,6 +211,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         if (EvaluateEndgame(pos, endgameScore, scale))
         {
             ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
+            if (pos.GetSideToMove() == Black) endgameScore = -endgameScore;
             return (ScoreType)endgameScore;
         }
     }
@@ -236,15 +227,9 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     if (g_mainNeuralNetwork)
     {
         int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
-
         // convert to centipawn range
         constexpr int32_t nnOutputDiv = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
-        nnValue = DivRoundNearest(nnValue, nnOutputDiv);
-
-        // NN output is side-to-move relative
-        if (pos.GetSideToMove() == Color::Black) nnValue = -nnValue;
-
-        finalValue = nnValue;
+        finalValue = DivRoundNearest(nnValue, nnOutputDiv);
     }
 
     // apply scaling based on game phase
