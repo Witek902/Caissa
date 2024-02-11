@@ -363,7 +363,7 @@ void MoveOrderer::ScoreMoves(
                 case Piece::Pawn:
                     score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
                     // check if pushed pawn is protected by other pawn
-                    if (Bitboard::GetPawnAttacks(move.ToSquare(), GetOppositeColor(pos.GetSideToMove())) & pos.GetCurrentSide().pawns)
+                    if (Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove() ^ 1) & pos.GetCurrentSide().pawns)
                     {
                         // bonus for creating threats
                         const Bitboard pawnAttacks = Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove());

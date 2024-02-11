@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Common.hpp"
-#include "Color.hpp"
 
 #include <assert.h>
 #include <string>

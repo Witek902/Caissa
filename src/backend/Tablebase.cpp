@@ -119,7 +119,7 @@ bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDistanceT
             pos.GetHalfMoveCount(),
             castlingRights,
             pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
-            pos.GetSideToMove() == Color::White,
+            pos.GetSideToMove() == White,
             nullptr);
     }
 
@@ -158,7 +158,7 @@ bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDistanceT
 bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL)
 {
     ASSERT(pos.IsValid());
-    ASSERT(!pos.IsInCheck(GetOppositeColor(pos.GetSideToMove())));
+    ASSERT(!pos.IsInCheck(pos.GetSideToMove() ^ 1));
 
     if (pos.GetNumPieces() > TB_LARGEST)
     {
@@ -187,7 +187,7 @@ bool ProbeSyzygy_WDL(const Position& pos, int32_t* outWDL)
         pos.Whites().pawns | pos.Blacks().pawns,
         castlingRights,
         pos.GetEnPassantSquare().IsValid() ? pos.GetEnPassantSquare().Index() : 0,
-        pos.GetSideToMove() == Color::White);
+        pos.GetSideToMove() == White);
 
     if (probeResult != TB_RESULT_FAILED)
     {
@@ -309,7 +309,7 @@ bool ProbeGaviota(const Position& pos, uint32_t* outDTM, int32_t* outWDL)
     uint32_t pliesToMate = 0;
     uint32_t info = tb_UNKNOWN;
 
-    uint32_t stm = pos.GetSideToMove() == Color::White ? tb_WHITE_TO_MOVE : tb_BLACK_TO_MOVE;
+    uint32_t stm = pos.GetSideToMove() == White ? tb_WHITE_TO_MOVE : tb_BLACK_TO_MOVE;
     uint32_t epsquare = SquareToGaviota(pos.GetEnPassantSquare());
 
     // Chess960 castling rights are not handled by Syzygy
@@ -440,7 +440,7 @@ bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM, int
             if (wdl < 0) score = -CheckmateValue + dtm;
             if (wdl > 0) score =  CheckmateValue - dtm;
 
-            if (pos.GetSideToMove() == Color::Black) score = -score;
+            if (pos.GetSideToMove() == Black) score = -score;
 
             if (score > bestScore)
             {

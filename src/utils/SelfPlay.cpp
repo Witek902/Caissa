@@ -232,7 +232,7 @@ static bool SelfPlayThreadFunc(
             Move move = searchResult[moveIndex].moves.front();
 
             ScoreType moveScore = searchResult[moveIndex].score;
-            if (game.GetSideToMove() == Color::Black)
+            if (game.GetSideToMove() == Black)
             {
                 moveScore = -moveScore;
             }
@@ -288,9 +288,9 @@ static bool SelfPlayThreadFunc(
             if (!isCheck && ProbeSyzygy_WDL(game.GetPosition(), &wdlScore))
             {
                 const auto stm = game.GetPosition().GetSideToMove();
-                if (wdlScore == 1) game.SetScore(stm == Color::White ? Game::Score::WhiteWins : Game::Score::BlackWins);
+                if (wdlScore == 1) game.SetScore(stm == White ? Game::Score::WhiteWins : Game::Score::BlackWins);
                 if (wdlScore == 0) game.SetScore(Game::Score::Draw);
-                if (wdlScore == -1) game.SetScore(stm == Color::White ? Game::Score::BlackWins : Game::Score::WhiteWins);
+                if (wdlScore == -1) game.SetScore(stm == White ? Game::Score::BlackWins : Game::Score::WhiteWins);
             }
 
             if (game.GetPosition().IsMate())

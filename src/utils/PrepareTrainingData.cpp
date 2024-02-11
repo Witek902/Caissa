@@ -85,7 +85,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
                 entry.score = moveScore;
 
                 Position normalizedPos = pos;
-                if (pos.GetSideToMove() == Color::Black)
+                if (pos.GetSideToMove() == Black)
                 {
                     // make whites side to move
                     normalizedPos = normalizedPos.SwappedColors();
@@ -139,7 +139,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
         for (const PositionEntry& entry : entries)
         {
             VERIFY(UnpackPosition(entry.pos, pos, false));
-            ASSERT(pos.GetSideToMove() == Color::White);
+            ASSERT(pos.GetSideToMove() == White);
 
             const char* scoreStr = "0.5";
             if (entry.wdlScore == static_cast<uint8_t>(Game::Score::WhiteWins)) scoreStr = "1";

@@ -2,7 +2,6 @@
 
 #include "PositionHash.hpp"
 #include "Bitboard.hpp"
-#include "Color.hpp"
 
 #include <string>
 #include <vector>
@@ -253,9 +252,9 @@ public:
 
     INLINE const SidePosition& Whites() const { return mColors[0]; }
     INLINE const SidePosition& Blacks() const { return mColors[1]; }
-    INLINE const SidePosition& GetSide(const Color color) const { return color == Color::White ? mColors[0] : mColors[1]; }
-    INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
-    INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
+    INLINE const SidePosition& GetSide(const Color color) const { return color == White ? mColors[0] : mColors[1]; }
+    INLINE const SidePosition& GetCurrentSide() const { return mSideToMove == White ? mColors[0] : mColors[1]; }
+    INLINE const SidePosition& GetOpponentSide() const { return mSideToMove == White ? mColors[1] : mColors[0]; }
     INLINE const Square GetCurrentSideKingSquare() const { return GetCurrentSide().GetKingSquare(); }
 
     INLINE uint8_t GetWhitesCastlingRights() const { return mCastlingRights[0]; }
@@ -280,7 +279,7 @@ public:
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
-    INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Color::Black ? GetSideToMoveZobristHash() : 0llu); }
+    INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Black ? GetSideToMoveZobristHash() : 0llu); }
     INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
     uint64_t HashAfterMove(const Move move) const;
 
@@ -307,9 +306,9 @@ public:
 
 private:
 
-    INLINE SidePosition& GetSide(const Color color) { return color == Color::White ? mColors[0] : mColors[1]; }
-    INLINE SidePosition& GetCurrentSide() { return mSideToMove == Color::White ? mColors[0] : mColors[1]; }
-    INLINE SidePosition& GetOpponentSide() { return mSideToMove == Color::White ? mColors[1] : mColors[0]; }
+    INLINE SidePosition& GetSide(const Color color) { return color == White ? mColors[0] : mColors[1]; }
+    INLINE SidePosition& GetCurrentSide() { return mSideToMove == White ? mColors[0] : mColors[1]; }
+    INLINE SidePosition& GetOpponentSide() { return mSideToMove == White ? mColors[1] : mColors[0]; }
 
     Square ExtractEnPassantSquareFromMove(const Move& move) const;
 

@@ -180,7 +180,7 @@ void NetworkTrainer::InitNetwork()
 
 static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
 {
-    ASSERT(pos.GetSideToMove() == Color::White);
+    ASSERT(pos.GetSideToMove() == White);
 
     constexpr uint32_t maxFeatures = 64;
 #ifdef USE_VIRTUAL_FEATURES
@@ -194,7 +194,7 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     ASSERT(numWhiteFeatures <= maxFeatures);
 
     uint16_t blackFeatures[maxFeatures];
-    uint32_t numBlackFeatures = PositionToFeaturesVector<useVirtualFeatures>(pos, blackFeatures, GetOppositeColor(pos.GetSideToMove()));
+    uint32_t numBlackFeatures = PositionToFeaturesVector<useVirtualFeatures>(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
     outEntry.whiteFeatures.clear();

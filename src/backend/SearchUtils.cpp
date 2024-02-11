@@ -25,7 +25,7 @@ void SearchUtils::Init()
     memset(gCuckooMoves, 0, sizeof(gCuckooMoves));
 
     uint32_t count = 0;
-    for (const Color color : {Color::White, Color::Black})
+    for (const Color color : {White, Black})
     {
         // Note: pawn moves not included as they are not reversible
         for (const Piece piece : {Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King})

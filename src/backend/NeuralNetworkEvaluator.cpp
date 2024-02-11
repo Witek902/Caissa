@@ -44,7 +44,7 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
     uint32_t numFeatures = 0;
 
     const auto& whites = pos.GetSide(perspective);
-    const auto& blacks = pos.GetSide(GetOppositeColor(perspective));
+    const auto& blacks = pos.GetSide(perspective ^ 1);
 
     Square kingSquare = whites.GetKingSquare();
 
@@ -57,7 +57,7 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         bitFlipMask = 0b000111;
     }
 
-    if (perspective == Color::Black)
+    if (perspective == Black)
     {
         // flip rank
         kingSquare = kingSquare.FlippedRank();
@@ -135,7 +135,7 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     Square kingSquare = pos.GetSide(perspective).GetKingSquare();
 
     // flip the according to the perspective
-    if constexpr (perspective == Color::Black)
+    if constexpr (perspective == Black)
     {
         square = square.FlippedRank();
         kingSquare = kingSquare.FlippedRank();
@@ -175,7 +175,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     ASSERT(numOurFeatures <= maxFeatures);
 
     uint16_t theirFeatures[maxFeatures];
-    const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, GetOppositeColor(pos.GetSideToMove()));
+    const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numTheirFeatures <= maxFeatures);
 
     return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
@@ -294,10 +294,10 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
     }
     else // refresh accumulator
     {
-        for (uint32_t c = 0; c < 2; ++c)
+        for (Color c = 0; c < 2; ++c)
         {
             const Position& pos = node.position;
-            const Bitboard* bitboards = &pos.GetSide((Color)c).pawns;
+            const Bitboard* bitboards = &pos.GetSide(c).pawns;
             for (uint32_t p = 0; p < 6; ++p)
             {
                 const Bitboard prev = cache.pieces[c][p];
@@ -308,14 +308,14 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
                 (curr & ~prev).Iterate([&](const Square sq) INLINE_LAMBDA
                 {
                     ASSERT(numAddedFeatures < maxChangedFeatures);
-                    addedFeatures[numAddedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, (Color)c, sq, pos);
+                    addedFeatures[numAddedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, c, sq, pos);
                 });
 
                 // removals
                 (prev & ~curr).Iterate([&](const Square sq) INLINE_LAMBDA
                 {
                     ASSERT(numRemovedFeatures < maxChangedFeatures);
-                    removedFeatures[numRemovedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, (Color)c, sq, pos);
+                    removedFeatures[numRemovedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, c, sq, pos);
                 });
 
                 cache.pieces[c][p] = curr;
@@ -343,7 +343,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     const Position& pos = node.position;
 
     uint32_t kingSide, kingBucket;
-    if constexpr (perspective == Color::White)
+    if constexpr (perspective == White)
         GetKingSideAndBucket(pos.Whites().GetKingSquare(), kingSide, kingBucket);
     else
         GetKingSideAndBucket(pos.Blacks().GetKingSquare().FlippedRank(), kingSide, kingBucket);
@@ -355,7 +355,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     for (const NodeInfo* nodePtr = &node; ; --nodePtr)
     {
         uint32_t newKingSide, newKingBucket;
-        if constexpr (perspective == Color::White)
+        if constexpr (perspective == White)
             GetKingSideAndBucket(static_cast<const Position&>(nodePtr->position).Whites().GetKingSquare(), newKingSide, newKingBucket);
         else
             GetKingSideAndBucket(static_cast<const Position&>(nodePtr->position).Blacks().GetKingSquare().FlippedRank(), newKingSide, newKingBucket);
@@ -411,8 +411,8 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     }
 #endif // VALIDATE_NETWORK_OUTPUT
 
-    RefreshAccumulator<Color::White>(network, node, cache);
-    RefreshAccumulator<Color::Black>(network, node, cache);
+    RefreshAccumulator<White>(network, node, cache);
+    RefreshAccumulator<Black>(network, node, cache);
 
     const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
     const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
@@ -437,6 +437,6 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
 void NNEvaluator::EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-    RefreshAccumulator<Color::White>(network, node, cache);
-    RefreshAccumulator<Color::Black>(network, node, cache);
+    RefreshAccumulator<White>(network, node, cache);
+    RefreshAccumulator<Black>(network, node, cache);
 }

@@ -87,7 +87,7 @@ Game::Score Game::CalculateScore() const
 {
     if (mPosition.IsMate())
     {
-        return mPosition.GetSideToMove() == Color::White ? Score::BlackWins : Score::WhiteWins;
+        return mPosition.GetSideToMove() == White ? Score::BlackWins : Score::WhiteWins;
     }
 
     if (IsDrawn())

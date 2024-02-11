@@ -28,7 +28,7 @@ void MaterialKey::FromString(const char* str)
 {
     value = 0;
 
-    Color side = Color::White;
+    Color side = White;
 
     for (;;)
     {
@@ -41,11 +41,11 @@ void MaterialKey::FromString(const char* str)
 
         if (c == 'v')
         {
-            side = Color::Black;
+            side = Black;
             continue;
         }
 
-        if (side == Color::White)
+        if (side == White)
         {
             if (c == 'P') numWhitePawns++;
             if (c == 'N') numWhiteKnights++;

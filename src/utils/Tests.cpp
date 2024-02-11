@@ -1264,19 +1264,19 @@ static void RunPositionTests()
     {
         {
             const Position pos("7K/5k2/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(!pos.IsInCheck(White));
             TEST_EXPECT(!pos.IsStalemate());
         }
 
         {
             const Position pos("7K/5k1P/8/8/8/8/8/8 w - - 0 1");
-            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(!pos.IsInCheck(White));
             TEST_EXPECT(pos.IsStalemate());
         }
 
         {
             const Position pos("7k/8/7r/K2P3q/P7/8/8/1r6 w - - 0 1");
-            TEST_EXPECT(!pos.IsInCheck(Color::White));
+            TEST_EXPECT(!pos.IsInCheck(White));
             TEST_EXPECT(pos.IsStalemate());
         }
     }
@@ -1654,9 +1654,9 @@ static void RunPerftTests()
 static void RunEvalTests()
 {
     TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")) < 0);
-    TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) == -Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")));
-    TEST_EXPECT(Evaluate(Position("r6r/1p3p2/1n1p1kpp/pPpPp1nP/P1P1PqPR/4NP2/3NK2R/Q7 w - - 0 1")) == -Evaluate(Position("q7/3nk2r/4np2/p1p1pQpr/PpPpP1Np/1N1P1KPP/1P3P2/R6R b - - 0 1")));
+    TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) == Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")));
+    TEST_EXPECT(Evaluate(Position("r6r/1p3p2/1n1p1kpp/pPpPp1nP/P1P1PqPR/4NP2/3NK2R/Q7 w - - 0 1")) == Evaluate(Position("q7/3nk2r/4np2/p1p1pQpr/PpPpP1Np/1N1P1KPP/1P3P2/R6R b - - 0 1")));
 
     // KvK
     TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/7k w - - 0 1")));
@@ -1694,7 +1694,7 @@ static void RunEvalTests()
 
     // KvBB (opposite colors)
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/B7/B7/8/8/8/8/7k w - - 0 1")));
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/B7/B7/8/8/8/8/7k b - - 0 1")));
+    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/B7/B7/8/8/8/8/7k b - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/7b/7b/7k w - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/7b/7b/7k w - - 0 1")));
 
@@ -1703,7 +1703,7 @@ static void RunEvalTests()
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/R7/8/8/8/8/8/7k w - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("K7/8/8/8/8/8/8/6rk w - - 0 1")));
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("8/8/8/8/8/8/6k1/KRR5 b - - 0 1")));
+    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("8/8/8/8/8/8/6k1/KRR5 b - - 0 1")));
 
     // KvQ
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("K7/Q7/8/8/8/8/8/7k w - - 0 1")));
@@ -1719,7 +1719,7 @@ static void RunEvalTests()
 
     // KvP (white winning)
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("7k/8/8/8/8/8/P7/K7 w - - 0 1")));
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("7k/8/8/8/8/8/P7/K7 b - - 0 1")));
+    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("7k/8/8/8/8/8/P7/K7 b - - 0 1")));
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("8/8/1k6/8/8/1K6/1P6/8 w - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("8/8/1k6/8/8/1K6/1P6/8 b - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("5k2/8/8/8/8/8/P7/K7 w - - 0 1")));
@@ -1727,8 +1727,8 @@ static void RunEvalTests()
 
     // KvP (black winning)
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("7k/7p/8/8/8/8/8/K7 w - - 0 1")));
-    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("7k/7p/8/8/8/8/8/K7 b - - 0 1")));
-    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 b - - 0 1")));
+    TEST_EXPECT(KnownWinValue <= Evaluate(Position("7k/7p/8/8/8/8/8/K7 b - - 0 1")));
+    TEST_EXPECT(KnownWinValue <= Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 b - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("8/6p1/6k1/8/8/6K1/8/8 w - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 w - - 0 1")));
     TEST_EXPECT(0 == Evaluate(Position("7k/7p/8/8/8/8/8/2K5 b - - 0 1")));
@@ -1768,33 +1768,31 @@ static void RunEvalTests()
     TEST_EXPECT(0 < Evaluate(Position("7k/7P/8/8/2B5/8/3B3P/6K1 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/4B3/1P6/1K6 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/8/P3B3/1K6 w - - 0 1")));
-    TEST_EXPECT(0 < Evaluate(Position("8/8/P2k4/8/8/8/7B/7K b - - 0 1")));
-    //TEST_EXPECT(0 < Evaluate(Position("8/8/P2k4/8/8/P7/7B/7K b - - 0 1")));
-    TEST_EXPECT(0 < Evaluate(Position("8/8/4k2P/8/8/8/B7/K7 b - - 0 1")));
+    TEST_EXPECT(0 > Evaluate(Position("8/8/4k2P/8/8/8/B7/K7 b - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("1k6/8/8/8/8/8/B6P/K7 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("6k1/8/8/8/8/8/P6B/7K w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/8/7K/8/B6P/8 w - - 0 1")));
-    TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 b - - 0 1")));
+    TEST_EXPECT(0 > Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 b - - 0 1")));
 
     // KBPvK (winning)
     TEST_EXPECT(KnownWinValue <= Evaluate(Position("4k3/8/8/8/8/8/8/2NBK3 w - - 0 1")));
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("4k3/8/8/8/8/8/8/2NBK3 b - - 0 1")));
-    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("2nbk3/8/8/8/8/8/8/4K3 b - - 0 1")));
+    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("4k3/8/8/8/8/8/8/2NBK3 b - - 0 1")));
+    TEST_EXPECT(KnownWinValue <= Evaluate(Position("2nbk3/8/8/8/8/8/8/4K3 b - - 0 1")));
     TEST_EXPECT(-KnownWinValue >= Evaluate(Position("2nbk3/8/8/8/8/8/8/4K3 w - - 0 1")));
 
     // KNNNvK
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 w - - 0 1")) >= KnownWinValue);
-    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 b - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 b - - 0 1")) <= -KnownWinValue);
 
     // KBBBvK
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2BKBB2 w - - 0 1")) >= KnownWinValue);
-    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2BKBB2 b - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2BKBB2 b - - 0 1")) <= -KnownWinValue);
 
     // KPPvK
     TEST_EXPECT(Evaluate(Position("K7/8/8/8/7k/7P/6P1/8 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("K7/8/8/3PP3/4k3/8/8/8 w - - 0 1")) >= KnownWinValue);
-    TEST_EXPECT(Evaluate(Position("8/8/8/8/8/6P1/5Pk1/K7 b - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("8/8/8/8/8/6P1/5Pk1/K7 b - - 0 1")) <= -KnownWinValue);
 
     // extreme imbalance
     {
@@ -1822,23 +1820,22 @@ static void RunEvalTests()
 
     // pawns endgame
     TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PP6/K7 w - - 0 1")) >= 0);
-    //TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PP6/K7 b - - 0 1")) >= 0);
     TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPP5/K7 w - - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPP5/K7 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPP5/K7 b - - 0 1")) < 0);
     TEST_EXPECT(Evaluate(Position("k7/pp6/8/8/8/8/PPP5/K7 w - - 0 1")) >= 0);
     TEST_EXPECT(Evaluate(Position("k7/pp6/8/8/8/8/PPP5/K7 w - - 0 1")) >= 0);
     TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPPP4/K7 w - - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPPP4/K7 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("k7/p7/8/8/8/8/PPPP4/K7 b - - 0 1")) < 0);
 
     // queen vs. weaker piece
     TEST_EXPECT(Evaluate(Position("3rk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("3rk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3rk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) < 0);
     TEST_EXPECT(Evaluate(Position("3nk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("3nk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3nk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) < 0);
     TEST_EXPECT(Evaluate(Position("3bk3/8/8/8/8/8/8/2Q1K3 w - - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("3bk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("3bk3/8/8/8/8/8/8/2Q1K3 b - - 0 1")) < 0);
     TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 w - - 0 1")) >= KnownWinValue);
-    TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 b - - 0 1")) > 0);
+    TEST_EXPECT(Evaluate(Position("4k3/3p4/8/8/8/8/8/2Q1K3 b - - 0 1")) < 0);
 
     TEST_EXPECT(Evaluate(Position("2Q5/8/8/8/3n4/8/1b6/k2K4 b - - 0 1")) == 0);
     TEST_EXPECT(Evaluate(Position("2Q3b1/6n1/8/8/8/8/3K4/k7 w - - 0 1")) > 0);

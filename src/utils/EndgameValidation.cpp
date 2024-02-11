@@ -146,7 +146,7 @@ struct EndgameValidationStats
 struct EndgameValidationParam
 {
     MaterialKey matKey;
-    Color sideToMove = Color::White;
+    Color sideToMove = White;
     Bitboard whitePawnsAllowedSquares   = Bitboard::Full();
     Bitboard whiteKnightsAllowedSquares = Bitboard::Full();
     Bitboard whiteBishopsAllowedSquares = Bitboard::Full();
@@ -170,8 +170,8 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
     {
         Position pos;
         pos.SetSideToMove(param.sideToMove);
-        pos.SetPiece(whiteKingSq, Piece::King, Color::White);
-        pos.SetPiece(blackKingSq, Piece::King, Color::Black);
+        pos.SetPiece(whiteKingSq, Piece::King, White);
+        pos.SetPiece(blackKingSq, Piece::King, Black);
 
         Bitboard occupied = whiteKingSq.GetBitboard() | blackKingSq.GetBitboard();
 
@@ -211,17 +211,17 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
             }
         };
 
-        for (uint32_t i = 0; i < param.matKey.numWhitePawns; ++i)     placePiece(Piece::Pawn, Color::White, param.whitePawnsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numWhiteKnights; ++i)   placePiece(Piece::Knight, Color::White, param.whiteKnightsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numWhiteBishops; ++i)   placePiece(Piece::Bishop, Color::White, param.whiteBishopsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numWhiteRooks; ++i)     placePiece(Piece::Rook, Color::White, param.whiteRooksAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numWhiteQueens; ++i)    placePiece(Piece::Queen, Color::White, param.whiteQueensAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numWhitePawns; ++i)     placePiece(Piece::Pawn, White, param.whitePawnsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numWhiteKnights; ++i)   placePiece(Piece::Knight, White, param.whiteKnightsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numWhiteBishops; ++i)   placePiece(Piece::Bishop, White, param.whiteBishopsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numWhiteRooks; ++i)     placePiece(Piece::Rook, White, param.whiteRooksAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numWhiteQueens; ++i)    placePiece(Piece::Queen, White, param.whiteQueensAllowedSquares);
 
-        for (uint32_t i = 0; i < param.matKey.numBlackPawns; ++i)     placePiece(Piece::Pawn, Color::Black, param.blackPawnsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numBlackKnights; ++i)   placePiece(Piece::Knight, Color::Black, param.blackKnightsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numBlackBishops; ++i)   placePiece(Piece::Bishop, Color::Black, param.blackBishopsAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numBlackRooks; ++i)     placePiece(Piece::Rook, Color::Black, param.blackRooksAllowedSquares);
-        for (uint32_t i = 0; i < param.matKey.numBlackQueens; ++i)    placePiece(Piece::Queen, Color::Black, param.blackQueensAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numBlackPawns; ++i)     placePiece(Piece::Pawn, Black, param.blackPawnsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numBlackKnights; ++i)   placePiece(Piece::Knight, Black, param.blackKnightsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numBlackBishops; ++i)   placePiece(Piece::Bishop, Black, param.blackBishopsAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numBlackRooks; ++i)     placePiece(Piece::Rook, Black, param.blackRooksAllowedSquares);
+        for (uint32_t i = 0; i < param.matKey.numBlackQueens; ++i)    placePiece(Piece::Queen, Black, param.blackQueensAllowedSquares);
 
         if (!positionValid)
         {
@@ -229,7 +229,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         }
 
         if (!pos.IsValid(true)) continue;
-        if (pos.IsInCheck(GetOppositeColor(param.sideToMove))) continue;
+        if (pos.IsInCheck(param.sideToMove ^ 1)) continue;
         if (!pos.IsQuiet()) continue;
         if (pos.IsStalemate()) continue;
 
@@ -240,7 +240,7 @@ static void ValidateEndgameForKingsPlacement(const EndgameValidationParam& param
         ASSERT(wdl >= -1 && wdl <= 1);
 
         // make WDL score be white perspective
-        if (param.sideToMove == Color::Black)
+        if (param.sideToMove == Black)
         {
             wdl = -wdl;
         }
@@ -356,7 +356,7 @@ static void ValidateEndgame(const EndgameValidationParam& param)
 {
     using namespace threadpool;
 
-    std::cout << "Side to move: " << (param.sideToMove == Color::White ? "WHITE" : "BLACK") << std::endl;
+    std::cout << "Side to move: " << (param.sideToMove == White ? "WHITE" : "BLACK") << std::endl;
 
     EndgameValidationStats stats;
     std::mutex statsMutex;
@@ -428,7 +428,7 @@ void ValidateEndgame()
 
     ValidateEndgame(param);
 
-    param.sideToMove = Color::Black;
+    param.sideToMove = Black;
 
     ValidateEndgame(param);
 }

@@ -14,7 +14,7 @@ bool PackPosition(const Position& inPos, PackedPosition& outPos)
 {
     outPos.occupied = inPos.Whites().Occupied() | inPos.Blacks().Occupied();
     outPos.moveCount = inPos.GetMoveCount();
-    outPos.sideToMove = inPos.GetSideToMove() == Color::White ? 0 : 1;
+    outPos.sideToMove = inPos.GetSideToMove() == White ? 0 : 1;
     outPos.halfMoveCount = inPos.GetHalfMoveCount();
     outPos.enPassantFile = inPos.GetEnPassantSquare().IsValid() ? inPos.GetEnPassantSquare().File() : 0xF;
 
@@ -82,12 +82,12 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeH
         if (value <= (uint8_t)Piece::King)
         {
             const Piece piece = (Piece)(value + (uint8_t)Piece::Pawn);
-            outPos.SetPiece(Square(index), piece, Color::White);
+            outPos.SetPiece(Square(index), piece, White);
         }
         else if (value >= 8 && value <= 8 + (uint8_t)Piece::King)
         {
             const Piece piece = (Piece)(value - 8 + (uint8_t)Piece::Pawn);
-            outPos.SetPiece(Square(index), piece, Color::Black);
+            outPos.SetPiece(Square(index), piece, Black);
         }
         else
         {
@@ -97,7 +97,7 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeH
         offset++;
     });
 
-    outPos.SetSideToMove((Color)inPos.sideToMove);
+    outPos.SetSideToMove(inPos.sideToMove);
     outPos.SetMoveCount(inPos.moveCount);
     outPos.SetHalfMoveCount(inPos.halfMoveCount);
 
@@ -109,8 +109,8 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeH
         if (inPos.castlingRights & 0b0100)  blackCastlingRights |= c_shortCastleMask;
         if (inPos.castlingRights & 0b1000)  blackCastlingRights |= c_longCastleMask;
 
-        outPos.SetCastlingRights(Color::White, whiteCastlingRights);
-        outPos.SetCastlingRights(Color::Black, blackCastlingRights);
+        outPos.SetCastlingRights(White, whiteCastlingRights);
+        outPos.SetCastlingRights(Black, blackCastlingRights);
     }
 
     if (inPos.enPassantFile < 8)
@@ -273,7 +273,7 @@ bool Position::FromFEN(const std::string& fenString)
             else
             {
                 const Square square(file, rank);
-                const Color color = ch <= 90 ? Color::White : Color::Black;
+                const Color color = ch <= 90 ? White : Black;
 
                 Piece piece;
                 if (!CharToPiece(ch, piece))
@@ -301,11 +301,11 @@ bool Position::FromFEN(const std::string& fenString)
         const char nextToMove = (char)tolower(fenString[loc]);
         if (nextToMove == 'w')
         {
-            mSideToMove = Color::White;
+            mSideToMove = White;
         }
         else if (nextToMove == 'b')
         {
-            mSideToMove = Color::Black;
+            mSideToMove = Black;
         }
         else
         {
@@ -400,7 +400,7 @@ bool Position::FromFEN(const std::string& fenString)
             return false;
         }
 
-        if (mSideToMove == Color::White)
+        if (mSideToMove == White)
         {
             if (mEnPassantSquare.Rank() != 5)
             {
@@ -478,7 +478,7 @@ bool Position::FromFEN(const std::string& fenString)
         return false;
     }
 
-    if (IsInCheck(GetOppositeColor(mSideToMove)))
+    if (IsInCheck(mSideToMove ^ 1))
     {
         fprintf(stderr, "Invalid FEN: opponent cannot be in check\n");
         return false;
@@ -540,7 +540,7 @@ std::string Position::ToFEN(bool skipMoveCounts) const
     // side to move
     {
         str += ' ';
-        str += mSideToMove == Color::White ? 'w' : 'b';
+        str += mSideToMove == White ? 'w' : 'b';
     }
 
     // castling rights
@@ -780,15 +780,15 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
         {
             // TODO generate pawn move directly
             MoveList moves;
-            if (GetSideToMove() == Color::White)
+            if (GetSideToMove() == White)
             {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, Color::White>(*this, moves);
-                GeneratePawnMoveList<MoveGenerationMode::Quiets, Color::White>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Captures, White>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Quiets, White>(*this, moves);
             }
             else
             {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, Color::Black>(*this, moves);
-                GeneratePawnMoveList<MoveGenerationMode::Quiets, Color::Black>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Captures, Black>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::Quiets, Black>(*this, moves);
             }
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -858,10 +858,10 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
             if (!isCapture)
             {
                 TMoveList<2> moves;
-                if (GetSideToMove() == Color::White)
-                    GenerateCastlingMoveList<Color::White>(*this, moves);
+                if (GetSideToMove() == White)
+                    GenerateCastlingMoveList<White>(*this, moves);
                 else
-                    GenerateCastlingMoveList<Color::Black>(*this, moves);
+                    GenerateCastlingMoveList<Black>(*this, moves);
 
                 for (uint32_t i = 0; i < moves.Size(); ++i)
                 {
@@ -983,7 +983,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
 
         if (str == "O-O" || str == "0-0")
         {
-            if (mSideToMove == Color::White)
+            if (mSideToMove == White)
             {
                 const Square sourceSquare = Whites().GetKingSquare();
                 const Square targetSquare = GetShortCastleRookSquare(sourceSquare, GetWhitesCastlingRights());
@@ -1002,7 +1002,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
         }
         else if (str == "O-O-O" || str == "0-0-0")
         {
-            if (mSideToMove == Color::White)
+            if (mSideToMove == White)
             {
                 const Square sourceSquare = Whites().GetKingSquare();
                 const Square targetSquare = GetLongCastleRookSquare(sourceSquare, GetWhitesCastlingRights());
@@ -1115,7 +1115,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
             return {};
         }
 
-        if (movedPiece == Piece::Pawn && ((mSideToMove == Color::White && toRank == 7) || (mSideToMove == Color::Black && toRank == 0)))
+        if (movedPiece == Piece::Pawn && ((mSideToMove == White && toRank == 7) || (mSideToMove == Black && toRank == 0)))
         {
             if (str.length() >= offset + 2 && str[offset] == '=' && CharToPiece(str[offset + 1], promoteTo))
             {
@@ -1213,8 +1213,8 @@ bool Position::IsMoveValid(const Move& move) const
 
     if (move.GetPiece() == Piece::Pawn)
     {
-        if ((mSideToMove == Color::White && move.ToSquare().Rank() == 7) ||
-            (mSideToMove == Color::Black && move.ToSquare().Rank() == 0))
+        if ((mSideToMove == White && move.ToSquare().Rank() == 7) ||
+            (mSideToMove == Black && move.ToSquare().Rank() == 0))
         {
             if (move.GetPromoteTo() != Piece::Queen && move.GetPromoteTo() != Piece::Rook &&
                 move.GetPromoteTo() != Piece::Bishop && move.GetPromoteTo() != Piece::Knight)
@@ -1356,7 +1356,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             whiteKingSq = genLegalSquare(mask);
             ASSERT(whiteKingSq.IsValid());
             occupied |= whiteKingSq.GetBitboard();
-            outPosition.SetPiece(whiteKingSq, Piece::King, Color::White);
+            outPosition.SetPiece(whiteKingSq, Piece::King, White);
         }
 
         // generate black king square
@@ -1367,17 +1367,17 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             blackKingSq = genLegalSquare(mask);
             ASSERT(blackKingSq.IsValid());
             occupied |= blackKingSq.GetBitboard();
-            outPosition.SetPiece(blackKingSq, Piece::King, Color::Black);
+            outPosition.SetPiece(blackKingSq, Piece::King, Black);
         }
 
         // generate white pawns on ranks 1-7, they cannot attack black king
         for (uint32_t i = 0; i < desc.materialKey.numWhitePawns; ++i)
         {
-            const Bitboard mask = ~occupied & pawnMask & ~Bitboard::GetPawnAttacks(blackKingSq, Color::Black) & desc.allowedWhitePawns;
+            const Bitboard mask = ~occupied & pawnMask & ~Bitboard::GetPawnAttacks(blackKingSq, Black) & desc.allowedWhitePawns;
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Pawn, Color::White);
+            outPosition.SetPiece(sq, Piece::Pawn, White);
         }
 
         // TODO generate en-passant square if possible
@@ -1389,7 +1389,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Pawn, Color::Black);
+            outPosition.SetPiece(sq, Piece::Pawn, Black);
         }
 
         // generate white queens, they cannot attack black king
@@ -1400,7 +1400,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Queen, Color::White);
+            outPosition.SetPiece(sq, Piece::Queen, White);
         }
 
         // generate black queens
@@ -1410,7 +1410,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Queen, Color::Black);
+            outPosition.SetPiece(sq, Piece::Queen, Black);
         }
 
         // generate white rooks, they cannot attack black king
@@ -1421,7 +1421,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Rook, Color::White);
+            outPosition.SetPiece(sq, Piece::Rook, White);
         }
 
         // generate black rooks
@@ -1431,7 +1431,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Rook, Color::Black);
+            outPosition.SetPiece(sq, Piece::Rook, Black);
         }
 
         // generate white bishops, they cannot attack black king
@@ -1442,7 +1442,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Bishop, Color::White);
+            outPosition.SetPiece(sq, Piece::Bishop, White);
         }
 
         // generate black bishops
@@ -1452,7 +1452,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Bishop, Color::Black);
+            outPosition.SetPiece(sq, Piece::Bishop, Black);
         }
 
         // generate white knights, they cannot attack black king
@@ -1463,7 +1463,7 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Knight, Color::White);
+            outPosition.SetPiece(sq, Piece::Knight, White);
         }
 
         // generate black knights
@@ -1473,12 +1473,12 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
             const Square sq = genLegalSquare(mask);
             ASSERT(sq.IsValid());
             occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Knight, Color::Black);
+            outPosition.SetPiece(sq, Piece::Knight, Black);
         }
 
         break;
     }
 
     ASSERT(outPosition.IsValid());
-    ASSERT(!outPosition.IsInCheck(Color::Black));
+    ASSERT(!outPosition.IsInCheck(Black));
 }

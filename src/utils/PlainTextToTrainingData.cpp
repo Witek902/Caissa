@@ -97,7 +97,7 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
                 entry.score = static_cast<ScoreType>(moveScore);
 
                 Position normalizedPos = pos;
-                if (pos.GetSideToMove() == Color::Black)
+                if (pos.GetSideToMove() == Black)
                 {
                     // make whites side to move
                     normalizedPos = normalizedPos.SwappedColors();
