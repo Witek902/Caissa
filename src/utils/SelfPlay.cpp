@@ -23,18 +23,17 @@
 #include <limits.h>
 
 static const bool randomizeOrder = true;
-static const uint32_t c_printPgnFrequency = 8;
-static const uint32_t c_minNodes = 8000;
-static const uint32_t c_maxNodes = 8000;
-static const uint32_t c_maxDepth = 24;
-static const int32_t c_maxEval = 1200;
+static const uint32_t c_printPgnFrequency = 4;
+static const uint32_t c_minNodes = 10000;
+static const uint32_t c_maxNodes = 10000;
+static const uint32_t c_maxDepth = 30;
+static const int32_t c_maxEval = 800;
 static const int32_t c_openingMaxEval = 500;
-static const int32_t c_multiPv = 3;
-static const int32_t c_multiPvMaxPly = 2;
+static const int32_t c_multiPv = 1;
+static const int32_t c_multiPvMaxPly = 0;
 static const int32_t c_multiPvScoreTreshold = 50;
 static const uint32_t c_minRandomMoves = 1;
 static const uint32_t c_maxRandomMoves = 8;
-static const float c_blunderProbability = 0.001f;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -108,13 +107,13 @@ static bool SelfPlayThreadFunc(
     const std::vector<PackedPosition>& openingPositions,
     SelfPlayStats& stats)
 {
-    const size_t c_transpositionTableSize = 1ull * 1024ull * 1024ull;
+    const size_t c_transpositionTableSize = 2ull * 1024ull * 1024ull;
 
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    Search search[2];
-    TranspositionTable tt[2] = { c_transpositionTableSize, c_transpositionTableSize };
+    Search search;
+    TranspositionTable tt{ c_transpositionTableSize };
 
     const std::string outputFileName = DATA_PATH "selfplayGames/selfplay_" +
         std::to_string(nameSeed) + "_" +
@@ -172,10 +171,8 @@ static bool SelfPlayThreadFunc(
 
         // start new game
         Game game;
-        tt[0].Clear();
-        tt[1].Clear();
-        search[0].Clear();
-        search[1].Clear();
+        tt.Clear();
+        search.Clear();
         game.Reset(openingPos);
 
         int32_t multiPvScoreTreshold = c_multiPvScoreTreshold;
@@ -188,23 +185,20 @@ static bool SelfPlayThreadFunc(
 
         for (;; ++halfMoveNumber)
         {
-            const uint32_t searchIndex = halfMoveNumber % 2;
-
-            const bool playBlunder = std::bernoulli_distribution(c_blunderProbability)(gen);
-
-            SearchParam searchParam{ tt[searchIndex]};
+            SearchParam searchParam{ tt };
             searchParam.debugLog = false;
             searchParam.allowPruningInPvNodes = false;
             searchParam.useRootTablebase = false;
-            searchParam.evalRandomization = 1;
+            searchParam.evalRandomization = 2;
             searchParam.seed = searchSeed;
-            searchParam.numPvLines = (halfMoveNumber < c_multiPvMaxPly || playBlunder) ? c_multiPv : 1;
+            searchParam.numPvLines = (halfMoveNumber < c_multiPvMaxPly) ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
             searchParam.limits.maxNodesSoft = c_minNodes + (c_maxNodes - c_minNodes) * std::max(0, 80 - halfMoveNumber) / 80;
+            searchParam.limits.maxNodes = 5 * searchParam.limits.maxNodesSoft;
 
             searchResult.clear();
-            tt[searchIndex].NextGeneration();
-            search[searchIndex].DoSearch(game, searchParam, searchResult);
+            tt.NextGeneration();
+            search.DoSearch(game, searchParam, searchResult);
 
             ASSERT(!searchResult.empty());
 
@@ -260,9 +254,7 @@ static bool SelfPlayThreadFunc(
                 drawScoreCounter = 0;
 
             // adjudicate draw if eval is zero
-            if (drawScoreCounter > 8 &&
-                halfMoveNumber >= 40 &&
-                game.GetPosition().GetHalfMoveCount() > 10)
+            if (drawScoreCounter > 8 && halfMoveNumber >= 40)
             {
                 game.SetScore(Game::Score::Draw);
             }
@@ -273,7 +265,7 @@ static bool SelfPlayThreadFunc(
                 if (moveScore > c_maxEval && eval > c_maxEval / 2)
                 {
                     whiteWinsCounter++;
-                    if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
+                    if (whiteWinsCounter > 3) game.SetScore(Game::Score::WhiteWins);
                 }
                 else
                 {
@@ -283,7 +275,7 @@ static bool SelfPlayThreadFunc(
                 if (moveScore < -c_maxEval && eval < -c_maxEval / 2)
                 {
                     blackWinsCounter++;
-                    if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
+                    if (blackWinsCounter > 3) game.SetScore(Game::Score::BlackWins);
                 }
                 else
                 {
@@ -369,7 +361,7 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Starting games..." << std::endl;
 
-    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency() - 4);
 
     std::vector<std::thread> threads;
     for (uint32_t i = 0; i < numThreads; ++i)
