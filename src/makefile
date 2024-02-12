@@ -1,5 +1,5 @@
 EXE                = caissa
-VERSION            = 1.16.14
+VERSION            = 1.17
 EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-33.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
@@ -49,7 +49,7 @@ SSE2FLAGS     = $(COMMONFLAGS) -DUSE_SSE -DUSE_SSE2
 SSE4FLAGS     = $(SSE2FLAGS) -DUSE_SSE4 -DUSE_POPCNT
 AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
 BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
-AVX512FLAGS   = $(BMI2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
+AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
 # for OpenBench
 ob:
