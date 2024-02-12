@@ -1,6 +1,7 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
 #include "Memory.hpp"
+#include "Tuning.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -9,6 +10,8 @@
 #ifdef USE_SSE
     #include <xmmintrin.h>
 #endif // USE_SSE
+
+DEFINE_PARAM(TTReplaceDepthMargin, 4, 1, 8);
 
 static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == 32, "Invalid TT cluster size");
@@ -261,7 +264,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     // don't overwrite entries with worse depth if the bounds are not exact
     if (entry.bounds != TTEntry::Bounds::Exact &&
         positionKey == prevKey &&
-        entry.depth < prevEntry.depth - 4)
+        entry.depth < prevEntry.depth - TTReplaceDepthMargin)
     {
         return;
     }

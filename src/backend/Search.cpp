@@ -46,11 +46,13 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMax, 420, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
+DEFINE_PARAM(NullMovePruning_ScoreDiv, 256, 128, 512);
 DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
+DEFINE_PARAM(HistoryPruningDepth, 9, 1, 15);
 DEFINE_PARAM(HistoryPruningLinearFactor, 237, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
 
@@ -66,6 +68,8 @@ DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
 DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
+DEFINE_PARAM(SSEPruningDepth_Captures, 4, 1, 12);
+DEFINE_PARAM(SSEPruningDepth_NonCaptures, 8, 1, 12);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
 
@@ -1599,7 +1603,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     const int32_t r =
                         NullMovePruning_NullMoveDepthReduction +
                         node->depth / 3 +
-                        std::min(3, int32_t(eval - beta) / 256) + isImproving;
+                        std::min(3, int32_t(eval - beta) / NullMovePruning_ScoreDiv) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
@@ -1830,7 +1834,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
+                    node->depth < HistoryPruningDepth &&
                     moveStatScore < GetHistoryPruningTreshold(node->depth))
                 {
                     continue;
@@ -1853,13 +1857,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (move.IsCapture())
                 {
-                    if (node->depth <= 4 &&
+                    if (node->depth <= SSEPruningDepth_Captures &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
                 }
                 else
                 {
-                    if (node->depth <= 8 &&
+                    if (node->depth <= SSEPruningDepth_NonCaptures &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
                 }
             }
