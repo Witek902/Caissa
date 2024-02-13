@@ -753,7 +753,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
-            thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
+
+            const ScoreType score = tempResult[pvIndex].score;
+            thread.avgScores[pvIndex] = std::abs(score) < KnownWinValue ? ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)score) / 2) : score;
         }
 
         if (abortSearch)
