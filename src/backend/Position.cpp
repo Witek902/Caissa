@@ -12,7 +12,7 @@ bool Position::s_enableChess960 = false;
 
 uint64_t Position::ComputeHash() const
 {
-    uint64_t hash = mSideToMove == Black ? GetSideToMoveZobristHash() : 0llu;
+    uint64_t hash = mSideToMove == Black ? c_SideToMoveZobristHash : 0llu;
 
     for (Color color = 0; color < 2; ++color)
     {
@@ -104,7 +104,7 @@ uint64_t Position::HashAfterMove(const Move move) const
 {
     ASSERT(move.IsValid());
 
-    uint64_t hash = mHash ^ GetSideToMoveZobristHash();
+    uint64_t hash = mHash ^ c_SideToMoveZobristHash;
 
     hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.FromSquare().Index());
     hash ^= GetPieceZobristHash(mSideToMove, move.GetPiece(), move.ToSquare().Index());
@@ -124,7 +124,7 @@ void Position::SetSideToMove(Color color)
 
     if (mSideToMove != color)
     {
-        mHash ^= GetSideToMoveZobristHash();
+        mHash ^= c_SideToMoveZobristHash;
         mSideToMove = color;
     }
 }
@@ -608,7 +608,7 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     const Color prevToMove = mSideToMove;
 
     mSideToMove = mSideToMove ^ 1;
-    mHash ^= GetSideToMoveZobristHash();
+    mHash ^= c_SideToMoveZobristHash;
 
     // board position after the move must be valid
     ASSERT(IsValid());
@@ -643,7 +643,7 @@ bool Position::DoNullMove()
     mHalfMoveCount++;
 
     mSideToMove = mSideToMove ^ 1;
-    mHash ^= GetSideToMoveZobristHash();
+    mHash ^= c_SideToMoveZobristHash;
 
     ASSERT(IsValid());  // board position after the move must be valid
 

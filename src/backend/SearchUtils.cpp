@@ -48,7 +48,7 @@ void SearchUtils::Init()
                     if (attacks & Square(squareB).GetBitboard())
                     {
                         PackedMove move{ Square(squareA), Square(squareB) };
-                        uint64_t key = GetPieceZobristHash(color, piece, squareA) ^ GetPieceZobristHash(color, piece, squareB) ^ GetSideToMoveZobristHash();
+                        uint64_t key = GetPieceZobristHash(color, piece, squareA) ^ GetPieceZobristHash(color, piece, squareB) ^ c_SideToMoveZobristHash;
                         uint32_t index = CuckooIndex1(key);
                         for (;;)
                         {

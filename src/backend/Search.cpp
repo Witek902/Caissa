@@ -1595,9 +1595,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (doNullMove)
                 {
-                    // start prefetching child node's TT entry
-                    ctx.searchParam.transpositionTable.Prefetch(position.GetHash() ^ GetSideToMoveZobristHash());
-
                     const int32_t r =
                         NullMovePruning_NullMoveDepthReduction +
                         node->depth / 3 +
