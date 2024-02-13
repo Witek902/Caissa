@@ -14,6 +14,17 @@ DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
 
+DEFINE_PARAM(TM_OurPawnFactor, 0, -100, 100);
+DEFINE_PARAM(TM_OurKnightFactor, 0, -100, 100);
+DEFINE_PARAM(TM_OurBishopFactor, 0, -100, 100);
+DEFINE_PARAM(TM_OurRookFactor, 0, -100, 100);
+DEFINE_PARAM(TM_OurQueenFactor, 0, -100, 100);
+DEFINE_PARAM(TM_TheirPawnFactor, 0, -100, 100);
+DEFINE_PARAM(TM_TheirKnightFactor, 0, -100, 100);
+DEFINE_PARAM(TM_TheirBishopFactor, 0, -100, 100);
+DEFINE_PARAM(TM_TheirRookFactor, 0, -100, 100);
+DEFINE_PARAM(TM_TheirQueenFactor, 0, -100, 100);
+
 static float EstimateMovesLeft(const uint32_t moves)
 {
     // based on LeelaChessZero
@@ -60,10 +71,13 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     }
 }
 
-void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state)
+void UpdateTimeManager(const Game& game, const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state)
 {
     ASSERT(!data.currResult.empty());
     ASSERT(!data.currResult[0].moves.empty());
+
+    const Position& pos = game.GetPosition();
+    const Move bestMove = data.currResult[0].moves.front();
 
     if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
         return;
@@ -77,7 +91,7 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
     // decrease time if PV move is stable
     {
         // update PV move stability counter
-        if (data.prevResult[0].moves.front() == data.currResult[0].moves.front())
+        if (data.prevResult[0].moves.front() == bestMove)
             state.stabilityCounter++;
         else
             state.stabilityCounter = 0;
@@ -95,6 +109,36 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // adjust time based on material
+    {
+        const double ourPawnFactor = static_cast<double>(TM_OurPawnFactor) / 100.0;
+        const double ourKnightFactor = static_cast<double>(TM_OurKnightFactor) / 100.0;
+        const double ourBishopFactor = static_cast<double>(TM_OurBishopFactor) / 100.0;
+        const double ourRookFactor = static_cast<double>(TM_OurRookFactor) / 100.0;
+        const double ourQueenFactor = static_cast<double>(TM_OurQueenFactor) / 100.0;
+        const double theirPawnFactor = static_cast<double>(TM_TheirPawnFactor) / 100.0;
+        const double theirKnightFactor = static_cast<double>(TM_TheirKnightFactor) / 100.0;
+        const double theirBishopFactor = static_cast<double>(TM_TheirBishopFactor) / 100.0;
+        const double theirRookFactor = static_cast<double>(TM_TheirRookFactor) / 100.0;
+        const double theirQueenFactor = static_cast<double>(TM_TheirQueenFactor) / 100.0;
+
+        const double maxMaterialFactor =
+            8 * (ourPawnFactor + theirPawnFactor) +
+            2 * (ourKnightFactor + theirKnightFactor) +
+            2 * (ourBishopFactor + theirBishopFactor) +
+            2 * (ourRookFactor + theirRookFactor) +
+            1 * (ourQueenFactor + theirQueenFactor);
+
+        const auto& us = pos.GetCurrentSide();
+        const auto& them = pos.GetOpponentSide();
+
+        const double materialFactor =
+            us.pawns.Count() * ourPawnFactor + us.knights.Count() * ourKnightFactor + us.bishops.Count() * ourBishopFactor + us.rooks.Count() * ourRookFactor + us.queens.Count() * ourQueenFactor +
+            them.pawns.Count() * theirPawnFactor + them.knights.Count() * theirKnightFactor + them.bishops.Count() * theirBishopFactor + them.rooks.Count() * theirRookFactor + them.queens.Count() * theirQueenFactor;
+
+        limits.idealTimeCurrent *= std::clamp(1.0 + (materialFactor - maxMaterialFactor / 2.0) / 4200.0, 0.5, 2.0);
     }
 
 #ifndef CONFIGURATION_FINAL
