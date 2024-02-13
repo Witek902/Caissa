@@ -279,7 +279,6 @@ public:
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
-    INLINE uint64_t GetHash_NoSideToMove() const { return mHash ^ (mSideToMove == Black ? GetSideToMoveZobristHash() : 0llu); }
     INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
     uint64_t HashAfterMove(const Move move) const;
 
