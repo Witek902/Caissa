@@ -6,14 +6,10 @@
 
 static constexpr uint32_t c_ZobristHashSize = 100;
 
+static constexpr uint64_t c_SideToMoveZobristHash = 1u;
 extern uint64_t s_ZobristHash[c_ZobristHashSize];
 
 void InitZobristHash();
-
-INLINE static uint64_t GetSideToMoveZobristHash()
-{
-    return 0xef3994857c29fd96ull;
-}
 
 INLINE static uint64_t GetPieceZobristHash(const Color color, const Piece piece, const uint32_t squareIndex)
 {
