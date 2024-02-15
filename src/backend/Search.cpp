@@ -76,8 +76,8 @@ DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
 
-DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+static constexpr int32_t EvalCorrectionScale = 512;
+static constexpr int32_t EvalCorrectionBlendFactor = 256;
 
 class SearchTrace
 {
@@ -244,6 +244,8 @@ void Search::Clear()
         threadData->stats = SearchThreadStats{};
         memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->whiteKingCorrection, 0, sizeof(threadData->whiteKingCorrection));
+        memset(threadData->blackKingCorrection, 0, sizeof(threadData->blackKingCorrection));
     }
 }
 
@@ -1014,11 +1016,34 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
+static uint64_t GetKingRingHash(const Position& pos, Square kingSquare)
+{
+    const Bitboard mask = Bitboard::GetKingAttacks(kingSquare);
+    return
+        (pos.Whites().pawns & mask) * 415520503 ^
+        (pos.Whites().knights & mask) * 391073719 ^
+        (pos.Whites().bishops & mask) * 170755727 ^
+        (pos.Whites().rooks & mask) * 846017573 ^
+        (pos.Whites().queens & mask) * 826393279 ^
+        (pos.Blacks().pawns & mask) * 959000633 ^
+        (pos.Blacks().knights & mask) * 930963181 ^
+        (pos.Blacks().bishops & mask) * 573313957 ^
+        (pos.Blacks().rooks & mask) * 893756393 ^
+        (pos.Blacks().queens & mask) * 524003269;
+}
+
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    return
+        matScoreCorrection[Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize] +
+        pawnStructureCorrection[pos.GetPawnsHash() % PawnStructureCorrectionTableSize] +
+        whiteKingCorrection[GetKingRingHash(pos, pos.Whites().GetKingSquare()) % KingCorrectionTableSize] +
+        blackKingCorrection[GetKingRingHash(pos, pos.Blacks().GetKingSquare()) % KingCorrectionTableSize];
+}
+
+INLINE static void BlendEvalCorrection(int16_t& score, const int32_t diff)
+{
+    score = static_cast<int16_t>((score * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
@@ -1026,19 +1051,10 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
     int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
     if (pos.GetSideToMove() == Black) diff = -diff;
 
-    // material
-    {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
-
-    // pawn structure
-    {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
+    BlendEvalCorrection(matScoreCorrection[Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize], diff);
+    BlendEvalCorrection(pawnStructureCorrection[pos.GetPawnsHash() % PawnStructureCorrectionTableSize], diff);
+    BlendEvalCorrection(whiteKingCorrection[GetKingRingHash(pos, pos.Whites().GetKingSquare()) % KingCorrectionTableSize], diff);
+    BlendEvalCorrection(blackKingCorrection[GetKingRingHash(pos, pos.Blacks().GetKingSquare()) % KingCorrectionTableSize], diff);
 }
 
 INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
@@ -1065,7 +1081,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
         // apply eval correction term
-        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
+        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) / EvalCorrectionScale / 2);
         adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw

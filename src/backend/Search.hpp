@@ -325,10 +325,13 @@ private:
         NodeInfo searchStack[MaxSearchDepth];
 
         static constexpr int32_t EvalCorrectionScale = 256;
-        static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
+        static constexpr uint32_t MaterialCorrectionTableSize = 1024;
+        static constexpr uint32_t PawnStructureCorrectionTableSize = 2048;
+        static constexpr uint32_t KingCorrectionTableSize = 2048;
         int16_t matScoreCorrection[MaterialCorrectionTableSize];
         int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
+        int16_t whiteKingCorrection[KingCorrectionTableSize];
+        int16_t blackKingCorrection[KingCorrectionTableSize];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
