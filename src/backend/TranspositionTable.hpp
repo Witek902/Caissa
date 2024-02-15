@@ -83,6 +83,7 @@ public:
     // old entries will be preserved if possible
     void Resize(size_t newSizeInBytes);
 
+    void SetRootScore(int32_t score) { rootScore = score; }
     size_t GetSize() const { return numClusters * NumEntriesPerCluster; }
 
     // print debug info
@@ -106,6 +107,7 @@ private:
     mutable TTCluster* clusters;
     size_t numClusters;
     uint8_t generation;
+    int32_t rootScore;
 };
 
 INLINE TTEntry::Bounds operator & (const TTEntry::Bounds a, const TTEntry::Bounds b)
