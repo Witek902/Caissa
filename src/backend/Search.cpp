@@ -1930,8 +1930,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (singularBeta >= beta)
                     return singularBeta;
                 else if (ttScore >= beta)
-                    moveExtension = -1 + isPvNode;
+                    moveExtension = -2 + isPvNode;
                 else if (node->isCutNode)
+                    moveExtension = -2;
+                else if (ttScore <= singularScore)
                     moveExtension = -1;
             }
         }
