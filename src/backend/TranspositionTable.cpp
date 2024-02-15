@@ -58,6 +58,7 @@ TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)
     , numClusters(0)
     , generation(0)
+    , rootScore(0)
 {
     Resize(initialSize);
 }
@@ -71,10 +72,12 @@ TranspositionTable::TranspositionTable(TranspositionTable&& rhs)
     : clusters(rhs.clusters)
     , numClusters(rhs.numClusters)
     , generation(rhs.generation)
+    , rootScore(rhs.rootScore)
 {
     rhs.clusters = nullptr;
     rhs.numClusters = 0;
     rhs.generation = 0;
+    rhs.rootScore = 0;
 }
 
 TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
@@ -86,10 +89,12 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
         clusters = rhs.clusters;
         numClusters = rhs.numClusters;
         generation = rhs.generation;
+        rootScore = rhs.rootScore;
 
         rhs.clusters = nullptr;
         rhs.numClusters = 0;
         rhs.generation = 0;
+        rhs.rootScore = 0;
     }
 
     return *this;
@@ -245,9 +250,15 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
             break;
         }
 
+        // compute difference between root score and entry score
+        int32_t rootScoreDiff = std::abs(rootScore - static_cast<int32_t>(data.score));
+        if ((bounds == TTEntry::Bounds::Lower && (data.score < rootScore)) ||
+            (bounds == TTEntry::Bounds::Upper && (data.score > rootScore)))
+            rootScoreDiff = 0;
+
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - entryAge;
+        const int32_t entryRelevance = (int32_t)data.depth - entryAge - std::min(4, rootScoreDiff / 128);
 
         if (entryRelevance < minRelevanceInCluster)
         {

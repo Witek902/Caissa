@@ -756,6 +756,9 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             const ScoreType score = tempResult[pvIndex].score;
             thread.avgScores[pvIndex] = std::abs(score) < KnownWinValue ? ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)score) / 2) : score;
+
+            if (pvIndex == 0)
+                param.transpositionTable.SetRootScore(thread.avgScores[pvIndex]);
         }
 
         if (abortSearch)
