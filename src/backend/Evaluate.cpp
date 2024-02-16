@@ -222,15 +222,22 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         5 * (whiteRooks   + blackRooks) +
         10 * (whiteQueens  + blackQueens));
 
-    int32_t finalValue = 0;
+    const auto materialValue =
+        c_pawnValue * (whitePawns - blackPawns) +
+        c_knightValue * (whiteKnights - blackKnights) +
+        c_bishopValue * (whiteBishops - blackBishops) +
+        c_rookValue * (whiteRooks - blackRooks) +
+        c_queenValue * (whiteQueens - blackQueens);
+    const int32_t simpleEval = (materialValue.mg * gamePhase + materialValue.eg * (64 - gamePhase)) / 64;
 
-    if (g_mainNeuralNetwork)
-    {
-        int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
-        // convert to centipawn range
-        constexpr int32_t nnOutputDiv = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
-        finalValue = DivRoundNearest(nnValue, nnOutputDiv);
-    }
+    const int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
+
+    // convert to centipawn range
+    constexpr int32_t nnOutputDiv = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
+    int32_t finalValue = DivRoundNearest(nnValue, nnOutputDiv);
+
+    // scale down when difference between simple eval and NN eval is large
+    finalValue -= finalValue * std::min(4096, std::abs(simpleEval - nnValue)) / 16384;
 
     // apply scaling based on game phase
     finalValue = finalValue * (96 + gamePhase) / 128;
