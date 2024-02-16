@@ -472,6 +472,8 @@ bool Position::FromFEN(const std::string& fenString)
 
     mHash = ComputeHash();
 
+    ComputeThreats();
+
     if (!IsValid())
     {
         fprintf(stderr, "Invalid FEN: invalid position\n");
@@ -694,11 +696,8 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                     bool ambiguousRank = false;
                     bool ambiguousPiece = false;
                     {
-                        Threats threats;
-                        ComputeThreats(threats);
-
                         MoveList moves;
-                        GenerateMoveList(*this, threats.allThreats, moves);
+                        GenerateMoveList(*this, moves);
 
                         for (uint32_t i = 0; i < moves.Size(); ++i)
                         {
@@ -933,11 +932,8 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
                 toSquare = shortCastleRookSquare;
             }
 
-            Threats threats;
-            ComputeThreats(threats);
-
             MoveList moves;
-            GenerateKingMoveList(*this, threats.allThreats, moves);
+            GenerateKingMoveList(*this, moves);
 
             for (uint32_t i = 0; i < moves.Size(); ++i)
             {
@@ -1130,11 +1126,8 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
 
         const Square toSquare((uint8_t)toFile, (uint8_t)toRank);
 
-        Threats threats;
-        ComputeThreats(threats);
-
         MoveList moves;
-        GenerateMoveList(*this, threats.allThreats, moves);
+        GenerateMoveList(*this, moves);
 
         for (uint32_t i = 0; i < moves.Size(); ++i)
         {
@@ -1282,7 +1275,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     }
 
     MoveList moveList;
-    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moveList);
+    GenerateMoveList(*this, moveList);
 
     uint64_t nodes = 0;
     for (uint32_t i = 0; i < moveList.Size(); i++)

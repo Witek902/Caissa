@@ -26,7 +26,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         {
             m_stage = Stage::Captures;
             m_moveIndex = 0;
-            GenerateMoveList<MoveGenerationMode::Captures>(m_position, node.threats.allThreats, m_moves);
+            GenerateMoveList<MoveGenerationMode::Captures>(m_position, m_moves);
 
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
@@ -105,7 +105,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             m_stage = Stage::PickQuiets;
             if (m_generateQuiets)
             {
-                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, node.threats.allThreats, m_moves);
+                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, m_moves);
 
                 // remove played moves from generated list
                 m_moves.RemoveMove(m_ttMove);

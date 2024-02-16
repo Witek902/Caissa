@@ -32,9 +32,7 @@ bool Game::DoMove(const Move& move)
     if (mPosition.DoMove(move))
     {
         mMoves.push_back(move);
-
         RecordBoardPosition(mPosition);
-
         return true;
     }
 
@@ -49,9 +47,7 @@ bool Game::DoMove(const Move& move, ScoreType score)
     {
         mMoves.push_back(move);
         mMoveScores.push_back(score);
-
         RecordBoardPosition(mPosition);
-
         return true;
     }
 

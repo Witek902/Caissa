@@ -176,7 +176,7 @@ void MoveOrderer::Clear()
 MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
 {
     ASSERT(move.IsValid());
-    const Bitboard threats = node.threats.allThreats;
+    const Bitboard threats = node.position.GetThreats().allThreats;
     const uint32_t from = move.FromSquare().Index();
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
@@ -233,7 +233,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusLinear * scoreDiff / 64, QuietBonusLimit);
     const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusLinear * scoreDiff / 64, QuietMalusLimit);
 
-    const Bitboard threats = node.threats.allThreats;
+    const Bitboard threats = node.position.GetThreats().allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
@@ -297,8 +297,8 @@ void MoveOrderer::ScoreMoves(
 {
     const Position& pos = node.position;
 
-    const uint32_t color = (uint32_t)pos.GetSideToMove();
-    const Bitboard threats = node.threats.allThreats;
+    const Color color = pos.GetSideToMove();
+    const Bitboard threats = pos.GetThreats().allThreats;
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
@@ -378,16 +378,16 @@ void MoveOrderer::ScoreMoves(
                     break;
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
-                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
-                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
+                    if (pos.GetThreats().attackedByPawns & move.FromSquare())   score += 4000;
+                    if (pos.GetThreats().attackedByPawns & move.ToSquare())     score -= 4000;
                     break;
                 case Piece::Rook:
-                    if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
-                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 8000;
+                    if (pos.GetThreats().attackedByMinors & move.FromSquare())  score += 8000;
+                    if (pos.GetThreats().attackedByMinors & move.ToSquare())    score -= 8000;
                     break;
                 case Piece::Queen:
-                    if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
-                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
+                    if (pos.GetThreats().attackedByRooks & move.FromSquare())   score += 12000;
+                    if (pos.GetThreats().attackedByRooks & move.ToSquare())     score -= 12000;
                     break;
                 case Piece::King:
                     if (pos.GetOurCastlingRights())             score -= 6000;

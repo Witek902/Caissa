@@ -269,8 +269,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "threats")
     {
-        Threats threats;
-        mGame.GetPosition().ComputeThreats(threats);
+        const Threats& threats = mGame.GetPosition().GetThreats();
         std::cout << "Attacked by pawns" << std::endl << threats.attackedByPawns.Print() << std::endl;
         std::cout << "Attacked by minors" << std::endl << threats.attackedByMinors.Print() << std::endl;
         std::cout << "Attacked by rooks" << std::endl << threats.attackedByRooks.Print() << std::endl;
@@ -1020,15 +1019,11 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 
 bool UniversalChessInterface::Command_ScoreMoves()
 {
-    Threats threats;
-    mGame.GetPosition().ComputeThreats(threats);
-
     MoveList moves;
-    GenerateMoveList(mGame.GetPosition(), threats.allThreats, moves);
+    GenerateMoveList(mGame.GetPosition(), moves);
 
     NodeInfo nodeInfo;
     nodeInfo.position = mGame.GetPosition();
-    mGame.GetPosition().ComputeThreats(nodeInfo.threats);
 
     const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
 
