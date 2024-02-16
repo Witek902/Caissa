@@ -27,23 +27,23 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Quiets, 50, 20, 80);
+DEFINE_PARAM(LateMoveReductionScale_Quiets, 43, 20, 70);
+DEFINE_PARAM(LateMoveReductionBias_Quiets, 49, 20, 80);
 DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
+DEFINE_PARAM(LateMoveReductionBias_Captures, 60, 20, 80);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
-DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
-DEFINE_PARAM(ProbcutBetaOffsetInCheck, 320, 100, 500);
+DEFINE_PARAM(ProbcutBetaOffset, 146, 80, 300);
+DEFINE_PARAM(ProbcutBetaOffsetInCheck, 327, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
-DEFINE_PARAM(FutilityPruningStatscoreDiv, 506, 128, 1024);
+DEFINE_PARAM(FutilityPruningStatscoreDiv, 479, 128, 1024);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 180, 100, 300);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 420, 200, 600);
-DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 181, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 424, 200, 600);
+DEFINE_PARAM(SingularitySearchScoreStep, 26, 10, 50);
 
 DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
 DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
@@ -51,8 +51,8 @@ DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
-DEFINE_PARAM(HistoryPruningLinearFactor, 237, 100, 500);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
+DEFINE_PARAM(HistoryPruningLinearFactor, 235, 100, 500);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 138, 50, 200);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 498, 200, 1000);
 DEFINE_PARAM(AspirationWindow, 10, 6, 20);
@@ -60,21 +60,21 @@ DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 102, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
 DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
 DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 123, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 55, 50, 150);
 
 DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
-DEFINE_PARAM(RazoringMarginMultiplier, 147, 100, 200);
+DEFINE_PARAM(RazoringMarginMultiplier, 150, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
-DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
+DEFINE_PARAM(ReductionStatOffset, 7531, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 10269, 6000, 12000);
 
 DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
@@ -1598,7 +1598,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     const int32_t r =
                         NullMovePruning_NullMoveDepthReduction +
                         node->depth / 3 +
-                        std::min(3, int32_t(eval - beta) / 256) + isImproving;
+                        std::min(3, int32_t(eval - beta) / 238) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
