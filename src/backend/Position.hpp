@@ -61,6 +61,36 @@ struct alignas(16) SidePosition
             king != rhs.king;
     }
 
+    INLINE void MirrorVertically()
+    {
+        pawns = pawns.MirroredVertically();
+        knights = knights.MirroredVertically();
+        bishops = bishops.MirroredVertically();
+        rooks = rooks.MirroredVertically();
+        queens = queens.MirroredVertically();
+        king = king.MirroredVertically();
+    }
+
+    INLINE void MirrorHorizontally()
+    {
+        pawns = pawns.MirroredHorizontally();
+        knights = knights.MirroredHorizontally();
+        bishops = bishops.MirroredHorizontally();
+        rooks = rooks.MirroredHorizontally();
+        queens = queens.MirroredHorizontally();
+        king = king.MirroredHorizontally();
+    }
+
+    INLINE void FlipDiagonally()
+    {
+        pawns = pawns.FlippedDiagonally();
+        knights = knights.FlippedDiagonally();
+        bishops = bishops.FlippedDiagonally();
+        rooks = rooks.FlippedDiagonally();
+        queens = queens.FlippedDiagonally();
+        king = king.FlippedDiagonally();
+    }
+
     Bitboard pawns = 0;
     Bitboard knights = 0;
     Bitboard bishops = 0;
@@ -98,6 +128,30 @@ struct Threats
     Bitboard attackedByMinors;
     Bitboard attackedByRooks;
     Bitboard allThreats;
+
+    INLINE void MirrorVertically()
+    {
+        attackedByPawns = attackedByPawns.MirroredVertically();
+        attackedByMinors = attackedByMinors.MirroredVertically();
+        attackedByRooks = attackedByRooks.MirroredVertically();
+        allThreats = allThreats.MirroredVertically();
+    }
+
+    INLINE void MirrorHorizontally()
+    {
+        attackedByPawns = attackedByPawns.MirroredHorizontally();
+        attackedByMinors = attackedByMinors.MirroredHorizontally();
+        attackedByRooks = attackedByRooks.MirroredHorizontally();
+        allThreats = allThreats.MirroredHorizontally();
+    }
+
+    INLINE void FlipDiagonally()
+    {
+        attackedByPawns = attackedByPawns.FlippedDiagonally();
+        attackedByMinors = attackedByMinors.FlippedDiagonally();
+        attackedByRooks = attackedByRooks.FlippedDiagonally();
+        allThreats = allThreats.FlippedDiagonally();
+    }
 };
 
 // class representing whole board state
@@ -151,10 +205,10 @@ public:
     std::string MoveToString(const Move& move, MoveNotation notation = MoveNotation::SAN) const;
 
     // parse move from string
-    Move MoveFromString(const std::string& str, MoveNotation notation = MoveNotation::LAN) const;
+    [[nodiscard]] Move MoveFromString(const std::string& str, MoveNotation notation = MoveNotation::LAN) const;
 
     // parse move from packed move
-    Move MoveFromPacked(const PackedMove& packedMove) const;
+    [[nodiscard]] Move MoveFromPacked(const PackedMove& packedMove) const;
 
     // set piece on given square (square is expected to be empty)
     void SetPiece(const Square square, const Piece piece, const Color color);
@@ -223,7 +277,7 @@ public:
     bool DoMove(const Move& move, NNEvaluatorContext& nnContext);
 
     // apply null move
-    bool DoNullMove();
+    void DoNullMove();
 
     // check what is theoretically possible best move value (without generating and analyzing actual moves)
     int32_t BestPossibleMoveValue() const;
@@ -233,9 +287,6 @@ public:
 
     // compute (SLOW) Zobrist hash
     uint64_t ComputeHash() const;
-
-    // get bitboard of attacked squares
-    Bitboard GetAttackedSquares(Color side) const;
 
     // return position where colors are swapped (but the board is not flipped)
     Position SwappedColors() const;
@@ -286,6 +337,7 @@ public:
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
     INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
+    INLINE const Threats& GetThreats() const { return mThreats; }
 
     void SetSideToMove(Color color);
     void SetCastlingRights(Color color, uint8_t rightsMask);
@@ -297,8 +349,6 @@ public:
 
     // compute material key (number of pieces of each kind)
     const MaterialKey GetMaterialKey() const;
-
-    void ComputeThreats(Threats& outThreats) const;
 
     static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
     static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
@@ -312,6 +362,8 @@ private:
     Square ExtractEnPassantSquareFromMove(const Move& move) const;
 
     void ClearRookCastlingRights(const Square affectedSquare);
+
+    void ComputeThreats();
 
     // BOARD STATE & FLAGS
 
@@ -331,11 +383,11 @@ private:
 
     // METADATA
 
+    Threats mThreats;
+
     uint64_t mHash;
     uint64_t mPawnsHash;
 };
-
-static_assert(sizeof(Position) <= 256, "Invalid position size");
 
 static constexpr uint8_t c_shortCastleMask = (1 << 7);
 static constexpr uint8_t c_longCastleMask = (1 << 0);

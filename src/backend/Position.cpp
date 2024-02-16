@@ -172,51 +172,8 @@ void Position::ClearEnPassantSquare()
     if (mEnPassantSquare.IsValid())
     {
         mHash ^= GetEnPassantFileZobristHash(mEnPassantSquare.File());
+        mEnPassantSquare = Square::Invalid();
     }
-
-    mEnPassantSquare = Square::Invalid();
-}
-
-Bitboard Position::GetAttackedSquares(Color side) const
-{
-    const SidePosition& currentSide = mColors[(uint8_t)side];
-    const Bitboard occupiedSquares = Whites().Occupied() | Blacks().Occupied();
-
-    Bitboard bitboard{ 0 };
-
-    if (currentSide.pawns)
-    {
-        if (side == White)
-        {
-            bitboard |= Bitboard::GetPawnsAttacks<White>(currentSide.pawns);
-        }
-        else
-        {
-            bitboard |= Bitboard::GetPawnsAttacks<Black>(currentSide.pawns);
-        }
-    }
-
-    currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
-    {
-        bitboard |= Bitboard::GetKnightAttacks(Square(fromIndex));
-    });
-
-    const Bitboard rooks = currentSide.rooks | currentSide.queens;
-    const Bitboard bishops = currentSide.bishops | currentSide.queens;
-
-    rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
-    {
-        bitboard |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares);
-    });
-
-    bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
-    {
-        bitboard |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares);
-    });
-
-    bitboard |= Bitboard::GetKingAttacks(Square(FirstBitSet(currentSide.king)));
-
-    return bitboard;
 }
 
 Square Position::GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights)
@@ -367,7 +324,7 @@ bool Position::GivesCheck_Approx(const Move move) const
 uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 {
     MoveList moves;
-    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
+    GenerateMoveList(*this, moves);
 
     if (moves.Size() == 0)
     {
@@ -619,7 +576,12 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     ASSERT(nnContext.numDirtyPieces > 0 && nnContext.numDirtyPieces <= MaxNumDirtyPieces);
 
     // can't be in check after move
-    return !IsInCheck(prevToMove);
+    if (IsInCheck(prevToMove))
+        return false;
+
+    ComputeThreats();
+
+    return true;
 }
 
 bool Position::DoMove(const Move& move)
@@ -628,7 +590,7 @@ bool Position::DoMove(const Move& move)
     return DoMove(move, dummyContext);
 }
 
-bool Position::DoNullMove()
+void Position::DoNullMove()
 {
     ASSERT(IsValid());          // board position must be valid
     ASSERT(!IsInCheck(mSideToMove));
@@ -636,9 +598,7 @@ bool Position::DoNullMove()
     SetEnPassantSquare(Square::Invalid());
 
     if (mSideToMove == Black)
-    {
         mMoveCount++;
-    }
 
     mHalfMoveCount++;
 
@@ -650,26 +610,21 @@ bool Position::DoNullMove()
     // validate hash
     ASSERT(ComputeHash() == GetHash());
 
-    return true;
+    ComputeThreats();
 }
 
 Position Position::SwappedColors() const
 {
     Position result;
 
-    result.mColors[0].king          = mColors[1].king.MirroredVertically();
-    result.mColors[0].queens        = mColors[1].queens.MirroredVertically();
-    result.mColors[0].rooks         = mColors[1].rooks.MirroredVertically();
-    result.mColors[0].bishops       = mColors[1].bishops.MirroredVertically();
-    result.mColors[0].knights       = mColors[1].knights.MirroredVertically();
-    result.mColors[0].pawns         = mColors[1].pawns.MirroredVertically();
+    result.mColors[0] = mColors[1];
+    result.mColors[0].MirrorVertically();
 
-    result.mColors[1].king          = mColors[0].king.MirroredVertically();
-    result.mColors[1].queens        = mColors[0].queens.MirroredVertically();
-    result.mColors[1].rooks         = mColors[0].rooks.MirroredVertically();
-    result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
-    result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
-    result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
+    result.mColors[1] = mColors[0];
+    result.mColors[1].MirrorVertically();
+
+    result.mThreats = mThreats;
+    result.mThreats.MirrorVertically();
 
     // flip pieces
     for (uint32_t rank = 0; rank < 8; ++rank)
@@ -694,19 +649,9 @@ Position Position::SwappedColors() const
 
 void Position::MirrorVertically()
 {
-    mColors[0].king     = mColors[0].king.MirroredVertically();
-    mColors[0].queens   = mColors[0].queens.MirroredVertically();
-    mColors[0].rooks    = mColors[0].rooks.MirroredVertically();
-    mColors[0].bishops  = mColors[0].bishops.MirroredVertically();
-    mColors[0].knights  = mColors[0].knights.MirroredVertically();
-    mColors[0].pawns    = mColors[0].pawns.MirroredVertically();
-
-    mColors[1].king     = mColors[1].king.MirroredVertically();
-    mColors[1].queens   = mColors[1].queens.MirroredVertically();
-    mColors[1].rooks    = mColors[1].rooks.MirroredVertically();
-    mColors[1].bishops  = mColors[1].bishops.MirroredVertically();
-    mColors[1].knights  = mColors[1].knights.MirroredVertically();
-    mColors[1].pawns    = mColors[1].pawns.MirroredVertically();
+    mColors[0].MirrorVertically();
+    mColors[1].MirrorVertically();
+    mThreats.MirrorVertically();
 
     mCastlingRights[0] = 0;
     mCastlingRights[1] = 0;
@@ -717,19 +662,9 @@ void Position::MirrorVertically()
 
 void Position::MirrorHorizontally()
 {
-    mColors[0].king     = mColors[0].king.MirroredHorizontally();
-    mColors[0].queens   = mColors[0].queens.MirroredHorizontally();
-    mColors[0].rooks    = mColors[0].rooks.MirroredHorizontally();
-    mColors[0].bishops  = mColors[0].bishops.MirroredHorizontally();
-    mColors[0].knights  = mColors[0].knights.MirroredHorizontally();
-    mColors[0].pawns    = mColors[0].pawns.MirroredHorizontally();
-
-    mColors[1].king     = mColors[1].king.MirroredHorizontally();
-    mColors[1].queens   = mColors[1].queens.MirroredHorizontally();
-    mColors[1].rooks    = mColors[1].rooks.MirroredHorizontally();
-    mColors[1].bishops  = mColors[1].bishops.MirroredHorizontally();
-    mColors[1].knights  = mColors[1].knights.MirroredHorizontally();
-    mColors[1].pawns    = mColors[1].pawns.MirroredHorizontally();
+    mColors[0].MirrorHorizontally();
+    mColors[1].MirrorHorizontally();
+    mThreats.MirrorHorizontally();
 
     mCastlingRights[0] = ReverseBits(mCastlingRights[0]);
     mCastlingRights[1] = ReverseBits(mCastlingRights[1]);
@@ -740,19 +675,9 @@ void Position::MirrorHorizontally()
 
 void Position::FlipDiagonally()
 {
-    mColors[0].king     = mColors[0].king.FlippedDiagonally();
-    mColors[0].queens   = mColors[0].queens.FlippedDiagonally();
-    mColors[0].rooks    = mColors[0].rooks.FlippedDiagonally();
-    mColors[0].bishops  = mColors[0].bishops.FlippedDiagonally();
-    mColors[0].knights  = mColors[0].knights.FlippedDiagonally();
-    mColors[0].pawns    = mColors[0].pawns.FlippedDiagonally();
-
-    mColors[1].king     = mColors[1].king.FlippedDiagonally();
-    mColors[1].queens   = mColors[1].queens.FlippedDiagonally();
-    mColors[1].rooks    = mColors[1].rooks.FlippedDiagonally();
-    mColors[1].bishops  = mColors[1].bishops.FlippedDiagonally();
-    mColors[1].knights  = mColors[1].knights.FlippedDiagonally();
-    mColors[1].pawns    = mColors[1].pawns.FlippedDiagonally();
+    mColors[0].FlipDiagonally();
+    mColors[1].FlipDiagonally();
+    mThreats.FlipDiagonally();
 
     mCastlingRights[0] = 0;
     mCastlingRights[1] = 0;
@@ -928,7 +853,7 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     return result != 0;
 }
 
-void Position::ComputeThreats(Threats& outThreats) const
+void Position::ComputeThreats()
 {
     Bitboard attackedByPawns = 0;
     Bitboard attackedByMinors = 0;
@@ -954,10 +879,10 @@ void Position::ComputeThreats(Threats& outThreats) const
         allThreats |= Bitboard::GenerateQueenAttacks(Square(fromIndex), occupied); });
     allThreats |= Bitboard::GetKingAttacks(opponentSide.GetKingSquare());
 
-    outThreats.attackedByPawns = attackedByPawns;
-    outThreats.attackedByMinors = attackedByMinors;
-    outThreats.attackedByRooks = attackedByRooks;
-    outThreats.allThreats = allThreats;
+    mThreats.attackedByPawns = attackedByPawns;
+    mThreats.attackedByMinors = attackedByMinors;
+    mThreats.attackedByRooks = attackedByRooks;
+    mThreats.allThreats = allThreats;
 }
 
 bool Position::IsQuiet() const
@@ -968,7 +893,7 @@ bool Position::IsQuiet() const
     }
 
     MoveList moves;
-    GenerateMoveList<MoveGenerationMode::Captures>(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
+    GenerateMoveList<MoveGenerationMode::Captures>(*this, moves);
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {

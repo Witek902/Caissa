@@ -846,8 +846,8 @@ static void RunPositionTests()
         // "very" long castle
         {
             Position pos;
-            TEST_EXPECT(pos.FromFEN("rkr4n/pppppppp/8/8/8/8/PPPPPPPP/RKR4N w ACac - 0 1"));
 
+            TEST_EXPECT(pos.FromFEN("rkr4n/pppppppp/8/8/8/8/PPPPPPPP/RKR4N w ACac - 0 1"));
             Move move = pos.MoveFromString("b1c1");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.FromSquare() == Square_b1);
@@ -863,6 +863,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rkr4n/pppppppp/8/8/8/8/PPPPPPPP/R4RKN b ac - 1 1");
 
+            TEST_EXPECT(pos.FromFEN("rkr4n/pppppppp/8/8/8/8/PPPPPPPP/RKR4N b ACac - 0 1"));
             move = pos.MoveFromString("b8c8");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.FromSquare() == Square_b8);
@@ -876,7 +877,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.MoveToString(move, MoveNotation::LAN) == "b8c8");
             TEST_EXPECT(pos.MoveToString(move, MoveNotation::SAN) == "O-O");
             TEST_EXPECT(pos.DoMove(move));
-            TEST_EXPECT(pos.ToFEN() == "r4rkn/pppppppp/8/8/8/8/PPPPPPPP/R4RKN w - - 2 2");
+            TEST_EXPECT(pos.ToFEN() == "r4rkn/pppppppp/8/8/8/8/PPPPPPPP/RKR4N w AC - 1 2");
         }
 
         // various 960 castlings
@@ -971,7 +972,7 @@ static void RunPositionTests()
         const NodeInfo node{ pos };
 
         MoveList allMoves;
-        GenerateMoveList(pos, Bitboard::GetKingAttacks(pos.GetOpponentSide().GetKingSquare()), allMoves);
+        GenerateMoveList(pos, allMoves);
         moveOrderer->ScoreMoves(node, allMoves);
 
         int32_t moveScore = 0;

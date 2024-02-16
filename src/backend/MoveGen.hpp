@@ -141,10 +141,10 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
     const Square kingSquare = currentSide.GetKingSquare();
 
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
-    const Bitboard opponentAttacks = pos.GetAttackedSquares(sideToMove ^ 1);
+    const Bitboard threats = pos.GetThreats().allThreats;
 
     // king can't be in check
-    if ((currentSide.king & opponentAttacks) == 0u)
+    if ((currentSide.king & threats) == 0u)
     {
         const Square longCastleRookSquare = pos.GetLongCastleRookSquare(kingSquare, currentSideCastlingRights);
         const Square shortCastleRookSquare = pos.GetShortCastleRookSquare(kingSquare, currentSideCastlingRights);
@@ -167,7 +167,7 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
             const Bitboard rookCrossedSquares = Bitboard::GetBetween(longCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
             const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~longCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
 
-            if (0u == (opponentAttacks & kingCrossedSquares) &&
+            if (0u == (threats & kingCrossedSquares) &&
                 0u == (kingCrossedSquares & occupiedSquares) &&
                 0u == (rookCrossedSquares & occupiedSquares))
             {
@@ -187,7 +187,7 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
             const Bitboard rookCrossedSquares = Bitboard::GetBetween(shortCastleRookSquare, targetRookSquare) | targetRookSquare.GetBitboard();
             const Bitboard occupiedSquares = (currentSide.Occupied() | occupiedByOpponent) & ~shortCastleRookSquare.GetBitboard() & ~kingSquare.GetBitboard();
 
-            if (0u == (opponentAttacks & kingCrossedSquares) &&
+            if (0u == (threats & kingCrossedSquares) &&
                 0u == (kingCrossedSquares & occupiedSquares) &&
                 0u == (rookCrossedSquares & occupiedSquares))
             {
@@ -198,8 +198,10 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 {
+    ASSERT(pos.GetThreats().allThreats != 0u);
+
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
@@ -209,7 +211,7 @@ INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, Mo
 
     Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
     attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
-    attackBitboard &= ~threats; // can't move to a square controlled by the opponent
+    attackBitboard &= ~pos.GetThreats().allThreats; // can't move to a square controlled by the opponent
     attackBitboard &= mode == MoveGenerationMode::Captures ? occupiedByOpponent : ~occupiedByOpponent;
 
     // regular king moves
@@ -225,7 +227,7 @@ INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, Mo
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
-inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+inline void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
     constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
     const SidePosition& currentSide = pos.GetSide(sideToMove);
@@ -279,43 +281,38 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
         });
     });
 
-    GenerateKingMoveList<mode, sideToMove>(pos, threats, outMoveList);
+    GenerateKingMoveList<mode, sideToMove>(pos, outMoveList);
 }
 
 template<MoveGenerationMode mode>
-INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == White)
     {
-        GenerateMoveList<mode, White>(pos, threats, outMoveList);
+        GenerateMoveList<mode, White>(pos, outMoveList);
     }
     else
     {
-        GenerateMoveList<mode, Black>(pos, threats, outMoveList);
+        GenerateMoveList<mode, Black>(pos, outMoveList);
     }
-}
-
-INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
-{
-    GenerateMoveList<MoveGenerationMode::Captures>(pos, threats, outMoveList);
-    GenerateMoveList<MoveGenerationMode::Quiets>(pos, threats, outMoveList);
 }
 
 INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
 {
-    GenerateMoveList(pos, Bitboard::GetKingAttacks(pos.GetOpponentSide().GetKingSquare()), outMoveList);
+    GenerateMoveList<MoveGenerationMode::Captures>(pos, outMoveList);
+    GenerateMoveList<MoveGenerationMode::Quiets>(pos, outMoveList);
 }
 
-INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+INLINE void GenerateKingMoveList(const Position& pos, MoveList& outMoveList)
 {
     if (pos.GetSideToMove() == White)
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, White>(pos, threats, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, White>(pos, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, White>(pos, outMoveList);
     }
     else
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Black>(pos, threats, outMoveList);
-        GenerateKingMoveList<MoveGenerationMode::Quiets, Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Captures, Black>(pos, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::Quiets, Black>(pos, outMoveList);
     }
 }

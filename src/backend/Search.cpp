@@ -377,7 +377,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         rootNode = NodeInfo{};
         rootNode.position = game.GetPosition();
         rootNode.isInCheck = game.GetPosition().IsInCheck();
-        rootNode.position.ComputeThreats(rootNode.threats);
         rootNode.isPvNodeFromPrevIteration = true;
         rootNode.alpha = -InfValue;
         rootNode.beta = InfValue;
@@ -847,7 +846,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode = NodeInfo{};
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
-            rootNode.position.ComputeThreats(rootNode.threats);
             rootNode.depth = singularDepth;
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
@@ -899,7 +897,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode = NodeInfo{};
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
-    rootNode.position.ComputeThreats(rootNode.threats);
     rootNode.isPvNodeFromPrevIteration = true;
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext.MarkAsDirty();
@@ -1006,12 +1003,12 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
-INLINE static bool OppCanWinMaterial(const Position& position, const Threats& threats)
+INLINE static bool OppCanWinMaterial(const Position& position)
 {
     const auto& us = position.GetCurrentSide();
-    return (threats.attackedByRooks & us.queens) ||
-        (threats.attackedByMinors & (us.queens | us.rooks)) ||
-        (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
+    return (position.GetThreats().attackedByRooks & us.queens) ||
+        (position.GetThreats().attackedByMinors & (us.queens | us.rooks)) ||
+        (position.GetThreats().attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
@@ -1245,10 +1242,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
             continue;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
@@ -1262,8 +1256,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
 
         childNode.previousMove = move;
-        childNode.position.ComputeThreats(childNode.threats);
-        childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+        childNode.isInCheck = childNode.position.GetThreats().allThreats & childNode.position.GetCurrentSideKingSquare();
         ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
 
         childNode.staticEval = InvalidValue;
@@ -1567,7 +1560,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))))
+                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position))))
             {
                 return (eval + beta) / 2;
             }
@@ -1614,7 +1607,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.nnContext.MarkAsDirty();
 
                     childNode.position.DoNullMove();
-                    childNode.position.ComputeThreats(childNode.threats);
 
                     ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
 
@@ -1672,8 +1664,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                     childNode.depth = 0;
                     childNode.previousMove = move;
-                    childNode.position.ComputeThreats(childNode.threats);
-                    childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+                    childNode.isInCheck = childNode.position.GetThreats().allThreats & childNode.position.GetCurrentSideKingSquare();
                     ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
 
                     // quick verification search
@@ -1848,7 +1839,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
             // the higher depth is, the less aggressive pruning is
-            if (move.ToSquare().GetBitboard() & node->threats.allThreats)
+            if (move.ToSquare().GetBitboard() & position.GetThreats().allThreats)
             {
                 if (move.IsCapture())
                 {
@@ -1953,8 +1944,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         childNode.staticEval = InvalidValue;
-        childNode.position.ComputeThreats(childNode.threats);
-        childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
+        childNode.isInCheck = childNode.position.GetThreats().allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
