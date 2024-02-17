@@ -39,6 +39,12 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
 
+        // reduce time if opponent played a move predicted by the previous search, increase otherwise
+        if (data.previousSearchHint == PreviousSearchHint::Hit)
+            idealTime *= 0.9f;
+        else if (data.previousSearchHint == PreviousSearchHint::Miss)
+            idealTime *= 1.1f;
+
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
 #endif // CONFIGURATION_FINAL
