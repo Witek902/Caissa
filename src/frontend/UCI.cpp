@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.17.2"
+#define CAISSA_VERSION "1.17.3"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -205,6 +205,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         mTranspositionTable.Clear();
         mSearch.Clear();
+        mPrevSearchPosition = Position();
+        mPrevSearchPvLine.clear();
     }
     else if (command == "setoption")
     {
@@ -581,6 +583,8 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
+
+
         TimeManagerInitData data;
         data.moveTime = moveTime;
         data.remainingTime = mGame.GetSideToMove() == White ? whiteRemainingTime : blacksRemainingTime;
@@ -589,6 +593,15 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         data.theirTimeIncrement = mGame.GetSideToMove() == White ? blacksTimeIncrement : whiteTimeIncrement;
         data.movesToGo = movesToGo;
         data.moveOverhead = mOptions.moveOverhead;
+
+        // check if opponent played a move predicted by the previous search
+        if (mPrevSearchPvLine.size() >= 2)
+        {
+            Position pos = mPrevSearchPosition;
+            if (pos.DoMove(mPrevSearchPvLine[0]))
+                if (pos.DoMove(mPrevSearchPvLine[1]))
+                    data.previousSearchHint = (mGame.GetPosition() == pos) ? PreviousSearchHint::Hit : PreviousSearchHint::Miss;
+        }
 
         InitTimeManager(mGame, data, mSearchCtx->searchParam.limits);
     }
@@ -734,6 +747,10 @@ void UniversalChessInterface::DoSearch()
         PrintNNEvaluatorStats();
 #endif // NN_ACCUMULATOR_STATS
     }
+
+    // remember search result
+    mPrevSearchPosition = mGame.GetPosition();
+    mPrevSearchPvLine = std::move(mSearchCtx->searchResult[0].moves);
     
     mSearchCtx->waitable.OnFinished();
 }
