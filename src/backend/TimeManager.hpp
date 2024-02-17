@@ -2,18 +2,23 @@
 
 #include "Search.hpp"
 
+enum class PreviousSearchHint
+{
+    Hit,
+    Miss,
+    Unknown,
+};
+
 struct TimeManagerInitData
 {
     int32_t moveTime;
-
     int32_t remainingTime;
     int32_t timeIncrement;
     int32_t theirRemainingTime;
     int32_t theirTimeIncrement;
-
     uint32_t movesToGo;
-
     int32_t moveOverhead;
+    PreviousSearchHint previousSearchHint = PreviousSearchHint::Unknown;
 };
 
 struct TimeManagerUpdateData

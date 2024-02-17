@@ -13,6 +13,8 @@ DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
+DEFINE_PARAM(TM_PredictedMoveHitScale, 900, 800, 1000);
+DEFINE_PARAM(TM_PredictedMoveMissScale, 1100, 1000, 1500);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -38,6 +40,12 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         const float timeMargin = 0.5f;
         maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime - moveOverhead));
+
+        // reduce time if opponent played a move predicted by the previous search, increase otherwise
+        if (data.previousSearchHint == PreviousSearchHint::Hit)
+            idealTime *= static_cast<float>(TM_PredictedMoveHitScale) / 1000.0f;
+        else if (data.previousSearchHint == PreviousSearchHint::Miss)
+            idealTime *= static_cast<float>(TM_PredictedMoveMissScale) / 1000.0f;
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
