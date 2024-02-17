@@ -67,6 +67,9 @@ private:
     TranspositionTable mTranspositionTable;
     Options mOptions;
 
+    Position mPrevSearchPosition;
+    std::vector<Move> mPrevSearchPvLine;
+
     std::thread mSearchThread;
 
     std::mutex mSearchThreadMutex;
