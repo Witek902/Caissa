@@ -13,8 +13,8 @@ DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
-DEFINE_PARAM(TM_PredictedMoveHitScale, 900, 800, 1000);
-DEFINE_PARAM(TM_PredictedMoveMissScale, 1100, 1000, 1500);
+DEFINE_PARAM(TM_PredictedMoveHitScale, 906, 800, 1000);
+DEFINE_PARAM(TM_PredictedMoveMissScale, 1136, 1000, 1500);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
