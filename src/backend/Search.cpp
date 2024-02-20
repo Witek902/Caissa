@@ -1307,9 +1307,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     // no legal moves - checkmate
     if (node->isInCheck && moveIndex == 0)
-    {
         return -CheckmateValue + (ScoreType)node->height;
-    }
+
+    // idea from Stockfish
+    if (bestValue > beta && std::abs(bestValue) <= KnownWinValue)
+        bestValue = (bestValue + beta) / 2;
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
