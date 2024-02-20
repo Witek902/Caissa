@@ -1243,21 +1243,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
             continue;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
         // skip everything after some sane amount of moves has been tried
         // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -TablebaseWinValue)
-        {
-                 if (node->depth < -4 && moveIndex > 1) break;
-            else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth <  0 && moveIndex > 3) break;
-        }
+        if (bestValue > -TablebaseWinValue && moveIndex - node->depth >= 4)
+            break;
 
         childNode.previousMove = move;
         childNode.position.ComputeThreats(childNode.threats);
