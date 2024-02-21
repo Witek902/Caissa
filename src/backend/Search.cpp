@@ -1098,14 +1098,31 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     thread.stats.OnNodeEnter(node->height + 1);
     ctx.stats.Append(thread.stats);
 
+    ScoreType alpha = node->alpha;
+    ScoreType beta = node->beta;
+
+    // check if we can draw by repetition in losing position
+    if constexpr (!isPvNode)
+    {
+        if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
+        {
+            alpha = 0;
+            if (alpha >= beta)
+            {
+                // update stats
+                thread.stats.OnNodeEnter(node->height + 1);
+                ctx.stats.Append(thread.stats);
+                return alpha;
+            }
+        }
+    }
+
     // Not checking for draw by repetition in the quiescence search
     if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
         return 0;
 
     const Position& position = node->position;
 
-    ScoreType alpha = node->alpha;
-    ScoreType beta = node->beta;
     ScoreType bestValue = -InfValue;
     ScoreType futilityBase = -InfValue;
 
@@ -1334,10 +1351,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     else
         ASSERT(node->alpha < node->beta);
 
+    // maximum search depth reached, enter quiescence search to find final evaluation
+    if (node->depth <= 0)
+    {
+        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+    }
+
     // clear PV line
     node->pvLength = 0;
 
-    const Position& position = node->position;
+    // update stats
+    thread.stats.OnNodeEnter(node->height + 1);
+    ctx.stats.Append(thread.stats);
 
     ScoreType alpha = node->alpha;
     ScoreType beta = node->beta;
@@ -1358,17 +1383,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
-    // maximum search depth reached, enter quiescence search to find final evaluation
-    if (node->depth <= 0)
-    {
-        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-    }
-
+    const Position& position = node->position;
     ASSERT(node->isInCheck == position.IsInCheck());
-
-    // update stats
-    thread.stats.OnNodeEnter(node->height + 1);
-    ctx.stats.Append(thread.stats);
 
     if constexpr (!isRootNode)
     {
