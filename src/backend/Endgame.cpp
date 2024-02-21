@@ -197,7 +197,7 @@ Result KPKPosition::Classify(const std::vector<KPKPosition>& db)
 
 } // KPKEndgame
 
-using EndgameEvaluationFunc = bool (*)(const Position&, int32_t&, int32_t&);
+using EndgameEvaluationFunc = bool (*)(const Position&, int32_t&);
 
 // map: material mask -> function index
 static uint8_t s_endgameEvaluationMap[MaterialMask_MAX] = { UINT8_MAX };
@@ -234,10 +234,8 @@ static void RegisterEndgame(MaterialMask materialMask, const uint8_t functionInd
 static const Bitboard winningFilesKQvKP = Bitboard::FileBitboard<1>() | Bitboard::FileBitboard<3>() | Bitboard::FileBitboard<4>() | Bitboard::FileBitboard<6>();
 
 // Rook(s) and/or Queen(s) vs. lone king
-static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
     const Square strongKing(FirstBitSet(pos.Whites().king));
@@ -310,10 +308,8 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore, int32_t
 }
 
 // knight(s) vs. lone king
-static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
     const Square strongKing(FirstBitSet(pos.Whites().king));
@@ -350,10 +346,8 @@ static bool EvaluateEndgame_KNvK(const Position& pos, int32_t& outScore, int32_t
 }
 
 // knight(s) vs. knight(s)
-static bool EvaluateEndgame_KNvKN(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KNvKN(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights != 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -389,10 +383,8 @@ static bool EvaluateEndgame_KNvKN(const Position& pos, int32_t& outScore, int32_
 }
 
 // bishop(s) vs. lone king
-static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
     const Square strongKing(FirstBitSet(pos.Whites().king));
@@ -420,10 +412,8 @@ static bool EvaluateEndgame_KBvK(const Position& pos, int32_t& outScore, int32_t
 }
 
 // bishop(s) vs. bishop(s)
-static bool EvaluateEndgame_KBvKB(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KBvKB(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops != 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops != 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -453,10 +443,8 @@ static bool EvaluateEndgame_KBvKB(const Position& pos, int32_t& outScore, int32_
 }
 
 // knight + bishop vs. lone king
-static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().bishops > 0 && pos.Whites().knights > 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
@@ -485,10 +473,8 @@ static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore, int32_
 }
 
 // pawn(s) vs. lone king
-static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns.Count() > 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
@@ -628,10 +614,8 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore, int32_t
 }
 
 // pawn(s) vs. pawn(s)
-static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns != 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -700,10 +684,8 @@ static bool EvaluateEndgame_KPvKP(const Position& pos, int32_t& outScore, int32_
 }
 
 // bishop(s) + pawn(s) vs. lone king
-static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns != 0 && pos.Whites().bishops != 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
@@ -781,10 +763,8 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore, int32_
 }
 
 // knight(s) + pawn(s) vs. lone king
-static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns > 0 && pos.Whites().bishops == 0 && pos.Whites().knights > 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
 
@@ -825,10 +805,8 @@ static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore, int32_
 }
 
 // Queen vs. Pawn
-static bool EvaluateEndgame_KQvKP(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKP(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -866,41 +844,9 @@ static bool EvaluateEndgame_KQvKP(const Position& pos, int32_t& outScore, int32_
     return false;
 }
 
-// Queen vs. Knight+Pawn
-static bool EvaluateEndgame_KQvKNP(const Position& pos, int32_t& outScore, int32_t& outScale)
-{
-    UNUSED(outScore);
-
-    ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
-    ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
-
-    if (pos.Whites().queens.Count() == 1 && pos.Blacks().pawns.Count() == 1 && pos.Blacks().knights.Count() == 1)
-    {
-        const Square strongKing(FirstBitSet(pos.Whites().king));
-        const Square weakKing(FirstBitSet(pos.Blacks().king));
-        const Square queenSquare(FirstBitSet(pos.Whites().queens));
-        const Square pawnSquare(FirstBitSet(pos.Blacks().pawns));
-        const Square knightSquare(FirstBitSet(pos.Blacks().knights));
-
-        if (strongKing.Rank() >= 6 &&
-            pawnSquare.Rank() <= 2 &&
-            weakKing.Rank() <= 2 &&
-            Square::Distance(pawnSquare, weakKing) <= 1 &&
-            Square::Distance(knightSquare, weakKing) <= 1 &&
-            Square::Distance(knightSquare, pawnSquare) <= 2)
-        {
-            outScale = c_endgameScaleMax / 4;
-        }
-    }
-
-    return false;
-}
-
 // Queen vs. Knight+Bishop
-static bool EvaluateEndgame_KQvKBN(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKBN(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScore);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops != 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -936,7 +882,6 @@ static bool EvaluateEndgame_KQvKBN(const Position& pos, int32_t& outScore, int32
             (weakKing == Square_a1 || weakKing == Square_b1 || weakKing == Square_a2) &&
             (bishopSquare == Square_a1 || bishopSquare == Square_b2))
         {
-            outScale = c_endgameScaleMax / 4;
             if (Square::Distance(weakKing, strongKing) > 2)
             {
                 outScore = 0;
@@ -949,10 +894,8 @@ static bool EvaluateEndgame_KQvKBN(const Position& pos, int32_t& outScore, int32
 }
 
 // Rook vs. Pawn
-static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -1024,10 +967,8 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore, int32_
 }
 
 // Rook vs. Knight
-static bool EvaluateEndgame_KRvKN(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KRvKN(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -1062,10 +1003,8 @@ static bool EvaluateEndgame_KRvKN(const Position& pos, int32_t& outScore, int32_
 }
 
 // Rook vs. Bishop
-static bool EvaluateEndgame_KRvKB(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KRvKB(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops != 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -1085,10 +1024,8 @@ static bool EvaluateEndgame_KRvKB(const Position& pos, int32_t& outScore, int32_
 }
 
 // Queen vs. Rook
-static bool EvaluateEndgame_KQvKR(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKR(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks != 0 && pos.Blacks().queens == 0);
 
@@ -1109,10 +1046,8 @@ static bool EvaluateEndgame_KQvKR(const Position& pos, int32_t& outScore, int32_
 }
 
 // Queen vs. Knight
-static bool EvaluateEndgame_KQvKN(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKN(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights != 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens == 0);
 
@@ -1143,10 +1078,8 @@ static bool EvaluateEndgame_KQvKN(const Position& pos, int32_t& outScore, int32_
     return false;
 }
 
-static bool EvaluateEndgame_KRvKR(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KRvKR(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks > 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks > 0 && pos.Blacks().queens == 0);
 
@@ -1216,10 +1149,8 @@ static bool EvaluateEndgame_KRvKR(const Position& pos, int32_t& outScore, int32_
     return false;
 }
 
-static bool EvaluateEndgame_KQvKQ(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKQ(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens > 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks == 0 && pos.Blacks().queens > 0);
 
@@ -1237,10 +1168,8 @@ static bool EvaluateEndgame_KQvKQ(const Position& pos, int32_t& outScore, int32_
 }
 
 // Rook+Pawn vs. Rook
-static bool EvaluateEndgame_KRPvKR(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KRPvKR(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns != 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks != 0 && pos.Whites().queens == 0);
     ASSERT(pos.Blacks().pawns == 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks != 0 && pos.Blacks().queens == 0);
 
@@ -1281,10 +1210,8 @@ static bool EvaluateEndgame_KRPvKR(const Position& pos, int32_t& outScore, int32
 }
 
 // Queen vs. Rook+Pawn
-static bool EvaluateEndgame_KQvKRP(const Position& pos, int32_t& outScore, int32_t& outScale)
+static bool EvaluateEndgame_KQvKRP(const Position& pos, int32_t& outScore)
 {
-    UNUSED(outScale);
-
     ASSERT(pos.Whites().pawns == 0 && pos.Whites().bishops == 0 && pos.Whites().knights == 0 && pos.Whites().rooks == 0 && pos.Whites().queens != 0);
     ASSERT(pos.Blacks().pawns != 0 && pos.Blacks().bishops == 0 && pos.Blacks().knights == 0 && pos.Blacks().rooks != 0 && pos.Blacks().queens == 0);
 
@@ -1385,7 +1312,6 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackBishop, EvaluateEndgame_KRvKB);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackRook, EvaluateEndgame_KQvKR);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackKnight, EvaluateEndgame_KQvKN);
-    RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackKnight|MaterialMask_BlackPawn, EvaluateEndgame_KQvKNP);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackBishop|MaterialMask_BlackKnight, EvaluateEndgame_KQvKBN);
     RegisterEndgame(MaterialMask_WhiteRook|MaterialMask_BlackRook, EvaluateEndgame_KRvKR);
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackQueen, EvaluateEndgame_KQvKQ);
@@ -1399,7 +1325,7 @@ static std::mutex s_matKeyOccurencesMutex;
 static std::unordered_map<MaterialKey, uint64_t> s_matKeyOccurences;
 #endif // COLLECT_ENDGAME_STATISTICS
 
-bool EvaluateEndgame(const Position& pos, int32_t& outScore, int32_t& outScale)
+bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 {
     MaterialMask materialMask = BuildMaterialMask(pos);
     ASSERT(materialMask < MaterialMask_MAX);
@@ -1425,7 +1351,7 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore, int32_t& outScale)
     {
         const EndgameEvaluationFunc& func = s_endgameEvaluationFunctions[evaluationFuncIndex];
         outScore = InvalidValue;
-        const bool result = func(pos, outScore, outScale);
+        const bool result = func(pos, outScore);
         if (result) { ASSERT(outScore != InvalidValue); }
         return result;
     }
@@ -1436,7 +1362,7 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore, int32_t& outScale)
     {
         const EndgameEvaluationFunc& func = s_endgameEvaluationFunctions[evaluationFuncIndex];
         int32_t score = InvalidValue;
-        const bool result = func(pos.SwappedColors(), score, outScale);
+        const bool result = func(pos.SwappedColors(), score);
         if (result) { ASSERT(score != InvalidValue); }
         outScore = -score;
         return result;

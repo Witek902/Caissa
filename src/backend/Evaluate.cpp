@@ -188,27 +188,25 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 {
     const Position& pos = node.position;
 
-    const int32_t whiteQueens   = pos.Whites().queens.Count();
-    const int32_t whiteRooks    = pos.Whites().rooks.Count();
-    const int32_t whiteBishops  = pos.Whites().bishops.Count();
-    const int32_t whiteKnights  = pos.Whites().knights.Count();
-    const int32_t whitePawns    = pos.Whites().pawns.Count();
-    const int32_t blackQueens   = pos.Blacks().queens.Count();
-    const int32_t blackRooks    = pos.Blacks().rooks.Count();
-    const int32_t blackBishops  = pos.Blacks().bishops.Count();
-    const int32_t blackKnights  = pos.Blacks().knights.Count();
-    const int32_t blackPawns    = pos.Blacks().pawns.Count();
+    const int32_t whiteQueens = pos.Whites().queens.Count();
+    const int32_t whiteRooks = pos.Whites().rooks.Count();
+    const int32_t whiteBishops = pos.Whites().bishops.Count();
+    const int32_t whiteKnights = pos.Whites().knights.Count();
+    const int32_t whitePawns = pos.Whites().pawns.Count();
+    const int32_t blackQueens = pos.Blacks().queens.Count();
+    const int32_t blackRooks = pos.Blacks().rooks.Count();
+    const int32_t blackBishops = pos.Blacks().bishops.Count();
+    const int32_t blackKnights = pos.Blacks().knights.Count();
+    const int32_t blackPawns = pos.Blacks().pawns.Count();
 
     const int32_t whitePieceCount = whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns;
     const int32_t blackPieceCount = blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
-
-    int32_t scale = c_endgameScaleMax;
 
     // check endgame evaluation first
     if (whitePieceCount + blackPieceCount <= 6 || blackPieceCount == 0 || whitePieceCount == 0) [[unlikely]]
     {
         int32_t endgameScore;
-        if (EvaluateEndgame(pos, endgameScore, scale))
+        if (EvaluateEndgame(pos, endgameScore))
         {
             ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
             if (pos.GetSideToMove() == Black) endgameScore = -endgameScore;
@@ -216,40 +214,30 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         }
     }
 
-    // 0 - endgame, 64 - opening
-    const int32_t gamePhase = std::min(64,
-        3 * (whiteKnights + blackKnights + whiteBishops + blackBishops) +
-        5 * (whiteRooks   + blackRooks) +
-        10 * (whiteQueens  + blackQueens));
+    int32_t value = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
 
-    int32_t finalValue = 0;
+    // convert to centipawn range
+    value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
-    if (g_mainNeuralNetwork)
-    {
-        int32_t nnValue = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
-        // convert to centipawn range
-        constexpr int32_t nnOutputDiv = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
-        finalValue = DivRoundNearest(nnValue, nnOutputDiv);
-    }
-
-    // apply scaling based on game phase
-    finalValue = finalValue * (96 + gamePhase) / 128;
+    // apply scaling based on game phase (0 - endgame, 24 - opening)
+    const int32_t gamePhase = std::min(24,
+        whiteKnights + blackKnights + whiteBishops + blackBishops +
+        2 * (whiteRooks + blackRooks) +
+        4 * (whiteQueens + blackQueens));
+    value = value * (52 + gamePhase) / 64;
 
     // saturate eval value so it doesn't exceed KnownWinValue
-    if (finalValue > c_evalSaturationTreshold)
-        finalValue = c_evalSaturationTreshold + (finalValue - c_evalSaturationTreshold) / 8;
-    else if (finalValue < -c_evalSaturationTreshold)
-        finalValue = -c_evalSaturationTreshold + (finalValue + c_evalSaturationTreshold) / 8;
+    if (value > c_evalSaturationTreshold)
+        value = c_evalSaturationTreshold + (value - c_evalSaturationTreshold) / 8;
+    else if (value < -c_evalSaturationTreshold)
+        value = -c_evalSaturationTreshold + (value + c_evalSaturationTreshold) / 8;
 
-    ASSERT(finalValue > -KnownWinValue && finalValue < KnownWinValue);
+    ASSERT(value > -KnownWinValue && value < KnownWinValue);
 
-    return (ScoreType)(finalValue * scale / c_endgameScaleMax);
+    return (ScoreType)value;
 }
 
 void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache)
 {
-    if (g_mainNeuralNetwork)
-    {
-        NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node, cache);
-    }
+    NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node, cache);
 }
