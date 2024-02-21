@@ -341,6 +341,11 @@ private:
         void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
 
         uint32_t GetRandomUint();
+
+        INLINE ScoreType GetDrawScore() const
+        {
+            return 4 - static_cast<ScoreType>(stats.nodesTotal & 0x7);
+        }
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;

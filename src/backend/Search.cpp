@@ -1347,7 +1347,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
         {
-            alpha = 0;
+            alpha = thread.GetDrawScore();
             if (alpha >= beta)
             {
                 // update stats
@@ -1378,7 +1378,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             CheckInsufficientMaterial(node->position) ||
             SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
         {
-            return 0;
+            return thread.GetDrawScore();
         }
 
         // mate distance pruning
