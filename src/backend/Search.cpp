@@ -69,7 +69,7 @@ DEFINE_PARAM(BetaMarginBias, 6, 0, 20);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 56, 50, 150);
 
-DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
+DEFINE_PARAM(RazoringStartDepth, 10, 1, 10);
 DEFINE_PARAM(RazoringMarginMultiplier, 147, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
