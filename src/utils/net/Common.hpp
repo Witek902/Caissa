@@ -5,6 +5,7 @@
 #include "../../backend/Math.hpp"
 
 #include <vector>
+#include <cmath>
 
 namespace nn {
 
@@ -22,7 +23,7 @@ struct ActiveFeature
 
 inline float Sigmoid(float x)
 {
-    return 1.0f / (1.0f + expf(-x));
+    return 1.0f / (1.0f + std::exp(-x));
 }
 inline float SigmoidDerivative(float x)
 {
@@ -36,7 +37,7 @@ static constexpr float c_WinProbabilityScale = 1.0f;
 
 inline float EvalToWinProbability(float eval)
 {
-    return 1.0f / (1.0f + expf((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale));
+    return 1.0f / (1.0f + std::exp((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale));
 }
 
 inline float EvalToDrawProbability(float eval)
@@ -55,7 +56,7 @@ inline float EvalToExpectedGameScore(float eval)
 
 inline float EvalToWinProbability_Derivative(float eval)
 {
-    const float t = expf((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale);
+    const float t = std::exp((-eval + c_WinProbabilityOffset) / c_WinProbabilityScale);
     return t / (c_WinProbabilityScale * Sqr(1.0f + t));
 }
 

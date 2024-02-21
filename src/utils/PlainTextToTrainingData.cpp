@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 // converts games in plain text format <FEN> [game result] <eval>
 // to binary format

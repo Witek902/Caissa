@@ -2,7 +2,6 @@
 
 #include "Common.hpp"
 
-#include <assert.h>
 #include <string>
 
 class Square;

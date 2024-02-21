@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <limits.h>
+#include <iostream>
 
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 4;

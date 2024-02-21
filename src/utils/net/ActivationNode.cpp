@@ -1,5 +1,7 @@
 #include "ActivationNode.hpp"
 
+#include <cmath>
+
 namespace nn {
 
 INLINE static float ApplyActivationFunction(float x, ActivationFunction func)

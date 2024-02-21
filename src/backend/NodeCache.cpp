@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <iostream>
 
 void NodeCacheEntry::PrintMoves() const
 {

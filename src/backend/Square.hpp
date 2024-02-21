@@ -2,7 +2,6 @@
 
 #include "Bitboard.hpp"
 
-#include <assert.h>
 #include <string>
 
 enum SquareName : uint32_t

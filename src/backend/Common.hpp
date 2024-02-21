@@ -1,12 +1,9 @@
 #pragma once
 
-#include <inttypes.h>
+#include <cinttypes>
+#include <cstdlib>
+#include <cstdio>
 #include <cstring>
-#include <stdlib.h>
-#include <math.h>
-#include <atomic>
-#include <string>
-#include <iostream>
 
 #ifdef USE_SSE
     #include <immintrin.h>
@@ -23,7 +20,6 @@
     #include <csignal>
 #endif
 
-
 #if defined(PLATFORM_WINDOWS)
     #define DEBUG_BREAK() __debugbreak()
 #elif defined(PLATFORM_LINUX)
@@ -33,8 +29,8 @@
 #define UNUSED(x) (void)(x)
 
 #ifndef CONFIGURATION_FINAL
-    #define ASSERT(x) do { if (!(x)) [[unlikely]] { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
-    #define VERIFY(x) do { if (!(x)) [[unlikely]] { std::cout << "Assertion failed: " << #x << std::endl; DEBUG_BREAK(); } } while (0)
+    #define ASSERT(x) do { if (!(x)) [[unlikely]] { printf("Assertion failed: %s\n", (#x)); DEBUG_BREAK(); } } while (0)
+    #define VERIFY(x) do { if (!(x)) [[unlikely]] { printf("Assertion failed: %s\n", (#x)); DEBUG_BREAK(); } } while (0)
 #else
     #define ASSERT(x) do { } while (0)
     #define VERIFY(x) (x)
@@ -382,27 +378,6 @@ inline uint64_t Murmur3(uint64_t k)
     return k;
 }
 
-class SpinLock
-{
-public:
-    void lock()
-    {
-        for (;;)
-        {
-            if (!lock_.exchange(true, std::memory_order_acquire)) break;
-            while (lock_.load(std::memory_order_relaxed));
-        }
-    }
-
-    void unlock()
-    {
-        lock_.store(false, std::memory_order_release);
-    }
-
-private:
-    std::atomic<bool> lock_ = { false };
-};
-
 template<typename T>
 INLINE void AlignedMemcpy64(T* dst, const T* src)
 {
@@ -469,6 +444,3 @@ static constexpr ScoreType DrawScoreRandomness = 2;
 
 // initialize all engine subsystems
 EXPORT void InitEngine();
-
-// get exe path
-std::string GetExecutablePath();

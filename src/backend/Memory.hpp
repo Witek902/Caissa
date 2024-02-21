@@ -4,7 +4,7 @@
 
 #include <limits>
 #include <new>
-#include <iostream>
+#include <algorithm>
 
 
 inline void* AlignedMalloc(size_t size, size_t alignment)

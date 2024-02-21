@@ -4,11 +4,12 @@
 #include "Endgame.hpp"
 #include "PackedNeuralNetwork.hpp"
 #include "NeuralNetworkEvaluator.hpp"
-#include "Pawns.hpp"
 #include "Search.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <memory>
+#include <iostream>
 
 #if defined(CAISSA_EVALFILE)
 
@@ -32,6 +33,59 @@ namespace {
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
 
 } // namespace
+
+int32_t NormalizeEval(int32_t eval)
+{
+    if (eval >= KnownWinValue || eval <= -KnownWinValue)
+        return eval;
+    else
+        return eval * 100 / wld::NormalizeToPawnValue;
+}
+
+float EvalToWinProbability(float eval, uint32_t ply)
+{
+    using namespace wld;
+    const double m = std::min(240u, ply) / 64.0;
+    const double a = ((as[0] * m + as[1]) * m + as[2]) * m + as[3];
+    const double b = ((bs[0] * m + bs[1]) * m + bs[2]) * m + bs[3];
+    return static_cast<float>(1.0 / (1.0 + exp((a - 100.0 * eval) / b)));
+}
+
+float EvalToDrawProbability(float eval, uint32_t ply)
+{
+    const float winProb = EvalToWinProbability(eval, ply);
+    const float lossProb = EvalToWinProbability(-eval, ply);
+    return 1.0f - winProb - lossProb;
+}
+
+float EvalToExpectedGameScore(float eval)
+{
+    return 1.0f / (1.0f + powf(10.0, -eval / 4.0f));
+}
+
+float InternalEvalToExpectedGameScore(int32_t eval)
+{
+    return EvalToExpectedGameScore(static_cast<float>(eval) * 0.01f);
+}
+
+float ExpectedGameScoreToEval(float score)
+{
+    ASSERT(score >= 0.0f && score <= 1.0f);
+    score = std::clamp(score, 0.0f, 1.0f);
+    return 4.0f * log10f(score / (1.0f - score));
+}
+
+ScoreType ExpectedGameScoreToInternalEval(float score)
+{
+    if (score > 0.99999f)
+        return KnownWinValue - 1;
+    else if (score < 0.00001f)
+        return -KnownWinValue + 1;
+    else
+        return (ScoreType)std::clamp((int32_t)std::round(100.0f * ExpectedGameScoreToEval(score)),
+            -KnownWinValue + 1, KnownWinValue - 1);
+}
+
 
 PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
@@ -70,7 +124,22 @@ bool LoadMainNeuralNetwork(const char* path)
 
 static std::string GetDefaultEvalFilePath()
 {
-    std::string path = GetExecutablePath();
+    std::string path;
+
+    // get path to executable
+    {
+#if defined(PLATFORM_WINDOWS)
+        char exePath[MAX_PATH];
+        HMODULE hModule = GetModuleHandle(NULL);
+        if (hModule != NULL)
+        {
+            GetModuleFileNameA(hModule, exePath, (sizeof(exePath)));
+            path = exePath;
+        }
+#elif defined(PLATFORM_LINUX)
+        path = realpath("/proc/self/exe", nullptr);
+#endif
+    }
 
     if (!path.empty())
     {

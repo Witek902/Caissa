@@ -4,7 +4,9 @@
 #include "Evaluate.hpp"
 #include "Tuning.hpp"
 
+#include <cmath>
 #include <algorithm>
+#include <iostream>
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
@@ -34,7 +36,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     {
         const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
         float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
-        float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
+        float maxTime = (data.remainingTime - moveOverhead) / std::sqrt(movesLeft) + (float)data.timeIncrement;
 
         const float minMoveTime = 0.00001f;
         const float timeMargin = 0.5f;

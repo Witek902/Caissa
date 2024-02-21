@@ -4,7 +4,6 @@
 #include "Math.hpp"
 
 #include <cassert>
-#include <cmath>
 #include <algorithm>
 #include <iostream>
 #include <vector>

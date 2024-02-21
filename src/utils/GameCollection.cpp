@@ -1,6 +1,8 @@
 #include "GameCollection.hpp"
 #include "../backend/Game.hpp"
 
+#include <iostream>
+
 namespace GameCollection
 {
 

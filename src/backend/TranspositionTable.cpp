@@ -3,8 +3,8 @@
 #include "Memory.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <thread>
+#include <iostream>
 
 #ifdef USE_SSE
     #include <xmmintrin.h>
