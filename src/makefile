@@ -4,7 +4,7 @@ EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-37.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 CC                 = g++
-SRC                = backend/*.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
+SRC                = backend/Unity.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
 
 ifeq ($(OS), Windows_NT)
 	EXT = .exe
