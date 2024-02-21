@@ -5,9 +5,11 @@
 #include "Game.hpp"
 #include "Tuning.hpp"
 
+#include <cmath>
 #include <algorithm>
 #include <limits>
 #include <iomanip>
+#include <iostream>
 
 DEFINE_PARAM(QuietBonusOffset, -101, -200, 50);
 DEFINE_PARAM(QuietBonusLinear, 162, 75, 200);
@@ -402,7 +404,7 @@ void MoveOrderer::ScoreMoves(
                     const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
                     ASSERT(fraction >= 0.0f);
                     ASSERT(fraction <= 1.0f);
-                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
+                    score += static_cast<int32_t>(4096.0f * std::sqrt(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
                 }
             }
         }

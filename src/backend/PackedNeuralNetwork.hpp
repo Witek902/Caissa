@@ -2,7 +2,6 @@
 
 #include "Common.hpp"
 
-#include <cmath>
 #include <vector>
 
 #if defined(PLATFORM_WINDOWS)

@@ -4,7 +4,7 @@ EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-33.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 CC                 = g++
-SRC                = backend/*.cpp backend/syzygy/tbprobe.cpp frontend/*.cpp
+SRC                = backend/Unity.cpp backend/syzygy/tbprobe.cpp frontend/UCI.cpp
 
 ifeq ($(OS), Windows_NT)
 	EXT = .exe
@@ -13,7 +13,7 @@ else
 endif
 
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -s -flto -std=c++20 -O3 -funroll-loops
+FLAGS = $(WFLAGS) -s -flto -std=c++17 -O3 -funroll-loops
 LIBS =
 
 ifeq ($(EXT), .exe)

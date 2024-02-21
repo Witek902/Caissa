@@ -3,6 +3,7 @@
 #include "../backend/Common.hpp"
 
 #include <vector>
+#include <string>
 #include <stdio.h>
 
 class InputStream

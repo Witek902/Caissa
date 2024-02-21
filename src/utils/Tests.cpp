@@ -9,7 +9,6 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Material.hpp"
-#include "../backend/Pawns.hpp"
 #include "../backend/MovePicker.hpp"
 #include "../backend/MoveOrderer.hpp"
 #include "../backend/Waitable.hpp"
@@ -1300,19 +1299,6 @@ static void RunPositionTests()
             TEST_EXPECT(!pos.IsMate());
             TEST_EXPECT(pos.IsFiftyMoveRuleDraw());
         }
-    }
-
-    // Passed pawns
-    {
-        const Position pos("k7/5pP1/1P2P3/pP6/P7/3pP3/1P2p1Pp/K7 w - - 0 1");
-
-        TEST_EXPECT(!IsPassedPawn(Square_a4, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b2, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b5, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_b6, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e3, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e6, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_g2, pos.Whites().pawns, pos.Blacks().pawns));
     }
 
     // GivesCheck

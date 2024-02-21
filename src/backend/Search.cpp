@@ -12,12 +12,11 @@
 #include "Score.hpp"
 #include "Tuning.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <sstream>
-#include <cstring>
 #include <string>
 #include <thread>
-#include <math.h>
 
 // #define VALIDATE_MOVE_PICKER
 
@@ -155,6 +154,13 @@ INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 {
     return 0 - HistoryPruningLinearFactor * depth - HistoryPruningQuadraticFactor * depth * depth;
+}
+
+template<typename T>
+INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
+{
+    T prev = outMax;
+    while (prev < value && !outMax.compare_exchange_weak(prev, value)) {}
 }
 
 void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
@@ -555,9 +561,9 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         const float l = EvalToWinProbability(-pvLine.score / 100.0f, ply);
         const float d = 1.0f - w - l;
         ss << " wdl "
-            << (int32_t)roundf(w * 1000.0f) << " "
-            << (int32_t)roundf(d * 1000.0f) << " "
-            << (int32_t)roundf(l * 1000.0f);
+            << (int32_t)std::round(w * 1000.0f) << " "
+            << (int32_t)std::round(d * 1000.0f) << " "
+            << (int32_t)std::round(l * 1000.0f);
     }
 
     if (boundsType == BoundsType::LowerBound) ss << " lowerbound";

@@ -7,6 +7,7 @@
 #include "MoveGen.hpp"
 
 #include <random>
+#include <iostream>
 
 static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
 

@@ -7,6 +7,7 @@
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
+#include <iostream>
 
 static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 

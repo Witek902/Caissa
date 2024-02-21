@@ -29,25 +29,3 @@ void InitEngine()
     InitEndgame();
     SearchUtils::Init();
 }
-
-std::string GetExecutablePath()
-{
-    std::string ret;
-#if defined(PLATFORM_WINDOWS)
-    char path[MAX_PATH];
-    HMODULE hModule = GetModuleHandle(NULL);
-    if (hModule != NULL)
-    {
-        // Use GetModuleFileName() with module handle to get the path
-        GetModuleFileNameA(hModule, path, (sizeof(path)));
-        ret = std::string(path);
-    }
-#elif defined(PLATFORM_LINUX)
-    if (char* execPath = realpath("/proc/self/exe", nullptr))
-    {
-        ret = execPath;
-        free(execPath);
-    }
-#endif
-    return ret;
-}

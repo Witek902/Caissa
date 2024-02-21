@@ -10,7 +10,7 @@
 #include "../backend/PositionUtils.hpp"
 #include "../backend/Tuning.hpp"
 
-#include <math.h>
+#include <iostream>
 
 #ifndef CAISSA_VERSION
 #define CAISSA_VERSION "1.17.5"
@@ -1235,4 +1235,14 @@ bool UniversalChessInterface::Command_Benchmark()
 #endif // NN_ACCUMULATOR_STATS
 
     return true;
+}
+
+int main(int argc, const char* argv[])
+{
+    InitEngine();
+
+    UniversalChessInterface uci;
+    uci.Loop(argc, argv);
+
+    return 0;
 }

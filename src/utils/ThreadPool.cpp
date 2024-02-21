@@ -2,8 +2,6 @@
 #include "../backend/Waitable.hpp"
 #include "minitrace/minitrace.h"
 
-#include <assert.h>
-
 namespace threadpool {
 
 Task::Task()
@@ -177,7 +175,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
             // Queued -> Executing
             {
                 const Task::State oldState = task->mState.exchange(Task::State::Executing);
-                assert(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
+                ASSERT(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
                 (void)oldState;
             }
 
@@ -191,7 +189,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
             // Executing -> Finished
             {
                 const Task::State oldState = task->mState.exchange(Task::State::Finished);
-                assert(Task::State::Executing == oldState); // Task is expected to be in 'Executing' state
+                ASSERT(Task::State::Executing == oldState); // Task is expected to be in 'Executing' state
                 (void)oldState;
             }
         }
@@ -200,7 +198,7 @@ void ThreadPool::SchedulerCallback(WorkerThread* thread)
             // Queued -> Finished
 
             const Task::State oldState = task->mState.exchange(Task::State::Finished);
-            assert(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
+            ASSERT(Task::State::Queued == oldState); // Task is expected to be in 'Queued' state
             (void)oldState;
         }
 
@@ -228,7 +226,7 @@ void ThreadPool::FinishTask(TaskID taskID)
             waitable = task.mWaitable;
 
             const int32_t tasksLeft = --task.mTasksLeft;
-            assert(tasksLeft >= 0); // Tasks counter underflow
+            ASSERT(tasksLeft >= 0); // Tasks counter underflow
             if (tasksLeft > 0)
             {
                 return;
@@ -263,8 +261,8 @@ void ThreadPool::EnqueueTaskInternal_NoLock(TaskID taskID)
     Task& task = mTasks[taskID];
 
     const Task::State oldState = task.mState.exchange(Task::State::Queued);
-    assert(Task::State::Created == oldState); // Task is expected to be in 'Created' state
-    assert((Task::Flag_IsDispatched | Task::Flag_DependencyFullfilled) == task.mDependencyState);
+    ASSERT(Task::State::Created == oldState); // Task is expected to be in 'Created' state
+    ASSERT((Task::Flag_IsDispatched | Task::Flag_DependencyFullfilled) == task.mDependencyState);
     (void)oldState;
 
     // push to queue
@@ -277,12 +275,12 @@ void ThreadPool::EnqueueTaskInternal_NoLock(TaskID taskID)
 
 void ThreadPool::FreeTask_NoLock(TaskID taskID)
 {
-    assert(taskID < mTasks.size());
+    ASSERT(taskID < mTasks.size());
 
     Task& task = mTasks[taskID];
 
     const Task::State oldState = task.mState.exchange(Task::State::Invalid);
-    assert(Task::State::Finished == oldState); // Task is expected to be in 'Finished' state
+    ASSERT(Task::State::Finished == oldState); // Task is expected to be in 'Finished' state
     (void)oldState;
 
     task.mNextFree = mFirstFreeTask;
@@ -299,7 +297,7 @@ TaskID ThreadPool::AllocateTask_NoLock()
     Task& task = mTasks[mFirstFreeTask];
 
     const Task::State oldState = task.mState.exchange(Task::State::Queued);
-    assert(Task::State::Invalid == oldState); // Task is expected to be in 'Invalid' state
+    ASSERT(Task::State::Invalid == oldState); // Task is expected to be in 'Invalid' state
     (void)oldState;
 
     TaskID newNextFree = task.mNextFree;
@@ -310,13 +308,13 @@ TaskID ThreadPool::AllocateTask_NoLock()
 
 TaskID ThreadPool::CreateTask(const TaskDesc& desc)
 {
-    assert(desc.priority < NumPriorities);
+    ASSERT(desc.priority < NumPriorities);
 
     // TODO lockless
     std::unique_lock<std::mutex> lock(mTaskListMutex);
 
     TaskID taskID = AllocateTask_NoLock();
-    assert(taskID != InvalidTaskID);
+    ASSERT(taskID != InvalidTaskID);
 
     if (taskID == InvalidTaskID)
     {
@@ -348,7 +346,7 @@ TaskID ThreadPool::CreateTask(const TaskDesc& desc)
     {
         Task& dependency = mTasks[dependencyID];
 
-        assert(Task::State::Invalid != dependency.mState); // Invalid state of dependency task
+        ASSERT(Task::State::Invalid != dependency.mState); // Invalid state of dependency task
 
         //NFE_SCOPED_LOCK(mFinishedTasksMutex); // TODO: how to get rid of it?
         if (dependency.mTasksLeft > 0)
@@ -378,18 +376,18 @@ TaskID ThreadPool::CreateTask(const TaskDesc& desc)
 
 void ThreadPool::DispatchTask(TaskID taskID)
 {
-    assert(taskID != InvalidTaskID);
+    ASSERT(taskID != InvalidTaskID);
 
     // TODO lockless
     std::unique_lock<std::mutex> lock(mTaskListMutex);
 
     Task& task = mTasks[taskID];
 
-    assert(Task::State::Created == task.mState); // Task is expected to be in 'Created' state
+    ASSERT(Task::State::Created == task.mState); // Task is expected to be in 'Created' state
 
     const uint8_t oldDependencyState = task.mDependencyState.fetch_or(Task::Flag_IsDispatched);
 
-    assert((oldDependencyState & Task::Flag_IsDispatched) == 0); // Task already dispatched
+    ASSERT((oldDependencyState & Task::Flag_IsDispatched) == 0); // Task already dispatched
 
     // can enqueue only if not dispatched yet, but dependency was fullfilled
     if (Task::Flag_DependencyFullfilled == oldDependencyState)
@@ -400,15 +398,15 @@ void ThreadPool::DispatchTask(TaskID taskID)
 
 void ThreadPool::OnTaskDependencyFullfilled_NoLock(TaskID taskID)
 {
-    assert(taskID != InvalidTaskID);
+    ASSERT(taskID != InvalidTaskID);
 
     Task& task = mTasks[taskID];
 
-    assert(Task::State::Created == task.mState); // Task is expected to be in 'Created' state
+    ASSERT(Task::State::Created == task.mState); // Task is expected to be in 'Created' state
 
     const uint8_t oldDependencyState = task.mDependencyState.fetch_or(Task::Flag_DependencyFullfilled);
 
-    assert((oldDependencyState & Task::Flag_DependencyFullfilled) == 0); // Task should not have dependency fullfilled
+    ASSERT((oldDependencyState & Task::Flag_DependencyFullfilled) == 0); // Task should not have dependency fullfilled
 
     // can enqueue only if was dispatched
     if (Task::Flag_IsDispatched == oldDependencyState)

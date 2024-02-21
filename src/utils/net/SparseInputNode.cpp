@@ -2,6 +2,8 @@
 #include "WeightsStorage.hpp"
 #include "Gradient.hpp"
 
+#include <cmath>
+
 namespace nn {
 
 void SparseInputNode::Run(INodeContext& ctx) const

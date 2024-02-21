@@ -88,13 +88,6 @@ INLINE constexpr T DivRoundNearest(T x, T y)
         return (x - y / 2) / y;
 }
 
-template<typename T>
-INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
-{
-    T prev = outMax;
-    while (prev < value && !outMax.compare_exchange_weak(prev, value)) { }
-}
-
 inline float Log(float x)
 {
     // based on:

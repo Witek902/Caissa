@@ -21,6 +21,7 @@
 #include <fstream>
 #include <limits.h>
 #include <iomanip>
+#include <iostream>
 
 static const bool c_collectMaterialStats = false;
 static const bool c_dumpFortressPositions = false;
