@@ -1562,13 +1562,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
+            const bool hasThreats = OppCanWinMaterial(position, node->threats);
+
             // Reverse Futility Pruning
             if (node->depth <= BetaPruningDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))))
+                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !hasThreats)))
             {
                 return (eval + beta) / 2;
             }
+
+            if (node->depth == 1 && node->staticEval > beta + (isImproving ? 0 : 20) && !hasThreats)
+                return (node->staticEval + beta) / 2;
 
             // Razoring
             // prune if quiescence search on current position can't beat beta
@@ -1584,7 +1589,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Null Move Pruning
             if (eval >= beta + (node->depth < 4 ? 20 : 0) &&
                 node->staticEval >= beta &&
-                node->depth >= NullMovePruningStartDepth &&
+                (node->depth >= NullMovePruningStartDepth || !hasThreats) &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
                 // don't allow null move if parent or grandparent node was null move
