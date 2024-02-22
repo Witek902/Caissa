@@ -30,6 +30,7 @@
 namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
+static constexpr ScoreType c_tempo = 8;
 
 } // namespace
 
@@ -234,7 +235,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 
     ASSERT(value > -KnownWinValue && value < KnownWinValue);
 
-    return (ScoreType)value;
+    return (ScoreType)value + c_tempo;
 }
 
 void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache)
