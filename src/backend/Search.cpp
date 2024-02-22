@@ -1811,6 +1811,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            const int32_t lmrDepth = std::max(1, node->depth - GetQuietsDepthReduction(node->depth, moveIndex));
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
                 // Late Move Pruning
@@ -1827,8 +1829,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
+                    lmrDepth < 9 &&
+                    moveStatScore < GetHistoryPruningTreshold(lmrDepth))
                 {
                     continue;
                 }
@@ -1836,8 +1838,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Futility Pruning
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
-                    node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    lmrDepth < FutilityPruningDepth &&
+                    node->staticEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
@@ -1856,8 +1858,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
                 else
                 {
-                    if (node->depth <= 8 &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
+                    if (lmrDepth <= 12 &&
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * lmrDepth)) continue;
                 }
             }
         }
