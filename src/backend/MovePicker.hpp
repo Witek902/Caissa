@@ -14,6 +14,7 @@ public:
     enum class Stage : uint8_t
     {
         TTMove = 0,
+        Second,
         GenerateCaptures,
         Captures,
         Killer,
@@ -42,6 +43,12 @@ public:
     INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
     INLINE void SkipQuiets() { m_generateQuiets = false; }
 
+    INLINE void SetSecondMove(Move move)
+    {
+        ASSERT(m_secondMove != m_ttMove);
+        m_secondMove = move;
+    }
+
 private:
 
     const Position& m_position;
@@ -53,6 +60,7 @@ private:
     uint32_t m_moveIndex = 0;
     Stage m_stage = Stage::TTMove;
 
+    Move m_secondMove = Move::Invalid();
     Move m_killerMove = Move::Invalid();
     Move m_counterMove = Move::Invalid();
 
