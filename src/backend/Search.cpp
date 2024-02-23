@@ -1821,62 +1821,60 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             quietMoveIndex++;
         }
 
-        const bool doPruning = isPvNode ? ctx.searchParam.allowPruningInPvNodes : true;
-
-        if (doPruning &&
-            bestValue > -KnownWinValue &&
-            position.HasNonPawnMaterial(position.GetSideToMove()))
-        {
-            if (move.IsQuiet() || move.IsUnderpromotion())
+        if constexpr (!isPvNode)
+            if (bestValue > -KnownWinValue &&
+                position.HasNonPawnMaterial(position.GetSideToMove()))
             {
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
+                if (move.IsQuiet() || move.IsUnderpromotion())
+                {
+                    // Late Move Pruning
+                    // skip quiet moves that are far in the list
+                    // the higher depth is, the less aggressive pruning is
+                    if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
+                    {
+                        // if we're in quiets stage, skip everything
+                        if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
+
+                        continue;
+                    }
+
+                    // History Pruning
+                    // if a move score is really bad, do not consider this move at low depth
+                    if (quietMoveIndex > 1 &&
+                        node->depth < 9 &&
+                        moveStatScore < GetHistoryPruningTreshold(node->depth))
+                    {
+                        continue;
+                    }
+
+                    // Futility Pruning
+                    // skip quiet move that have low chance to beat alpha
+                    if (!node->isInCheck &&
+                        node->depth < FutilityPruningDepth &&
+                        node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    {
+                        movePicker.SkipQuiets();
+                        if (quietMoveIndex > 1) continue;
+                    }
+                }
+
+                // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
+                if (move.ToSquare().GetBitboard() & node->threats.allThreats)
                 {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
-                }
-
-                // History Pruning
-                // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
-                {
-                    continue;
-                }
-
-                // Futility Pruning
-                // skip quiet move that have low chance to beat alpha
-                if (!node->isInCheck &&
-                    node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
-                {
-                    movePicker.SkipQuiets();
-                    if (quietMoveIndex > 1) continue;
+                    if (move.IsCapture())
+                    {
+                        if (node->depth <= 4 &&
+                            moveScore < MoveOrderer::GoodCaptureValue &&
+                            !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                    }
+                    else
+                    {
+                        if (node->depth <= 8 &&
+                            !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
+                    }
                 }
             }
-
-            // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
-            // the higher depth is, the less aggressive pruning is
-            if (move.ToSquare().GetBitboard() & node->threats.allThreats)
-            {
-                if (move.IsCapture())
-                {
-                    if (node->depth <= 4 &&
-                        moveScore < MoveOrderer::GoodCaptureValue &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
-                }
-                else
-                {
-                    if (node->depth <= 8 &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth)) continue;
-                }
-            }
-        }
 
         int32_t moveExtension = extension;
         {
