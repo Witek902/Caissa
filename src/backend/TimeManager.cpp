@@ -9,10 +9,14 @@
 DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
-DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
-DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
+
+DEFINE_PARAM(TM_NodesCountBias, 2, 0, 100);
+DEFINE_PARAM(TM_NodesCountLinearFactor, 60, 10, 100);
+DEFINE_PARAM(TM_NodesCountSqrtFactor, 170, 100, 250);
+
 DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1254, 1000, 2000);
+
 DEFINE_PARAM(TM_PredictedMoveHitScale, 900, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1100, 1000, 1500);
 
@@ -99,9 +103,10 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
     // decrease time if nodes fraction spent on best move is high
     {
         const double nonBestMoveNodeFraction = 1.0 - data.bestMoveNodeFraction;
-        const double scale = static_cast<double>(TM_NodesCountScale) / 100.0;
-        const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
-        const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
+        const double nodeCountFactor =
+            (static_cast<double>(TM_NodesCountBias) / 100.0) +
+            nonBestMoveNodeFraction * (static_cast<double>(TM_NodesCountLinearFactor) / 100.0) +
+            sqrt(nonBestMoveNodeFraction) * (static_cast<double>(TM_NodesCountSqrtFactor) / 100.0);
         limits.idealTimeCurrent *= nodeCountFactor;
     }
 
