@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
-#include "Accumulator.hpp"
+#include "PackedNeuralNetwork.hpp"
 #include "Memory.hpp"
 #include "Position.hpp"
 
