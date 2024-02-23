@@ -69,6 +69,10 @@ namespace nn {
     #define NN_USE_SSE4
 #endif // USE_SSE
 
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+    #define NN_USE_SIMD
+#endif
+
 #if defined(NN_USE_AVX512)
     constexpr uint32_t OptimalRegisterCount = 16;
 #elif defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
@@ -77,7 +81,6 @@ namespace nn {
 
 
 class NeuralNetwork;
-struct Accumulator;
 
 static constexpr uint32_t CurrentVersion = 9;
 static constexpr uint32_t MagicNumber = 'CSNN';
@@ -116,9 +119,6 @@ static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * Activati
 static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
-using FirstLayerWeightType = int16_t;
-using FirstLayerBiasType = int16_t;
-
 using HiddenLayerWeightType = int8_t;
 using HiddenLayerBiasType = int32_t;
 
@@ -126,12 +126,167 @@ using LastLayerWeightType = int16_t;
 using LastLayerBiasType = int32_t;
 
 using IntermediateType = int8_t;
+using AccumulatorType = int16_t;
+
+
+struct alignas(CACHELINE_SIZE) Accumulator
+{
+    AccumulatorType values[AccumulatorSize];
+
+    INLINE void Refresh(
+        const Accumulator weights[], const Accumulator& biases,
+        uint32_t numActiveFeatures, const uint16_t* activeFeatures)
+    {
+#ifndef CONFIGURATION_FINAL
+        // check for duplicate features
+        for (uint32_t i = 0; i < numActiveFeatures; ++i)
+        {
+            for (uint32_t j = i + 1; j < numActiveFeatures; ++j)
+            {
+                ASSERT(activeFeatures[i] != activeFeatures[j]);
+            }
+        }
+#endif // CONFIGURATION_FINAL
+
+#if defined(NN_USE_SIMD)
+
+        constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+        static_assert(AccumulatorSize % registerWidth == 0);
+        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)&biases % 32 == 0);
+        ASSERT((size_t)values % 32 == 0);
+
+        constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
+        static_assert(numChunks % OptimalRegisterCount == 0, "");
+        constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+
+        Int16VecType regs[OptimalRegisterCount];
+        for (uint32_t tile = 0; tile < numTiles; ++tile)
+        {
+            const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
+
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                regs[i] = Int16VecLoad(biases.values + chunkBase + i * registerWidth);
+
+            for (uint32_t j = 0; j < numActiveFeatures; ++j)
+            {
+                const Accumulator& weightsStart = weights[activeFeatures[j]];
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart.values + chunkBase + i * registerWidth));
+            }
+
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                Int16VecStore(values + chunkBase + i * registerWidth, regs[i]);
+        }
+
+#else // no SIMD support
+
+        AccumulatorType regs[AccumulatorSize];
+
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            regs[i] = biases.values[i];
+
+        for (uint32_t j = 0; j < numActiveFeatures; ++j)
+        {
+            const uint32_t featureIndex = activeFeatures[j];
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            {
+                ASSERT(int32_t(regs[i]) + int32_t(weights[featureIndex].values[i]) <= std::numeric_limits<AccumulatorType>::max());
+                ASSERT(int32_t(regs[i]) + int32_t(weights[featureIndex].values[i]) >= std::numeric_limits<AccumulatorType>::min());
+                regs[i] += weights[featureIndex].values[i];
+            }
+        }
+
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            values[i] = static_cast<AccumulatorType>(regs[i]);
+#endif // NN_USE_SIMD
+    }
+
+
+    INLINE void Update(
+        const Accumulator& source,
+        const Accumulator weights[],
+        uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+        uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
+    {
+#if defined(NN_USE_SIMD)
+
+        constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+        static_assert(AccumulatorSize % registerWidth == 0);
+        const uint32_t numChunks = AccumulatorSize / registerWidth;
+        static_assert(numChunks % OptimalRegisterCount == 0);
+        const uint32_t numTiles = numChunks / OptimalRegisterCount;
+        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)source.values % 32 == 0);
+        ASSERT((size_t)values % 32 == 0);
+
+        Int16VecType regs[OptimalRegisterCount];
+        for (uint32_t tile = 0; tile < numTiles; ++tile)
+        {
+            const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
+
+            {
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecLoad(source.values + chunkBase + i * registerWidth);
+            }
+
+            for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+            {
+                const Accumulator& weightsStart = weights[removedFeatures[j]];
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecSub(regs[i], Int16VecLoad(weightsStart.values + chunkBase + i * registerWidth));
+            }
+
+            for (uint32_t j = 0; j < numAddedFeatures; ++j)
+            {
+                const Accumulator& weightsStart = weights[addedFeatures[j]];
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart.values + chunkBase + i * registerWidth));
+            }
+
+            {
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    Int16VecStore(values + chunkBase + i * registerWidth, regs[i]);
+            }
+        }
+
+#else // no SIMD support
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            values[i] = source.values[i];
+
+        for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+        {
+            const uint32_t featureIndex = removedFeatures[j];
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+                values[i] -= weights[featureIndex].values[i];
+        }
+
+        for (uint32_t j = 0; j < numAddedFeatures; ++j)
+        {
+            const uint32_t featureIndex = addedFeatures[j];
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+                values[i] += weights[featureIndex].values[i];
+        }
+#endif // NN_USE_SIMD
+    }
+
+};
+
+struct alignas(CACHELINE_SIZE) LastLayerWeightsBlock
+{
+    LastLayerWeightType weights[2u * AccumulatorSize];
+    LastLayerBiasType bias;
+    char __padding[CACHELINE_SIZE - sizeof(LastLayerBiasType)];
+};
 
 class PackedNeuralNetwork
 {
 public:
 
     friend class NeuralNetwork;
+
+    static const uint32_t NumAccumDeltas = 7964;
+    static const uint32_t MaxNumAccumDeltas = 8192;
 
     static constexpr uint32_t MaxInputs = 262144;
     static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
@@ -146,16 +301,6 @@ public:
         uint32_t layerVariants[MaxNumLayers] = { 0, 0, 0, 0 };
         uint32_t padding[6];
     };
-
-    PackedNeuralNetwork();
-    ~PackedNeuralNetwork();
-
-    // unload weights
-    void Release();
-
-    // allocate weights
-    bool Resize(const std::vector<uint32_t>& layerSizes,
-                const std::vector<uint32_t>& numVariantsPerLayer = std::vector<uint32_t>());
 
     // load from file
     bool LoadFromFile(const char* filePath);
@@ -172,72 +317,26 @@ public:
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const;
 
-    INLINE uint32_t GetNumInputs() const { return header.layerSizes[0]; }
-    INLINE uint32_t GetAccumulatorSize() const { return header.layerSizes[1] / 2; }
-    INLINE uint32_t GetLayerSize(uint32_t i) const { return header.layerSizes[i]; }
+    INLINE const Accumulator* GetAccumulatorWeights() const { return accumulatorWeights; }
+    INLINE const Accumulator& GetAccumulatorBiases() const { return accumulatorBiases; }
 
-    void GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const;
+    INLINE const LastLayerWeightsBlock& GetLastLayerWeights(uint32_t variant) const { return lastLayerWeights[variant]; }
 
-    INLINE const FirstLayerWeightType* GetAccumulatorWeights() const
+    INLINE uint16_t GetAccumDeltaIndex(uint32_t stm, uint32_t piece, uint32_t from, uint32_t to) const
     {
-        return reinterpret_cast<const FirstLayerWeightType*>(layerDataPointers[0]);
+        return accumDeltaIndexTable[stm][piece][from][to];
     }
-    INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
-    {
-        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + GetNumInputs() * GetAccumulatorSize());
-    }
-
-    template<typename T>
-    INLINE const T* GetLayerWeights(uint32_t index, uint32_t variant) const
-    {
-        const void* weights;
-        const void* biases;
-        GetLayerWeightsAndBiases(index, variant, weights, biases);
-        return reinterpret_cast<const T*>(weights);
-    }
-
-    template<typename T>
-    INLINE const T* GetLayerBiases(uint32_t index, uint32_t variant) const
-    {
-        const void* weights;
-        const void* biases;
-        GetLayerWeightsAndBiases(index, variant, weights, biases);
-        return reinterpret_cast<const T*>(biases);
-    }
-
-    // calculate size of all weights buffer
-    size_t GetWeightsBufferSize() const;
-
-    bool IsValid() const { return GetNumInputs() > 0; }
 
 private:
 
-    void ReleaseFileMapping();
+    Accumulator accumulatorWeights[NumNetworkInputs + NumAccumDeltas * NumKingBuckets];
+    Accumulator accumulatorBiases;
 
-    void InitLayerDataSizes();
-    void InitLayerDataPointers();
+    LastLayerWeightsBlock lastLayerWeights[NumVariants];
 
-    Header header;
+    uint16_t accumDeltaIndexTable[2][6][64][64]; // stm, piece, from, to
 
-    uint32_t numActiveLayers = 0;
-    uint32_t layerDataSizes[MaxNumLayers];  // size of each layer (in bytes)
-    const uint8_t* layerDataPointers[MaxNumLayers];  // base pointer to weights of each layer
-
-    // file mapping
-#if defined(PLATFORM_WINDOWS)
-    HANDLE fileHandle = INVALID_HANDLE_VALUE;
-    HANDLE fileMapping = INVALID_HANDLE_VALUE;
-#else
-    int fileDesc = -1;
-#endif // PLATFORM_WINDOWS
-
-    void* mappedData = nullptr;
-    size_t mappedSize = 0;
-
-    void* allocatedData = nullptr;
-
-    // all weights and biases are stored in this buffer
-    const uint8_t* weightsBuffer = nullptr;
+    void InitAccumulatorDeltas();
 };
 
 } // namespace nn

@@ -1,7 +1,10 @@
 #include "PackedNeuralNetwork.hpp"
-#include "Accumulator.hpp"
 #include "Memory.hpp"
 #include "Math.hpp"
+#include "Bitboard.hpp"
+#include "Square.hpp"
+#include "Piece.hpp"
+#include "NeuralNetworkEvaluator.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -15,7 +18,6 @@
     #include <sys/mman.h>
     #include <sys/stat.h>
 #endif // PLATFORM_LINUX
-
 
 namespace nn {
 
@@ -51,15 +53,14 @@ INLINE static int32_t m128_hadd(__m128i a)
 #endif // USE_SSE4
 
 INLINE static int32_t LinearLayer_Accum_SingleOutput(
-    const LastLayerWeightType* weights, const LastLayerBiasType* biases,
+    const LastLayerWeightType* weights,
     const AccumulatorType* inputA, const AccumulatorType* inputB)
 {
-    int32_t val = biases[0];
+    int32_t val = 0;
 
 #if defined(NN_USE_AVX512)
     constexpr uint32_t registerWidth = 32;
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     // unroll 2x so two sums can be calculated independently
     __m512i sumA = _mm512_setzero_si512();
@@ -86,7 +87,6 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 #elif defined(NN_USE_AVX2)
     constexpr uint32_t registerWidth = 16;
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     // unroll 2x so two sums can be calculated independently
     __m256i sumA = _mm256_setzero_si256();
@@ -119,7 +119,6 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     constexpr uint32_t registerWidth = 8;
     static_assert(AccumulatorSize % registerWidth == 0, "");
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     // unroll 2x so two sums can be calculated independently
     __m128i sumA = _mm_setzero_si128();
@@ -148,7 +147,6 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     constexpr uint32_t registerWidth = 8;
     static_assert(AccumulatorSize % registerWidth == 0, "");
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
     int32x4_t sumA = vdupq_n_s32(0);
     int32x4_t sumB = vdupq_n_s32(0);
@@ -196,163 +194,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
 ///
 
-PackedNeuralNetwork::PackedNeuralNetwork()
-{
-}
-
-PackedNeuralNetwork::~PackedNeuralNetwork()
-{
-    Release();
-}
-
-void PackedNeuralNetwork::Release()
-{
-    ReleaseFileMapping();
-
-    if (allocatedData)
-    {
-        AlignedFree(allocatedData);
-        allocatedData = nullptr;
-    }
-
-    weightsBuffer = nullptr;
-
-    header = Header{};
-}
-
-size_t PackedNeuralNetwork::GetWeightsBufferSize() const
-{
-    return layerDataSizes[0] + layerDataSizes[1] + layerDataSizes[2] + layerDataSizes[3];
-}
-
-bool PackedNeuralNetwork::Resize(const std::vector<uint32_t>& layerSizes,
-                                 const std::vector<uint32_t>& numVariantsPerLayer)
-{
-    Release();
-
-    if (layerSizes.size() < 2 || layerSizes.size() > MaxNumLayers)
-    {
-        return false;
-    }
-
-    header.magic = MagicNumber;
-    header.version = CurrentVersion;
-
-    for (size_t i = 0; i < layerSizes.size(); ++i)
-    {
-        header.layerSizes[i] = layerSizes[i];
-        header.layerVariants[i] = i < numVariantsPerLayer.size() ? numVariantsPerLayer[i] : 1;
-    }
-    numActiveLayers = (uint32_t)layerSizes.size();
-
-    InitLayerDataSizes();
-
-    const size_t weightsSize = GetWeightsBufferSize();
-    allocatedData = AlignedMalloc(weightsSize, CACHELINE_SIZE);
-    weightsBuffer = (uint8_t*)allocatedData;
-
-    InitLayerDataPointers();
-
-    if (!weightsBuffer)
-    {
-        Release();
-        std::cerr << "Failed to allocate weights buffer" << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-void PackedNeuralNetwork::InitLayerDataSizes()
-{
-    ASSERT(numActiveLayers >= 2);
-
-    memset(layerDataSizes, 0, sizeof(layerDataSizes));
-
-    layerDataSizes[0] = header.layerVariants[0] * RoundUp<uint32_t, CACHELINE_SIZE>(
-        (header.layerSizes[0] * (header.layerSizes[1] / 2) * sizeof(FirstLayerWeightType) +
-        (header.layerSizes[1] / 2) * sizeof(FirstLayerBiasType)));
-    ASSERT(layerDataSizes[0] > 0);
-
-    for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
-    {
-        layerDataSizes[i] = header.layerVariants[i] * RoundUp<uint32_t, CACHELINE_SIZE>(
-            (header.layerSizes[i] * header.layerSizes[i+1] * sizeof(HiddenLayerWeightType) +
-             header.layerSizes[i+1] * sizeof(HiddenLayerBiasType)));
-        ASSERT(layerDataSizes[i] > 0);
-    }
-
-    layerDataSizes[numActiveLayers-1] = header.layerVariants[numActiveLayers-1] * RoundUp<uint32_t, CACHELINE_SIZE>(
-        (header.layerSizes[numActiveLayers-1] * OutputSize * sizeof(LastLayerWeightType) +
-        OutputSize * sizeof(LastLayerBiasType)));
-    ASSERT(layerDataSizes[numActiveLayers-1]);
-}
-
-void PackedNeuralNetwork::InitLayerDataPointers()
-{
-    ASSERT(numActiveLayers >= 2);
-
-    memset(layerDataPointers, 0, sizeof(layerDataPointers));
-
-    ASSERT((size_t)weightsBuffer % CACHELINE_SIZE == 0);
-    layerDataPointers[0] = weightsBuffer;
-
-    for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
-    {
-        ASSERT(layerDataSizes[i - 1] > 0);
-        layerDataPointers[i] = layerDataPointers[i - 1] + layerDataSizes[i - 1];
-        ASSERT((size_t)layerDataPointers[i] % CACHELINE_SIZE == 0);
-    }
-
-    ASSERT(layerDataSizes[numActiveLayers - 2] > 0);
-    layerDataPointers[numActiveLayers - 1] = layerDataPointers[numActiveLayers - 2] + layerDataSizes[numActiveLayers - 2];
-    ASSERT((size_t)layerDataPointers[numActiveLayers - 1] % CACHELINE_SIZE == 0);
-}
-
-void PackedNeuralNetwork::GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const
-{
-    ASSERT(layerIndex < MaxNumLayers);
-    ASSERT(layerVariant < header.layerVariants[layerIndex]);
-    ASSERT(header.layerSizes[layerIndex] > 0);
-
-    size_t weightSize = sizeof(HiddenLayerWeightType);
-    size_t biasSize = sizeof(HiddenLayerBiasType);
-
-    if (layerIndex == 0)
-    {
-        weightSize = sizeof(FirstLayerWeightType);
-        biasSize = sizeof(FirstLayerBiasType);
-    }
-    else if (layerIndex + 1 == numActiveLayers)
-    {
-        weightSize = sizeof(LastLayerWeightType);
-        biasSize = sizeof(LastLayerBiasType);
-    }
-
-    const size_t nextLayerSize = (layerIndex + 1 < numActiveLayers) ? header.layerSizes[layerIndex + 1] : 1;
-    const size_t weightsBlockSize = weightSize * (size_t)header.layerSizes[layerIndex] * nextLayerSize;
-    const size_t biasesBlockSize = biasSize * nextLayerSize;
-    ASSERT(weightsBlockSize > 0);
-    ASSERT(biasesBlockSize > 0);
-
-    const uint8_t* basePointer = layerDataPointers[layerIndex];
-    ASSERT(basePointer != nullptr);
-
-    const uint8_t* weightsPointer = basePointer + layerVariant * RoundUp<size_t, CACHELINE_SIZE>(weightsBlockSize + biasesBlockSize);
-    const uint8_t* biasesPointer = weightsPointer + weightsBlockSize;
-
-    outWeights = weightsPointer;
-    outBiases = biasesPointer;
-}
-
 bool PackedNeuralNetwork::Save(const char* filePath) const
 {
-    if (!IsValid())
-    {
-        std::cerr << "Failed to save neural network: " << "invalid network" << std::endl;
-        return false;
-    }
-
     FILE* file = fopen(filePath, "wb");
     if (!file)
     {
@@ -360,64 +203,44 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
         return false;
     }
 
+    Header header; // TODO remove
+
     if (1 != fwrite(&header, sizeof(Header), 1, file))
     {
         fclose(file);
         std::cerr << "Failed to save neural network: " << "cannot write header" << std::endl;
         return false;
     }
-    
-    if (1 != fwrite(weightsBuffer, GetWeightsBufferSize(), 1, file))
-    {
-        fclose(file);
-        std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
-        return false;
-    }
+
+    // TODO write weights
+    //if (1 != fwrite(weightsBuffer, GetWeightsBufferSize(), 1, file))
+    //{
+    //    fclose(file);
+    //    std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
+    //    return false;
+    //}
 
     fclose(file);
     return true;
 }
 
-void PackedNeuralNetwork::ReleaseFileMapping()
-{
-    if (mappedData)
-    {
-#if defined(PLATFORM_WINDOWS)
-        if (fileMapping == INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(fileMapping);
-            fileMapping = INVALID_HANDLE_VALUE;
-        }
-
-        if (fileHandle == INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(fileHandle);
-            fileHandle = INVALID_HANDLE_VALUE;
-        }
-#else
-        if (mappedData)
-        {
-            if (0 != munmap(mappedData, mappedSize))
-            {
-                perror("munmap");
-            }
-        }
-
-        if (fileDesc != -1)
-        {
-            close(fileDesc);
-            fileDesc = -1;
-        }
-#endif // PLATFORM_WINDOWS
-    }
-
-    mappedData = nullptr;
-    mappedSize = 0;
-}
-
 bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
 {
-    Release();
+    bool success = false;
+    uint32_t numActiveLayers = 0;
+
+    Header header;
+
+    // file mapping
+#if defined(PLATFORM_WINDOWS)
+    HANDLE fileHandle = INVALID_HANDLE_VALUE;
+    HANDLE fileMapping = INVALID_HANDLE_VALUE;
+#else
+    int fileDesc = -1;
+#endif // PLATFORM_WINDOWS
+
+    uint64_t mappedSize = 0;
+    void* mappedData = nullptr;
 
 #if defined(PLATFORM_WINDOWS)
 
@@ -450,7 +273,7 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
     }
 
     mappedSize = (uint64_t)sizeLow + ((uint64_t)sizeHigh << 32);
-    mappedData = (void*)MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
+    mappedData = (void*)::MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
     if (mappedData == nullptr)
     {
         fprintf(stderr, "MapViewOfFile() failed, error = %lu.\n", GetLastError());
@@ -509,7 +332,6 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
         goto onError;
     }
 
-    numActiveLayers = 0;
     for (uint32_t i = 0; i < MaxNumLayers; ++i)
     {
         if (header.layerSizes[i] == 0) break;
@@ -532,74 +354,167 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
         goto onError;
     }
 
-    weightsBuffer = reinterpret_cast<const uint8_t*>(mappedData) + sizeof(Header);
+    LoadFromMemory(mappedData);
 
-    InitLayerDataSizes();
-    InitLayerDataPointers();
-
-    if (sizeof(Header) + GetWeightsBufferSize() > mappedSize)
-    {
-        std::cerr << "Failed to load neural network: " << "file is too small" << std::endl;
-        goto onError;
-    }
-
-    return true;
+    success = true;
 
 onError:
-    Release();
-    return false;
+
+    if (mappedData)
+    {
+#if defined(PLATFORM_WINDOWS)
+        if (fileMapping == INVALID_HANDLE_VALUE)
+        {
+            ::CloseHandle(fileMapping);
+            fileMapping = INVALID_HANDLE_VALUE;
+        }
+        if (fileHandle == INVALID_HANDLE_VALUE)
+        {
+            ::CloseHandle(fileHandle);
+            fileHandle = INVALID_HANDLE_VALUE;
+        }
+#else
+        if (mappedData)
+        {
+            if (0 != munmap(mappedData, mappedSize))
+            {
+                perror("munmap");
+            }
+        }
+        if (fileDesc != -1)
+        {
+            close(fileDesc);
+            fileDesc = -1;
+        }
+#endif // PLATFORM_WINDOWS
+    }
+
+    return success;
 }
 
 bool PackedNeuralNetwork::LoadFromMemory(const void* data)
 {
-    Release();
+    // TODO get rid of header
+    const uint8_t* weightsBuffer = reinterpret_cast<const uint8_t*>(data) + sizeof(Header);
 
-    // TODO this should be all hardcoded
-    header = Header{};
-    header.layerSizes[0] = nn::NumNetworkInputs;
-    header.layerSizes[1] = nn::AccumulatorSize * 2;
-    header.layerVariants[0] = 1;
-    header.layerVariants[1] = nn::NumVariants;
-    numActiveLayers = 2;
+    // copy accumulator weights and biases
+    memcpy(&accumulatorWeights, weightsBuffer, sizeof(Accumulator) * NumNetworkInputs);
+    memcpy(&accumulatorBiases, weightsBuffer + sizeof(Accumulator) * NumNetworkInputs, sizeof(Accumulator));
 
-    weightsBuffer = reinterpret_cast<const uint8_t*>(data) + sizeof(Header);
+    // copy last layer weights and biases
+    memcpy(&lastLayerWeights, weightsBuffer + sizeof(Accumulator) * (NumNetworkInputs + 1), sizeof(LastLayerWeightsBlock) * NumVariants);
 
-    InitLayerDataSizes();
-    InitLayerDataPointers();
+    InitAccumulatorDeltas();
 
     return true;
 }
 
 int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const
 {
-    ASSERT(numActiveLayers > 1);
-    ASSERT(GetAccumulatorSize() == AccumulatorSize);
-    ASSERT(GetLayerSize(2) <= MaxNeuronsInHiddenLayers);
-    ASSERT(GetLayerSize(3) <= MaxNeuronsInHiddenLayers);
-
-    constexpr uint32_t weightSize = sizeof(LastLayerWeightType);
-    constexpr uint32_t biasSize = sizeof(LastLayerBiasType);
-    constexpr uint32_t weightsBlockSize = 2u * nn::AccumulatorSize * weightSize;
-
-    const uint8_t* weights = layerDataPointers[1] + variant * RoundUp<uint32_t, CACHELINE_SIZE>(weightsBlockSize + biasSize);
-    const uint8_t* biases = weights + weightsBlockSize;
-
-    return LinearLayer_Accum_SingleOutput(
-        reinterpret_cast<const LastLayerWeightType*>(weights),
-        reinterpret_cast<const LastLayerBiasType*>(biases),
-        stmAccum.values,
-        nstmAccum.values);
+    const LastLayerWeightsBlock& weightsBlock = lastLayerWeights[variant];
+    return weightsBlock.bias + LinearLayer_Accum_SingleOutput(weightsBlock.weights, stmAccum.values, nstmAccum.values);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const
 {
     Accumulator stmAccum;
-    stmAccum.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), stmNumFeatures, stmFeatures);
+    stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
 
     Accumulator nstmAccum;
-    nstmAccum.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), nstmNumFeatures, nstmFeatures);
+    nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
 
     return Run(stmAccum, nstmAccum, variant);
+}
+
+void PackedNeuralNetwork::InitAccumulatorDeltas()
+{
+    memset(accumDeltaIndexTable, -1, sizeof(accumDeltaIndexTable));
+
+    Accumulator zeroAccum;
+    memset(zeroAccum.values, 0, sizeof(Accumulator));
+
+    uint32_t count = 0;
+    for (const Color color : {White, Black})
+    {
+        for (uint32_t pieceIdx = 0; pieceIdx < 6; ++pieceIdx)
+        {
+            const Piece piece = static_cast<Piece>(pieceIdx + 1);
+            for (uint32_t squareA = 0; squareA < 64; ++squareA)
+            {
+                Bitboard attacks;
+                switch (piece)
+                {
+                case Piece::Pawn:
+                    attacks = Bitboard::GetPawnAttacks(Square(squareA), color);
+                    if (color == White)
+                    {
+                        attacks |= Square(squareA).GetBitboard().North(); // single push
+                        attacks |= Square(squareA).GetBitboard().North().North() & Bitboard::RankBitboard<3>(); // double push
+                    }
+                    else
+                    {
+                        attacks |= Square(squareA).GetBitboard().South(); // single push
+                        attacks |= Square(squareA).GetBitboard().South().South() & Bitboard::RankBitboard<4>(); // double push
+                    }
+                    break;
+                case Piece::Knight:
+                    attacks = Bitboard::GetKnightAttacks(Square(squareA));
+                    break;
+                case Piece::Bishop:
+                    attacks = Bitboard::GetBishopAttacks(Square(squareA));
+                    break;
+                case Piece::Rook:
+                    attacks = Bitboard::GetRookAttacks(Square(squareA));
+                    break;
+                case Piece::Queen:
+                    attacks = Bitboard::GetQueenAttacks(Square(squareA));
+                    break;
+                case Piece::King:
+                    // TODO filter out "from" squares on right side of board
+                    // TODO filter out king moves that change bucket
+                    attacks = Bitboard::GetKingAttacks(Square(squareA));
+                    // handle castling moves
+                    // Note: adding weird castling targets due to horizontal symmetry
+                    if (color == White && Square(squareA).Rank() == 0)
+                    {
+                        attacks |= Square(Square_b1).GetBitboard();
+                        attacks |= Square(Square_c1).GetBitboard();
+                        attacks |= Square(Square_f1).GetBitboard();
+                        attacks |= Square(Square_g1).GetBitboard();
+                    }
+                    else if (color == Black && Square(squareA).Rank() == 7)
+                    {
+                        attacks |= Square(Square_b8).GetBitboard();
+                        attacks |= Square(Square_c8).GetBitboard();
+                        attacks |= Square(Square_f8).GetBitboard();
+                        attacks |= Square(Square_g8).GetBitboard();
+                    }
+                    break;
+                }
+
+                attacks.Iterate([&](const Square square)
+                {
+                    const uint32_t squareB = square.Index();
+
+                    const uint16_t accumDeltaIndex = static_cast<uint16_t>(count++);
+                    accumDeltaIndexTable[color][pieceIdx][squareA][squareB] = accumDeltaIndex;
+
+                    // compute accumulator deltas for each king bucket
+                    for (uint32_t kingBucket = 0; kingBucket < NumKingBuckets; ++kingBucket)
+                    {
+                        const uint16_t removedFeature = GetFeatureIndexInBucket(pieceIdx, squareA, color, kingBucket);
+                        const uint16_t addedFeature = GetFeatureIndexInBucket(pieceIdx, squareB, color, kingBucket);
+
+                        accumulatorWeights[NumNetworkInputs + kingBucket * NumAccumDeltas + accumDeltaIndex].Update(
+                            zeroAccum, accumulatorWeights,
+                            1, &addedFeature, 1, &removedFeature);
+                    }
+                });
+            }
+        }
+    }
+    ASSERT(count == NumAccumDeltas);
+    UNUSED(count);
 }
 
 } // namespace nn
