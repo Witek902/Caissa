@@ -1900,7 +1900,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
+                node->bestMove = Move::Invalid();
                 const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
+
+                // use the best move from singular search as a next move to be searched
+                if (node->bestMove.IsValid() && node->bestMove.IsQuiet())
+                    movePicker.SetSecondMove(node->bestMove);
 
                 // restore node state
                 node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
@@ -2227,5 +2232,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    node->bestMove = bestMove;
     return bestValue;
 }
