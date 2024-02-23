@@ -1324,9 +1324,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     // no legal moves - checkmate
     if (node->isInCheck && moveIndex == 0)
-    {
-        return -CheckmateValue + (ScoreType)node->height;
-    }
+        bestValue = -CheckmateValue + (ScoreType)node->height;
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
@@ -2169,12 +2167,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue = -InfValue;
         else
             bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->height : 0;
-
-        return bestValue;
     }
-
     // update move orderer
-    if (bestValue >= beta)
+    else if (bestValue >= beta)
     {
         if (bestMove.IsQuiet())
         {
@@ -2197,8 +2192,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 #endif // COLLECT_SEARCH_STATS
 
-    ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
-
     if constexpr (isRootNode)
     {
         ASSERT(bestMove.IsValid());
@@ -2211,10 +2204,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
 
     // update transposition table
-    // don't write if:
-    // - time is exceeded as evaluation may be inaccurate
-    // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
-    if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
+    // don't write if some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
+    if (!filteredSomeMove)
     {
         const TTEntry::Bounds bounds =
             bestValue >= beta ? TTEntry::Bounds::Lower :
