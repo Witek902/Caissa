@@ -2,7 +2,7 @@
 #include "Search.hpp"
 
 // enable validation of NN output (check if incremental updates work correctly)
-//#define VALIDATE_NETWORK_OUTPUT
+// #define VALIDATE_NETWORK_OUTPUT
 
 #ifdef NN_ACCUMULATOR_STATS
 
@@ -30,7 +30,7 @@ void AccumulatorCache::Init(const nn::PackedNeuralNetwork* net)
         {
             for (uint32_t b = 0; b < 2 * nn::NumKingBuckets; ++b)
             {
-                memcpy(kingBuckets[c][b].accum.values, net->GetAccumulatorBiases(), sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
+                kingBuckets[c][b].accum = net->GetAccumulatorBiases();
                 memset(kingBuckets[c][b].pieces, 0, sizeof(kingBuckets[c][b].pieces));
             }
         }
