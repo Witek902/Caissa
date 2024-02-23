@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
-#include "Accumulator.hpp"
+#include "PackedNeuralNetwork.hpp"
 #include "Memory.hpp"
 #include "Position.hpp"
 
@@ -75,6 +75,14 @@ public:
 #endif // NN_ACCUMULATOR_STATS
 };
 
+INLINE uint16_t GetFeatureIndexInBucket(uint32_t pieceIndex, uint32_t square, Color color, uint32_t kingBucket)
+{
+    ASSERT(pieceIndex < 6);
+    ASSERT(square < 64);
+    ASSERT(color < 2);
+    ASSERT(kingBucket < nn::NumKingBuckets);
+    return static_cast<uint16_t>(kingBucket * 12 * 64 + (color != 0 ? 6 * 64 : 0) + pieceIndex * 64 + square);
+}
 
 INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
 {

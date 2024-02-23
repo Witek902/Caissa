@@ -136,8 +136,8 @@ void NetworkTrainer::InitNetwork()
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(networkInputs, accumulatorSize, 1);
     m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    m_featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 32 / nn::InputLayerWeightQuantizationScale;
-    m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 32 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::AccumulatorType>::max() / 32 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::AccumulatorType>::max() / 32 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
     //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * accumulatorSize, 1);
@@ -535,16 +535,6 @@ static void UnpackWeights(nn::Values& outWeights, uint32_t numInputs, uint32_t n
 
 bool NetworkTrainer::PackNetwork()
 {
-    {
-        const std::vector<uint32_t> layerSizes = { nn::NumNetworkInputs, 2u * nn::AccumulatorSize };
-        const std::vector<uint32_t> layerVariants = { 1, nn::NumVariants };
-
-        if (!m_packedNet.Resize(layerSizes, layerVariants))
-        {
-            return false;
-        }
-    }
-
     // feature transformer
     {
 #ifdef USE_VIRTUAL_FEATURES
@@ -580,40 +570,22 @@ bool NetworkTrainer::PackNetwork()
             weights,
             nn::NumNetworkInputs,
             nn::AccumulatorSize,
-            const_cast<nn::FirstLayerWeightType*>(m_packedNet.GetAccumulatorWeights()),
-            const_cast<nn::FirstLayerBiasType*>(m_packedNet.GetAccumulatorBiases()),
+            const_cast<nn::AccumulatorType*>(m_packedNet.GetAccumulatorWeights()[0].values),
+            const_cast<nn::AccumulatorType*>(m_packedNet.GetAccumulatorBiases().values),
             nn::InputLayerWeightQuantizationScale,
             nn::InputLayerBiasQuantizationScale,
             true);
     }
 
-    /*
-    // hidden layers
-    for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
-    {
-        for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
-        {
-            PackWeights(nodes[i],
-                variantIdx,
-                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
-                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
-                nn::HiddenLayerWeightQuantizationScale,
-                nn::HiddenLayerBiasQuantizationScale,
-                false);
-        }
-    }
-    */
-
     // last layer
-    const uint32_t lastLayerIndex = 1;
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
     {
         PackWeights(
             m_lastLayerWeights->m_variants[variantIdx].m_weights,
             m_lastLayerWeights->m_inputSize,
             1u,
-            const_cast<nn::LastLayerWeightType*>(m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx)),
-            const_cast<nn::LastLayerBiasType*>(m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx)),
+            const_cast<nn::LastLayerWeightType*>(m_packedNet.GetLastLayerWeights(variantIdx).weights),
+            const_cast<nn::LastLayerBiasType*>(&m_packedNet.GetLastLayerWeights(variantIdx).bias),
             nn::OutputLayerWeightQuantizationScale,
             nn::OutputLayerBiasQuantizationScale,
             false);
@@ -630,40 +602,22 @@ bool NetworkTrainer::UnpackNetwork()
             m_featureTransformerWeights->m_variants.front().m_weights,
             nn::NumNetworkInputs,
             nn::AccumulatorSize,
-            m_packedNet.GetAccumulatorWeights(),
-            m_packedNet.GetAccumulatorBiases(),
+            m_packedNet.GetAccumulatorWeights()[0].values,
+            m_packedNet.GetAccumulatorBiases().values,
             nn::InputLayerWeightQuantizationScale,
             nn::InputLayerBiasQuantizationScale,
             true);
     }
 
-    /*
-    // hidden layers
-    for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
-    {
-        for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
-        {
-            UnpackWeights(nodes[i],
-                variantIdx,
-                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
-                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
-                nn::HiddenLayerWeightQuantizationScale,
-                nn::HiddenLayerBiasQuantizationScale,
-                false);
-        }
-    }
-    */
-
     // last layer
-    const uint32_t lastLayerIndex = 1;
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
     {
         UnpackWeights(
             m_lastLayerWeights->m_variants[variantIdx].m_weights,
             m_lastLayerWeights->m_inputSize,
             1u,
-            m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx),
-            m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx),
+            m_packedNet.GetLastLayerWeights(variantIdx).weights,
+            &m_packedNet.GetLastLayerWeights(variantIdx).bias,
             nn::OutputLayerWeightQuantizationScale,
             nn::OutputLayerBiasQuantizationScale,
             false);
@@ -785,7 +739,6 @@ bool NetworkTrainer::Train()
 
 #ifdef USE_PACKED_NET
         PackNetwork();
-        ASSERT(m_packedNet.IsValid());
 #endif // USE_PACKED_NET
 
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
