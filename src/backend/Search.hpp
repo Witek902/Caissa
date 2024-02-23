@@ -136,6 +136,7 @@ struct NodeInfo
     ScoreType beta;
 
     ScoreType staticEval = InvalidValue;
+    Move bestMove = Move::Invalid();
 
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
@@ -162,6 +163,7 @@ struct NodeInfo
         pvIndex = 0;
         filteredMove = PackedMove::Invalid();
         staticEval = InvalidValue;
+        bestMove = Move::Invalid();
         previousMove = Move::Invalid();
         moveStatScore = 0;
         isPvNodeFromPrevIteration = false;
