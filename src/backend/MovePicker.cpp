@@ -11,12 +11,24 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
     {
         case Stage::TTMove:
         {
-            m_stage = Stage::GenerateCaptures;
+            m_stage = Stage::Second;
             const Move move = m_position.MoveFromPacked(m_ttMove);
             if (move.IsValid() && (!move.IsQuiet() || m_generateQuiets))
             {
                 outMove = move;
                 outScore = MoveOrderer::TTMoveValue;
+                return true;
+            }
+            [[fallthrough]];
+        }
+
+        case Stage::Second:
+        {
+            m_stage = Stage::GenerateCaptures;
+            if (m_secondMove.IsValid())
+            {
+                outMove = m_secondMove;
+                outScore = MoveOrderer::TTMoveValue - 1;
                 return true;
             }
             [[fallthrough]];
@@ -28,8 +40,9 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             m_moveIndex = 0;
             GenerateMoveList<MoveGenerationMode::Captures>(m_position, node.threats.allThreats, m_moves);
 
-            // remove PV and TT moves from generated list
+            // remove played moves from generated list
             m_moves.RemoveMove(m_ttMove);
+            m_moves.RemoveMove(m_secondMove);
 
             m_moveOrderer.ScoreMoves(node, m_moves, false);
 
@@ -68,7 +81,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         {
             m_stage = Stage::Counter;
             Move move = m_moveOrderer.GetKillerMove(node.height);
-            if (move.IsValid() && move != m_ttMove)
+            if (move.IsValid() && move != m_ttMove && move != m_secondMove)
             {
                 move = m_position.MoveFromPacked(move);
                 if (move.IsValid() && !move.IsCapture())
@@ -86,7 +99,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         {
             m_stage = Stage::GenerateQuiets;
             Move move = m_moveOrderer.GetCounterMove(node);
-            if (move.IsValid() && move != m_ttMove && move != m_killerMove)
+            if (move.IsValid() && move != m_ttMove && move != m_secondMove && move != m_killerMove)
             {
                 move = m_position.MoveFromPacked(move);
                 if (move.IsValid() && !move.IsCapture())
@@ -109,6 +122,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
                 // remove played moves from generated list
                 m_moves.RemoveMove(m_ttMove);
+                m_moves.RemoveMove(m_secondMove);
                 m_moves.RemoveMove(m_killerMove);
                 m_moves.RemoveMove(m_counterMove);
 
