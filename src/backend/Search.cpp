@@ -1117,9 +1117,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
     }
 
-    // Not checking for draw by repetition in the quiescence search
-    if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
+    // Check for draw
+    if (node->position.IsFiftyMoveRuleDraw() ||
+        CheckInsufficientMaterial(node->position) ||
+        SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
+    {
         return 0;
+    }
 
     const Position& position = node->position;
 
