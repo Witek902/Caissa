@@ -173,7 +173,7 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPv
             prevNode->position == node.position)
         {
             // twofold repetition within search tree in non-PV nodes
-            if (!isPvNode && prevNode->height > 0)
+            if (!isPvNode)
                 return true;
 
             // threefold repetition
