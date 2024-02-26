@@ -32,6 +32,8 @@ DEFINE_PARAM(LateMoveReductionBias_Quiets, 50, 20, 80);
 DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
 DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
 
+DEFINE_PARAM(ImprovingMargin, 5, 0, 10);
+
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 320, 100, 500);
@@ -1564,14 +1566,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     bool isImproving = false;
     if (!node->isInCheck)
     {
-        int32_t evalImprovement = 0;
-
         if (node->height > 1 && (node - 2)->staticEval != InvalidValue)
-            evalImprovement = node->staticEval - (node - 2)->staticEval;
+            isImproving = node->staticEval - (node - 2)->staticEval >= ImprovingMargin;
         else if (node->height > 3 && (node - 4)->staticEval != InvalidValue)
-            evalImprovement = node->staticEval - (node - 4)->staticEval;
-
-        isImproving = evalImprovement >= 0;
+            isImproving = node->staticEval - (node - 4)->staticEval >= ImprovingMargin;
+        else
+            isImproving = true;
     }
 
     if constexpr (!isPvNode)
