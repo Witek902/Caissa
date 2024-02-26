@@ -1933,7 +1933,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
                             if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            {
+                                node->depth += node->depth < 12;
                                 moveExtension = 2;
+                            }
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
