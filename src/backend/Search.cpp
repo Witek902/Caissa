@@ -27,10 +27,25 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-DEFINE_PARAM(LateMoveReductionScale_Quiets, 42, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Quiets, 50, 20, 80);
-DEFINE_PARAM(LateMoveReductionScale_Captures, 39, 20, 70);
-DEFINE_PARAM(LateMoveReductionBias_Captures, 58, 20, 80);
+static const int32_t LmrScale = 64;
+
+DEFINE_PARAM(LmrScale_Quiets, 42, 20, 70);
+DEFINE_PARAM(LmrBias_Quiets, 50, 20, 80);
+DEFINE_PARAM(LmrScale_Captures, 39, 20, 70);
+DEFINE_PARAM(LmrBias_Captures, 58, 20, 80);
+
+DEFINE_PARAM(LmrQuietNonPv, 64, -128, 256);
+DEFINE_PARAM(LmrQuietTTCapture, 64, -128, 256);
+DEFINE_PARAM(LmrQuietRefutation, 128, -128, 256);
+DEFINE_PARAM(LmrQuietCutNode, 128, -128, 256);
+DEFINE_PARAM(LmrQuietImproving, 64, -128, 256);
+DEFINE_PARAM(LmrQuietInCheck, 64, -128, 256);
+
+DEFINE_PARAM(LmrCaptureWinning, 64, -128, 256);
+DEFINE_PARAM(LmrCaptureBad, 64, -128, 256);
+DEFINE_PARAM(LmrCaptureCutNode, 64, -128, 256);
+DEFINE_PARAM(LmrCaptureImproving, 64, -128, 256);
+DEFINE_PARAM(LmrCaptureInCheck, 64, -128, 256);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 153, 80, 300);
@@ -74,7 +89,7 @@ DEFINE_PARAM(RazoringMarginMultiplier, 147, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 19, 0, 25);
 
 DEFINE_PARAM(ReductionStatOffset, 7538, 5000, 12000);
-DEFINE_PARAM(ReductionStatDiv, 9964, 6000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 155, 10, 400);
 
 DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
@@ -216,9 +231,7 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            const int32_t reduction = int32_t(bias + scale * Log(float(depth)) * Log(float(moveIndex)));
-            ASSERT(reduction <= 64);
-            table[depth][moveIndex] = (uint8_t)std::clamp<int32_t>(reduction, 0, 64);
+            table[depth][moveIndex] = int16_t(LmrScale * (bias + scale * Log(float(depth)) * Log(float(moveIndex))));
         }
     }
 }
@@ -226,12 +239,12 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
 void Search::BuildMoveReductionTable()
 {
     BuildMoveReductionTable(mMoveReductionTable_Quiets,
-        static_cast<float>(LateMoveReductionScale_Quiets) / 100.0f,
-        static_cast<float>(LateMoveReductionBias_Quiets) / 100.0f);
+        static_cast<float>(LmrScale_Quiets) / 100.0f,
+        static_cast<float>(LmrBias_Quiets) / 100.0f);
 
     BuildMoveReductionTable(mMoveReductionTable_Captures,
-        static_cast<float>(LateMoveReductionScale_Captures) / 100.0f,
-        static_cast<float>(LateMoveReductionBias_Captures) / 100.0f);
+        static_cast<float>(LmrScale_Captures) / 100.0f,
+        static_cast<float>(LmrBias_Captures) / 100.0f);
 }
 
 void Search::Clear()
@@ -1989,37 +2002,46 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 r = GetQuietsDepthReduction(node->depth, moveIndex);
 
                 // reduce non-PV nodes more
-                if constexpr (!isPvNode) r++;
+                if constexpr (!isPvNode) r += LmrQuietNonPv;
 
                 // reduce more if TT move is capture
-                if (ttCapture) r++;
+                if (ttCapture) r += LmrQuietTTCapture;
 
                 // reduce good moves less
-                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= 2;
+                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= LmrQuietRefutation;
 
                 // reduce less based on move stat score
-                r -= DivFloor<int32_t>(moveStatScore + ReductionStatOffset, ReductionStatDiv);
+                r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
 
-                if (node->isCutNode) r += 2;
+                if (node->isCutNode) r += LmrQuietCutNode;
+
+                // reduce more if eval is not improving
+                if (!isImproving) r += LmrQuietImproving;
+
+                // reduce less if move is a check
+                if (childNode.isInCheck) r -= LmrQuietInCheck;
             }
             else
             {
                 r = GetCapturesDepthReduction(node->depth, moveIndex);
 
                 // reduce winning captures less
-                if (moveScore > MoveOrderer::WinningCaptureValue) r--;
+                if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
 
                 // reduce bad captures more
-                if (moveScore < MoveOrderer::GoodCaptureValue) r++;
+                if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad;
 
-                if (node->isCutNode) r++;
+                if (node->isCutNode) r += LmrCaptureCutNode;
+
+                // reduce more if eval is not improving
+                if (!isImproving) r += LmrCaptureImproving;
+
+                // reduce less if move is a check
+                if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
-            // reduce more if eval is not improving
-            if (!isImproving) r++;
-
-            // reduce less if move is a check
-            if (childNode.isInCheck) r--;
+            // scale down with randomization
+            r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
         }
 
         int32_t newDepth = node->depth + moveExtension - 1;
