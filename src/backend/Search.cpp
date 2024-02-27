@@ -1226,7 +1226,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     Move bestMove = Move::Invalid();
     int32_t moveIndex = 0;
 
-    Move captureMovesTried[MoveList::MaxMoves];
+    constexpr uint32_t maxMovesTried = 32;
+    Move quietMovesTried[maxMovesTried];
+    Move captureMovesTried[maxMovesTried];
+    uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
 
     while (movePicker.PickMove(*node, move, moveScore))
@@ -1250,7 +1253,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
 
             // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
+            if (move.IsCapture() &&
+                moveScore < MoveOrderer::GoodCaptureValue &&
                 !position.StaticExchangeEvaluation(move))
                 break;
         }
@@ -1287,10 +1291,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         const ScoreType score = -QuiescenceNegaMax<nodeType>(thread, &childNode, ctx);
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-        if (move.IsCapture())
-        {
+        if (move.IsQuiet() && numQuietMovesTried < maxMovesTried)
+            quietMovesTried[numQuietMovesTried++] = move;
+        else if (move.IsCapture() && numCaptureMovesTried < maxMovesTried)
             captureMovesTried[numCaptureMovesTried++] = move;
-        }
 
         if (score > bestValue) // new best move found
         {
@@ -1311,9 +1315,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
                 if (score >= beta)
                 {
-                    if (bestMove.IsCapture())
-                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
-
+                    if (bestMove.IsQuiet() && node->depth >= 0)
+                    {
+                        thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, std::min(bestValue - beta, 256));
+                        thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
+                    }
+                    thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
                     break;
                 }
             }
@@ -2095,13 +2102,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
         if (move.IsQuiet() && numQuietMovesTried < maxMovesTried)
-        {
             quietMovesTried[numQuietMovesTried++] = move;
-        }
         else if (move.IsCapture() && numCaptureMovesTried < maxMovesTried)
-        {
             captureMovesTried[numCaptureMovesTried++] = move;
-        }
 
         if (score > bestValue) // new best move found
         {
