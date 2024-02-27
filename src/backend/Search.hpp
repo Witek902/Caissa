@@ -348,15 +348,15 @@ private:
     std::vector<ThreadDataPtr> mThreadData;
 
     static constexpr uint32_t LMRTableSize = 64;
-    using LMRTableType = uint8_t[LMRTableSize][LMRTableSize];
+    using LMRTableType = uint16_t[LMRTableSize][LMRTableSize];
     LMRTableType mMoveReductionTable_Quiets;
     LMRTableType mMoveReductionTable_Captures;
 
-    INLINE uint8_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    INLINE uint16_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
         return mMoveReductionTable_Quiets[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
-    INLINE uint8_t GetCapturesDepthReduction(uint32_t depth, uint32_t moveIndex) const
+    INLINE uint16_t GetCapturesDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
         return mMoveReductionTable_Captures[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
