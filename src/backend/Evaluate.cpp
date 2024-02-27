@@ -219,8 +219,15 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     // convert to centipawn range
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
+    const int32_t imbalance =
+        std::abs(whiteKnights - blackKnights) +
+        std::abs(whiteBishops - blackBishops) +
+        2 * std::abs(whiteRooks - blackRooks) +
+        4 * std::abs(whiteQueens - blackQueens);
+
     // apply scaling based on game phase (0 - endgame, 24 - opening)
-    const int32_t gamePhase = std::min(24,
+    const int32_t gamePhase = std::min(32,
+        imbalance +
         whiteKnights + blackKnights + whiteBishops + blackBishops +
         2 * (whiteRooks + blackRooks) +
         4 * (whiteQueens + blackQueens));
