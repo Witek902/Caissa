@@ -1004,11 +1004,13 @@ uint32_t Search::ThreadData::GetRandomUint()
     return randomSeed;
 }
 
-INLINE static bool OppCanWinMaterial(const Position& position, const Threats& threats)
+// get bitboard of pieces that opponent can win in next move if we don't do anything
+INLINE static Bitboard MaterialWinnableByOpp(const Position& position, const Threats& threats)
 {
     const auto& us = position.GetCurrentSide();
-    return (threats.attackedByRooks & us.queens) ||
-        (threats.attackedByMinors & (us.queens | us.rooks)) ||
+    return
+        (threats.attackedByRooks & us.queens) |
+        (threats.attackedByMinors & (us.queens | us.rooks)) |
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
@@ -1579,11 +1581,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
-            if (node->depth <= BetaPruningDepth &&
-                eval <= KnownWinValue &&
-                eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))))
+            if (node->depth <= BetaPruningDepth && eval <= KnownWinValue)
             {
-                return (eval + beta) / 2;
+                // disable if two or more pieces are hanging
+                const Bitboard materialWinnableByOpp = MaterialWinnableByOpp(position, node->threats);
+                if (PopCount(materialWinnableByOpp) < 2 &&
+                    eval >= beta + BetaMarginBias + BetaMarginMultiplier * (node->depth - (isImproving && (0 == materialWinnableByOpp))))
+                {
+                    return (eval + beta) / 2;
+                }
             }
 
             // Razoring
