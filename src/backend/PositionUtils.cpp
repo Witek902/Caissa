@@ -762,10 +762,8 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
 
 Move Position::MoveFromPacked(const PackedMove& packedMove) const
 {
-    if (!packedMove.FromSquare().IsValid())
-    {
+    if (!packedMove.IsValid())
         return Move();
-    }
 
     const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(packedMove.FromSquare());
 
