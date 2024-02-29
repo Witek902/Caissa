@@ -1143,9 +1143,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
-            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
+            const ScoreType margin = 10; // allow for more cutoffs
+            if (ttEntry.bounds == TTEntry::Bounds::Exact)
+                return ttScore;
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore - margin <= alpha && ttScore > -KnownWinValue)
+                return ttScore - margin;
+            else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore + margin >= beta && ttScore < KnownWinValue)
+                return ttScore + margin;
         }
     }
 
