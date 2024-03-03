@@ -2040,6 +2040,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            // reduce more if static eval is way below alpha
+            r += std::clamp((alpha - node->staticEval) / 8, 0, 2 * LmrScale);
+
             // scale down with randomization
             r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
         }
