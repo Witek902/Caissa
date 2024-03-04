@@ -1365,10 +1365,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->alpha < node->beta);
 
     // maximum search depth reached, enter quiescence search to find final evaluation
-    if (node->depth <= 0)
-    {
+    if (node->depth <= 0 && !node->isInCheck)
         return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-    }
+
+    node->depth = std::max<int16_t>(node->depth, 0);
 
     // clear PV line
     node->pvLength = 0;
