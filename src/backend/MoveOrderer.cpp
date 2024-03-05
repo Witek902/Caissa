@@ -188,10 +188,12 @@ Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
 {
     if (node.previousMove.IsValid())
     {
+        const Bitboard threats = node.threats.allThreats;
         const Move prevMove = node.previousMove;
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
+        const uint32_t from = prevMove.FromSquare().Index();
         const uint32_t to = prevMove.ToSquare().Index();
-        return counterMoves[(uint32_t)node.position.GetSideToMove()][piece][to];
+        return counterMoves[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][piece][to];
     }
     return Move::Invalid();
 }
@@ -213,6 +215,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
+    const Bitboard threats = node.threats.allThreats;
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     // update counter move
@@ -220,8 +223,9 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     {
         const Move prevMove = node.previousMove;
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
+        const uint32_t from = prevMove.FromSquare().Index();
         const uint32_t to = prevMove.ToSquare().Index();
-        counterMoves[color][piece][to] = bestMove;
+        counterMoves[color][threats.IsBitSet(from)][threats.IsBitSet(to)][piece][to] = bestMove;
     }
 
     // don't update uncertain moves
@@ -232,8 +236,6 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusLinear * scoreDiff / 64, QuietBonusLimit);
     const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusLinear * scoreDiff / 64, QuietMalusLimit);
-
-    const Bitboard threats = node.threats.allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
