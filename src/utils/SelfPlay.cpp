@@ -23,12 +23,12 @@
 #include <limits.h>
 
 static const bool randomizeOrder = true;
-static const uint32_t c_printPgnFrequency = 4;
-static const uint32_t c_minNodes = 10000;
-static const uint32_t c_maxNodes = 10000;
-static const uint32_t c_maxDepth = 30;
-static const int32_t c_maxEval = 800;
-static const int32_t c_openingMaxEval = 500;
+static const uint32_t c_printPgnFrequency = 1;
+static const uint32_t c_minNodes = 15000;
+static const uint32_t c_maxNodes = 15000;
+static const uint32_t c_maxDepth = 25;
+static const int32_t c_maxEval = 1000;
+static const int32_t c_openingMaxEval = 2000;
 static const int32_t c_multiPv = 1;
 static const int32_t c_multiPvMaxPly = 0;
 static const int32_t c_multiPvScoreTreshold = 50;
@@ -231,38 +231,40 @@ static bool SelfPlayThreadFunc(
             ASSERT(!searchResult[moveIndex].moves.empty());
             Move move = searchResult[moveIndex].moves.front();
 
-            ScoreType moveScore = searchResult[moveIndex].score;
-            if (game.GetSideToMove() == Black)
-            {
-                moveScore = -moveScore;
-            }
-
             // reduce threshold of picking worse move
             // this way the game will be more random at the beginning and there will be less blunders later in the game
             multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 2);
 
-            const ScoreType eval = Evaluate(game.GetPosition());
+            ScoreType moveScore = searchResult[moveIndex].score;
+            ScoreType eval = Evaluate(game.GetPosition());
+
+            if (game.GetSideToMove() == Black)
+            {
+                moveScore = -moveScore;
+                eval = -eval;
+            }
+
             const bool isCheck = game.GetPosition().IsInCheck();
 
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
-            if (std::abs(moveScore) < 5)
+            if (std::abs(moveScore) < 4)
                 drawScoreCounter++;
             else
                 drawScoreCounter = 0;
 
             // adjudicate draw if eval is zero
-            if (drawScoreCounter > 8 && halfMoveNumber >= 40)
+            if (drawScoreCounter > 8 && halfMoveNumber >= 60)
             {
                 game.SetScore(Game::Score::Draw);
             }
 
             // adjudicate win
-            if (!isCheck)
+            if (halfMoveNumber >= 20)
             {
-                if (moveScore > c_maxEval && eval > c_maxEval / 2)
+                if (moveScore > c_maxEval && eval > c_maxEval / 4)
                 {
                     whiteWinsCounter++;
                     if (whiteWinsCounter > 3) game.SetScore(Game::Score::WhiteWins);
@@ -272,7 +274,7 @@ static bool SelfPlayThreadFunc(
                     whiteWinsCounter = 0;
                 }
 
-                if (moveScore < -c_maxEval && eval < -c_maxEval / 2)
+                if (moveScore < -c_maxEval && eval < -c_maxEval / 4)
                 {
                     blackWinsCounter++;
                     if (blackWinsCounter > 3) game.SetScore(Game::Score::BlackWins);
@@ -361,7 +363,7 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Starting games..." << std::endl;
 
-    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency() - 4);
+    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
 
     std::vector<std::thread> threads;
     for (uint32_t i = 0; i < numThreads; ++i)
