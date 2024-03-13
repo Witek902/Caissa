@@ -1246,8 +1246,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
         {
-            ASSERT(!node->isInCheck);
-
             // skip underpromotions
             if (move.IsUnderpromotion()) continue;
 
@@ -1263,7 +1261,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
 
             // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
+            if (move.IsCapture() &&
+                moveScore < MoveOrderer::GoodCaptureValue &&
                 !position.StaticExchangeEvaluation(move))
                 break;
         }
@@ -1330,9 +1329,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                     break;
                 }
             }
-
-            if (node->isInCheck) break; // try only one check evasion
         }
+
+        // try only one quiet check evasion (note that quiet moves are only generated when in check)
+        if (bestValue > -TablebaseWinValue && move.IsQuiet())
+            break;
     }
 
     // no legal moves - checkmate
