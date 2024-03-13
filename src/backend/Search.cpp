@@ -1330,9 +1330,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                     break;
                 }
             }
-
-            if (node->isInCheck) break; // try only one check evasion
         }
+
+        // try only one quiet check evasion
+        if (bestValue > -TablebaseWinValue && node->isInCheck && move.IsQuiet())
+            break;
     }
 
     // no legal moves - checkmate
