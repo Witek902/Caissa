@@ -1067,8 +1067,6 @@ INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm
 
 ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
 {
-    // TODO analyze history moves, scale down when moving same piece all the time
-
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
@@ -1078,6 +1076,10 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         // apply eval correction term
         const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
         adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
+
+        // adjust based on threats difference (STM threats are approximated by using threats from previous move)
+        if (node.height > 0 && !node.isNullMove)
+            adjustedScore += static_cast<ScoreType>((&node - 1)->threats.allThreats.Count()) - static_cast<ScoreType>(node.threats.allThreats.Count());
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1548,7 +1550,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         ASSERT(node->staticEval != InvalidValue);
 
-        // adjust static eval based on node path
         eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
