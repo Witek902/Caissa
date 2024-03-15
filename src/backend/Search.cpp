@@ -1814,30 +1814,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
 
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
-
-        // Singular move detection
         if constexpr (!isRootNode)
         {
+            // promotion extension
+            moveExtension += (move.GetPromoteTo() == Piece::Queen);
+
+            // singular move extension
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
                 node->depth >= SingularExtensionMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-                ttEntry.depth >= node->depth - 3)
+                ttEntry.depth >= node->depth - 4)
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
 
@@ -1862,7 +1851,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (singularScore < singularBeta)
                 {
-                    if (node->ply < 2 * thread.rootDepth)
+                    if (node->ply < 4 * thread.rootDepth)
                     {
                         moveExtension = 1;
                         // double extension if singular score is way below beta
