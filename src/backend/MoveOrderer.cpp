@@ -137,7 +137,7 @@ void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
     const NodeInfo* nodePtr = &node;
     for (uint32_t i = 0; i < 6; ++i)
     {
-        if (!nodePtr || nodePtr->height == 0)
+        if (!nodePtr || nodePtr->ply == 0)
             break;
         if (nodePtr->previousMove.IsValid())
         {
@@ -347,7 +347,7 @@ void MoveOrderer::ScoreMoves(
         else if (withQuiets) // non-capture
         {
             // killer moves should be filtered by move picker
-            ASSERT(killerMoves[node.height] != move);
+            ASSERT(killerMoves[node.ply] != move);
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];

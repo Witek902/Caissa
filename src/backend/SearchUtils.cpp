@@ -82,7 +82,7 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
     for (;;)
     {
         // go up the tree, abort on any null move or irreversible move
-        if (currNode->height < 2) break;
+        if (currNode->ply < 2) break;
 
         if (currNode->isNullMove || currNode->previousMove.IsIrreversible()) break;
         currNode = currNode - 1;
@@ -158,7 +158,7 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPv
         }
 
         // reached end of the stack
-        if (prevNode->height == 0)
+        if (prevNode->ply == 0)
             break;
 
         --prevNode;
@@ -173,7 +173,7 @@ bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPv
             prevNode->position == node.position)
         {
             // twofold repetition within search tree in non-PV nodes
-            if (!isPvNode && prevNode->height > 0)
+            if (!isPvNode && prevNode->ply > 0)
                 return true;
 
             // threefold repetition

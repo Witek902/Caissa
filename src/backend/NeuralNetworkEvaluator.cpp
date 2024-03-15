@@ -227,7 +227,7 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
                 }
             }
 
-            if (nodePtr->height == 0)
+            if (nodePtr->ply == 0)
             {
                 // reached end of stack
                 break;
@@ -373,7 +373,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
             break;
         }
 
-        if (nodePtr->height == 0)
+        if (nodePtr->ply == 0)
         {
             // reached end of stack
             break;
@@ -386,7 +386,7 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     {
         // do nothing - accumulator is already up to date (was cached)
     }
-    else if (node.height > 0 && prevAccumNode &&
+    else if (node.ply > 0 && prevAccumNode &&
         parentInfo != prevAccumNode &&
         parentInfo->nnContext.accumDirty[color])
     {

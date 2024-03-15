@@ -67,7 +67,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         case Stage::Killer:
         {
             m_stage = Stage::Counter;
-            Move move = m_moveOrderer.GetKillerMove(node.height);
+            Move move = m_moveOrderer.GetKillerMove(node.ply);
             if (move.IsValid() && move != m_ttMove)
             {
                 move = m_position.MoveFromPacked(move);
