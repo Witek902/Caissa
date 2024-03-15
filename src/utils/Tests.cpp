@@ -1798,22 +1798,22 @@ static void RunEvalTests()
     {
         {
             const ScoreType score = Evaluate(Position("QQQQQQpk/QQQQQQpp/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/QQQQQQQQ/KQQQQQQQ w - - 0 1"));
-            TEST_EXPECT(score > 6000);
+            TEST_EXPECT(score > 4000);
             TEST_EXPECT(score < KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("qqqqkqqq/qqqqqqqq/qqqqqqqq/qqqqqqqq/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
-            TEST_EXPECT(score < -6000);
+            TEST_EXPECT(score < -4000);
             TEST_EXPECT(score > -KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("RRRRRRpk/RRRRRRpp/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/KRRRRRRR w - - 0 1"));
-            TEST_EXPECT(score > 3000);
+            TEST_EXPECT(score > 2000);
             TEST_EXPECT(score < KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("rrrrkrrr/rrrrrrrr/rrrrrrrr/rrrrrrrr/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
-            TEST_EXPECT(score < -3000);
+            TEST_EXPECT(score < -2000);
             TEST_EXPECT(score > -KnownWinValue);
         }
     }

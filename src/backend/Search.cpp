@@ -94,72 +94,6 @@ DEFINE_PARAM(ReductionStatDiv, 165, 10, 400);
 DEFINE_PARAM(EvalCorrectionScale, 501, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
-class SearchTrace
-{
-public:
-    enum class ExitReason
-    {
-        Regular,
-        Draw,
-        GameCycle,
-        MateDistancePruning,
-        TBHit,
-        TTCutoff,
-        BetaPruning,
-        Razoring,
-        NullMovePruning,
-        SingularPruning,
-    };
-
-    SearchTrace(const NodeInfo& node) : m_node(node) { }
-
-    void OnNodeExit(ExitReason reason, ScoreType score, Move bestMove = Move::Invalid())
-    {
-        FILE* f = GetOutputFile();
-
-        const char* exitReasonStr = "";
-        switch (reason)
-        {
-        case ExitReason::Draw:                  exitReasonStr = "Draw"; break;
-        case ExitReason::GameCycle:             exitReasonStr = "GameCycle"; break;
-        case ExitReason::MateDistancePruning:   exitReasonStr = "MateDistancePruning"; break;
-        case ExitReason::TBHit:                 exitReasonStr = "TBHit"; break;
-        case ExitReason::TTCutoff:              exitReasonStr = "TTCutoff"; break;
-        case ExitReason::BetaPruning:           exitReasonStr = "BetaPruning"; break;
-        case ExitReason::Razoring:              exitReasonStr = "Razoring"; break;
-        case ExitReason::NullMovePruning:       exitReasonStr = "NullMovePruning"; break;
-        case ExitReason::SingularPruning:       exitReasonStr = "SingularPruning"; break;
-        }
-
-        // write indent
-        char spaceBuffer[MaxSearchDepth];
-        memset(spaceBuffer, '\t', m_node.height);
-        fwrite(spaceBuffer, 1, m_node.height, f);
-
-        fprintf(f, "%s [%s] d=%d, a=%d, b=%d, e=%d | %s score=%d bestMove=%s\n",
-                m_node.previousMove.ToString().c_str(),
-                m_node.position.ToFEN().c_str(),
-                m_node.depth, m_node.alpha, m_node.beta, m_node.staticEval,
-                exitReasonStr, score, bestMove.ToString().c_str());
-    }
-
-    static void OnRootSearchBegin()
-    {
-        FILE* f = GetOutputFile();
-        fprintf(f, "ROOT SEARCH START\n");
-    }
-
-private:
-
-    static FILE* GetOutputFile()
-    {
-        static FILE* f = fopen("searchTrace.txt", "w");
-        return f;
-    }
-
-    const NodeInfo& m_node;
-};
-
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
@@ -985,7 +919,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
 Search::ThreadData::ThreadData()
 {
-    randomSeed = 0x4abf372b;
 }
 
 const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
@@ -996,25 +929,16 @@ const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
     }
 
     const std::vector<Move>& pvLine = pvLines[node.pvIndex].moves;
-    if (node.height >= pvLine.size())
+    if (node.ply >= pvLine.size())
     {
         return Move::Invalid();
     }
 
-    const Move pvMove = pvLine[node.height];
+    const Move pvMove = pvLine[node.ply];
     ASSERT(pvMove.IsValid());
     ASSERT(node.position.IsMoveLegal(pvMove));
 
     return pvMove;
-}
-
-uint32_t Search::ThreadData::GetRandomUint()
-{
-    // Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs"
-    randomSeed ^= randomSeed << 13;
-    randomSeed ^= randomSeed >> 17;
-    randomSeed ^= randomSeed << 5;
-    return randomSeed;
 }
 
 INLINE static bool OppCanWinMaterial(const Position& position, const Threats& threats)
@@ -1067,8 +991,6 @@ INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm
 
 ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
 {
-    // TODO analyze history moves, scale down when moving same piece all the time
-
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
@@ -1092,7 +1014,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
 template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
-    ASSERT(node->height < MaxSearchDepth);
+    ASSERT(node->ply < MaxSearchDepth);
     ASSERT(!node->filteredMove.IsValid());
     ASSERT(node->isInCheck == node->position.IsInCheck());
 
@@ -1108,7 +1030,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     // update stats
     thread.stats.quiescenceNodes++;
-    thread.stats.OnNodeEnter(node->height + 1);
+    thread.stats.OnNodeEnter(node->ply + 1);
     ctx.stats.Append(thread.stats);
 
     ScoreType alpha = node->alpha;
@@ -1123,7 +1045,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             if (alpha >= beta)
             {
                 // update stats
-                thread.stats.OnNodeEnter(node->height + 1);
+                thread.stats.OnNodeEnter(node->ply + 1);
                 ctx.stats.Append(thread.stats);
                 return alpha;
             }
@@ -1146,7 +1068,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         node->staticEval = ttEntry.staticEval;
 
-        ttScore = ScoreFromTT(ttEntry.score, node->height, position.GetHalfMoveCount());
+        ttScore = ScoreFromTT(ttEntry.score, node->ply, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1203,7 +1125,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         {
             if (!ttEntry.IsValid())
             {
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, TTEntry::Bounds::Lower);
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
             }
             return bestValue;
         }
@@ -1217,7 +1139,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     }
 
     // guard against overflowing the search stack
-    if (node->height >= MaxSearchDepth - 1) [[unlikely]]
+    if (node->ply >= MaxSearchDepth - 1) [[unlikely]]
     {
         return node->isInCheck ? 0 : bestValue;
     }
@@ -1226,7 +1148,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     childNode.Clear();
     childNode.pvIndex = node->pvIndex;
     childNode.depth = node->depth - 1;
-    childNode.height = node->height + 1;
+    childNode.ply = node->ply + 1;
     childNode.nnContext.MarkAsDirty();
 
     const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
@@ -1338,12 +1260,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // no legal moves - checkmate
     if (node->isInCheck && moveIndex == 0)
     {
-        return -CheckmateValue + (ScoreType)node->height;
+        return -CheckmateValue + (ScoreType)node->ply;
     }
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
-    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, 0, bounds, bestMove);
+    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, bounds, bestMove);
 #ifdef COLLECT_SEARCH_STATS
     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1354,7 +1276,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 template<NodeType nodeType>
 ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
-    ASSERT(node->height < MaxSearchDepth);
+    ASSERT(node->ply < MaxSearchDepth);
 
     constexpr bool isRootNode = nodeType == NodeType::Root;
     constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
@@ -1374,7 +1296,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     node->pvLength = 0;
 
     // update stats
-    thread.stats.OnNodeEnter(node->height + 1);
+    thread.stats.OnNodeEnter(node->ply + 1);
     ctx.stats.Append(thread.stats);
 
     ScoreType alpha = node->alpha;
@@ -1389,7 +1311,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (alpha >= beta)
             {
                 // update stats
-                thread.stats.OnNodeEnter(node->height + 1);
+                thread.stats.OnNodeEnter(node->ply + 1);
                 ctx.stats.Append(thread.stats);
                 return alpha;
             }
@@ -1411,14 +1333,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         // mate distance pruning
-        alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node->height, alpha);
-        beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node->height - 1, beta);
+        alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node->ply, alpha);
+        beta = std::min<ScoreType>(CheckmateValue - (ScoreType)node->ply - 1, beta);
         if (alpha >= beta)
             return alpha;
     }
 
     // clear killer moves for next ply
-    thread.moveOrderer.ClearKillerMoves(node->height + 1);
+    thread.moveOrderer.ClearKillerMoves(node->ply + 1);
 
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
@@ -1438,7 +1360,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         node->staticEval = ttEntry.staticEval;
 
-        ttScore = ScoreFromTT(ttEntry.score, node->height, position.GetHalfMoveCount());
+        ttScore = ScoreFromTT(ttEntry.score, node->ply, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
 
         // don't prune in PV nodes, because TT does not contain path information
@@ -1478,7 +1400,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             thread.stats.tbHits++;
 
-            const ScoreType tbWinScore = TablebaseWinValue - ScoreType(100 * position.GetNumPiecesExcludingKing()) - ScoreType(node->height);
+            const ScoreType tbWinScore = TablebaseWinValue - ScoreType(100 * position.GetNumPiecesExcludingKing()) - ScoreType(node->ply);
             ASSERT(tbWinScore > KnownWinValue);
 
             // convert the WDL value to a score
@@ -1511,7 +1433,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (!ttEntry.IsValid())
                 {
-                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->height), node->staticEval, node->depth, bounds);
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->ply), node->staticEval, node->depth, bounds);
 #ifdef COLLECT_SEARCH_STATS
                     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1567,7 +1489,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // guard against overflowing the search stack
-    if (node->height >= MaxSearchDepth - 1) [[unlikely]]
+    if (node->ply >= MaxSearchDepth - 1) [[unlikely]]
     {
         return node->isInCheck ? 0 : eval;
     }
@@ -1579,9 +1501,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         int32_t evalImprovement = 0;
 
-        if (node->height > 1 && (node - 2)->staticEval != InvalidValue)
+        if (node->ply > 1 && (node - 2)->staticEval != InvalidValue)
             evalImprovement = node->staticEval - (node - 2)->staticEval;
-        else if (node->height > 3 && (node - 4)->staticEval != InvalidValue)
+        else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
             evalImprovement = node->staticEval - (node - 4)->staticEval;
 
         isImproving = evalImprovement >= 0;
@@ -1618,7 +1540,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 // don't allow null move if parent or grandparent node was null move
                 bool doNullMove = !node->isNullMove;
-                if (node->height > 0 && (node - 1)->isNullMove) doNullMove = false;
+                if (node->ply > 0 && (node - 1)->isNullMove) doNullMove = false;
 
                 if (doNullMove)
                 {
@@ -1636,7 +1558,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.isNullMove = true;
                     childNode.isCutNode = !node->isCutNode;
                     childNode.doubleExtensions = node->doubleExtensions;
-                    childNode.height = node->height + 1;
+                    childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
                     childNode.nnContext.MarkAsDirty();
 
@@ -1671,7 +1593,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 NodeInfo& childNode = *(node + 1);
                 childNode.Clear();
-                childNode.height = node->height + 1;
+                childNode.ply = node->ply + 1;
                 childNode.pvIndex = node->pvIndex;
                 childNode.doubleExtensions = node->doubleExtensions;
                 childNode.nnContext.MarkAsDirty();
@@ -1717,7 +1639,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // probcut failed
                     if (score >= probBeta)
                     {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->height), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
                         return score;
                     }
                 }
@@ -1748,7 +1670,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
-    childNode.height = node->height + 1;
+    childNode.ply = node->ply + 1;
     childNode.pvIndex = node->pvIndex;
     childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
@@ -1764,9 +1686,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
-    if (node->height < 3)
+    if (node->ply < 3)
     {
-        nodeCacheEntry = thread.nodeCache.GetEntry(position, node->height);
+        nodeCacheEntry = thread.nodeCache.GetEntry(position, node->ply);
     }
 
     MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, true);
@@ -1940,7 +1862,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (singularScore < singularBeta)
                 {
-                    if (node->height < 2 * thread.rootDepth)
+                    if (node->ply < 2 * thread.rootDepth)
                     {
                         moveExtension = 1;
                         // double extension if singular score is way below beta
@@ -2069,7 +1991,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                newDepth += (score > bestValue + 80) && (node->height < 2 * thread.rootDepth); // prevent search explosions
+                newDepth += (score > bestValue + 80) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
                 newDepth -= (score < bestValue + newDepth);
                 doFullDepthSearch = newDepth > lmrDepth;
             }
@@ -2190,7 +2112,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (filteredSomeMove)
             bestValue = -InfValue;
         else
-            bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->height : 0;
+            bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->ply : 0;
 
         return bestValue;
     }
@@ -2201,7 +2123,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (bestMove.IsQuiet())
         {
             thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, std::min(bestValue - beta, 256));
-            thread.moveOrderer.UpdateKillerMove(node->height, bestMove);
+            thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
         }
         thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
@@ -2247,7 +2169,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->height), node->staticEval, node->depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;

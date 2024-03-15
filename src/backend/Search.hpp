@@ -129,8 +129,8 @@ struct NodeInfo
     // remaining depth
     int16_t depth = 0;
 
-    // depth in ply (depth counting from root)
-    uint16_t height = 0;
+    // distance to the root
+    uint16_t ply = 0;
 
     ScoreType alpha;
     ScoreType beta;
@@ -313,7 +313,6 @@ private:
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
-        uint32_t randomSeed;                // seed for random number generator
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
@@ -339,8 +338,6 @@ private:
 
         ScoreType GetEvalCorrection(const Position& pos) const;
         void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
-
-        uint32_t GetRandomUint();
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
