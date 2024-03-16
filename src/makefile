@@ -1,5 +1,5 @@
 EXE                = caissa
-VERSION            = 1.17.11
+VERSION            = 1.17.12
 EXE_NAME           = $(EXE)-$(VERSION)
 DEFAULT_EVALFILE   = ../data/neuralNets/eval-35.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
@@ -13,7 +13,7 @@ else
 endif
 
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -s -flto -std=c++20 -O3 -funroll-loops
+FLAGS = $(WFLAGS) -s -flto -flto-partition=one -std=c++20 -O3 -funroll-loops
 LIBS =
 
 ifeq ($(EXT), .exe)
