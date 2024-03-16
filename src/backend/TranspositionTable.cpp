@@ -225,7 +225,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
     TTCluster& cluster = GetCluster(position.GetHash());
 
-    uint32_t replaceIndex = 0;
+    uint32_t replaceIndex = static_cast<uint32_t>(staticEval & 1); // randomize
     int32_t minRelevanceInCluster = INT32_MAX;
     uint16_t prevKey = 0;
     TTEntry prevEntry;
@@ -247,7 +247,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - entryAge;
+        const int32_t entryRelevance = (int32_t)data.depth - (entryAge + 1) / 2;
 
         if (entryRelevance < minRelevanceInCluster)
         {
