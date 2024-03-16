@@ -1966,6 +1966,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
 
+            // reduce less if TT entry has high depth
+            if (ttEntry.depth >= node->depth) r -= LmrScale; // TODO tune
+
             // scale down with randomization
             r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
         }
