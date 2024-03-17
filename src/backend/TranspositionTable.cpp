@@ -10,7 +10,7 @@
     #include <xmmintrin.h>
 #endif // USE_SSE
 
-static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
+static_assert(sizeof(TTEntry) == 10, "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == 32, "Invalid TT cluster size");
 
 ScoreType ScoreToTT(ScoreType v, int32_t height)
@@ -178,103 +178,66 @@ void TranspositionTable::Prefetch(const uint64_t hash) const
 #endif // USE_SSE
 }
 
-bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
+bool TranspositionTable::Read(const Position& position, TTEntry*& outEntry) const
 {
-    if (clusters)
-    {
-        TTCluster& cluster = GetCluster(position.GetHash());
-
-        const uint16_t posKey = (uint16_t)position.GetHash();
-
-        for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
-        {
-            const uint16_t key = cluster.entries[i].key;
-            const TTEntry data = cluster.entries[i].entry;
-
-            if (key == posKey && data.bounds != TTEntry::Bounds::Invalid)
-            {
-                outEntry = data;
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
-{
-    ASSERT(position.GetHash() == position.ComputeHash());
-
-    TTEntry entry;
-    entry.score = score;
-    entry.staticEval = staticEval;
-    entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
-    entry.bounds = bounds;
-    entry.move = move;
-
-    ASSERT(entry.IsValid());
-
-    if (!clusters)
-    {
-        return;
-    }
-
-    const uint64_t positionHash = position.GetHash();
-    const uint16_t positionKey = (uint16_t)positionHash;
+    ASSERT(clusters);
 
     TTCluster& cluster = GetCluster(position.GetHash());
+    const uint16_t posKey = (uint16_t)position.GetHash();
 
-    uint32_t replaceIndex = 0;
-    int32_t minRelevanceInCluster = INT32_MAX;
-    uint16_t prevKey = 0;
-    TTEntry prevEntry;
-
-    // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
-        const uint16_t key = cluster.entries[i].key;
-        const TTEntry data = cluster.entries[i].entry;
-
-        // found entry with same hash or empty entry
-        if (key == positionKey || !data.IsValid())
+        TTEntry& entry = cluster.entries[i];
+        if (entry.key == posKey && entry.bounds != TTEntry::Bounds::Invalid)
         {
-            replaceIndex = i;
-            prevKey = key;
-            prevEntry = data;
-            break;
+            outEntry = &entry;
+            return true;
         }
+    }
 
-        // old entriess are less relevant
-        const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - entryAge;
+    // find the entry with the lowest relevance
+    uint32_t replaceIndex = 0;
+    int32_t minRelevanceInCluster = INT32_MAX;
+    for (uint32_t i = 1; i < NumEntriesPerCluster; ++i)
+    {
+        TTEntry& entry = cluster.entries[i];
+
+        const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - entry.generation) & (TTEntry::GenerationCycle - 1);
+        const int32_t entryRelevance = (int32_t)entry.depth - entryAge;
 
         if (entryRelevance < minRelevanceInCluster)
         {
             minRelevanceInCluster = entryRelevance;
             replaceIndex = i;
-            prevKey = key;
-            prevEntry = data;
         }
     }
 
+    outEntry = cluster.entries + replaceIndex;
+    return false;
+}
+
+void TranspositionTable::Write(TTEntry* entry, const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
+{
+    ASSERT(clusters);
+    ASSERT(entry);
+    ASSERT(position.GetHash() == position.ComputeHash());
+    ASSERT(depth >= 0);
+
+    const uint16_t positionKey = (uint16_t)position.GetHash();
+
+    if (move || positionKey != entry->key)
+        entry->move = move;
+
     // don't overwrite entries with worse depth if the bounds are not exact
-    if (entry.bounds != TTEntry::Bounds::Exact &&
-        positionKey == prevKey &&
-        entry.depth < prevEntry.depth - 4)
+    if (bounds == TTEntry::Bounds::Exact || positionKey != entry->key || depth + 4 >= entry->depth)
     {
-        return;
+        entry->score = score;
+        entry->staticEval = staticEval;
+        entry->depth = static_cast<int8_t>(depth);
+        entry->bounds = bounds;
+        entry->generation = generation;
+        entry->key = positionKey;
     }
-
-    // preserve existing move
-    if (positionKey == prevKey && !entry.move.IsValid())
-    {
-        entry.move = prevEntry.move;
-    }
-
-    entry.generation = generation;
-
-    cluster.entries[replaceIndex] = { positionKey, entry };
 }
 
 void TranspositionTable::PrintInfo() const
@@ -289,14 +252,13 @@ void TranspositionTable::PrintInfo() const
         const TTCluster& cluster = clusters[i];
         for (size_t j = 0; j < NumEntriesPerCluster; ++j)
         {
-            const InternalEntry& entry = cluster.entries[j];
-            if (entry.entry.IsValid())
+            const TTEntry& entry = cluster.entries[j];
+            if (entry.IsValid())
             {
                 totalCount++;
-
-                if (entry.entry.bounds == TTEntry::Bounds::Exact) exactCount++;
-                if (entry.entry.bounds == TTEntry::Bounds::Lower) lowerBoundCount++;
-                if (entry.entry.bounds == TTEntry::Bounds::Upper) upperBoundCount++;
+                if (entry.bounds == TTEntry::Bounds::Exact) exactCount++;
+                if (entry.bounds == TTEntry::Bounds::Lower) lowerBoundCount++;
+                if (entry.bounds == TTEntry::Bounds::Upper) upperBoundCount++;
             }
         }
     }
@@ -317,9 +279,9 @@ uint32_t TranspositionTable::GetHashFull() const
     {
         for (uint32_t i = 0; i < clusterCount; ++i)
         {
-            for (const InternalEntry& entry : clusters[i].entries)
+            for (const TTEntry& entry : clusters[i].entries)
             {
-                count += (entry.entry.IsValid() && entry.entry.generation == generation);
+                count += (entry.IsValid() && entry.generation == generation);
             }
         }
     }
