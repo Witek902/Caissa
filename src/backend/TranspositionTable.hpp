@@ -25,6 +25,7 @@ struct TTEntry
     int8_t depth;
     Bounds bounds : 2;
     uint8_t generation : GenerationBits;
+    uint16_t key;
 
     INLINE TTEntry()
         : score(0)
@@ -33,6 +34,7 @@ struct TTEntry
         , depth(0)
         , bounds(Bounds::Invalid)
         , generation(0)
+        , key(0)
     {}
 
     INLINE bool IsValid() const
@@ -50,17 +52,12 @@ struct TTEntry
 class TranspositionTable
 {
 public:
-    struct InternalEntry
-    {
-        uint16_t key;
-        TTEntry entry;
-    };
 
     // one cluster occupies one cache line
     static constexpr uint32_t NumEntriesPerCluster = 3;
     struct alignas(32) TTCluster
     {
-        InternalEntry entries[NumEntriesPerCluster];
+        TTEntry entries[NumEntriesPerCluster];
         uint16_t padding;
     };
 
@@ -72,8 +69,8 @@ public:
     // should be called before running a new search
     void NextGeneration();
 
-    bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
+    [[nodiscard]] bool Read(const Position& position, TTEntry*& outEntry) const;
+    void Write(TTEntry* targetEntry, const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
     void Prefetch(const uint64_t hash) const;
 
     // invalidate all entries
