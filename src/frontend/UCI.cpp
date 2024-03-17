@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.17.12"
+#define CAISSA_VERSION "1.17.13"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -956,24 +956,23 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 
 bool UniversalChessInterface::Command_TranspositionTableProbe()
 {
-    TTEntry ttEntry;
-
     std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
 
+    TTEntry* ttEntry;
     if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {
         const char* boundsStr =
-            ttEntry.bounds == TTEntry::Bounds::Exact ? "exact" :
-            ttEntry.bounds == TTEntry::Bounds::Upper ? "upper" :
-            ttEntry.bounds == TTEntry::Bounds::Lower ? "lower" :
+            ttEntry->bounds == TTEntry::Bounds::Exact ? "exact" :
+            ttEntry->bounds == TTEntry::Bounds::Upper ? "upper" :
+            ttEntry->bounds == TTEntry::Bounds::Lower ? "lower" :
             "invalid";
 
-        std::cout << "Score:      " << ttEntry.score << std::endl;
-        std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
-        std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
+        std::cout << "Score:      " << ttEntry->score << std::endl;
+        std::cout << "StaticEval: " << ttEntry->staticEval << std::endl;
+        std::cout << "Depth:      " << (uint32_t)ttEntry->depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
-        std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
-        std::cout << "Moves:      " << ttEntry.move.ToString() << std::endl;
+        std::cout << "Generation: " << (uint32_t)ttEntry->generation << std::endl;
+        std::cout << "Move:       " << ttEntry->move.ToString() << std::endl;
     }
     else
     {
