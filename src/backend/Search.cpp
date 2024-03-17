@@ -1962,6 +1962,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            // reduce low-ply moves less
+            if constexpr (isPvNode)
+                r -= LmrScale * node->depth / (1 + node->ply + node->depth);
+
             // scale down with randomization
             r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
         }
