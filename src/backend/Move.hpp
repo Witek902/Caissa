@@ -41,20 +41,11 @@ struct PackedMove
 
     // valid move does not mean it's a legal move for a given position
     // use Position::IsMoveLegal() to fully validate a move
-    bool constexpr IsValid() const
-    {
-        return value != 0u;
-    }
+    INLINE bool constexpr IsValid() const { return value != 0u; }
+    INLINE constexpr operator bool() const { return value != 0u; }
 
-    INLINE constexpr bool operator == (const PackedMove& rhs) const
-    {
-        return value == rhs.value;
-    }
-
-    INLINE constexpr bool operator != (const PackedMove& rhs) const
-    {
-        return value != rhs.value;
-    }
+    INLINE constexpr bool operator == (const PackedMove& rhs) const { return value == rhs.value; }
+    INLINE constexpr bool operator != (const PackedMove& rhs) const { return value != rhs.value; }
 
     std::string ToString() const;
 };
