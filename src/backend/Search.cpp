@@ -1037,24 +1037,25 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     ScoreType beta = node->beta;
 
     // check if we can draw by repetition in losing position
-    if constexpr (!isPvNode)
+    if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
     {
-        if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
+        alpha = 0;
+        if (alpha >= beta)
         {
-            alpha = 0;
-            if (alpha >= beta)
-            {
-                // update stats
-                thread.stats.OnNodeEnter(node->ply + 1);
-                ctx.stats.Append(thread.stats);
-                return alpha;
-            }
+            // update stats
+            thread.stats.OnNodeEnter(node->ply + 1);
+            ctx.stats.Append(thread.stats);
+            return alpha;
         }
     }
 
-    // Not checking for draw by repetition in the quiescence search
-    if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
+    // check for draw
+    if (node->position.IsFiftyMoveRuleDraw() ||
+        CheckInsufficientMaterial(node->position) ||
+        SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
+    {
         return 0;
+    }
 
     const Position& position = node->position;
 
@@ -1303,7 +1304,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     ScoreType beta = node->beta;
 
     // check if we can draw by repetition in losing position
-    if constexpr (!isPvNode)
+    if constexpr (!isRootNode)
     {
         if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
         {
