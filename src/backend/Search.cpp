@@ -19,6 +19,11 @@
 #include <thread>
 #include <math.h>
 
+// silent warning C4127: conditional expression is constant
+#ifdef _MSC_VER
+#pragma warning(disable: 4127)
+#endif
+
 // #define VALIDATE_MOVE_PICKER
 
 static const float PvLineReportDelay = 0.005f;
@@ -825,8 +830,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     window += std::abs(param.previousScore) / 16;
 
     // start applying aspiration window at given depth
-    if (param.searchParam.useAspirationWindows &&
-        param.previousScore != InvalidValue &&
+    if (param.previousScore != InvalidValue &&
         !IsMate(param.previousScore) &&
         !CheckStopCondition(thread, param.searchContext, true))
     {
@@ -1756,9 +1760,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             quietMoveIndex++;
         }
 
-        const bool doPruning = isPvNode ? ctx.searchParam.allowPruningInPvNodes : true;
-
-        if (doPruning &&
+        if (!isRootNode &&
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
