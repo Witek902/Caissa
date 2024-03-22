@@ -89,9 +89,6 @@ struct SearchParam
     // probe tablebases at the root
     bool useRootTablebase = true;
 
-    bool allowPruningInPvNodes = true;
-    bool useAspirationWindows = true;
-
     // use colors in console output to make it more readable
     bool colorConsoleOutput = false;
 
