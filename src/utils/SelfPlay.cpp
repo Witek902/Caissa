@@ -187,7 +187,6 @@ static bool SelfPlayThreadFunc(
         {
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
-            searchParam.allowPruningInPvNodes = false;
             searchParam.useRootTablebase = false;
             searchParam.evalRandomization = 2;
             searchParam.seed = searchSeed;
