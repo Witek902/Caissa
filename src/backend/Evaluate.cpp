@@ -30,6 +30,7 @@
 namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
+static constexpr ScoreType c_castlingRightsBonus = 5;
 
 } // namespace
 
@@ -225,6 +226,14 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         2 * (whiteRooks + blackRooks) +
         4 * (whiteQueens + blackQueens));
     value = value * (52 + gamePhase) / 64;
+
+    // apply castling rights bonus
+    {
+        ScoreType bonus = 0;
+        if (pos.Whites().GetKingSquare() != Square_e1) bonus += c_castlingRightsBonus * (ScoreType)PopCount(pos.GetWhitesCastlingRights());
+        if (pos.Blacks().GetKingSquare() != Square_e8) bonus -= c_castlingRightsBonus * (ScoreType)PopCount(pos.GetBlacksCastlingRights());
+        value += pos.GetSideToMove() == White ? bonus : -bonus;
+    }
 
     // saturate eval value so it doesn't exceed KnownWinValue
     if (value > c_evalSaturationTreshold)
