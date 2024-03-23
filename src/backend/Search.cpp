@@ -1155,8 +1155,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     childNode.ply = node->ply + 1;
     childNode.nnContext.MarkAsDirty();
 
-    const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
-
     MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node->isInCheck);
 
     int32_t moveScore = 0;
@@ -1181,7 +1179,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             if (move.IsCapture() &&
                 futilityBase > -KnownWinValue &&
                 futilityBase <= alpha &&
-                move.ToSquare() != prevSquare &&
+                moveScore < MoveOrderer::WinningCaptureValue &&
                 !position.StaticExchangeEvaluation(move, 1))
             {
                 bestValue = std::max(bestValue, futilityBase);
@@ -1189,7 +1187,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
 
             // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
+            if (move.IsCapture() &&
+                moveScore < MoveOrderer::GoodCaptureValue &&
                 !position.StaticExchangeEvaluation(move))
                 break;
         }
@@ -1199,10 +1198,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
             continue;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
