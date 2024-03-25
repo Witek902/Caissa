@@ -806,10 +806,10 @@ const MaterialKey Position::GetMaterialKey() const
 }
 
 static const int32_t pawnValue = 100;
-static const int32_t knightValue = 300;
-static const int32_t bishopValue = 300;
-static const int32_t rookValue = 500;
-static const int32_t queenValue = 900;
+static const int32_t knightValue = 400;
+static const int32_t bishopValue = 400;
+static const int32_t rookValue = 600;
+static const int32_t queenValue = 1200;
 static const int32_t kingValue = INT32_MAX;
 
 int32_t Position::BestPossibleMoveValue() const
