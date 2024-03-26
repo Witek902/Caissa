@@ -1165,8 +1165,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     Move bestMove = Move::Invalid();
     int32_t moveIndex = 0;
 
-    Move captureMovesTried[MoveList::MaxMoves];
-    uint32_t numCaptureMovesTried = 0;
+    constexpr uint32_t capturesTriedListSize = 8;
+    uint32_t numCapturesTried = 0;
+    Move capturesTried[capturesTriedListSize];
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
@@ -1226,10 +1227,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         const ScoreType score = -QuiescenceNegaMax<nodeType>(thread, &childNode, ctx);
         ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-        if (move.IsCapture())
-        {
-            captureMovesTried[numCaptureMovesTried++] = move;
-        }
+        if (move.IsCapture() && numCapturesTried < capturesTriedListSize)
+            capturesTried[numCapturesTried++] = move;
 
         if (score > bestValue) // new best move found
         {
@@ -1251,7 +1250,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 if (score >= beta)
                 {
                     if (bestMove.IsCapture())
-                        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
+                        thread.moveOrderer.UpdateCapturesHistory(*node, capturesTried, numCapturesTried, bestMove);
 
                     break;
                 }
