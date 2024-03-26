@@ -23,6 +23,7 @@ public:
         End,
     };
 
+    INLINE
     MovePicker(const Position& pos,
                const MoveOrderer& moveOrderer,
                const NodeCacheEntry* nodeCacheEntry,
@@ -50,11 +51,10 @@ private:
     bool m_generateQuiets;
 
     const MoveOrderer& m_moveOrderer;
-    uint32_t m_moveIndex = 0;
+    uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
-
-    Move m_killerMove = Move::Invalid();
-    Move m_counterMove = Move::Invalid();
+    Move m_killerMove;
+    Move m_counterMove;
 
     MoveList m_moves;
 };
