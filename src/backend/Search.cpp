@@ -77,8 +77,8 @@ DEFINE_PARAM(HistoryPruningQuadraticFactor, 136, 50, 200);
 DEFINE_PARAM(AspirationWindowMaxSize, 498, 200, 1000);
 DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
-DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularExtensionMinDepth, 4, 4, 10);
+DEFINE_PARAM(SingularExtensionMarigin, 20, 10, 30);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
 
@@ -1827,59 +1827,54 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        // Singular move detection
-        if constexpr (!isRootNode)
+        // Singular Move Extensions
+        if (!isRootNode &&
+            node->ply < 2 * thread.rootDepth &&
+            !node->filteredMove.IsValid() &&
+            move == ttMove &&
+            node->depth >= SingularExtensionMinDepth &&
+            std::abs(ttScore) < KnownWinValue &&
+            ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
+            ttEntry.depth >= node->depth - 3)
         {
-            if (!node->filteredMove.IsValid() &&
-                move == ttMove &&
-                node->depth >= SingularExtensionMinDepth &&
-                std::abs(ttScore) < KnownWinValue &&
-                ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-                ttEntry.depth >= node->depth - 3)
+            const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+
+            const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
+            const int16_t originalDepth = node->depth;
+            const ScoreType originalAlpha = node->alpha;
+            const ScoreType originalBeta = node->beta;
+
+            node->isPvNodeFromPrevIteration = false;
+            node->depth = node->depth / 2;
+            node->alpha = singularBeta - 1;
+            node->beta = singularBeta;
+            node->filteredMove = move;
+            const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
+
+            // restore node state
+            node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
+            node->depth = originalDepth;
+            node->alpha = originalAlpha;
+            node->beta = originalBeta;
+            node->filteredMove = PackedMove::Invalid();
+
+            if (singularScore < singularBeta)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
-
-                const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
-                const int16_t originalDepth = node->depth;
-                const ScoreType originalAlpha = node->alpha;
-                const ScoreType originalBeta = node->beta;
-
-                node->isPvNodeFromPrevIteration = false;
-                node->depth = node->depth / 2 - 1;
-                node->alpha = singularBeta - 1;
-                node->beta = singularBeta;
-                node->filteredMove = move;
-                const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
-
-                // restore node state
-                node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
-                node->depth = originalDepth;
-                node->alpha = originalAlpha;
-                node->beta = originalBeta;
-                node->filteredMove = PackedMove::Invalid();
-
-                if (singularScore < singularBeta)
-                {
-                    if (node->ply < 2 * thread.rootDepth)
-                    {
-                        moveExtension = 1;
-                        // double extension if singular score is way below beta
-                        if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension = 2;
-                    }
-                }
-                // if second best move beats current beta, there most likely would be beta cutoff
-                // when searching it at full depth
-                else if (singularBeta >= beta)
-                    return singularBeta;
-                else if (ttScore >= beta)
-                    moveExtension = -2 - !isPvNode;
-                else if (node->isCutNode)
-                    moveExtension = -1;
-                else if (ttScore <= alpha)
-                    moveExtension = -1;
+                moveExtension = 1;
+                // triple extension if singular score is way below beta
+                if (!isPvNode && node->doubleExtensions <= 15)
+                    moveExtension = 2 + ((singularScore < singularBeta - SingularExtensionMarigin) && !ttCapture);
             }
+            // if second best move beats current beta, there most likely would be beta cutoff
+            // when searching it at full depth
+            else if (singularBeta >= beta)
+                return singularBeta;
+            else if (ttScore >= beta)
+                moveExtension = -2 - !isPvNode;
+            else if (node->isCutNode)
+                moveExtension = -1;
+            else if (ttScore <= alpha)
+                moveExtension = -1;
         }
 
         // do the move
