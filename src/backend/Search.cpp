@@ -80,7 +80,7 @@ DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 100, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
 
 DEFINE_PARAM(BetaPruningDepth, 6, 5, 10);
 DEFINE_PARAM(BetaMarginMultiplier, 118, 80, 180);
@@ -1199,10 +1199,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
-        {
             continue;
-        }
-
         moveIndex++;
 
         // Move Count Pruning
