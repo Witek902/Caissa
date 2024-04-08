@@ -45,7 +45,7 @@ void GenerateEndgamePositions()
     }
 
     std::mutex mutex;
-    std::mutex tbMutex;
+    //std::mutex tbMutex;
     uint32_t numPositions = 0;
 
     const auto generate = [&]()
