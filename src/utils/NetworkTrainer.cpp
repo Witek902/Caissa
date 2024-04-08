@@ -748,7 +748,7 @@ bool NetworkTrainer::Train()
                 GenerateTrainingSet(m_trainingSet, kingBucketMask, lambda);
             });
 
-            taskBuilder.Task("Train", [this, iteration, kingBucketMask, &epoch, &batch, learningRate](const TaskContext& ctx)
+            taskBuilder.Task("Train", [this, kingBucketMask, &epoch, &batch, learningRate](const TaskContext& ctx)
             {
                 nn::TrainParams params;
                 params.optimizer = nn::Optimizer::Adam;

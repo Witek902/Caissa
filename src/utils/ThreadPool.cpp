@@ -603,6 +603,7 @@ void TaskBuilder::ParallelFor(const char* debugName, uint32_t arraySize, const P
                     uint32_t index;
                     while ((index = threadData.counter++) < threadData.numElements)
                     {
+                        (void)arraySize;
                         ASSERT(threadData.elementOffset + index < arraySize);
                         func(context, static_cast<uint32_t>(threadData.elementOffset + index));
                     }
