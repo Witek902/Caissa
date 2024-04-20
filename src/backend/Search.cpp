@@ -1647,15 +1647,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
-    // reduce depth if position was not found in transposition table
-    if (node->depth >= 3 + 4 * node->isCutNode && !ttEntry.IsValid())
-    {
-        node->depth--;
-    }
-
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+
+    // reduce depth if position was not found in transposition table
+    if (node->depth >= 7
+        && (node->isCutNode || isPvNode)
+        && (!ttMove.IsValid() || ttEntry.depth + 4 < node->depth))
+        node->depth--;
 
     // in-check probcut (idea from Stockfish)
     if constexpr (!isPvNode)
