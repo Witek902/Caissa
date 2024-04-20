@@ -33,6 +33,7 @@ public:
     void InitContinuationHistoryPointers(NodeInfo& node);
 
     CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
+    CounterType GetCaptureHistory(const Position& pos, const Move move) const;
 
     Move GetCounterMove(const NodeInfo& node) const;
 

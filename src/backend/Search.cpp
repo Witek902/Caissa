@@ -1801,7 +1801,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->depth <= 4 &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                        !position.StaticExchangeEvaluation(move,
+                            -SSEPruningMultiplier_Captures * node->depth - thread.moveOrderer.GetCaptureHistory(node->position, move) / 128))
+                        continue;
                 }
                 else
                 {

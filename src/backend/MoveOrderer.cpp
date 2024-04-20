@@ -184,6 +184,15 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
     return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 }
 
+MoveOrderer::CounterType MoveOrderer::GetCaptureHistory(const Position& pos, const Move move) const
+{
+    const uint32_t capturedIdx = (uint32_t)pos.GetCapturedPiece(move) - 1;
+    const uint32_t pieceIdx = (uint32_t)move.GetPiece() - 1;
+    ASSERT(capturedIdx < 5);
+    ASSERT(pieceIdx < 6);
+    return capturesHistory[pos.GetSideToMove()][pieceIdx][capturedIdx][move.ToSquare().Index()];
+}
+
 Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
 {
     if (node.previousMove.IsValid())
