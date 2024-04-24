@@ -1872,7 +1872,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if second best move beats current beta, there most likely would be beta cutoff
                 // when searching it at full depth
                 else if (singularBeta >= beta)
-                    return singularBeta;
+                    return (singularBeta + beta) / 2;
                 else if (ttScore >= beta)
                     moveExtension = -2 - !isPvNode;
                 else if (node->isCutNode)
