@@ -1008,6 +1008,9 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
 
+        // scale down when move count is high
+        adjustedScore = adjustedScore * (512 - std::clamp((int32_t)node.position.GetMoveCount() - 32, 0, 256)) / 512;
+
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
     }
