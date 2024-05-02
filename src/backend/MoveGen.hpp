@@ -5,18 +5,24 @@
 
 enum class MoveGenerationMode
 {
-    Captures,   // captures and queen promotion
-    Quiets,     // quiet moves and underpromotions
+    WinningCaptures,    // captures winning material and queen promotion
+    NonWinningCaptures, // captures not winning material
+    Quiets,             // quiet moves and underpromotions
 };
+
+INLINE constexpr bool IsCapture(const MoveGenerationMode mode)
+{
+    return mode == MoveGenerationMode::WinningCaptures || mode == MoveGenerationMode::NonWinningCaptures;
+}
 
 template<MoveGenerationMode mode, bool isCapture>
 INLINE void GeneratePromotionsMoveList(const Square from, const Square to, MoveList& outMoveList)
 {
-    if constexpr (mode == MoveGenerationMode::Captures)
+    if constexpr (mode == MoveGenerationMode::WinningCaptures)
     {
         outMoveList.Push(Move::Make(from, to, Piece::Pawn, Piece::Queen, isCapture));
     }
-    else // generate underpromotions
+    else if constexpr (mode == MoveGenerationMode::Quiets) // generate underpromotions
     {
         outMoveList.Push(Move::Make(from, to, Piece::Pawn, Piece::Knight, isCapture));
         outMoveList.Push(Move::Make(from, to, Piece::Pawn, Piece::Bishop, isCapture));
@@ -40,6 +46,7 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
     constexpr Bitboard promotionRank = sideToMove == White ? Bitboard::RankBitboard<7>() : Bitboard::RankBitboard<0>();
     constexpr Bitboard beforePromotionRank = sideToMove == White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>();
 
+    // quiet pawn moves - single and double pushes
     if constexpr (mode == MoveGenerationMode::Quiets)
     {
         constexpr Bitboard doublePushesRank = sideToMove == White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
@@ -61,10 +68,33 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
         });
     }
 
-    if constexpr (mode == MoveGenerationMode::Captures)
+    // pawn capturing non-pawn pieces
+    if constexpr (mode == MoveGenerationMode::WinningCaptures)
     {
-        const Bitboard leftCaptures = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & ~promotionRank;
-        const Bitboard rightCaptures = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & ~promotionRank;
+        const Bitboard filter = occupiedByOpponent & ~opponentSide.pawns & ~promotionRank;
+        const Bitboard leftCaptures = currentSide.pawns.Shift<pawnDirection>().West() & filter;
+        const Bitboard rightCaptures = currentSide.pawns.Shift<pawnDirection>().East() & filter;
+
+        leftCaptures.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
+        {
+            outMoveList.Push(Move::Make(
+                Square(targetIndex).Shift_Unsafe<pawnRevDirection>().East_Unsafe(),
+                targetIndex, Piece::Pawn, Piece::None, true));
+        });
+        rightCaptures.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
+        {
+            outMoveList.Push(Move::Make(
+                Square(targetIndex).Shift_Unsafe<pawnRevDirection>().West_Unsafe(),
+                targetIndex, Piece::Pawn, Piece::None, true));
+        });
+    }
+
+    // pawn capturing pawns
+    if constexpr (mode == MoveGenerationMode::NonWinningCaptures)
+    {
+        const Bitboard filter = opponentSide.pawns & ~promotionRank;
+        const Bitboard leftCaptures = currentSide.pawns.Shift<pawnDirection>().West() & filter;
+        const Bitboard rightCaptures = currentSide.pawns.Shift<pawnDirection>().East() & filter;
 
         leftCaptures.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
         {
@@ -109,16 +139,13 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
         const Bitboard leftCapturePromotions = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & promotionRank;
         const Bitboard rightCapturesPromotions = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & promotionRank;
 
-        promotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
-        {
+        promotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA {
             GeneratePromotionsMoveList<mode,false>(Square(targetIndex).Shift_Unsafe<pawnRevDirection>(), targetIndex, outMoveList);
         });
-        leftCapturePromotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
-        {
+        leftCapturePromotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA {
             GeneratePromotionsMoveList<mode,true>(Square(targetIndex).Shift_Unsafe<pawnRevDirection>().East_Unsafe(), targetIndex, outMoveList);
         });
-        rightCapturesPromotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
-        {
+        rightCapturesPromotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA {
             GeneratePromotionsMoveList<mode,true>(Square(targetIndex).Shift_Unsafe<pawnRevDirection>().West_Unsafe(), targetIndex, outMoveList);
         });
     }
@@ -200,34 +227,36 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
 template<MoveGenerationMode mode, Color sideToMove>
 INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
-    const SidePosition& currentSide = pos.GetSide(sideToMove);
-    const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
-
-    ASSERT(currentSide.king);
-    const Square kingSquare = currentSide.GetKingSquare();
-    const Bitboard occupiedByOpponent = opponentSide.Occupied();
-
-    Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
-    attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
-    attackBitboard &= ~threats; // can't move to a square controlled by the opponent
-    attackBitboard &= mode == MoveGenerationMode::Captures ? occupiedByOpponent : ~occupiedByOpponent;
-
-    // regular king moves
-    attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+    if constexpr (mode == MoveGenerationMode::NonWinningCaptures || mode == MoveGenerationMode::Quiets)
     {
-        outMoveList.Push(Move::Make(kingSquare, Square(toIndex), Piece::King, Piece::None, mode == MoveGenerationMode::Captures));
-    });
+        const SidePosition& currentSide = pos.GetSide(sideToMove);
+        const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
-    if constexpr (mode == MoveGenerationMode::Quiets)
-    {
-        GenerateCastlingMoveList<sideToMove>(pos, outMoveList);
+        ASSERT(currentSide.king);
+        const Square kingSquare = currentSide.GetKingSquare();
+        const Bitboard occupiedByOpponent = opponentSide.Occupied();
+
+        Bitboard attackBitboard = Bitboard::GetKingAttacks(kingSquare);
+        attackBitboard &= ~currentSide.OccupiedExcludingKing(); // can't capture own piece
+        attackBitboard &= ~threats; // can't move to a square controlled by the opponent
+        attackBitboard &= IsCapture(mode) ? occupiedByOpponent : ~occupiedByOpponent;
+
+        // regular king moves
+        attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA {
+            outMoveList.Push(Move::Make(kingSquare, Square(toIndex), Piece::King, Piece::None, IsCapture(mode)));
+        });
+
+        if constexpr (mode == MoveGenerationMode::Quiets)
+        {
+            GenerateCastlingMoveList<sideToMove>(pos, outMoveList);
+        }
     }
 }
 
 template<MoveGenerationMode mode, Color sideToMove>
 inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
-    constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
+    constexpr const bool isCapture = IsCapture(mode);
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
 
@@ -235,49 +264,116 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
     const Bitboard occupiedByOpponent = opponentSide.Occupied();
     const Bitboard occupiedSquares = occupiedByCurrent | occupiedByOpponent;
 
-    Bitboard filter;
-    if constexpr (isCapture)
-        filter = occupiedByOpponent;
-    else
-        filter = ~occupiedSquares;
-
     GeneratePawnMoveList<mode, sideToMove>(pos, outMoveList);
 
-    currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+    if constexpr (mode == MoveGenerationMode::WinningCaptures)
     {
-        const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & filter;
-        attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
-        {
-            outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
-        });
-    });
+        const Bitboard rooksFilter = opponentSide.queens;
+        const Bitboard bishopsFilter = rooksFilter | opponentSide.rooks;
+        const Bitboard knightsFilter = bishopsFilter | opponentSide.bishops;
 
-    currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
-    {
-        const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & filter;
-        attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+        currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
+            const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & knightsFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
+            });
         });
-    });
+        currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & bishopsFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & rooksFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        // Note: queen captures cannot be winning material
+    }
 
-    currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+    if constexpr (mode == MoveGenerationMode::NonWinningCaptures)
     {
-        const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & filter;
-        attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
-        {
-            outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
-        });
-    });
+        const Bitboard knightsFilter = opponentSide.pawns | opponentSide.knights;
+        const Bitboard bishopsFilter = knightsFilter | opponentSide.bishops;
+        const Bitboard rooksFilter = bishopsFilter | opponentSide.rooks;
 
-    currentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
-    {
-        const Bitboard attackBitboard = filter & Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares);
-        attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+        currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
         {
-            outMoveList.Push(Move::MakeSimple<Piece::Queen, isCapture>(fromIndex, Square(toIndex)));
+            const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & knightsFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
+            });
         });
-    });
+        currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & bishopsFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & rooksFilter;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares) & occupiedByOpponent;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Queen, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+    }
+
+    if constexpr (mode == MoveGenerationMode::Quiets)
+    {
+        currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GetKnightAttacks(Square(fromIndex)) & ~occupiedSquares;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Knight, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateBishopAttacks(Square(fromIndex), occupiedSquares) & ~occupiedSquares;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Bishop, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateRookAttacks(Square(fromIndex), occupiedSquares) & ~occupiedSquares;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Rook, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+        currentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
+        {
+            const Bitboard attackBitboard = Bitboard::GenerateQueenAttacks(Square(fromIndex), occupiedSquares) & ~occupiedSquares;
+            attackBitboard.Iterate([&](uint32_t toIndex) INLINE_LAMBDA
+            {
+                outMoveList.Push(Move::MakeSimple<Piece::Queen, isCapture>(fromIndex, Square(toIndex)));
+            });
+        });
+    }
 
     GenerateKingMoveList<mode, sideToMove>(pos, threats, outMoveList);
 }
@@ -297,7 +393,8 @@ INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 
 INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
-    GenerateMoveList<MoveGenerationMode::Captures>(pos, threats, outMoveList);
+    GenerateMoveList<MoveGenerationMode::WinningCaptures>(pos, threats, outMoveList);
+    GenerateMoveList<MoveGenerationMode::NonWinningCaptures>(pos, threats, outMoveList);
     GenerateMoveList<MoveGenerationMode::Quiets>(pos, threats, outMoveList);
 }
 
@@ -310,12 +407,14 @@ INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, Mo
 {
     if (pos.GetSideToMove() == White)
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::WinningCaptures, White>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::NonWinningCaptures, White>(pos, threats, outMoveList);
         GenerateKingMoveList<MoveGenerationMode::Quiets, White>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateKingMoveList<MoveGenerationMode::Captures, Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::WinningCaptures, Black>(pos, threats, outMoveList);
+        GenerateKingMoveList<MoveGenerationMode::NonWinningCaptures, Black>(pos, threats, outMoveList);
         GenerateKingMoveList<MoveGenerationMode::Quiets, Black>(pos, threats, outMoveList);
     }
 }

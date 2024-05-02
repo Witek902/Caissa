@@ -968,7 +968,8 @@ bool Position::IsQuiet() const
     }
 
     MoveList moves;
-    GenerateMoveList<MoveGenerationMode::Captures>(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
+    GenerateMoveList<MoveGenerationMode::WinningCaptures>(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
+    GenerateMoveList<MoveGenerationMode::NonWinningCaptures>(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
 
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {

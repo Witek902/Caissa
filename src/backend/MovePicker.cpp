@@ -11,7 +11,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
     {
         case Stage::TTMove:
         {
-            m_stage = Stage::GenerateCaptures;
+            m_stage = Stage::GenerateWinningCaptures;
             const Move move = m_position.MoveFromPacked(m_ttMove);
             if (move.IsValid() && (!move.IsQuiet() || m_generateQuiets))
             {
@@ -22,13 +22,13 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             [[fallthrough]];
         }
 
-        case Stage::GenerateCaptures:
+        case Stage::GenerateWinningCaptures:
         {
             m_moveIndex = 0;
-            m_stage = Stage::Captures;
+            m_stage = Stage::WinningCaptures;
             m_killerMove = Move::Invalid();
             m_counterMove = Move::Invalid();
-            GenerateMoveList<MoveGenerationMode::Captures>(m_position, node.threats.allThreats, m_moves);
+            GenerateMoveList<MoveGenerationMode::WinningCaptures>(m_position, node.threats.allThreats, m_moves);
 
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
@@ -38,7 +38,37 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             [[fallthrough]];
         }
 
-        case Stage::Captures:
+        case Stage::WinningCaptures:
+        {
+            if (m_moves.Size() > 0)
+            {
+                const uint32_t index = m_moves.BestMoveIndex();
+                outMove = m_moves.GetMove(index);
+                outScore = m_moves.GetScore(index);
+
+                ASSERT(outMove.IsValid());
+                ASSERT(outScore > INT32_MIN);
+
+                if (outScore >= MoveOrderer::PromotionValue)
+                {
+                    m_moves.RemoveByIndex(index);
+                    return true;
+                }
+            }
+
+            m_moveIndex = 0;
+            m_stage = Stage::NonWinningCaptures;
+            GenerateMoveList<MoveGenerationMode::NonWinningCaptures>(m_position, node.threats.allThreats, m_moves);
+
+            // remove PV and TT moves from generated list
+            m_moves.RemoveMove(m_ttMove);
+
+            m_moveOrderer.ScoreMoves(node, m_moves, false);
+
+            [[fallthrough]];
+        }
+
+        case Stage::NonWinningCaptures:
         {
             if (m_moves.Size() > 0)
             {

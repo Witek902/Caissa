@@ -780,12 +780,14 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
             MoveList moves;
             if (GetSideToMove() == White)
             {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, White>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::WinningCaptures, White>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::NonWinningCaptures, White>(*this, moves);
                 GeneratePawnMoveList<MoveGenerationMode::Quiets, White>(*this, moves);
             }
             else
             {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, Black>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::WinningCaptures, Black>(*this, moves);
+                GeneratePawnMoveList<MoveGenerationMode::NonWinningCaptures, Black>(*this, moves);
                 GeneratePawnMoveList<MoveGenerationMode::Quiets, Black>(*this, moves);
             }
             for (uint32_t i = 0; i < moves.Size(); ++i)
