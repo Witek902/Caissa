@@ -53,8 +53,8 @@ private:
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
-    Move m_killerMove;
-    Move m_counterMove;
+    PackedMove m_killerMove;
+    PackedMove m_counterMove;
 
     MoveList m_moves;
 };
