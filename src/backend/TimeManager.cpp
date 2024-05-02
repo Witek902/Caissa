@@ -8,7 +8,7 @@
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
-DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
+DEFINE_PARAM(TM_IdealTimeFactor, 850, 700, 1000);
 DEFINE_PARAM(TM_NodesCountScale, 199, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 53, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 37, 0, 200);
@@ -103,6 +103,17 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // decrease time if eval is around +1.0 or -1.0
+    {
+        const double normalizedEval = static_cast<double>(data.currResult[0].score) / static_cast<double>(wld::NormalizeToPawnValue);
+        const double a = 0.1; // strength
+        const double b = 4.0; // steepness
+        const double posFactor = std::exp(-b * Sqr(normalizedEval - 1.0));
+        const double negFactor = std::exp(-b * Sqr(normalizedEval + 1.0));
+        const double evalFactor = 1.0 / (1.0 + a * (posFactor + negFactor));
+        limits.idealTimeCurrent *= evalFactor;
     }
 
 #ifndef CONFIGURATION_FINAL
