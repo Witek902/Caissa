@@ -14,8 +14,9 @@ public:
     enum class Stage : uint8_t
     {
         TTMove = 0,
-        GenerateCaptures,
-        Captures,
+        GenerateWinningCaptures,
+        WinningCaptures,
+        NonWinningCaptures,
         Killer,
         Counter,
         GenerateQuiets,
@@ -53,8 +54,8 @@ private:
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
-    Move m_killerMove;
-    Move m_counterMove;
+    PackedMove m_killerMove;
+    PackedMove m_counterMove;
 
     MoveList m_moves;
 };
