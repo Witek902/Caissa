@@ -218,7 +218,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     int32_t value = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
 
     // convert to centipawn range
-    value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
+    value /= c_nnOutputToCentiPawns;
 
     // apply scaling based on game phase (0 - endgame, 24 - opening)
     const int32_t gamePhase = std::min(24,
