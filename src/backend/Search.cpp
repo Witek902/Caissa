@@ -1157,7 +1157,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
 
-    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node->isInCheck);
+    const PackedMove ttMove = node->isInCheck || position.IsCapture(ttEntry.move) ? ttEntry.move : PackedMove::Invalid();
+    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttMove, node->isInCheck);
 
     int32_t moveScore = 0;
     Move move;
