@@ -84,7 +84,7 @@ DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
 
 DEFINE_PARAM(RfpDepth, 6, 5, 10);
 DEFINE_PARAM(RfpMultiplier, 112, 80, 180);
-DEFINE_PARAM(RfpTreshold, 16, 0, 20);
+DEFINE_PARAM(RfpTreshold, 40, 0, 80);
 
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 54, 50, 150);
