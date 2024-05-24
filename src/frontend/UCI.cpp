@@ -13,7 +13,7 @@
 #include <math.h>
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.18.7"
+#define CAISSA_VERSION "1.18.8"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -187,6 +187,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UCI_ShowWDL type check default false\n";
+        std::cout << "option name Minimal type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
         std::cout << "option name ColorConsoleOutput type check default false\n";
 #ifdef ENABLE_TUNING
@@ -633,6 +634,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
     mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
     mSearchCtx->searchParam.showWDL = mOptions.showWDL;
+    mSearchCtx->searchParam.minimalOutput = mOptions.minimalOutput;
 
     {
         std::unique_lock<std::mutex> lock(mSearchThreadMutex);
@@ -892,6 +894,14 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "uci_showwdl")
     {
         if (!ParseBool(lowerCaseValue, mOptions.showWDL))
+        {
+            std::cout << "Invalid value" << std::endl;
+            return false;
+        }
+    }
+    else if (lowerCaseName == "minimal")
+    {
+        if (!ParseBool(lowerCaseValue, mOptions.minimalOutput))
         {
             std::cout << "Invalid value" << std::endl;
             return false;
