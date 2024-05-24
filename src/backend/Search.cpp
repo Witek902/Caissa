@@ -320,41 +320,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
     SearchStats globalStats;
 
-    // Quiescence search debugging 
-    if (param.limits.maxDepth == 0)
-    {
-        ThreadData& thread = *mThreadData.front();
-
-        NodeInfo& rootNode = thread.searchStack[0];
-        rootNode = NodeInfo{};
-        rootNode.position = game.GetPosition();
-        rootNode.isInCheck = game.GetPosition().IsInCheck();
-        rootNode.position.ComputeThreats(rootNode.threats);
-        rootNode.isPvNodeFromPrevIteration = true;
-        rootNode.alpha = -InfValue;
-        rootNode.beta = InfValue;
-        rootNode.nnContext.MarkAsDirty();
-
-        SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
-        outResult.resize(1);
-        outResult.front().score = QuiescenceNegaMax<NodeType::Root>(thread, &rootNode, searchContext);
-        SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
-
-        // flush pending stats
-        searchContext.stats.Append(thread.stats, true);
-
-        const AspirationWindowSearchParam aspirationWindowSearchParam =
-        {
-            game.GetPosition(),
-            param,
-            0,
-            0,
-            searchContext,
-        };
-
-        ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
-    }
-
     // kick off worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
@@ -392,7 +357,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     // select best PV line from finished threads
     {
         uint32_t bestThreadIndex = 0;
-        uint16_t bestDepth = 0;
+        uint32_t bestDepth = 0;
         ScoreType bestScore = -InfValue;
 
         for (uint32_t i = 0; i < param.numThreads; ++i)
@@ -476,33 +441,35 @@ void Search::WorkerThreadCallback(ThreadData* threadData)
     }
 }
 
-void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
+void Search::ReportPV(
+    const SearchParam& searchParam, const SearchContext& searchContext,
+    uint32_t depth, uint32_t pvIndex, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
 {
     const float timeInSeconds = searchTime.ToSeconds();
 
     // don't report PV line if very small amount of time passed and we have time limits
     if (timeInSeconds < PvLineReportDelay &&
-        param.searchParam.limits.maxTime.IsValid() &&
-        !param.searchParam.limits.analysisMode)
+        searchParam.limits.maxTime.IsValid() &&
+        !searchParam.limits.analysisMode)
     {
         return;
     }
 
     std::stringstream ss{ std::ios_base::out };
 
-    const uint64_t numNodes = param.searchContext.stats.nodes.load();
+    const uint64_t numNodes = searchContext.stats.nodes.load();
 
-    ss << "info depth " << param.depth;
-    ss << " seldepth " << (uint32_t)param.searchContext.stats.maxDepth;
-    if (param.searchParam.numPvLines > 1) ss << " multipv " << (param.pvIndex + 1);
+    ss << "info depth " << depth;
+    ss << " seldepth " << (uint32_t)searchContext.stats.maxDepth;
+    if (searchParam.numPvLines > 1) ss << " multipv " << (pvIndex + 1);
 
     if (pvLine.score > CheckmateValue - (int32_t)MaxSearchDepth)        ss << " score mate " << (CheckmateValue - pvLine.score + 1) / 2;
     else if (pvLine.score < -CheckmateValue + (int32_t)MaxSearchDepth)  ss << " score mate -" << (CheckmateValue + pvLine.score + 1) / 2;
     else                                                                ss << " score cp " << NormalizeEval(pvLine.score);
 
-    if (param.searchParam.showWDL)
+    if (searchParam.showWDL)
     {
-        const uint32_t ply = 2 * param.searchContext.game.GetPosition().GetMoveCount();
+        const uint32_t ply = 2 * searchContext.game.GetPosition().GetMoveCount();
         const float w = EvalToWinProbability(pvLine.score / 100.0f, ply);
         const float l = EvalToWinProbability(-pvLine.score / 100.0f, ply);
         const float d = 1.0f - w - l;
@@ -517,23 +484,23 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
 
     ss << " nodes " << numNodes;
     if (timeInSeconds > 0.01f && numNodes > 100) ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
-    ss << " hashfull " << param.searchParam.transpositionTable.GetHashFull();
-    if (param.searchContext.stats.tbHits) ss << " tbhits " << param.searchContext.stats.tbHits;
+    ss << " hashfull " << searchParam.transpositionTable.GetHashFull();
+    if (searchContext.stats.tbHits) ss << " tbhits " << searchContext.stats.tbHits;
     ss << " time " << static_cast<int64_t>(0.5f + 1000.0f * timeInSeconds);
 
     ss << " pv ";
     {
-        Position tempPosition = param.position;
+        Position tempPosition = searchContext.game.GetPosition();
         for (size_t i = 0; i < pvLine.moves.size(); ++i)
         {
             const Move move = pvLine.moves[i];
             ASSERT(move.IsValid());
 
-            if (i == 0 && param.searchParam.colorConsoleOutput) ss << "\033[93m";
+            if (i == 0 && searchParam.colorConsoleOutput) ss << "\033[93m";
 
-            ss << tempPosition.MoveToString(move, param.searchParam.moveNotation);
+            ss << tempPosition.MoveToString(move, searchParam.moveNotation);
 
-            if (i == 0 && param.searchParam.colorConsoleOutput) ss << "\033[0m";
+            if (i == 0 && searchParam.colorConsoleOutput) ss << "\033[0m";
 
             if (i + 1 < pvLine.moves.size()) ss << ' ';
             tempPosition.DoMove(move);
@@ -541,9 +508,9 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     }
 
 #ifdef COLLECT_SEARCH_STATS
-    if (param.searchParam.verboseStats)
+    if (searchParam.verboseStats)
     {
-        const SearchStats& stats = param.searchContext.stats;
+        const SearchStats& stats = searchContext.stats;
 
         {
             const float sum = float(stats.numPvNodes + stats.numAllNodes + stats.numCutNodes);
@@ -718,6 +685,15 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
+        if (isMainThread && param.debugLog && !param.minimalOutput)
+        {
+            const TimePoint searchTime = TimePoint::GetCurrent() - param.limits.startTimePoint;
+            for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
+            {
+                ReportPV(param, searchContext, thread.depthCompleted, pvIndex, thread.pvLines[pvIndex], BoundsType::Exact, searchTime);
+            }
+        }
+
         const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
@@ -817,6 +793,15 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     // make sure all threads are stopped
     param.stopSearch = true;
+
+    if (isMainThread && param.debugLog && param.minimalOutput)
+    {
+        const TimePoint searchTime = TimePoint::GetCurrent() - param.limits.startTimePoint;
+        for (uint32_t pvIndex = 0; pvIndex < numPvLines; ++pvIndex)
+        {
+            ReportPV(param, searchContext, thread.depthCompleted, pvIndex, thread.pvLines[pvIndex], BoundsType::Exact, searchTime);
+        }
+    }
 }
 
 PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
@@ -895,10 +880,13 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         ASSERT(!pvLine.moves.empty());
         ASSERT(pvLine.moves.front().IsValid());
 
-        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch)
+        // print only non-exact scores from aspiration window search here
+        if (isMainThread && !param.searchParam.stopSearch &&
+            param.searchParam.debugLog && !param.searchParam.minimalOutput &&
+            boundsType != BoundsType::Exact)
         {
             const TimePoint searchTime = TimePoint::GetCurrent() - param.searchParam.limits.startTimePoint;
-            ReportPV(param, pvLine, boundsType, searchTime);
+            ReportPV(param.searchParam, param.searchContext, param.depth, param.pvIndex, pvLine, boundsType, searchTime);
         }
 
         // don't return line if search was aborted, because the result comes from incomplete search

@@ -18,6 +18,7 @@ struct Options
     int32_t staticContempt = 0;
     int32_t dynamicContempt = 0;
     bool analysisMode = false;
+    bool minimalOutput = false;
     bool useStandardAlgebraicNotation = false;
     bool colorConsoleOutput = false;
     bool showWDL = false;

@@ -98,6 +98,9 @@ struct SearchParam
     // print verbose debug stats (not UCI compatible)
     bool verboseStats = false;
 
+    // minimal printing, include only best move from last iteration
+    bool minimalOutput = false;
+
     // show win/draw/loss probabilities along with classic cp score
     bool showWDL = false;
 };
@@ -305,8 +308,8 @@ private:
 
         bool isMainThread = false;
 
-        uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
-        uint16_t depthCompleted = 0;        // recently completed search depth
+        uint32_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
+        uint32_t depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
@@ -362,7 +365,8 @@ private:
 
     static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam);
 
-    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
+    void ReportPV(const SearchParam& searchParam, const SearchContext& searchContext,
+        uint32_t depth, uint32_t pvIndex, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
