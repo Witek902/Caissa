@@ -96,7 +96,7 @@ DEFINE_PARAM(RazoringMarginBias, 20, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 
-DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
+DEFINE_PARAM(EvalCorrectionWeight, 533, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
@@ -962,7 +962,7 @@ ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
-    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
+    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -INT16_MAX, INT16_MAX);
     if (pos.GetSideToMove() == Black) diff = -diff;
 
     // material
@@ -1002,7 +1002,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
         // apply eval correction term
-        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
+        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionWeight / 1024);
         adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw
