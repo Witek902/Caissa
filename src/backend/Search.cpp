@@ -97,7 +97,7 @@ DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 
 DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(EvalCorrectionBlendFactor, 128, 8, 512);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
