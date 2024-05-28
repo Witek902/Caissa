@@ -32,7 +32,7 @@ The engine has been written from the ground up. In early versions it used a simp
 
 The runtime neural network evaluation code is located in [PackedNeuralNetwork.cpp](https://github.com/Witek902/Caissa/blob/devel/src/backend/PackedNeuralNetwork.cpp) and was inspired by [nnue.md document](https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md). The neural network trainer is written completely from scratch and is located in [NetworkTrainer.cpp](https://github.com/Witek902/Caissa/blob/devel/src/utils/NetworkTrainer.cpp), [NeuralNetwork.cpp](https://github.com/Witek902/Caissa/blob/devel/src/utils/NeuralNetwork.cpp) and other NeuralNetwork* files. The trainer is purely CPU-based and is heavily optimized to take advantage of many threads and AVX instructions as well as it exploits the sparse nature of the nets.
 
-The games are generated with the utility [SelfPlay.cpp](https://github.com/Witek902/Caissa/blob/devel/src/utils/SelfPlay.cpp), which generates games with a fixed number of nodes/depth and saves them in a custom binary game format to save space. The opening books used are either Stefan's Pohl [UHO books](https://www.sp-cc.de/uho_2022.htm) or DFRC openings with few random moves played at the beginning.
+The games are generated with the utility [SelfPlay.cpp](https://github.com/Witek902/Caissa/blob/devel/src/utils/SelfPlay.cpp), which generates games with a fixed number of nodes/depth and saves them in a custom binary game format to save space. The opening books used are either Stefan's Pohl [UHO books](https://www.sp-cc.de/downloads--links.htm) or DFRC openings with few random moves played at the beginning.
 
 ### Supported UCI options
 
