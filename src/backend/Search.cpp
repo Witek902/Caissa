@@ -2056,9 +2056,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             bestValue = score;
 
-            // make sure we have any best move in root node
-            if constexpr (isRootNode) bestMove = move;
-
             // update PV line
             if constexpr (isPvNode)
             {
@@ -2147,13 +2144,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
-
-    if constexpr (isRootNode)
-    {
-        ASSERT(bestMove.IsValid());
-        ASSERT(!isPvNode || node->pvLength > 0);
-        ASSERT(!isPvNode || node->pvLine[0] == bestMove);
-    }
 
     // clamp score to TB bounds
     if constexpr (isPvNode)
