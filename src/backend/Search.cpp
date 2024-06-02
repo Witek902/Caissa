@@ -676,7 +676,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             if (depth > 1 && CheckStopCondition(thread, searchContext, true))
             {
                 abortSearch = true;
-                break;
             }
 
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
@@ -708,16 +707,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
         }
 
-        if (abortSearch)
-        {
-            if (isMainThread)
-            {
-                // stop other threads
-                param.stopSearch = true;
-            }
-            break;
-        }
-
         const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
@@ -741,6 +730,16 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         // remember PV lines so they can be used in next iteration
         thread.pvLines = std::move(tempResult);
+
+        if (abortSearch)
+        {
+            if (isMainThread)
+            {
+                // stop other threads
+                param.stopSearch = true;
+            }
+            break;
+        }
 
         if (!param.stopSearch)
         {
@@ -901,11 +900,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             ReportPV(param, pvLine, boundsType, searchTime);
         }
 
-        // don't return line if search was aborted, because the result comes from incomplete search
-        if (!stopSearch)
-        {
-            finalPvLine = std::move(pvLine);
-        }
+        finalPvLine = std::move(pvLine);
 
         // stop the search when exact score is found
         if (boundsType == BoundsType::Exact || stopSearch)
