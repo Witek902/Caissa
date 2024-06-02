@@ -325,7 +325,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     {
         ThreadData& thread = *mThreadData.front();
 
-        NodeInfo& rootNode = thread.searchStack[0];
+        NodeInfo& rootNode = thread.searchStack[ThreadData::StackSizeMargin];
         rootNode = NodeInfo{};
         rootNode.position = game.GetPosition();
         rootNode.isInCheck = game.GetPosition().IsInCheck();
@@ -793,7 +793,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             const uint16_t singularDepth = depth / 2;
             const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
 
-            NodeInfo& rootNode = thread.searchStack[0];
+            NodeInfo& rootNode = thread.searchStack[ThreadData::StackSizeMargin];
             rootNode = NodeInfo{};
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
@@ -844,7 +844,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? UINT32_MAX : std::min(param.depth, DefaultMaxPvLineLength);
 
     // TODO root node could be created in Search_Internal
-    NodeInfo& rootNode = thread.searchStack[0];
+    NodeInfo& rootNode = thread.searchStack[ThreadData::StackSizeMargin];
     rootNode = NodeInfo{};
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
@@ -1214,6 +1214,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
 
         childNode.previousMove = move;
+        childNode.continuationHistory = &(thread.moveOrderer.continuationHistory[move.IsCapture()][position.GetSideToMove()][(uint32_t)move.GetPiece() - 1][move.ToSquare().Index()]);
         childNode.position.ComputeThreats(childNode.threats);
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
@@ -1560,6 +1561,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.doubleExtensions = node->doubleExtensions;
                     childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
+                    childNode.continuationHistory = &(thread.moveOrderer.continuationHistory[false][(uint32_t)position.GetSideToMove()][0][0]);
                     childNode.nnContext.MarkAsDirty();
 
                     childNode.position.DoNullMove();
@@ -1621,6 +1623,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                     childNode.depth = 0;
                     childNode.previousMove = move;
+                    childNode.continuationHistory = &(thread.moveOrderer.continuationHistory[move.IsCapture()][position.GetSideToMove()][(uint32_t)move.GetPiece() - 1][move.ToSquare().Index()]);
                     childNode.position.ComputeThreats(childNode.threats);
                     childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
                     ASSERT(childNode.isInCheck == childNode.position.IsInCheck());
@@ -1682,8 +1685,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         extension++;
     }
-
-    thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
     if (node->ply < 3)
@@ -1749,9 +1750,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const uint32_t piece = (uint32_t)move.GetPiece() - 1;
             const uint32_t to = move.ToSquare().Index();
             moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
-            if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
+            if (const auto* h = node->continuationHistory) moveStatScore += (*h)[piece][to];
+            if (const auto* h = (node - 1)->continuationHistory) moveStatScore += (*h)[piece][to];
+            if (const auto* h = (node - 3)->continuationHistory) moveStatScore += (*h)[piece][to];
 
             quietMoveIndex++;
         }
@@ -1905,6 +1906,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.position.ComputeThreats(childNode.threats);
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
+        childNode.continuationHistory = &(thread.moveOrderer.continuationHistory[move.IsCapture()][position.GetSideToMove()][(uint32_t)move.GetPiece() - 1][move.ToSquare().Index()]);
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
         childNode.doubleExtensions = node->doubleExtensions + (moveExtension >= 2);

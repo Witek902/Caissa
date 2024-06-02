@@ -10,6 +10,8 @@ class MoveOrderer
 {
 public:
 
+    friend class Search;
+
     static constexpr int32_t PVMoveValue            = INT32_MAX;
     static constexpr int32_t TTMoveValue            = PVMoveValue - 1;
 
@@ -29,8 +31,6 @@ public:
 
     void NewSearch();
     void Clear();
-
-    void InitContinuationHistoryPointers(NodeInfo& node);
 
     CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
 
@@ -70,7 +70,7 @@ private:
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][2][2][64*64];           // stm, from-threated, to-threated, from-square, to-square
-    PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
+    PieceSquareHistory continuationHistory[2][2][6][64];    // prev is capture, prev stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
     Move counterMoves[2][6][64];                            // stm, piece, to-square
 

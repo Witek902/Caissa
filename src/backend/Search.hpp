@@ -142,7 +142,7 @@ struct NodeInfo
     bool isNullMove = false;
     bool isInCheck = false;
 
-    MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
+    MoveOrderer::PieceSquareHistory* continuationHistory = nullptr;
 
     NNEvaluatorContext nnContext;
 
@@ -167,12 +167,7 @@ struct NodeInfo
         isCutNode = false;
         doubleExtensions = 0;
         nnContext.MarkAsDirty();
-        continuationHistories[0] = nullptr;
-        continuationHistories[1] = nullptr;
-        continuationHistories[2] = nullptr;
-        continuationHistories[3] = nullptr;
-        continuationHistories[4] = nullptr;
-        continuationHistories[5] = nullptr;
+        continuationHistory = nullptr;
     }
 };
 
@@ -318,7 +313,8 @@ private:
 
         AccumulatorCache accumulatorCache;
 
-        NodeInfo searchStack[MaxSearchDepth];
+        static constexpr uint32_t StackSizeMargin = 8; // for continuation history
+        NodeInfo searchStack[MaxSearchDepth + StackSizeMargin];
 
         static constexpr int32_t EvalCorrectionScale = 256;
         static constexpr uint32_t MaterialCorrectionTableSize = 2048;
