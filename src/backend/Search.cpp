@@ -1099,6 +1099,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
+
+            ctx.searchParam.transpositionTable.Write(position, evalScore, evalScore, -1, TTEntry::Bounds::Lower);
+
             node->staticEval = evalScore;
 
 #ifdef COLLECT_SEARCH_STATS
@@ -1126,18 +1129,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
 
         if (bestValue >= beta)
-        {
-            if (!ttEntry.IsValid())
-            {
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
-            }
             return bestValue;
-        }
 
         if (bestValue > alpha)
-        {
             alpha = bestValue;
-        }
 
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
@@ -1459,9 +1454,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-            node->staticEval = evalScore;
+            
+            ctx.searchParam.transpositionTable.Write(position, evalScore, evalScore, -1, TTEntry::Bounds::Lower);
 
-            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
+            node->staticEval = evalScore;
         }
         else if (!node->isCutNode)
         {
