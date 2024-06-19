@@ -1494,6 +1494,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return node->isInCheck ? 0 : eval;
     }
 
+    // use static evaluation difference to update history heuristics
+    if constexpr (!isRootNode)
+    {
+        if (!node->isNullMove && node->previousMove.IsQuiet() &&
+            std::abs(node->staticEval) < KnownWinValue &&
+            std::abs((node - 1)->staticEval) < KnownWinValue)
+        {
+            const int32_t bonus = std::clamp<int32_t>(-((node - 1)->staticEval + node->staticEval), -40, 40);
+            thread.moveOrderer.UpdateQuietHistory(*(node - 1), node->previousMove, bonus);
+        }
+    }
+
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     bool isImproving = false;
