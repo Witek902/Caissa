@@ -32,8 +32,14 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
+        int32_t remainingTime = data.remainingTime;
+        if (data.theirRemainingTime != INT32_MAX && data.theirRemainingTime < data.remainingTime)
+        {
+            remainingTime = 2 * data.remainingTime - data.theirRemainingTime;
+        }
+
         const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
-        float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
+        float idealTime = idealTimeFactor * (remainingTime / movesLeft + (float)data.timeIncrement);
         float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
 
         const float minMoveTime = 0.00001f;
