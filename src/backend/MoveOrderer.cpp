@@ -170,6 +170,7 @@ void MoveOrderer::Clear()
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
     memset(counterMoves, 0, sizeof(counterMoves));
+    memset(pawnHistory, 0, sizeof(pawnHistory));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -245,6 +246,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t to = move.ToSquare().Index();
         
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
+        UpdateHistoryCounter(pawnHistory[node.position.GetPawnsHash() % PawnHistorySize][color][piece][to], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -351,6 +353,7 @@ void MoveOrderer::ScoreMoves(
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+            score += pawnHistory[pos.GetPawnsHash() % PawnHistorySize][color][piece][to];
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
