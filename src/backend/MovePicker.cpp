@@ -1,9 +1,7 @@
 #include "MovePicker.hpp"
-#include "MoveOrderer.hpp"
 #include "MoveGen.hpp"
-#include "Position.hpp"
-#include "TranspositionTable.hpp"
 #include "Search.hpp"
+
 
 bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore)
 {

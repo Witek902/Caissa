@@ -1,9 +1,6 @@
 #include "SearchUtils.hpp"
 #include "Search.hpp"
-#include "Position.hpp"
-#include "PositionHash.hpp"
 #include "Game.hpp"
-#include "TranspositionTable.hpp"
 
 // Upcoming repetition detection algorithm base on Stockfish implementation
 // Algorithm by Marcel van Kervinck:

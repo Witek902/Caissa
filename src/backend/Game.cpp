@@ -1,8 +1,6 @@
 #include "Game.hpp"
 #include "Evaluate.hpp"
-#include "Score.hpp"
 
-#include <sstream>
 
 Game::Game()
     : mInitPosition(Position::InitPositionFEN)

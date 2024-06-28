@@ -1,14 +1,8 @@
 #include "Evaluate.hpp"
-#include "Move.hpp"
-#include "Material.hpp"
 #include "Endgame.hpp"
-#include "PackedNeuralNetwork.hpp"
-#include "NeuralNetworkEvaluator.hpp"
-#include "Pawns.hpp"
 #include "Search.hpp"
 
 #include <fstream>
-#include <memory>
 
 #if defined(CAISSA_EVALFILE)
 
@@ -16,7 +10,7 @@
     #define INCBIN_PREFIX
     #define INCBIN_STYLE INCBIN_STYLE_CAMEL
     #include "incbin.h"
-    INCBIN(Embed, CAISSA_EVALFILE);
+        INCBIN(Embed, CAISSA_EVALFILE);
 
     const char* c_DefaultEvalFile = "<empty>";
 

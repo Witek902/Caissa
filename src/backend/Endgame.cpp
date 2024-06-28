@@ -1,16 +1,10 @@
 #include "Endgame.hpp"
 #include "Evaluate.hpp"
-#include "Position.hpp"
 #include "Material.hpp"
-#include "Move.hpp"
-#include "MoveList.hpp"
 #include "MoveGen.hpp"
 #include "Math.hpp"
-#include "PackedNeuralNetwork.hpp"
 
 #include <bitset>
-#include <vector>
-#include <mutex>
 
 // KPK evaluation is based on Stockfish bitbase:
 // https://github.com/official-stockfish/Stockfish/blob/master/src/bitbase.cpp
@@ -1320,7 +1314,6 @@ void InitEndgame()
 }
 
 #ifdef COLLECT_ENDGAME_STATISTICS
-#include <unordered_map>
 static std::mutex s_matKeyOccurencesMutex;
 static std::unordered_map<MaterialKey, uint64_t> s_matKeyOccurences;
 #endif // COLLECT_ENDGAME_STATISTICS

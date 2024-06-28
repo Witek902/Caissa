@@ -1,6 +1,5 @@
 #include "Memory.hpp"
 
-#include <iostream>
 
 #if defined(PLATFORM_WINDOWS)
 
@@ -9,7 +8,6 @@
 #define NOMINMAX
 #endif // NOMINMAX
 #include <Windows.h>
-
 
 bool EnableLargePagesSupport()
 {

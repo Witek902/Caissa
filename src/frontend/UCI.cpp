@@ -1,16 +1,9 @@
 #include "UCI.hpp"
-#include "../backend/Move.hpp"
 #include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/NeuralNetworkEvaluator.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/Material.hpp"
 #include "../backend/TimeManager.hpp"
-#include "../backend/PositionUtils.hpp"
-#include "../backend/Tuning.hpp"
 
-#include <math.h>
 
 #ifndef CAISSA_VERSION
 #define CAISSA_VERSION "1.19"
@@ -362,20 +355,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             extraMovesStart = 2;
         }
     }
-#ifndef CONFIGURATION_FINAL
-    else if (args.size() >= 2 && args[1] == "random")
-    {
-        MaterialKey matKey = { 8, 2, 2, 2, 1, 8, 2, 2, 2, 1 };
-        std::random_device rd;
-        std::mt19937 mt(rd());
-        GenerateRandomPosition(mt, RandomPosDesc{ matKey }, pos);
-
-        if (args.size() >= 4 && args[2] == "moves")
-        {
-            extraMovesStart = 2;
-        }
-    }
-#endif // CONFIGURATION_FINAL
     else if (args.size() > 2 && args[1] == "fen")
     {
         size_t numFenElements = 0;

@@ -3,7 +3,6 @@
 #include "Memory.hpp"
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
-#include "Evaluate.hpp"
 #include "SearchUtils.hpp"
 
 #if defined(PLATFORM_WINDOWS)

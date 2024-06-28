@@ -1,6 +1,4 @@
 #include "Position.hpp"
-#include "MoveList.hpp"
-#include "Bitboard.hpp"
 #include "Material.hpp"
 #include "Evaluate.hpp"
 #include "MoveGen.hpp"

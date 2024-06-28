@@ -1,9 +1,6 @@
 #include "MoveList.hpp"
-#include "MoveOrderer.hpp"
 #include "Position.hpp"
 
-#include <algorithm>
-#include <cstring>
 #include <iomanip>
 
 void PrintMoveList(const Position& pos, const MoveList& moves)

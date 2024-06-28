@@ -1,13 +1,7 @@
 #include "MoveOrderer.hpp"
 #include "Search.hpp"
-#include "MoveList.hpp"
-#include "Evaluate.hpp"
-#include "Game.hpp"
 #include "Tuning.hpp"
 
-#include <algorithm>
-#include <limits>
-#include <iomanip>
 
 DEFINE_PARAM(QuietBonusOffset, -103, -200, 50);
 DEFINE_PARAM(QuietBonusLinear, 162, 75, 200);

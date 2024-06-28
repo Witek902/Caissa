@@ -1,10 +1,7 @@
 #include "TimeManager.hpp"
-
 #include "Game.hpp"
-#include "Evaluate.hpp"
 #include "Tuning.hpp"
 
-#include <algorithm>
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 41, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 213, 150, 260);
