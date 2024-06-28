@@ -3,12 +3,10 @@
 #include "Memory.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <thread>
 
 #ifdef USE_SSE
-    #include <xmmintrin.h>
-#endif // USE_SSE
+    #endif // USE_SSE
 
 static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == 32, "Invalid TT cluster size");

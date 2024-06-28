@@ -1,6 +1,5 @@
 #include "Bitboard.hpp"
 #include "Square.hpp"
-#include "Common.hpp"
 
 static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];

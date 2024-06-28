@@ -1,12 +1,7 @@
 #include "PositionUtils.hpp"
-
-#include "Position.hpp"
-#include "MoveList.hpp"
 #include "Time.hpp"
-#include "Material.hpp"
 #include "MoveGen.hpp"
 
-#include <random>
 
 static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
 

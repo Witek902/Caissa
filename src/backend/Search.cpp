@@ -2,22 +2,12 @@
 #include "SearchUtils.hpp"
 #include "MovePicker.hpp"
 #include "Game.hpp"
-#include "MoveList.hpp"
 #include "Material.hpp"
 #include "Evaluate.hpp"
-#include "TranspositionTable.hpp"
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
-#include "PositionHash.hpp"
-#include "Score.hpp"
 #include "Tuning.hpp"
 
-#include <iostream>
-#include <sstream>
-#include <cstring>
-#include <string>
-#include <thread>
-#include <math.h>
 
 // silent warning C4127: conditional expression is constant
 #ifdef _MSC_VER
