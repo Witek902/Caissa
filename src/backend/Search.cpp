@@ -1208,9 +1208,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         // there shouldn't be many "good" captures available in a "normal" chess positions
         if (bestValue > -TablebaseWinValue)
         {
-                 if (node->depth < -4 && moveIndex > 1) break;
-            else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth <  0 && moveIndex > 3) break;
+                 if (node->depth <= -2 && moveIndex > 1) break;
+            else if (node->depth <= -1 && moveIndex > 2) break;
+            else if (node->depth <=  0 && moveIndex > 3) break;
         }
 
         childNode.previousMove = move;
