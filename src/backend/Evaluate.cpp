@@ -242,5 +242,5 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 
 void EnsureAccumulatorUpdated(NodeInfo& node, AccumulatorCache& cache)
 {
-    NNEvaluator::EnsureAccumulatorUpdated(*g_mainNeuralNetwork, node, cache);
+    NNEvaluator::EnsureAccumulatorsUpdated(*g_mainNeuralNetwork, node, cache);
 }
