@@ -1484,6 +1484,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return node->isInCheck ? 0 : eval;
     }
 
+    // reduce depth if position was not found in transposition table
+    if (node->depth >= 4
+        && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
+        node->depth--;
+
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     bool isImproving = false;
@@ -1636,12 +1641,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
-
-    // reduce depth if position was not found in transposition table
-    if (node->depth >= 7
-        && (node->isCutNode || isPvNode)
-        && (!ttMove.IsValid() || ttEntry.depth + 4 < node->depth))
-        node->depth--;
 
     // in-check probcut (idea from Stockfish)
     if constexpr (!isPvNode)
