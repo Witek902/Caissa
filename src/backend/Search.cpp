@@ -1485,10 +1485,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // reduce depth if position was not found in transposition table
-    if (node->depth >= 4
-        && (node->isCutNode || isPvNode)
-        && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
-        node->depth--;
+    if ((node->isCutNode || isPvNode) &&
+        (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
+    {
+        node->depth = std::max<int16_t>(1, node->depth - 2);
+    }
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
