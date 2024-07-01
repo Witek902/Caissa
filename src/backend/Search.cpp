@@ -345,6 +345,17 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
     }
 
+    // average histories across threads
+    if (mThreadData.size() > 1)
+    {
+        static std::vector<MoveOrderer*> moveOrderers;
+        moveOrderers.clear();
+        for (const auto& threadData : mThreadData)
+            moveOrderers.push_back(&threadData->moveOrderer);
+
+        MoveOrderer::AverageHistories(moveOrderers.data(), moveOrderers.size());
+    }
+
     // kick off worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {

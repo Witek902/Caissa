@@ -410,3 +410,41 @@ void MoveOrderer::ScoreMoves(
         moves.entries[i].score = score;
     }
 }
+
+void MoveOrderer::AverageHistories(MoveOrderer** moveOrderers, size_t count)
+{
+    //TimePoint start = TimePoint::GetCurrent();
+
+    // average quiet moves history
+    {
+        constexpr size_t numValues = sizeof(MoveOrderer::quietMoveHistory) / sizeof(CounterType);
+        for (size_t i = 0; i < numValues; ++i)
+        {
+            int32_t sum = 0;
+            for (size_t j = 0; j < count; ++j)
+                sum += reinterpret_cast<const CounterType*>(moveOrderers[j]->quietMoveHistory)[i];
+            sum /= static_cast<int32_t>(count); // TODO avoid division
+
+            for (size_t j = 0; j < count; ++j)
+                reinterpret_cast<CounterType*>(moveOrderers[j]->quietMoveHistory)[i] = static_cast<CounterType>(sum);
+        }
+    }
+
+    // average continuation history
+    //{
+    //    constexpr size_t numValues = sizeof(MoveOrderer::continuationHistory) / sizeof(CounterType);
+    //    for (size_t i = 0; i < numValues; ++i)
+    //    {
+    //        int32_t sum = 0;
+    //        for (size_t j = 0; j < count; ++j)
+    //            sum += reinterpret_cast<const CounterType*>(moveOrderers[j]->continuationHistory)[i];
+    //        sum /= static_cast<int32_t>(count); // TODO avoid division
+
+    //        for (size_t j = 0; j < count; ++j)
+    //            reinterpret_cast<CounterType*>(moveOrderers[j]->continuationHistory)[i] = static_cast<CounterType>(sum);
+    //    }
+    //}
+
+    //TimePoint end = TimePoint::GetCurrent();
+    //std::cout << "AverageHistories: " << (1000.0f * (end - start).ToSeconds()) << "ms" << std::endl;
+}
