@@ -65,6 +65,8 @@ public:
 
     void DebugPrint() const;
 
+    static void AverageHistories(MoveOrderer** moveOrderers, size_t count);
+
 private:
 
     alignas(CACHELINE_SIZE)
