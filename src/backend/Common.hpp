@@ -456,6 +456,7 @@ static constexpr Color White = 0;
 static constexpr Color Black = 1;
 
 using ScoreType = int16_t;
+using DepthType = int16_t;
 
 static constexpr ScoreType InfValue             = 32767;
 static constexpr ScoreType InvalidValue         = INT16_MAX;

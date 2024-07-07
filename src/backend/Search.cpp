@@ -19,7 +19,6 @@
 static const float PvLineReportDelay = 0.005f;
 static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
-static const uint32_t MateCountStopCondition = 7;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 64;
@@ -89,14 +88,14 @@ DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
-INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
+INLINE static uint32_t GetLateMovePruningTreshold(DepthType depth, bool improving)
 {
     return improving ?
         LateMovePruningBase + depth * depth :
         LateMovePruningBase + depth * depth / 2;
 }
 
-INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
+INLINE static int32_t GetHistoryPruningTreshold(DepthType depth)
 {
     return 0 - HistoryPruningLinearFactor * depth - HistoryPruningQuadraticFactor * depth * depth;
 }
@@ -616,7 +615,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.moveOrderer.NewSearch();
     thread.nodeCache.OnNewSearch();
 
-    uint32_t mateCounter = 0;
     TimeManagerState timeManagerState;
 
     SearchContext searchContext{ game, param, outStats };
@@ -672,19 +670,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             ASSERT(pvLine.score > -CheckmateValue && pvLine.score < CheckmateValue);
             ASSERT(!pvLine.moves.empty());
 
-            // update mate counter
-            if (pvIndex == 0)
-            {
-                if (IsMate(pvLine.score))
-                {
-                    mateCounter++;
-                }
-                else
-                {
-                    mateCounter = 0;
-                }
-            }
-
             // store for multi-PV filtering in next iteration
 #ifndef CONFIGURATION_FINAL
             for (const Move prevMove : searchContext.excludedRootMoves)
@@ -738,8 +723,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             thread.depthCompleted = depth;
         }
 
-        if (isMainThread &&
-            !param.isPonder.load(std::memory_order_acquire))
+        if (isMainThread && !param.isPonder.load(std::memory_order_acquire))
         {
             // check soft time limit every depth iteration
             if (param.limits.idealTimeCurrent.IsValid() &&
@@ -753,15 +737,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             // check soft node limit
             if (param.limits.maxNodesSoft < UINT64_MAX &&
                 searchContext.stats.nodes > param.limits.maxNodesSoft)
-            {
-                param.stopSearch = true;
-                break;
-            }
-
-            // stop the search if found mate in multiple depths in a row
-            if (!param.limits.analysisMode &&
-                mateCounter >= MateCountStopCondition &&
-                param.limits.maxDepth == UINT16_MAX)
             {
                 param.stopSearch = true;
                 break;
@@ -950,23 +925,26 @@ ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
     return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
 }
 
-void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
+void Search::ThreadData::UpdateEvalCorrection(const NodeInfo& node, ScoreType trueScore)
 {
-    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
-    if (pos.GetSideToMove() == Black) diff = -diff;
+    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - node.staticEval), -32000, 32000);
+    if (node.position.GetSideToMove() == Black) diff = -diff;
+
+    // make higher depths influence the running average more
+    const int32_t weight = std::clamp<DepthType>(node.depth / 2, 1, 8);
 
     // material
     {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
+        const int32_t index = Murmur3(node.position.GetMaterialKey().value) % MaterialCorrectionTableSize;
         int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - weight) + diff * weight) / EvalCorrectionBlendFactor);
     }
 
     // pawn structure
     {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
+        const int32_t index = node.position.GetPawnsHash() % PawnStructureCorrectionTableSize;
         int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - weight) + diff * weight) / EvalCorrectionBlendFactor);
     }
 }
 
@@ -2174,7 +2152,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
         {
-            thread.UpdateEvalCorrection(node->position, node->staticEval, bestValue);
+            thread.UpdateEvalCorrection(*node, bestValue);
         }
     }
 
