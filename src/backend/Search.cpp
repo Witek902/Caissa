@@ -86,6 +86,7 @@ DEFINE_PARAM(RazoringMarginBias, 20, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 
+DEFINE_PARAM(EvalQuantization, 8, 1, 16);
 DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
 DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
 
@@ -994,6 +995,12 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         // apply eval correction term
         const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
         adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
+
+        // quantize
+        adjustedScore = (adjustedScore / EvalQuantization) * EvalQuantization;
+        
+        // add randomness
+        adjustedScore += (node.position.GetHash() & 0x2) - 1;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
