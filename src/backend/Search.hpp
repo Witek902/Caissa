@@ -42,7 +42,7 @@ struct SearchLimits
     uint64_t maxNodesSoft = UINT64_MAX;
 
     // maximum allowed base search depth (excluding quiescence, extensions, etc.)
-    uint16_t maxDepth = UINT16_MAX;
+    DepthType maxDepth = INT16_MAX;
 
     // enable mate search, disables all pruning
     bool mateSearch = false;
@@ -124,7 +124,7 @@ struct NodeInfo
     uint8_t doubleExtensions = 0;
 
     // remaining depth
-    int16_t depth = 0;
+    DepthType depth = 0;
 
     // distance to the root
     uint16_t ply = 0;
@@ -305,8 +305,8 @@ private:
 
         bool isMainThread = false;
 
-        uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
-        uint16_t depthCompleted = 0;        // recently completed search depth
+        DepthType rootDepth = 0;             // search depth at the root node in current iterative deepening step
+        DepthType depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
@@ -334,7 +334,7 @@ private:
         const Move GetPvMove(const NodeInfo& node) const;
 
         ScoreType GetEvalCorrection(const Position& pos) const;
-        void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
+        void UpdateEvalCorrection(const NodeInfo& node, ScoreType trueScore);
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
