@@ -79,10 +79,10 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 9;
+static constexpr uint32_t CurrentVersion = 10;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
-static constexpr uint32_t NumKingBuckets = 5;
+static constexpr uint32_t NumKingBuckets = 11;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 1024;
 static constexpr uint32_t OutputSize = 1;
@@ -90,14 +90,14 @@ static constexpr uint32_t NumVariants = 8;
 
 static constexpr uint8_t KingBucketIndex[64] =
 {
-    0, 0, 1, 1, 1, 1, 0, 0,
-    0, 0, 1, 1, 1, 1, 0, 0,
-    2, 2, 3, 3, 3, 3, 2, 2,
-    2, 2, 3, 3, 3, 3, 2, 2,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4,
+     0, 1, 2, 3, 3, 2, 1, 0,
+     4, 5, 6, 7, 7, 6, 5, 4,
+     8, 8, 9, 9, 9, 9, 8, 8,
+     8, 8, 9, 9, 9, 9, 8, 8,
+    10,10,10,10,10,10,10,10,
+    10,10,10,10,10,10,10,10,
+    10,10,10,10,10,10,10,10,
+    10,10,10,10,10,10,10,10,
 };
 
 // by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)

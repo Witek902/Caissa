@@ -19,6 +19,21 @@ using namespace threadpool;
 
 static std::mutex g_mutex;
 
+static constexpr int32_t c_ScoreTreshold = 1000;
+static constexpr int32_t c_EvalTreshold = 500;
+
+static bool IsPositionImbalanced(const Position& pos, ScoreType moveScore)
+{
+    if (pos.GetSideToMove() == Black)
+    {
+        moveScore = -moveScore;
+    }
+
+    return
+        (moveScore > c_ScoreTreshold && Evaluate(pos) > c_EvalTreshold) ||
+        (moveScore < -c_ScoreTreshold && Evaluate(pos) < -c_EvalTreshold);
+}
+
 static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::string& outputPath)
 {
     std::vector<PositionEntry> entries;
@@ -72,11 +87,11 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
             const Move move = moves[i];
             const ScoreType moveScore = game.GetMoveScores()[i];
 
-            if (move.IsQuiet() &&                                   // best move must be quiet
-                pos.GetNumPieces() >= 4 &&
-                !((moveScore > 1000 && Evaluate(pos) > 400) ||
-                  (moveScore < -1000 && Evaluate(pos) < -400)) && // skip unbalanced positions
-                !pos.IsInCheck())
+            if (move.IsQuiet() &&                                               // best move must be quiet
+                pos.GetNumPieces() >= 4 &&                                      // skip known endgames
+                //(i + 1 >= game.GetMoves().size() || moves[i + 1].IsQuiet()) &&  // next best move must be quiet
+                !pos.IsInCheck() &&                                             // skip check positions
+                !IsPositionImbalanced(pos, moveScore))                          // skip imbalanced positions
             {
                 PositionEntry entry{};
 
@@ -127,7 +142,8 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
     // shuffle the training data
     {
-        std::mt19937 randomGenerator;
+        std::random_device rd;
+        std::mt19937 randomGenerator(rd());
         std::shuffle(entries.begin(), entries.end(), randomGenerator);
     }
 
