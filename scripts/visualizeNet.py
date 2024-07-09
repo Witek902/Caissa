@@ -6,7 +6,7 @@ from math import ceil
 filePath = "../build_bmi2/src/utils/eval.pnn"
 marginSize = 1
 headerSize = 64
-numKingBuckets = 5
+numKingBuckets = 11
 
 def lerp(a: float, b: float, t: float) -> float:
     return (1 - t) * a + t * b
@@ -103,7 +103,7 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
-    kingBucket = 0
+    kingBucket = 5
 
     for i in range(768):
         for j in range(accumulatorSize):

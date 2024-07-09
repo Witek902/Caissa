@@ -87,7 +87,6 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
             }
 
             if (pos.GetNumPieces() >= 4 &&
-                (std::abs(moveScore) < 2000 || std::abs(Evaluate(pos)) < 2000) &&   // skip unbalanced positions
                 !pos.IsInCheck())
             {
                 PositionEntry entry{};
@@ -127,7 +126,8 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
 
         // shuffle the training data
         {
-            std::mt19937 randomGenerator;
+            std::random_device rd;
+            std::mt19937 randomGenerator(rd());
             std::shuffle(entries.begin(), entries.end(), randomGenerator);
         }
 
