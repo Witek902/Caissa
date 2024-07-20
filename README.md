@@ -86,7 +86,7 @@ The games are generated with the utility [SelfPlay.cpp](https://github.com/Witek
   * manually vectorized code supporting SSE2, AVX2, AVX-512 and ARM NEON instructions
   * clipped-ReLU activation function
   * 8 variants of last layer weights selected based on piece count
-  * input features: absolute piece coordinates with horizontal symmetry, 5 king buckets
+  * input features: absolute piece coordinates with horizontal symmetry, 11 king buckets
 * Special endgame evaluation routines
 
 #### Neural net trainer
