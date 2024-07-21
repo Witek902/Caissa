@@ -112,7 +112,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
                 m_moves.RemoveMove(m_killerMove);
                 m_moves.RemoveMove(m_counterMove);
 
-                m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
+                m_moveOrderer.ScoreMoves(node, m_moves, true);
             }
             [[fallthrough]];
         }

@@ -26,11 +26,9 @@ public:
     INLINE
     MovePicker(const Position& pos,
                const MoveOrderer& moveOrderer,
-               const NodeCacheEntry* nodeCacheEntry,
                const PackedMove ttMove,
                bool generateQuiets)
         : m_position(pos)
-        , m_nodeCacheEntry(nodeCacheEntry)
         , m_ttMove(ttMove)
         , m_generateQuiets(generateQuiets)
         , m_moveOrderer(moveOrderer)
@@ -46,7 +44,6 @@ public:
 private:
 
     const Position& m_position;
-    const NodeCacheEntry* m_nodeCacheEntry;
     const PackedMove m_ttMove;
     bool m_generateQuiets;
 

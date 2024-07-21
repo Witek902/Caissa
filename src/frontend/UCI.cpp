@@ -6,7 +6,7 @@
 
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.19.3"
+#define CAISSA_VERSION "1.19.4"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -1026,9 +1026,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
     nodeInfo.position = mGame.GetPosition();
     mGame.GetPosition().ComputeThreats(nodeInfo.threats);
 
-    const NodeCacheEntry* nodeCacheEntry = mSearch.GetNodeCache().TryGetEntry(mGame.GetPosition());
-
-    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves, true, nodeCacheEntry);
+    mSearch.GetMoveOrderer().ScoreMoves(nodeInfo, moves, true);
 
     moves.Sort();
     PrintMoveList(mGame.GetPosition(), moves);

@@ -978,7 +978,7 @@ static void RunPositionTests()
         Move move;
         uint32_t moveIndex = 0;
 
-        MovePicker movePicker(pos, *moveOrderer, nullptr, Move::Invalid(), true);
+        MovePicker movePicker(pos, *moveOrderer, Move::Invalid(), true);
         while (movePicker.PickMove(node, move, moveScore))
         {
             bool found = false;
