@@ -184,8 +184,7 @@ void Search::Clear()
         threadData->moveOrderer.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
-        memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
-        memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->evalCorrectionTable, 0, sizeof(threadData->evalCorrectionTable));
     }
 }
 
@@ -943,11 +942,26 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
+INLINE static uint32_t FastMaterialHash(const Position& pos)
+{
+    const uint32_t hashA = (pos.Whites().knights.Count()) | (pos.Whites().bishops.Count() << 2) | (pos.Whites().rooks.Count() << 4) | (pos.Whites().queens.Count() << 6);
+    const uint32_t hashB = (pos.Blacks().knights.Count()) | (pos.Blacks().bishops.Count() << 2) | (pos.Blacks().rooks.Count() << 4) | (pos.Blacks().queens.Count() << 6);
+
+    // FNV-1a hash
+    uint32_t hash = 0x811c9dc5ul;
+    hash = (hash ^ hashA) * 0x01000193ul;
+    hash = (hash ^ hashB) * 0x01000193ul;
+    return hash;
+}
+
+INLINE static uint32_t EvalCorrectionHash(const Position& pos)
+{
+    return static_cast<uint32_t>(pos.GetPawnsHash()) ^ FastMaterialHash(pos);
+}
+
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    return evalCorrectionTable[EvalCorrectionHash(pos) % EvalCorrectionTableSize] / EvalCorrectionScale;
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
@@ -955,19 +969,8 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
     int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
     if (pos.GetSideToMove() == Black) diff = -diff;
 
-    // material
-    {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
-
-    // pawn structure
-    {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
+    int16_t& correction = evalCorrectionTable[EvalCorrectionHash(pos) % EvalCorrectionTableSize];
+    correction = static_cast<int16_t>((correction * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
 }
 
 INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
