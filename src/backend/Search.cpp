@@ -1147,7 +1147,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
 
-    MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node->isInCheck);
+    MovePicker movePicker(position, thread.moveOrderer, ttEntry.move, node->isInCheck);
 
     int32_t moveScore = 0;
     Move move;
@@ -1594,7 +1594,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 childNode.isCutNode = !node->isCutNode;
 
                 const ScoreType seeThreshold = probBeta - node->staticEval;
-                MovePicker movePicker(position, thread.moveOrderer, nullptr,
+                MovePicker movePicker(position, thread.moveOrderer,
                     (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
 
                 int32_t moveScore = 0;
@@ -1677,7 +1677,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         nodeCacheEntry = thread.nodeCache.GetEntry(position, node->ply);
     }
 
-    MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, true);
+    MovePicker movePicker(position, thread.moveOrderer, ttMove, true);
 
     int32_t moveScore = 0;
     Move move;

@@ -286,8 +286,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
     MoveList& moves,
-    bool withQuiets,
-    const NodeCacheEntry* nodeCacheEntry) const
+    bool withQuiets) const
 {
     const Position& pos = node.position;
 
@@ -386,18 +385,6 @@ void MoveOrderer::ScoreMoves(
                 case Piece::King:
                     if (pos.GetOurCastlingRights())             score -= 6000;
                     break;
-            }
-
-            // use node cache for scoring moves near the root
-            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
-            {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
-                {
-                    const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
-                    ASSERT(fraction >= 0.0f);
-                    ASSERT(fraction <= 1.0f);
-                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
-                }
             }
         }
 
