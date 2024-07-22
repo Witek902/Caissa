@@ -1772,7 +1772,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    eval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
