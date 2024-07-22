@@ -2083,7 +2083,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // reduce remaining moves more if we managed to find new best move
-            if (node->depth > 2) node->depth--;
+            if (node->depth > 2 && node->depth < 16) node->depth--;
+            if (node->depth > 2 && node->depth < 8) node->depth--;
         }
 
         if constexpr (!isRootNode)
