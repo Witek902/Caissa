@@ -42,6 +42,8 @@ DEFINE_PARAM(LmrCaptureCutNode, 80, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, 26, -128, 256);
 DEFINE_PARAM(LmrCaptureInCheck, 58, -128, 256);
 
+DEFINE_PARAM(LmrDeeperTreshold, 80, 20, 200);
+
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 146, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 318, 100, 500);
@@ -55,9 +57,11 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMin, 184, 100, 300);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 417, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
 
-DEFINE_PARAM(NullMovePruningStartDepth, 2, 1, 10);
-DEFINE_PARAM(NullMovePruning_NullMoveDepthReduction, 3, 1, 5);
-DEFINE_PARAM(NullMovePruning_ReSearchDepthReduction, 5, 1, 5);
+DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
+DEFINE_PARAM(NmpEvalTreshold, 20, 0, 40);
+DEFINE_PARAM(NmpEvalDiffDiv, 256, 64, 1024);
+DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
+DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
@@ -69,6 +73,7 @@ DEFINE_PARAM(AspirationWindow, 10, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionsLimit, 6, 4, 12);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
 
@@ -1525,9 +1530,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? 20 : 0) &&
+            if (eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
                 node->staticEval >= beta &&
-                node->depth >= NullMovePruningStartDepth &&
+                node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
                 // don't allow null move if parent or grandparent node was null move
@@ -1537,9 +1542,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (doNullMove)
                 {
                     const int32_t r =
-                        NullMovePruning_NullMoveDepthReduction +
+                        NmpNullMoveDepthReduction +
                         node->depth / 3 +
-                        std::min(3, int32_t(eval - beta) / 256) + isImproving;
+                        std::min(3, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
@@ -1567,7 +1572,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         if (std::abs(beta) < KnownWinValue && node->depth < 10)
                             return nullMoveScore;
 
-                        node->depth -= static_cast<uint16_t>(NullMovePruning_ReSearchDepthReduction);
+                        node->depth -= static_cast<uint16_t>(NmpReSearchDepthReduction);
 
                         if (node->depth <= 0)
                         {
@@ -1851,7 +1856,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         moveExtension = 1;
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= 6 && singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            if (node->doubleExtensions <= SingularDoubleExtensionsLimit &&
+                                singularScore < singularBeta - SingularDoubleExtensionMarigin)
                                 moveExtension = 2;
                     }
                 }
@@ -1982,7 +1988,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                newDepth += (score > bestValue + 80) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
+                newDepth += (score > bestValue + LmrDeeperTreshold) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
                 newDepth -= (score < bestValue + newDepth);
                 doFullDepthSearch = newDepth > lmrDepth;
             }
