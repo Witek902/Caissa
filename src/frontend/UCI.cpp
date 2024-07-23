@@ -3,10 +3,11 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
+#include "../backend/Tuning.hpp"
 
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.19.4"
+#define CAISSA_VERSION "1.19.5"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
