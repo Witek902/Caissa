@@ -24,75 +24,75 @@ static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 64;
 
-DEFINE_PARAM(LmrScale_Quiets, 42, 20, 70);
-DEFINE_PARAM(LmrBias_Quiets, 50, 20, 80);
-DEFINE_PARAM(LmrScale_Captures, 38, 20, 70);
-DEFINE_PARAM(LmrBias_Captures, 57, 20, 80);
+DEFINE_PARAM(LmrScale_Quiets, 69, 20, 70);
+DEFINE_PARAM(LmrBias_Quiets, 61, 20, 80);
+DEFINE_PARAM(LmrScale_Captures, 34, 20, 70);
+DEFINE_PARAM(LmrBias_Captures, 70, 20, 80);
 
-DEFINE_PARAM(LmrQuietNonPv, 75, -128, 256);
-DEFINE_PARAM(LmrQuietTTCapture, 83, -128, 256);
-DEFINE_PARAM(LmrQuietRefutation, 149, -128, 256);
-DEFINE_PARAM(LmrQuietCutNode, 142, -128, 256);
-DEFINE_PARAM(LmrQuietImproving, 70, -128, 256);
-DEFINE_PARAM(LmrQuietInCheck, 55, -128, 256);
+DEFINE_PARAM(LmrQuietNonPv, 52, -128, 256);
+DEFINE_PARAM(LmrQuietTTCapture, 43, -128, 256);
+DEFINE_PARAM(LmrQuietRefutation, 235, -128, 256);
+DEFINE_PARAM(LmrQuietCutNode, 54, -128, 256);
+DEFINE_PARAM(LmrQuietImproving, 44, -128, 256);
+DEFINE_PARAM(LmrQuietInCheck, 121, -128, 256);
 
-DEFINE_PARAM(LmrCaptureWinning, 61, -128, 256);
-DEFINE_PARAM(LmrCaptureBad, 33, -128, 256);
-DEFINE_PARAM(LmrCaptureCutNode, 80, -128, 256);
-DEFINE_PARAM(LmrCaptureImproving, 26, -128, 256);
-DEFINE_PARAM(LmrCaptureInCheck, 58, -128, 256);
+DEFINE_PARAM(LmrCaptureWinning, 70, -128, 256);
+DEFINE_PARAM(LmrCaptureBad, 106, -128, 256);
+DEFINE_PARAM(LmrCaptureCutNode, 23, -128, 256);
+DEFINE_PARAM(LmrCaptureImproving, -67, -128, 256);
+DEFINE_PARAM(LmrCaptureInCheck, 112, -128, 256);
 
-DEFINE_PARAM(LmrDeeperTreshold, 80, 20, 200);
+DEFINE_PARAM(LmrDeeperTreshold, 109, 20, 200);
 
-DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
-DEFINE_PARAM(ProbcutBetaOffset, 146, 80, 300);
-DEFINE_PARAM(ProbcutBetaOffsetInCheck, 318, 100, 500);
+DEFINE_PARAM(ProbcutStartDepth, 3, 3, 8);
+DEFINE_PARAM(ProbcutBetaOffset, 213, 80, 300);
+DEFINE_PARAM(ProbcutBetaOffsetInCheck, 259, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
-DEFINE_PARAM(FutilityPruningScale, 32, 16, 64);
-DEFINE_PARAM(FutilityPruningStatscoreDiv, 470, 128, 1024);
+DEFINE_PARAM(FutilityPruningScale, 17, 16, 64);
+DEFINE_PARAM(FutilityPruningStatscoreDiv, 163, 128, 1024);
 
-DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 184, 100, 300);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 417, 200, 600);
-DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
+DEFINE_PARAM(SingularitySearchMinDepth, 10, 5, 20);
+DEFINE_PARAM(SingularitySearchScoreTresholdMin, 144, 100, 300);
+DEFINE_PARAM(SingularitySearchScoreTresholdMax, 567, 200, 600);
+DEFINE_PARAM(SingularitySearchScoreStep, 25, 10, 50);
 
-DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
-DEFINE_PARAM(NmpEvalTreshold, 20, 0, 40);
-DEFINE_PARAM(NmpEvalDiffDiv, 256, 64, 1024);
+DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
+DEFINE_PARAM(NmpEvalTreshold, 16, 0, 40);
+DEFINE_PARAM(NmpEvalDiffDiv, 75, 64, 1024);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
-DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
+DEFINE_PARAM(NmpReSearchDepthReduction, 2, 1, 5);
 
-DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
-DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
-DEFINE_PARAM(HistoryPruningLinearFactor, 240, 100, 500);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 134, 50, 200);
+DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
+DEFINE_PARAM(LateMovePruningBase, 6, 1, 10);
+DEFINE_PARAM(HistoryPruningLinearFactor, 301, 100, 500);
+DEFINE_PARAM(HistoryPruningQuadraticFactor, 151, 50, 200);
 
-DEFINE_PARAM(AspirationWindowMaxSize, 480, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 10, 6, 20);
+DEFINE_PARAM(AspirationWindowMaxSize, 661, 200, 1000);
+DEFINE_PARAM(AspirationWindow, 15, 6, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
-DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
-DEFINE_PARAM(SingularDoubleExtensionsLimit, 6, 4, 12);
+DEFINE_PARAM(SingularDoubleExtensionMarigin, 23, 10, 30);
+DEFINE_PARAM(SingularDoubleExtensionsLimit, 5, 4, 12);
 
-DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
+DEFINE_PARAM(QSearchFutilityPruningOffset, 68, 50, 150);
 
-DEFINE_PARAM(RfpDepth, 6, 5, 10);
-DEFINE_PARAM(RfpMultiplier, 112, 80, 180);
+DEFINE_PARAM(RfpDepth, 5, 5, 10);
+DEFINE_PARAM(RfpMultiplier, 82, 80, 180);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 125, 50, 200);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 54, 50, 150);
+DEFINE_PARAM(SSEPruningMultiplier_Captures, 83, 50, 200);
+DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 72, 50, 150);
 
-DEFINE_PARAM(RazoringStartDepth, 3, 1, 6);
-DEFINE_PARAM(RazoringMarginMultiplier, 144, 100, 200);
-DEFINE_PARAM(RazoringMarginBias, 20, 0, 25);
+DEFINE_PARAM(RazoringStartDepth, 1, 1, 6);
+DEFINE_PARAM(RazoringMarginMultiplier, 133, 100, 200);
+DEFINE_PARAM(RazoringMarginBias, 17, 0, 25);
 
-DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
-DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
+DEFINE_PARAM(ReductionStatOffset, 7051, 5000, 12000);
+DEFINE_PARAM(ReductionStatDiv, 134, 10, 400);
 
-DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(EvalCorrectionScale, 556, 1, 1024);
+DEFINE_PARAM(EvalCorrectionBlendFactor, 306, 8, 512);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {

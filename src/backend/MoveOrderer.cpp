@@ -3,21 +3,21 @@
 #include "Tuning.hpp"
 
 
-DEFINE_PARAM(QuietBonusOffset, -103, -200, 50);
-DEFINE_PARAM(QuietBonusLinear, 162, 75, 200);
-DEFINE_PARAM(QuietBonusLimit, 1948, 1000, 4000);
+DEFINE_PARAM(QuietBonusOffset, 15, -200, 50);
+DEFINE_PARAM(QuietBonusLinear, 198, 75, 200);
+DEFINE_PARAM(QuietBonusLimit, 2843, 1000, 4000);
 
-DEFINE_PARAM(QuietMalusOffset, -66, -200, 50);
-DEFINE_PARAM(QuietMalusLinear, 162, 75, 200);
-DEFINE_PARAM(QuietMalusLimit, 1964, 1000, 4000);
+DEFINE_PARAM(QuietMalusOffset, 2, -200, 50);
+DEFINE_PARAM(QuietMalusLinear, 198, 75, 200);
+DEFINE_PARAM(QuietMalusLimit, 1303, 1000, 4000);
 
-DEFINE_PARAM(CaptureBonusOffset, 38, 0, 150);
-DEFINE_PARAM(CaptureBonusLinear, 75, 20, 150);
-DEFINE_PARAM(CaptureBonusLimit, 2495, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 93, 0, 150);
+DEFINE_PARAM(CaptureBonusLinear, 64, 20, 150);
+DEFINE_PARAM(CaptureBonusLimit, 2943, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 37, 0, 150);
-DEFINE_PARAM(CaptureMalusLinear, 61, 20, 150);
-DEFINE_PARAM(CaptureMalusLimit, 2143, 1000, 4000);
+DEFINE_PARAM(CaptureMalusOffset, 9, 0, 150);
+DEFINE_PARAM(CaptureMalusLinear, 62, 20, 150);
+DEFINE_PARAM(CaptureMalusLimit, 1510, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
