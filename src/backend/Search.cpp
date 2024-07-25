@@ -1166,6 +1166,15 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
+        // Futility Pruning
+        if (move.IsCapture() && !node->isInCheck &&
+            GetPieceValue(position.GetOpponentSide().GetPieceAtSquare(move.ToSquare())) - GetPieceValue(move.GetPiece()) + bestValue > beta + 200)
+        {
+            bestValue = beta;
+            bestMove = move;
+            break;
+        }
+
         if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
         {
             ASSERT(!node->isInCheck);

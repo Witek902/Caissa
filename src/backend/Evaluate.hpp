@@ -39,6 +39,11 @@ static constexpr PieceScore c_pieceValues[] =
     c_kingValue,
 };
 
+INLINE int16_t GetPieceValue(Piece p)
+{
+    return c_pieceValues[(uint8_t)p].mg;
+}
+
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
 
