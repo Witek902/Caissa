@@ -91,8 +91,8 @@ DEFINE_PARAM(RazoringMarginBias, 20, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 
-DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(EvalCorrectionMultiplier, 533, 1, 1024);
+DEFINE_PARAM(EvalCorrectionBlendFactor, 512, 8, 1024);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
@@ -952,26 +952,26 @@ ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
     const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
     const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    return static_cast<ScoreType>((matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionGrain);
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
 {
-    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
+    int32_t diff = EvalCorrectionGrain * (trueScore - evalScore);
     if (pos.GetSideToMove() == Black) diff = -diff;
 
     // material
     {
         const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        int32_t& matScore = matScoreCorrection[index];
+        matScore = (matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor;
     }
 
     // pawn structure
     {
         const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        int32_t& pawnScore = pawnStructureCorrection[index];
+        pawnScore = (pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor;
     }
 }
 
@@ -997,7 +997,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
         adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
 
         // apply eval correction term
-        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
+        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionMultiplier / 1024);
         adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
 
         // scale down when approaching 50-move draw
