@@ -6,7 +6,7 @@
 
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.20"
+#define CAISSA_VERSION "1.20.1"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
