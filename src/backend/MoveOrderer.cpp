@@ -160,6 +160,8 @@ void MoveOrderer::NewSearch()
 
 void MoveOrderer::Clear()
 {
+    memset(quietMoveFromHistory, 0, sizeof(quietMoveFromHistory));
+    memset(quietMoveToHistory, 0, sizeof(quietMoveToHistory));
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
@@ -238,6 +240,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
         
+        UpdateHistoryCounter(quietMoveFromHistory[color][threats.IsBitSet(from)][piece][from], delta);
+        UpdateHistoryCounter(quietMoveToHistory[color][threats.IsBitSet(to)][piece][to], delta);
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -345,6 +349,8 @@ void MoveOrderer::ScoreMoves(
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+            score += quietMoveFromHistory[color][threats.IsBitSet(from)][piece][from] / 4;
+            score += quietMoveToHistory[color][threats.IsBitSet(to)][piece][to] / 4;
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
