@@ -1489,11 +1489,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return node->isInCheck ? 0 : eval;
     }
 
-    // reduce depth if position was not found in transposition table
+    // reduce depth if position was not found in transposition table, reduce more in PV nodes
     if (node->depth >= 4
         && (node->isCutNode || isPvNode)
         && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
-        node->depth--;
+        node->depth -= 1 + isPvNode;
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
