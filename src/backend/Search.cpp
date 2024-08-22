@@ -1511,11 +1511,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
-            if (node->depth <= RfpDepth &&
-                eval <= KnownWinValue &&
-                eval >= beta + std::max<int32_t>(RfpMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))), RfpTreshold))
+            if (node->depth <= RfpDepth && eval <= KnownWinValue)
             {
-                return (eval + beta) / 2;
+                const ScoreType rfpEvalTreshold = eval - std::max<ScoreType>(RfpTreshold,
+                    RfpMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))));
+                if (rfpEvalTreshold >= beta)
+                    return (rfpEvalTreshold + beta) / 2;
             }
 
             // Razoring
