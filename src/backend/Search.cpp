@@ -69,7 +69,8 @@ DEFINE_PARAM(HistoryPruningLinearFactor, 240, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 134, 50, 200);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 480, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 10, 6, 20);
+DEFINE_PARAM(AspirationWindowInitial, 5, 1, 20);
+DEFINE_PARAM(AspirationWindowScoreDiv, 4096, 1, 20000);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 5, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 18, 10, 30);
@@ -347,7 +348,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             searchContext,
         };
 
-        ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
+        ReportPV(aspirationWindowSearchParam, outResult[0], TimePoint());
     }
 
     // kick off worker threads
@@ -471,7 +472,7 @@ void Search::WorkerThreadCallback(ThreadData* threadData)
     }
 }
 
-void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const
+void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, const TimePoint& searchTime) const
 {
     const float timeInSeconds = searchTime.ToSeconds();
 
@@ -506,9 +507,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             << (int32_t)roundf(d * 1000.0f) << " "
             << (int32_t)roundf(l * 1000.0f);
     }
-
-    if (boundsType == BoundsType::LowerBound) ss << " lowerbound";
-    if (boundsType == BoundsType::UpperBound) ss << " upperbound";
 
     ss << " nodes " << numNodes;
     if (timeInSeconds > 0.01f && numNodes > 100) ss << " nps " << (int64_t)((double)numNodes / (double)timeInSeconds);
@@ -819,10 +817,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
     uint32_t depth = param.depth;
-    int32_t window = AspirationWindow;
-
-    // increase window based on score
-    window += std::abs(param.previousScore) / 16;
+    // set initial window size based on previous score
+    int32_t window = AspirationWindowInitial + (int32_t)param.previousScore * (int32_t)param.previousScore / AspirationWindowScoreDiv;
 
     // start applying aspiration window at given depth
     if (param.previousScore != InvalidValue &&
@@ -890,10 +886,10 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         ASSERT(!pvLine.moves.empty());
         ASSERT(pvLine.moves.front().IsValid());
 
-        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch)
+        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch && boundsType == BoundsType::Exact)
         {
             const TimePoint searchTime = TimePoint::GetCurrent() - param.searchParam.limits.startTimePoint;
-            ReportPV(param, pvLine, boundsType, searchTime);
+            ReportPV(param, pvLine, searchTime);
         }
 
         // don't return line if search was aborted, because the result comes from incomplete search
