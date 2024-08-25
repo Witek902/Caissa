@@ -362,7 +362,7 @@ private:
 
     static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam);
 
-    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
+    void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
