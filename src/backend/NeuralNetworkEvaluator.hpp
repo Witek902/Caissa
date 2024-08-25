@@ -76,7 +76,7 @@ public:
 };
 
 
-INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
+INLINE void GetKingSide(Square kingSquare, uint32_t& side)
 {
     ASSERT(kingSquare.IsValid());
 
@@ -89,14 +89,6 @@ INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bu
     {
         side = 0;
     }
-
-    bucket = nn::KingBucketIndex[kingSquare.Index()];
-    ASSERT(bucket < nn::NumKingBuckets);
-}
-
-INLINE uint32_t GetNetworkVariant(const Position& pos)
-{
-    return std::min(pos.GetNumPiecesExcludingKing() / 4u, 7u);
 }
 
 template<bool IncludePieceFeatures = false>
