@@ -64,10 +64,7 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
         bitFlipMask |= 0b111000;
     }
 
-    const uint32_t kingBucket = nn::KingBucketIndex[kingSquare.Index()];
-    ASSERT(kingBucket < nn::NumKingBuckets);
-
-    uint32_t inputOffset = kingBucket * 12 * 64;
+    uint32_t inputOffset = 0;
 
     const auto writeKingRelativePieceFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask) INLINE_LAMBDA
     {
@@ -148,11 +145,7 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
         kingSquare = kingSquare.FlippedFile();
     }
 
-    const uint32_t kingBucket = nn::KingBucketIndex[kingSquare.Index()];
-    ASSERT(kingBucket < nn::NumKingBuckets);
-
     uint32_t index =
-        kingBucket * 12 * 64 +
         ((uint32_t)piece - (uint32_t)Piece::Pawn) * 64 +
         square.Index();
 
@@ -178,7 +171,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numTheirFeatures <= maxFeatures);
 
-    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
+    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, 0);
 }
 
 template<Color perspective>
@@ -342,25 +335,25 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     constexpr uint32_t color = (uint32_t)perspective;
     const Position& pos = node.position;
 
-    uint32_t kingSide, kingBucket;
+    uint32_t kingSide;
     if constexpr (perspective == White)
-        GetKingSideAndBucket(pos.Whites().GetKingSquare(), kingSide, kingBucket);
+        GetKingSide(pos.Whites().GetKingSquare(), kingSide);
     else
-        GetKingSideAndBucket(pos.Blacks().GetKingSquare().FlippedRank(), kingSide, kingBucket);
+        GetKingSide(pos.Blacks().GetKingSquare().FlippedRank(), kingSide);
 
-    AccumulatorCache::KingBucket& kingBucketCache = cache.kingBuckets[color][kingBucket + kingSide * nn::NumKingBuckets];
+    AccumulatorCache::KingBucket& kingBucketCache = cache.kingBuckets[color][kingSide];
 
     // find closest parent node that has valid accumulator
     const NodeInfo* prevAccumNode = nullptr;
     for (const NodeInfo* nodePtr = &node; ; --nodePtr)
     {
-        uint32_t newKingSide, newKingBucket;
+        uint32_t newKingSide;
         if constexpr (perspective == White)
-            GetKingSideAndBucket(static_cast<const Position&>(nodePtr->position).Whites().GetKingSquare(), newKingSide, newKingBucket);
+            GetKingSide(static_cast<const Position&>(nodePtr->position).Whites().GetKingSquare(), newKingSide);
         else
-            GetKingSideAndBucket(static_cast<const Position&>(nodePtr->position).Blacks().GetKingSquare().FlippedRank(), newKingSide, newKingBucket);
+            GetKingSide(static_cast<const Position&>(nodePtr->position).Blacks().GetKingSquare().FlippedRank(), newKingSide);
 
-        if (newKingSide != kingSide || newKingBucket != kingBucket)
+        if (newKingSide != kingSide)
         {
             // king moved, accumulator needs to be refreshed
             break;
@@ -416,7 +409,7 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
     const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
     const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
-    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, 0);
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {
