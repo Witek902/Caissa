@@ -2119,7 +2119,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (bestMove.IsQuiet())
         {
-            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, std::min(bestValue - beta, 256));
+            const int32_t depthBonus = node->depth + (node->isCutNode && node->depth < 4);
+            const int32_t scoreDiff = std::min(bestValue - beta, 256);
+            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, depthBonus, scoreDiff);
             thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
         }
         thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
