@@ -91,9 +91,6 @@ DEFINE_PARAM(RazoringMarginBias, 20, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7641, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 178, 10, 400);
 
-DEFINE_PARAM(EvalCorrectionScale, 533, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
-
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
@@ -187,10 +184,9 @@ void Search::Clear()
     {
         ASSERT(threadData);
         threadData->moveOrderer.Clear();
+        threadData->evalCorrection.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
-        memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
-        memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
     }
 }
 
@@ -948,57 +944,14 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
-ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
-{
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
-}
-
-void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
-{
-    int32_t diff = std::clamp<int32_t>(EvalCorrectionScale * (trueScore - evalScore), -32000, 32000);
-    if (pos.GetSideToMove() == Black) diff = -diff;
-
-    // material
-    {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
-
-    // pawn structure
-    {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
-    }
-}
-
-INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
-{
-    int32_t contempt = searchParam.staticContempt;
-
-    if (searchParam.dynamicContempt > 0)
-        contempt += (searchParam.dynamicContempt * pos.GetNumPiecesExcludingKing()) / 32;
-
-    if (pos.GetSideToMove() != rootStm)
-        contempt = -contempt;
-
-    return contempt;
-}
-
-ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color, const SearchParam& searchParam)
 {
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
     {
-        adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
-
         // apply eval correction term
-        const ScoreType evalCorrection = ScoreType((int32_t)threadData.GetEvalCorrection(node.position) * EvalCorrectionScale / 1024);
-        adjustedScore += node.position.GetSideToMove() == White ? evalCorrection : -evalCorrection;
+        adjustedScore = threadData.evalCorrection.Apply(static_cast<ScoreType>(adjustedScore), node.position);
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1007,6 +960,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
     }
 
+    ASSERT(std::abs(adjustedScore) < CheckmateValue);
     return static_cast<ScoreType>(adjustedScore);
 }
 
@@ -2180,7 +2134,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
         {
-            thread.UpdateEvalCorrection(node->position, node->staticEval, bestValue);
+            thread.evalCorrection.Update(node->position, node->staticEval, bestValue);
         }
     }
 

@@ -9,6 +9,7 @@
 #include "Score.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 #include "NodeCache.hpp"
+#include "EvalCorrection.hpp"
 
 #include <atomic>
 #include <memory>
@@ -311,20 +312,12 @@ private:
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
 
-        // per-thread move orderer
         MoveOrderer moveOrderer;
-
+        EvalCorrection evalCorrection;
         NodeCache nodeCache;
-
         AccumulatorCache accumulatorCache;
 
         NodeInfo searchStack[MaxSearchDepth];
-
-        static constexpr int32_t EvalCorrectionScale = 256;
-        static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
-        int16_t matScoreCorrection[MaterialCorrectionTableSize];
-        int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
@@ -332,9 +325,6 @@ private:
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
-
-        ScoreType GetEvalCorrection(const Position& pos) const;
-        void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
