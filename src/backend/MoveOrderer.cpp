@@ -201,7 +201,7 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
-void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
+void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t depth, int32_t scoreDiff)
 {
     ASSERT(node.depth >= 0);
     ASSERT(numMoves > 0);
@@ -224,8 +224,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusLinear * scoreDiff / 64, QuietBonusLimit);
-    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusLinear * scoreDiff / 64, QuietMalusLimit);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * depth + QuietBonusLinear * scoreDiff / 64, QuietBonusLimit);
+    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * depth + QuietMalusLinear * scoreDiff / 64, QuietMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
