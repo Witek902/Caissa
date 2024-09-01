@@ -77,7 +77,7 @@ DEFINE_PARAM(SingularDoubleExtensionsLimit, 6, 4, 12);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 75, 50, 150);
 
-DEFINE_PARAM(RfpDepth, 6, 5, 10);
+DEFINE_PARAM(RfpDepth, 8, 5, 10);
 DEFINE_PARAM(RfpMultiplier, 112, 80, 180);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 
@@ -1512,6 +1512,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             // Reverse Futility Pruning
             if (node->depth <= RfpDepth &&
+                (!ttEntry.move.IsValid() || position.IsCapture(ttEntry.move)) &&
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(RfpMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))), RfpTreshold))
             {
