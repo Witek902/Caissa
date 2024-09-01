@@ -52,11 +52,6 @@ DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 32, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 470, 128, 1024);
 
-DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
-DEFINE_PARAM(SingularitySearchScoreTresholdMin, 184, 100, 300);
-DEFINE_PARAM(SingularitySearchScoreTresholdMax, 417, 200, 600);
-DEFINE_PARAM(SingularitySearchScoreStep, 27, 10, 50);
-
 DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 20, 0, 40);
 DEFINE_PARAM(NmpEvalDiffDiv, 256, 64, 1024);
@@ -713,7 +708,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             break;
         }
 
-        const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
@@ -726,6 +720,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             {
                 if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
                 {
+                    data.nodesSearched = moveInfo->nodesSearched;
                     data.bestMoveNodeFraction = nodeCacheEntry->nodesSum > 0 ?
                         (static_cast<double>(moveInfo->nodesSearched) / static_cast<double>(nodeCacheEntry->nodesSum)) : 0.0;
                 }
@@ -767,42 +762,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             if (!param.limits.analysisMode &&
                 mateCounter >= MateCountStopCondition &&
                 param.limits.maxDepth == UINT16_MAX)
-            {
-                param.stopSearch = true;
-                break;
-            }
-        }
-
-        // check for singular root move
-        if (isMainThread &&
-            primaryMove.IsValid() &&
-            numPvLines == 1 &&
-            depth >= SingularitySearchMinDepth &&
-            std::abs(primaryMoveScore) < 1000 &&
-            param.limits.rootSingularityTime.IsValid() &&
-            param.limits.startTimePoint.IsValid() &&
-            TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.rootSingularityTime)
-        {
-            const int32_t scoreTreshold = std::max<int32_t>(SingularitySearchScoreTresholdMin, SingularitySearchScoreTresholdMax - SingularitySearchScoreStep * (depth - SingularitySearchMinDepth));
-
-            const uint16_t singularDepth = depth / 2;
-            const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
-
-            NodeInfo& rootNode = thread.searchStack[0];
-            rootNode = NodeInfo{};
-            rootNode.position = game.GetPosition();
-            rootNode.isInCheck = rootNode.position.IsInCheck();
-            rootNode.position.ComputeThreats(rootNode.threats);
-            rootNode.depth = singularDepth;
-            rootNode.alpha = singularBeta - 1;
-            rootNode.beta = singularBeta;
-            rootNode.filteredMove = primaryMove;
-            rootNode.nnContext.MarkAsDirty();
-
-            ScoreType score = NegaMax<NodeType::NonPV>(thread, &rootNode, searchContext);
-            ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
-
-            if (score < singularBeta || CheckStopCondition(thread, searchContext, true))
             {
                 param.stopSearch = true;
                 break;
@@ -1717,7 +1676,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         generatedSoFar[numGeneratedMoves++] = move;
 #endif // VALIDATE_MOVE_PICKER
 
-        // apply move filter (multi-PV search, singularity search, etc.)
+        // apply move filter (multi-PV search, etc.)
         if (move == node->filteredMove)
         {
             filteredSomeMove = true;
