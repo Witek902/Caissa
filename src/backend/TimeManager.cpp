@@ -52,9 +52,6 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
 
         // abort search if significantly exceeding ideal allocated time
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
-
-        // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
     // fixed move time
@@ -100,6 +97,11 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+
+        if (data.nodesSearched > 100000 && data.bestMoveNodeFraction > 0.98)
+        {
+            limits.idealTimeCurrent *= 0.001;
+        }
     }
 
 #ifndef CONFIGURATION_FINAL

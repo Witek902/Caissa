@@ -23,9 +23,10 @@ struct TimeManagerInitData
 
 struct TimeManagerUpdateData
 {
-    uint32_t depth;
+    uint32_t depth = 0;
     const SearchResult& currResult;
     const SearchResult& prevResult;
+    uint64_t nodesSearched = 0;
     double bestMoveNodeFraction = 0.0;
 };
 
