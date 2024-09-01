@@ -25,9 +25,6 @@ struct SearchLimits
     // a time point where search started
     TimePoint startTimePoint = TimePoint::Invalid();
 
-    // minimum time after which root singularity search kicks in
-    TimePoint rootSingularityTime = TimePoint::Invalid();
-
     // suggested search time, it's checked every iteration so can be exceeded
     TimePoint idealTimeBase = TimePoint::Invalid();
     TimePoint idealTimeCurrent = TimePoint::Invalid();
