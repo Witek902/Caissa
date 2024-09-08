@@ -881,7 +881,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
-            if (depth > 1 && depth + 3 > param.depth) depth--;
+            if (depth > 1 && depth + 5 > param.depth) depth--;
         }
 
         const bool stopSearch = param.depth > 1 && CheckStopCondition(thread, param.searchContext, true);
