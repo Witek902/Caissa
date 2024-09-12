@@ -1,6 +1,7 @@
 #include "Evaluate.hpp"
 #include "Endgame.hpp"
 #include "Search.hpp"
+#include "Tuning.hpp"
 
 #include <fstream>
 
@@ -27,6 +28,13 @@ static constexpr int32_t c_evalSaturationTreshold   = 8000;
 static constexpr ScoreType c_castlingRightsBonus = 5;
 
 } // namespace
+
+DEFINE_PARAM(EvalScale_Pawns, 0, -100, 100);
+DEFINE_PARAM(EvalScale_Knights, 16, -100, 100);
+DEFINE_PARAM(EvalScale_Bishops, 16, -100, 100);
+DEFINE_PARAM(EvalScale_Rooks, 32, -150, 150);
+DEFINE_PARAM(EvalScale_Queens, 64, -200, 200);
+DEFINE_PARAM(EvalScale_Offset, 832, 500, 1500);
 
 PackedNeuralNetworkPtr g_mainNeuralNetwork;
 
@@ -214,12 +222,14 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     // convert to centipawn range
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
-    // apply scaling based on game phase (0 - endgame, 24 - opening)
-    const int32_t gamePhase = std::min(24,
-        whiteKnights + blackKnights + whiteBishops + blackBishops +
-        2 * (whiteRooks + blackRooks) +
-        4 * (whiteQueens + blackQueens));
-    value = value * (52 + gamePhase) / 64;
+    // apply scaling based on game phase
+    const int32_t gamePhase =
+        EvalScale_Pawns * (whitePawns + blackPawns) +
+        EvalScale_Knights * (whiteKnights + blackKnights) +
+        EvalScale_Bishops * (whiteBishops + blackBishops) +
+        EvalScale_Rooks * (whiteRooks + blackRooks) +
+        EvalScale_Queens * (whiteQueens + blackQueens);
+    value = value * (EvalScale_Offset + gamePhase) / 1024;
 
     // apply castling rights bonus
     {
