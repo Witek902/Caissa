@@ -3,6 +3,7 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
+#include "../backend/Tuning.hpp"
 
 
 #ifndef CAISSA_VERSION
