@@ -1932,6 +1932,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce less if adjusted eval is very different from raw eval
+                if (std::abs(eval - node->staticEval) > 120) r -= LmrScale; // TODO tune
             }
             else
             {
