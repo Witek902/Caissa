@@ -280,6 +280,7 @@ public:
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
     INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
+    INLINE uint32_t GetNonPawnsHash(Color color) const { return mNonPawnsHash[color]; }
     uint64_t HashAfterMove(const Move move) const;
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
@@ -333,6 +334,7 @@ private:
 
     uint64_t mHash;
     uint64_t mPawnsHash;
+    uint32_t mNonPawnsHash[2];
 };
 
 static_assert(sizeof(Position) <= 256, "Invalid position size");

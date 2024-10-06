@@ -191,6 +191,8 @@ void Search::Clear()
         threadData->stats = SearchThreadStats{};
         memset(threadData->matScoreCorrection, 0, sizeof(threadData->matScoreCorrection));
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->nonPawnWhiteCorrection, 0, sizeof(threadData->nonPawnWhiteCorrection));
+        memset(threadData->nonPawnBlackCorrection, 0, sizeof(threadData->nonPawnBlackCorrection));
     }
 }
 
@@ -950,9 +952,12 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
 
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
-    const int32_t matIndex = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-    const int32_t pawnIndex = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-    return (matScoreCorrection[matIndex] + pawnStructureCorrection[pawnIndex]) / EvalCorrectionScale;
+    int32_t corr = 0;
+    corr += matScoreCorrection[Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize];
+    corr += pawnStructureCorrection[pos.GetPawnsHash() % PawnStructureCorrectionTableSize];
+    corr += nonPawnWhiteCorrection[pos.GetNonPawnsHash(White) % NonPawnCorrectionTableSize] / 2;
+    corr += nonPawnBlackCorrection[pos.GetNonPawnsHash(Black) % NonPawnCorrectionTableSize] / 2;
+    return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
 
 void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore)
@@ -962,16 +967,26 @@ void Search::ThreadData::UpdateEvalCorrection(const Position& pos, ScoreType eva
 
     // material
     {
-        const int32_t index = Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize;
-        int16_t& matScore = matScoreCorrection[index];
-        matScore = static_cast<int16_t>((matScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        int16_t& corr = matScoreCorrection[Murmur3(pos.GetMaterialKey().value) % MaterialCorrectionTableSize];
+        corr = static_cast<int16_t>((corr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
 
     // pawn structure
     {
-        const int32_t index = pos.GetPawnsHash() % PawnStructureCorrectionTableSize;
-        int16_t& pawnScore = pawnStructureCorrection[index];
-        pawnScore = static_cast<int16_t>((pawnScore * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+        int16_t& corr = pawnStructureCorrection[pos.GetPawnsHash() % PawnStructureCorrectionTableSize];
+        corr = static_cast<int16_t>((corr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+    }
+
+    // white non-pawn
+    {
+        int16_t& corr = nonPawnWhiteCorrection[pos.GetNonPawnsHash(White) % NonPawnCorrectionTableSize];
+        corr = static_cast<int16_t>((corr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
+    }
+
+    // black non-pawn
+    {
+        int16_t& corr = nonPawnBlackCorrection[pos.GetNonPawnsHash(Black) % NonPawnCorrectionTableSize];
+        corr = static_cast<int16_t>((corr * (EvalCorrectionBlendFactor - 1) + diff) / EvalCorrectionBlendFactor);
     }
 }
 
