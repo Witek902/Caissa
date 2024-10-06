@@ -6,7 +6,7 @@
 
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.20.3"
+#define CAISSA_VERSION "1.20.4"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -938,6 +938,9 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
     TTEntry ttEntry;
 
     std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
+    std::cout << "PawnHash:   " << mGame.GetPosition().GetPawnsHash() << std::endl;
+    std::cout << "Non-Pawn Hash (Whites): " << mGame.GetPosition().GetNonPawnsHash(White) << std::endl;
+    std::cout << "Non-Pawn Hash (Blacks): " << mGame.GetPosition().GetNonPawnsHash(Black) << std::endl;
 
     if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {
