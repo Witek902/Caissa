@@ -57,8 +57,6 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMin, 183, 100, 300);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 416, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 26, 10, 50);
 
-DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
-DEFINE_PARAM(NmpEvalTreshold, 19, 0, 40);
 DEFINE_PARAM(NmpEvalDiffDiv, 239, 64, 1024);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
@@ -1530,56 +1528,36 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
-                node->staticEval >= beta &&
-                node->depth >= NmpStartDepth &&
+            if (eval >= beta &&
+                beta > -KnownWinValue &&
+                !node->isNullMove &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
-                // don't allow null move if parent or grandparent node was null move
-                bool doNullMove = !node->isNullMove;
-                if (node->ply > 0 && (node - 1)->isNullMove) doNullMove = false;
+                const int32_t r =
+                    NmpNullMoveDepthReduction +
+                    node->depth / 3 +
+                    std::min(3, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
 
-                if (doNullMove)
-                {
-                    const int32_t r =
-                        NmpNullMoveDepthReduction +
-                        node->depth / 3 +
-                        std::min(3, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
+                NodeInfo& childNode = *(node + 1);
+                childNode.Clear();
+                childNode.pvIndex = node->pvIndex;
+                childNode.position = position;
+                childNode.alpha = -beta;
+                childNode.beta = -beta + 1;
+                childNode.isNullMove = true;
+                childNode.isCutNode = !node->isCutNode;
+                childNode.doubleExtensions = node->doubleExtensions;
+                childNode.ply = node->ply + 1;
+                childNode.depth = static_cast<int16_t>(node->depth - r);
+                childNode.nnContext.MarkAsDirty();
 
-                    NodeInfo& childNode = *(node + 1);
-                    childNode.Clear();
-                    childNode.pvIndex = node->pvIndex;
-                    childNode.position = position;
-                    childNode.alpha = -beta;
-                    childNode.beta = -beta + 1;
-                    childNode.isNullMove = true;
-                    childNode.isCutNode = !node->isCutNode;
-                    childNode.doubleExtensions = node->doubleExtensions;
-                    childNode.ply = node->ply + 1;
-                    childNode.depth = static_cast<int16_t>(node->depth - r);
-                    childNode.nnContext.MarkAsDirty();
+                childNode.position.DoNullMove();
+                childNode.position.ComputeThreats(childNode.threats);
 
-                    childNode.position.DoNullMove();
-                    childNode.position.ComputeThreats(childNode.threats);
+                ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
 
-                    ScoreType nullMoveScore = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
-
-                    if (nullMoveScore >= beta)
-                    {
-                        if (nullMoveScore >= TablebaseWinValue)
-                            nullMoveScore = beta;
-
-                        if (std::abs(beta) < KnownWinValue && node->depth < 10)
-                            return nullMoveScore;
-
-                        node->depth -= static_cast<uint16_t>(NmpReSearchDepthReduction);
-
-                        if (node->depth <= 0)
-                        {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-                        }
-                    }
-                }
+                if (nullMoveScore >= beta)
+                    return nullMoveScore < TablebaseWinValue ? nullMoveScore : beta;
             }
 
             // Probcut
