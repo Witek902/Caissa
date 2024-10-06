@@ -320,11 +320,13 @@ private:
 
         NodeInfo searchStack[MaxSearchDepth];
 
-        static constexpr int32_t EvalCorrectionScale = 256;
+        static constexpr int32_t EvalCorrectionScale = 512;
         static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t PawnStructureCorrectionTableSize = 1024;
-        int16_t matScoreCorrection[MaterialCorrectionTableSize];
-        int16_t pawnStructureCorrection[PawnStructureCorrectionTableSize];
+        static constexpr uint32_t EvalCorrectionTableSize = 16384;
+        using EvalCorrectionTable = int16_t[2][EvalCorrectionTableSize]; // [stm][hash]
+        EvalCorrectionTable pawnStructureCorrection;
+        EvalCorrectionTable nonPawnWhiteCorrection;
+        EvalCorrectionTable nonPawnBlackCorrection;
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
@@ -334,7 +336,6 @@ private:
         const Move GetPvMove(const NodeInfo& node) const;
 
         ScoreType GetEvalCorrection(const Position& pos) const;
-        void UpdateEvalCorrection(const Position& pos, ScoreType evalScore, ScoreType trueScore);
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
