@@ -389,14 +389,11 @@ void MoveOrderer::ScoreMoves(
             }
 
             // use node cache for scoring moves near the root
-            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
+            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 64)
             {
                 if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
                 {
-                    const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
-                    ASSERT(fraction >= 0.0f);
-                    ASSERT(fraction <= 1.0f);
-                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
+                    score += static_cast<int32_t>(32768 * moveInfo->nodesSearched / nodeCacheEntry->nodesSum);
                 }
             }
         }
