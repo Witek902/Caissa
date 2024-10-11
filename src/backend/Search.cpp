@@ -1443,10 +1443,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         eval = node->staticEval = InvalidValue;
 
-        if (!node->isCutNode)
-        {
+        if constexpr (isPvNode)
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
-        }
     }
     else
     {
@@ -1458,10 +1456,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
         }
-        else if (!node->isCutNode)
-        {
+        else if constexpr (isPvNode)
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
-        }
 
         ASSERT(node->staticEval != InvalidValue);
 
