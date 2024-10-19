@@ -41,6 +41,7 @@ DEFINE_PARAM(LmrCaptureBad, 19, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 72, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, 34, -128, 256);
 DEFINE_PARAM(LmrCaptureInCheck, 50, -128, 256);
+DEFINE_PARAM(LmrTTHighDepth, 64, -128, 256);
 
 DEFINE_PARAM(LmrDeeperTreshold, 79, 20, 200);
 
@@ -91,8 +92,8 @@ DEFINE_PARAM(RazoringMarginBias, 22, 0, 25);
 DEFINE_PARAM(ReductionStatOffset, 7544, 5000, 12000);
 DEFINE_PARAM(ReductionStatDiv, 171, 10, 400);
 
-DEFINE_PARAM(EvalCorrectionScale, 516, 1, 1024);
-DEFINE_PARAM(EvalCorrectionBlendFactor, 256, 8, 512);
+DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
+DEFINE_PARAM(EvalCorrectionNonPawnsScale, 53, 1, 128);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
@@ -952,9 +953,9 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
 ScoreType Search::ThreadData::GetEvalCorrection(const Position& pos) const
 {
     int32_t corr = 0;
-    corr += 53 * pawnStructureCorrection[pos.GetSideToMove()][pos.GetPawnsHash() % EvalCorrectionTableSize];
-    corr += 53 * nonPawnWhiteCorrection[pos.GetSideToMove()][pos.GetNonPawnsHash(White) % EvalCorrectionTableSize];
-    corr += 53 * nonPawnBlackCorrection[pos.GetSideToMove()][pos.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
+    corr += EvalCorrectionPawnsScale * pawnStructureCorrection[pos.GetSideToMove()][pos.GetPawnsHash() % EvalCorrectionTableSize];
+    corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[pos.GetSideToMove()][pos.GetNonPawnsHash(White) % EvalCorrectionTableSize];
+    corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[pos.GetSideToMove()][pos.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
 
@@ -1945,7 +1946,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
 
             // reduce less if TT entry has high depth
-            if (ttEntry.depth >= node->depth) r -= LmrScale; // TODO tune
+            if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
             // scale down with randomization
             r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
