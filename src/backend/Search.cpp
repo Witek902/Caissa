@@ -59,7 +59,6 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMax, 416, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 26, 10, 50);
 
 DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
-DEFINE_PARAM(NmpEvalTreshold, 19, 0, 40);
 DEFINE_PARAM(NmpEvalDiffDiv, 239, 64, 1024);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
@@ -1313,7 +1312,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue; // fully adjusted eval
-    ScoreType unadjustedEval = InvalidValue; // eval before TT adjustment
+    ScoreType rawStaticEval = InvalidValue; // what Evaluate() returned
     ScoreType tbMinValue = -InfValue; // min value according to tablebases
     ScoreType tbMaxValue = InfValue; // max value according to tablebases
 
@@ -1327,7 +1326,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ctx.stats.ttHits++;
 #endif // COLLECT_SEARCH_STATS
 
-        node->staticEval = ttEntry.staticEval;
+        rawStaticEval = ttEntry.staticEval;
 
         ttScore = ScoreFromTT(ttEntry.score, node->ply, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
@@ -1415,7 +1414,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // evaluate position
     if (node->isInCheck)
     {
-        unadjustedEval = eval = node->staticEval = InvalidValue;
+        node->staticEval = InvalidValue;
 
         if (!node->isCutNode)
         {
@@ -1424,23 +1423,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
     else
     {
-        if (node->staticEval == InvalidValue)
+        if (rawStaticEval == InvalidValue)
         {
-            const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
-            ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
-            node->staticEval = evalScore;
-
-            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
+            rawStaticEval = Evaluate(*node, thread.accumulatorCache);
+            ASSERT(rawStaticEval < TablebaseWinValue && rawStaticEval > -TablebaseWinValue);
+            ctx.searchParam.transpositionTable.Write(position, rawStaticEval, rawStaticEval, -1, TTEntry::Bounds::Lower);
         }
         else if (!node->isCutNode)
         {
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
         }
 
-        ASSERT(node->staticEval != InvalidValue);
+        ASSERT(rawStaticEval != InvalidValue);
+        node->staticEval = eval = rawStaticEval;
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
@@ -1504,8 +1502,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
-                node->staticEval >= beta &&
+            if (eval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
@@ -1610,7 +1607,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // probcut failed
                     if (score >= probBeta)
                     {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), rawStaticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
                         return score;
                     }
                 }
@@ -2140,7 +2137,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), rawStaticEval, node->depth, bounds, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
@@ -2150,10 +2147,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->isInCheck &&
             (!bestMove.IsValid() || bestMove.IsQuiet()) &&
             (bounds == TTEntry::Bounds::Exact ||
-             (bounds == TTEntry::Bounds::Lower && bestValue >= unadjustedEval) ||
-             (bounds == TTEntry::Bounds::Upper && bestValue <= unadjustedEval)))
+             (bounds == TTEntry::Bounds::Lower && bestValue >= node->staticEval) ||
+             (bounds == TTEntry::Bounds::Upper && bestValue <= node->staticEval)))
         {
-            const int32_t bonus = std::clamp((bestValue - unadjustedEval) * node->depth / 8, -256, 256);
+            const int32_t bonus = std::clamp((bestValue - node->staticEval) * node->depth / 8, -256, 256);
             AddToCorrHist(thread.pawnStructureCorrection[position.GetSideToMove()][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnWhiteCorrection[position.GetSideToMove()][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnBlackCorrection[position.GetSideToMove()][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
