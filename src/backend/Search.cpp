@@ -964,27 +964,12 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-INLINE static int32_t GetContemptFactor(const Position& pos, const Color rootStm, const SearchParam& searchParam)
-{
-    int32_t contempt = searchParam.staticContempt;
-
-    if (searchParam.dynamicContempt > 0)
-        contempt += (searchParam.dynamicContempt * pos.GetNumPiecesExcludingKing()) / 32;
-
-    if (pos.GetSideToMove() != rootStm)
-        contempt = -contempt;
-
-    return contempt;
-}
-
-ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const Color rootStm, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
 {
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
     {
-        adjustedScore += GetContemptFactor(node.position, rootStm, searchParam);
-
         // apply eval correction term
         adjustedScore += threadData.GetEvalCorrection(node.position);
 
@@ -1093,7 +1078,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1455,7 +1440,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.game.GetPosition().GetSideToMove(), ctx.searchParam);
+        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
