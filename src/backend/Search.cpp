@@ -1078,15 +1078,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
-
-        bestValue = adjustedEvalScore;
+        bestValue = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         // try to use TT score for better score estimate
-        if (std::abs(ttScore) < KnownWinValue)
+        if (ttScore != InvalidValue)
         {
-            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > adjustedEvalScore) ||
-                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < adjustedEvalScore) ||
+            if ((ttEntry.bounds == TTEntry::Bounds::Lower && ttScore > bestValue) ||
+                (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore < bestValue) ||
                 (ttEntry.bounds == TTEntry::Bounds::Exact))
             {
                 bestValue = ttScore;
@@ -1096,16 +1094,12 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         if (bestValue >= beta)
         {
             if (!ttEntry.IsValid())
-            {
                 ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
-            }
             return bestValue;
         }
 
         if (bestValue > alpha)
-        {
             alpha = bestValue;
-        }
 
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
