@@ -1963,7 +1963,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                newDepth += (score > bestValue + LmrDeeperTreshold) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
+                newDepth += (score > bestValue + LmrDeeperTreshold) && !isRootNode;
                 newDepth -= (score < bestValue + newDepth);
                 doFullDepthSearch = newDepth > lmrDepth;
             }
