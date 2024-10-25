@@ -64,7 +64,7 @@ DEFINE_PARAM(NmpEvalDiffDiv, 201, 64, 1024);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 
-DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
+DEFINE_PARAM(LateMoveReductionStartDepth, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 10);
 DEFINE_PARAM(HistoryPruningLinearFactor, 238, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 133, 50, 200);
