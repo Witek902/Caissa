@@ -65,9 +65,10 @@ struct Move
 {
     INLINE const Square FromSquare() const      { return value & 0x3F; }
     INLINE const Square ToSquare() const        { return (value >> 6) & 0x3F; }
-    INLINE uint32_t FromTo() const              { return value & 0xFFF; }
     INLINE Piece GetPromoteTo() const           { return (Piece)((value >> 12) & 0xF); }
     INLINE Piece GetPiece() const               { return (Piece)((value >> 16) & 0xF); }
+    INLINE uint32_t FromTo() const              { return value & 0xFFF; }
+    INLINE uint32_t PieceTo() const             { return 64u * ((uint32_t)GetPiece() - (uint32_t)Piece::Pawn) | ToSquare().Index(); }
     INLINE constexpr bool IsCapture() const     { return value & (1u << 20); }
     INLINE constexpr bool IsEnPassant() const   { return value & (1u << 21); }
     INLINE constexpr bool IsLongCastle() const  { return value & (1u << 22); }
