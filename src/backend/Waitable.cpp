@@ -11,13 +11,10 @@ Waitable::~Waitable()
 
 void Waitable::Wait()
 {
-    if (!mFinished)
+    std::unique_lock<std::mutex> lock(mMutex);
+    while (!mFinished)
     {
-        std::unique_lock<std::mutex> lock(mMutex);
-        while (!mFinished)
-        {
-            mConditionVariable.wait(lock);
-        }
+        mConditionVariable.wait(lock);
     }
 }
 
@@ -30,10 +27,11 @@ void Waitable::Reset()
 
 void Waitable::OnFinished()
 {
+    std::unique_lock<std::mutex> lock(mMutex);
+
     const bool oldState = mFinished.exchange(true);
     ASSERT(!oldState);
     (void)oldState;
 
-    std::unique_lock<std::mutex> lock(mMutex);
     mConditionVariable.notify_all();
 }

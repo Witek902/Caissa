@@ -157,7 +157,10 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
     {
         numClusters = 0;
         std::cerr << "Failed to allocate transposition table" << std::endl;
+        return;
     }
+
+    Clear();
 }
 
 void TranspositionTable::NextGeneration()
