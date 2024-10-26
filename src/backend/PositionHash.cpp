@@ -1,13 +1,10 @@
 #include "PositionHash.hpp"
 
-// 800 random bytes to store Zobrist hash
-// 
 // 2*6*64 for pieces piece
 // 8 for en passant square
 // 16 for castling rights
 // 
-// This gives 792 64-bit hashes required. We overlap all the hashes (1 byte offsets),
-// so required storage is 8x smaller.
+// This gives 792 64-bit hashes required.
 // Note: side-to-move hash is stored separately
 alignas(64) uint64_t s_ZobristHash[c_ZobristHashSize];
 

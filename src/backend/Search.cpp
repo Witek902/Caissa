@@ -371,8 +371,8 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             {
                 Search_Internal(i, numPvLines, game, param, globalStats);
             };
+            threadData->newTaskCV.notify_one();
         }
-        threadData->newTaskCV.notify_one();
     }
         
     // do search on main thread
@@ -469,8 +469,8 @@ void Search::WorkerThreadCallback(ThreadData* threadData)
             std::unique_lock<std::mutex> lock(threadData->taskFinishedMutex);
             ASSERT(!threadData->taskFinished);
             threadData->taskFinished = true;
+            threadData->taskFinishedCV.notify_one();
         }
-        threadData->taskFinishedCV.notify_one();
     }
 }
 
