@@ -43,8 +43,6 @@ DEFINE_PARAM(LmrCaptureImproving, 26, -128, 256);
 DEFINE_PARAM(LmrCaptureInCheck, 40, -128, 256);
 DEFINE_PARAM(LmrTTHighDepth, 63, -128, 256);
 
-DEFINE_PARAM(LmrDeeperTreshold, 90, 20, 200);
-
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 143, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 322, 100, 500);
@@ -1963,7 +1961,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             if (score > alpha)
             {
-                newDepth += (score > bestValue + LmrDeeperTreshold) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
                 newDepth -= (score < bestValue + newDepth);
                 doFullDepthSearch = newDepth > lmrDepth;
             }
