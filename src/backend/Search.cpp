@@ -1581,7 +1581,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 childNode.beta = -probBeta + 1;
                 childNode.isCutNode = !node->isCutNode;
 
-                const ScoreType seeThreshold = probBeta - node->staticEval;
+                const ScoreType seeThreshold = (probBeta - node->staticEval) * 2;
                 MovePicker movePicker(position, thread.moveOrderer, nullptr,
                     (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
 
