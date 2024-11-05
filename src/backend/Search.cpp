@@ -1513,8 +1513,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
-                node->staticEval >= beta &&
+            if (eval >= beta &&
+                node->staticEval + 32 * node->depth - 200 >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
