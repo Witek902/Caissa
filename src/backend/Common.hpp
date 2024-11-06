@@ -447,6 +447,7 @@ struct NodeInfo;
 struct NNEvaluatorContext;
 
 static constexpr uint32_t MaxAllowedMoves = 280;
+static constexpr uint32_t ContinuationHistorySize = 8;
 
 template<uint32_t MaxSize> class TMoveList;
 using MoveList = TMoveList<MaxAllowedMoves>;
