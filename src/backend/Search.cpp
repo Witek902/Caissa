@@ -61,7 +61,7 @@ DEFINE_PARAM(SingularitySearchScoreStep, 25, 10, 50);
 DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 18, 0, 40);
 DEFINE_PARAM(NmpEvalDiffDiv, 201, 64, 1024);
-DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
+DEFINE_PARAM(NmpNullMoveDepthReduction, 4, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
