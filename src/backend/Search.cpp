@@ -1105,10 +1105,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         if (bestValue >= beta)
         {
             if (!ttEntry.IsValid())
-            {
                 ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
-            }
-            return bestValue;
+            return (bestValue + beta) / 2;
         }
 
         if (bestValue > alpha)
