@@ -82,6 +82,8 @@ DEFINE_PARAM(RfpDepth, 6, 5, 10);
 DEFINE_PARAM(RfpMultiplier, 111, 80, 180);
 DEFINE_PARAM(RfpTreshold, 14, 0, 20);
 
+DEFINE_PARAM(SSEPruningDepth_Captures, 4, 1, 12);
+DEFINE_PARAM(SSEPruningDepth_NonCaptures, 8, 1, 12);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 128, 50, 200);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 51, 50, 150);
 
@@ -95,6 +97,7 @@ DEFINE_PARAM(ReductionStatDiv, 190, 10, 400);
 DEFINE_PARAM(EvalCorrectionPawnsScale, 45, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 58, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 50, 1, 128);
+DEFINE_PARAM(CorrHistMaxBonus, 256, 128, 512);
 
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
@@ -1612,7 +1615,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // verification search
                     if (score >= probBeta)
                     {
-                        childNode.depth = node->depth - 4;
+                        childNode.depth = node->depth - ProbcutStartDepth + 1;
                         score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
                     }
 
@@ -1773,13 +1776,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (move.IsCapture())
                 {
-                    if (node->depth <= 4 &&
+                    if (node->depth <= SSEPruningDepth_Captures &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
                 }
                 else
                 {
-                    if (node->depth <= 8 &&
+                    if (node->depth <= SSEPruningDepth_NonCaptures &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth - moveStatScore / 128)) continue;
                 }
             }
@@ -2162,7 +2165,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Lower && bestValue >= unadjustedEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= unadjustedEval)))
         {
-            const int32_t bonus = std::clamp((bestValue - unadjustedEval) * node->depth / 8, -256, 256);
+            const int32_t bonus = std::clamp((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
             AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
