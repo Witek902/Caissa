@@ -70,7 +70,7 @@ DEFINE_PARAM(HistoryPruningLinearFactor, 238, 100, 500);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 133, 50, 200);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 562, 200, 1000);
-DEFINE_PARAM(AspirationWindow, 8, 6, 20);
+DEFINE_PARAM(AspirationWindow, 6, 5, 20);
 
 DEFINE_PARAM(SingularExtensionMinDepth, 4, 4, 10);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 17, 10, 30);
@@ -917,7 +917,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         }
 
         // increase window, fallback to full window after some threshold
-        window += window / 3;
+        window += 1 + window / 4;
         if (window > AspirationWindowMaxSize) window = CheckmateValue;
     }
 
