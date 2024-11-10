@@ -1822,7 +1822,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType originalBeta = node->beta;
 
                 node->isPvNodeFromPrevIteration = false;
-                node->depth = node->depth / 2 - 1;
+                node->depth = std::max<int16_t>(1, (node->depth - 3) / 2);
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
