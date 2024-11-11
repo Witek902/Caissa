@@ -72,7 +72,9 @@ DEFINE_PARAM(HistoryPruningQuadraticFactor, 133, 50, 200);
 DEFINE_PARAM(AspirationWindowMaxSize, 562, 200, 1000);
 DEFINE_PARAM(AspirationWindow, 8, 6, 20);
 
-DEFINE_PARAM(SingularExtensionMinDepth, 4, 4, 10);
+DEFINE_PARAM(SingularExtMinDepth, 4, 4, 10);
+DEFINE_PARAM(SingularExtDepthRedMul, 64, 32, 128);
+DEFINE_PARAM(SingularExtDepthRedSub, 192, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 17, 10, 30);
 DEFINE_PARAM(SingularDoubleExtensionsLimit, 6, 4, 12);
 
@@ -1615,7 +1617,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // verification search
                     if (score >= probBeta)
                     {
-                        childNode.depth = node->depth - ProbcutStartDepth + 1;
+                        childNode.depth = static_cast<int16_t>(node->depth - ProbcutStartDepth + 1);
                         score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
                     }
 
@@ -1809,7 +1811,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
-                node->depth >= SingularExtensionMinDepth &&
+                node->depth >= SingularExtMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - 3)
@@ -1822,7 +1824,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType originalBeta = node->beta;
 
                 node->isPvNodeFromPrevIteration = false;
-                node->depth = std::max<int16_t>(1, (node->depth - 3) / 2);
+                node->depth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
@@ -2165,7 +2167,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Lower && bestValue >= unadjustedEval) ||
              (bounds == TTEntry::Bounds::Upper && bestValue <= unadjustedEval)))
         {
-            const int32_t bonus = std::clamp((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
+            const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
             AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
