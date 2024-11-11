@@ -33,7 +33,13 @@
 #error "Unknown configuration"
 #endif
 
-static const char* c_EngineName = "Caissa " CAISSA_VERSION " " ArchitectureStr ConfigurationStr;
+#if defined(ENABLE_TUNING)
+#define TuningStr " TUNING"
+#else
+#define TuningStr ""
+#endif
+
+static const char* c_EngineName = "Caissa " CAISSA_VERSION " " ArchitectureStr ConfigurationStr TuningStr;
 static const char* c_Author = "Michal Witanowski";
 
 // TODO set TT size based on current memory usage / total memory size

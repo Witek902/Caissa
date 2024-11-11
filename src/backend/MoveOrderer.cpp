@@ -3,20 +3,22 @@
 #include "Tuning.hpp"
 
 
-DEFINE_PARAM(QuietBonusOffset, -104, -200, 50);
-DEFINE_PARAM(QuietBonusLinear, 166, 75, 200);
-DEFINE_PARAM(QuietBonusLimit, 1955, 1000, 4000);
+DEFINE_PARAM(QuietBonusOffset, -104, -200, 0);
+DEFINE_PARAM(QuietBonusLinear, 166, 100, 250);
+DEFINE_PARAM(QuietBonusScoreDiff, 166, 0, 400);
+DEFINE_PARAM(QuietBonusLimit, 1955, 1000, 3000);
 
 DEFINE_PARAM(QuietMalusOffset, -58, -200, 50);
 DEFINE_PARAM(QuietMalusLinear, 154, 75, 200);
-DEFINE_PARAM(QuietMalusLimit, 1960, 1000, 4000);
+DEFINE_PARAM(QuietMalusScoreDiff, 154, 0, 400);
+DEFINE_PARAM(QuietMalusLimit, 1960, 1000, 3000);
 
-DEFINE_PARAM(CaptureBonusOffset, 28, 0, 150);
-DEFINE_PARAM(CaptureBonusLinear, 72, 20, 150);
+DEFINE_PARAM(CaptureBonusOffset, 28, 0, 100);
+DEFINE_PARAM(CaptureBonusLinear, 72, 20, 120);
 DEFINE_PARAM(CaptureBonusLimit, 2714, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 33, 0, 150);
-DEFINE_PARAM(CaptureMalusLinear, 57, 20, 150);
+DEFINE_PARAM(CaptureMalusOffset, 33, 0, 100);
+DEFINE_PARAM(CaptureMalusLinear, 57, 20, 120);
 DEFINE_PARAM(CaptureMalusLimit, 2124, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
@@ -224,8 +226,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusLinear * scoreDiff / 64, QuietBonusLimit);
-    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusLinear * scoreDiff / 64, QuietMalusLimit);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusScoreDiff * scoreDiff / 64, QuietBonusLimit);
+    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusScoreDiff * scoreDiff / 64, QuietMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
