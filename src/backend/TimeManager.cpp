@@ -3,8 +3,9 @@
 #include "Tuning.hpp"
 
 
-DEFINE_PARAM(TM_MovesLeftMidpoint, 38, 30, 60);
-DEFINE_PARAM(TM_MovesLeftSteepness, 214, 150, 260);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 38, 25, 55);
+DEFINE_PARAM(TM_MovesLeftSteepness, 213, 160, 260);
+DEFINE_PARAM(TM_MovesLeftPiecesFactor, 20, 0, 200);
 DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
 DEFINE_PARAM(TM_NodesCountScale, 203, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 60, 10, 90);
@@ -13,18 +14,20 @@ DEFINE_PARAM(TM_StabilityOffset, 1411, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 900, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1100, 1000, 1500);
 
-static float EstimateMovesLeft(const uint32_t moves)
+static float EstimateMovesLeft(const Game& game)
 {
-    // based on LeelaChessZero
+    const float moves = game.GetPosition().GetMoveCount();
     const float midpoint = static_cast<float>(TM_MovesLeftMidpoint);
     const float steepness = static_cast<float>(TM_MovesLeftSteepness) / 100.0f;
-    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
+    const float piecesFactor = static_cast<float>(TM_MovesLeftPiecesFactor) / 1000.0f * game.GetPosition().GetNumPiecesExcludingKing();
+    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves + (float)piecesFactor;
+
 }
 
 void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
 {
     const int32_t moveOverhead = data.moveOverhead;
-    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game.GetPosition().GetMoveCount());
+    const float movesLeft = data.movesToGo != UINT32_MAX ? (float)data.movesToGo : EstimateMovesLeft(game);
 
     // soft limit
     if (data.remainingTime != INT32_MAX)
