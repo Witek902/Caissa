@@ -113,7 +113,7 @@ void MoveOrderer::DebugPrint() const
                 for (uint32_t file = 0; file < 8; ++file)
                 {
                     const uint32_t square = 8 * (7 - rank) + file;
-                    const CounterType count = capturesHistory[0][piece][capturedPiece][square];
+                    const CounterType count = capturesHistory[0][0][piece][capturedPiece][square];
                     std::cout << std::fixed << std::setw(8) << count;
                 }
                 std::cout << std::endl;
@@ -261,6 +261,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     }
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    const Bitboard threats = node.threats.allThreats;
 
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
     const int32_t malus = -std::min<int32_t>(CaptureMalusOffset + CaptureMalusLinear * depth, CaptureMalusLimit);
@@ -278,10 +279,12 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         const uint32_t capturedIdx = (uint32_t)captured - 1;
         const uint32_t pieceIdx = (uint32_t)move.GetPiece() - 1;
+        const uint32_t from = move.FromSquare().Index();
+        const uint32_t to = move.ToSquare().Index();
 
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
-        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+        UpdateHistoryCounter(capturesHistory[color][threats.IsBitSet(from)][pieceIdx][capturedIdx][to], delta);
     }
 }
 
@@ -335,7 +338,7 @@ void MoveOrderer::ScoreMoves(
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
+                const int32_t historyScore = ((int32_t)capturesHistory[color][threats.IsBitSet(from)][pieceIdx][capturedIdx][to] - INT16_MIN) / 128;
                 ASSERT(historyScore >= 0);
                 score += historyScore;
             }
