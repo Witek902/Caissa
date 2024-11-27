@@ -1748,7 +1748,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     // if we're in quiets stage, skip everything
                     if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
                     continue;
                 }
 
@@ -1768,7 +1767,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
-                    if (quietMoveIndex > 1) continue;
+                    continue;
                 }
             }
 
