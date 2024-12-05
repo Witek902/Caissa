@@ -1791,20 +1791,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
 
         int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
 
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
+        // promotion extension
+        if (move.GetPromoteTo() == Piece::Queen)
+            moveExtension++;
 
         // Singular move detection
         if constexpr (!isRootNode)
