@@ -98,7 +98,8 @@ DEFINE_PARAM(ReductionStatDiv, 200, 10, 400);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 48, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 64, 1, 128);
-DEFINE_PARAM(ContCorrectionScale, 62, 1, 128);
+DEFINE_PARAM(ContCorrectionScale1, 62, 1, 128);
+DEFINE_PARAM(ContCorrectionScale2, 50, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 236, 128, 512);
 
 
@@ -966,9 +967,10 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
     corr += EvalCorrectionPawnsScale * pawnStructureCorrection[stm][node.position.GetPawnsHash() % EvalCorrectionTableSize];
     corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % EvalCorrectionTableSize];
     corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
-
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+        corr += ContCorrectionScale1 * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+    if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
+        corr += ContCorrectionScale2 * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -2169,11 +2171,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
-            AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
-            if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            if (bonus != 0)
+            {
+                AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
+                AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
+                AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
+                if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
+                    AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
+                    AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+            }
         }
     }
 
