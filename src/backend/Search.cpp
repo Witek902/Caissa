@@ -963,9 +963,9 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
     const Color stm = node.position.GetSideToMove();
 
     int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * pawnStructureCorrection[stm][node.position.GetPawnsHash() % EvalCorrectionTableSize];
-    corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % EvalCorrectionTableSize];
-    corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
+    corr += EvalCorrectionPawnsScale * pawnStructureCorrection[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
@@ -1079,6 +1079,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         if (node->staticEval == InvalidValue)
         {
+#ifdef USE_SSE
+            _mm_prefetch(reinterpret_cast<const char*>(&thread.pawnStructureCorrection[position.GetSideToMove()][position.GetPawnsHash() % ThreadData::PawnCorrTableSize]), _MM_HINT_T0);
+#endif // USE_SSE
+
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
@@ -1440,6 +1444,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (node->staticEval == InvalidValue)
         {
+#ifdef USE_SSE
+            _mm_prefetch(reinterpret_cast<const char*>(&thread.pawnStructureCorrection[position.GetSideToMove()][position.GetPawnsHash() % ThreadData::PawnCorrTableSize]), _MM_HINT_T0);
+#endif // USE_SSE
+
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
@@ -2168,12 +2176,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Upper && bestValue <= unadjustedEval)))
         {
             const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
-            const Color stm = position.GetSideToMove();
-            AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
-            if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            if (bonus != 0)
+            {
+                const Color stm = position.GetSideToMove();
+                AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::PawnCorrTableSize], bonus);
+                AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::NonPawnCorrTableSize], bonus);
+                AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::NonPawnCorrTableSize], bonus);
+                if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
+                    AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            }
         }
     }
 
