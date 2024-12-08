@@ -318,12 +318,14 @@ private:
 
         static constexpr int32_t EvalCorrectionScale = 512;
         static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t EvalCorrectionTableSize = 16384;
-        using EvalCorrectionTable = int16_t[2][EvalCorrectionTableSize]; // [stm][hash]
+        static constexpr uint32_t PawnCorrTableSize = 1 << 16;
+        static constexpr uint32_t NonPawnCorrTableSize = 1 << 14;
+        using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
+        using NonPawnCorrTableTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
         using ContCorrectionTable = int16_t[2][6*64][6*64]; // [stm][piece-to][piece-to]
-        EvalCorrectionTable pawnStructureCorrection;
-        EvalCorrectionTable nonPawnWhiteCorrection;
-        EvalCorrectionTable nonPawnBlackCorrection;
+        PawnCorrTable pawnStructureCorrection;
+        NonPawnCorrTableTable nonPawnWhiteCorrection;
+        NonPawnCorrTableTable nonPawnBlackCorrection;
         ContCorrectionTable continuationCorrection;
 
         ThreadData();
