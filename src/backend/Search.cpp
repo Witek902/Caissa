@@ -197,11 +197,11 @@ void Search::Clear()
         threadData->moveOrderer.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
-        memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
         memset(threadData->nonPawnWhiteCorrection, 0, sizeof(threadData->nonPawnWhiteCorrection));
         memset(threadData->nonPawnBlackCorrection, 0, sizeof(threadData->nonPawnBlackCorrection));
         memset(threadData->continuationCorrection, 0, sizeof(threadData->continuationCorrection));
     }
+    memset(mPawnStructureCorrection, 0, sizeof(mPawnStructureCorrection));
 }
 
 const MoveOrderer& Search::GetMoveOrderer() const
@@ -824,7 +824,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     param.stopSearch = true;
 }
 
-PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const
+PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param)
 {
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
@@ -958,17 +958,17 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
-ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
+ScoreType Search::GetEvalCorrection(const ThreadData& threadData, const NodeInfo& node) const
 {
     const Color stm = node.position.GetSideToMove();
 
     int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * pawnStructureCorrection[stm][node.position.GetPawnsHash() % EvalCorrectionTableSize];
-    corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % EvalCorrectionTableSize];
-    corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
+    corr += EvalCorrectionPawnsScale * mPawnStructureCorrection[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * threadData.nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * threadData.nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+        corr += ContCorrectionScale * threadData.continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -978,14 +978,14 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam) const
 {
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
     {
         // apply eval correction term
-        adjustedScore += threadData.GetEvalCorrection(node);
+        adjustedScore += GetEvalCorrection(threadData, node);
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -998,7 +998,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
 }
 
 template<NodeType nodeType>
-ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
+ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx)
 {
     ASSERT(node->ply < MaxSearchDepth);
     ASSERT(!node->filteredMove.IsValid());
@@ -1079,6 +1079,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     {
         if (node->staticEval == InvalidValue)
         {
+#ifdef USE_SSE
+            _mm_prefetch(reinterpret_cast<const char*>(&mPawnStructureCorrection[position.GetSideToMove()][position.GetPawnsHash() % PawnCorrTableSize]), _MM_HINT_T0);
+#endif // USE_SSE
+
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
@@ -1256,7 +1260,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 }
 
 template<NodeType nodeType>
-ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
+ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx)
 {
     ASSERT(node->ply < MaxSearchDepth);
 
@@ -1440,6 +1444,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (node->staticEval == InvalidValue)
         {
+#ifdef USE_SSE
+            _mm_prefetch(reinterpret_cast<const char*>(&mPawnStructureCorrection[position.GetSideToMove()][position.GetPawnsHash() % PawnCorrTableSize]), _MM_HINT_T0);
+#endif // USE_SSE
+
             const ScoreType evalScore = Evaluate(*node, thread.accumulatorCache);
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
@@ -2168,12 +2176,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bounds == TTEntry::Bounds::Upper && bestValue <= unadjustedEval)))
         {
             const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 8, -CorrHistMaxBonus, CorrHistMaxBonus);
-            const Color stm = position.GetSideToMove();
-            AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
-            AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
-            if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            if (bonus != 0)
+            {
+                const Color stm = position.GetSideToMove();
+                AddToCorrHist(mPawnStructureCorrection[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+                AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
+                AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
+                if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
+                    AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            }
         }
     }
 

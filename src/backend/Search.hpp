@@ -260,6 +260,11 @@ private:
 
     Search(const Search&) = delete;
 
+    static constexpr uint32_t PawnCorrTableSize = 1 << 16; // 64K
+    static constexpr int32_t EvalCorrectionScale = 512;
+    static constexpr uint32_t MaterialCorrectionTableSize = 2048;
+    static constexpr uint32_t NonPawnCorrTableSize = 16384;
+
     enum class BoundsType : uint8_t
     {
         Exact = 0,
@@ -309,22 +314,16 @@ private:
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
-
         NodeCache nodeCache;
-
         AccumulatorCache accumulatorCache;
-
         NodeInfo searchStack[MaxSearchDepth];
 
-        static constexpr int32_t EvalCorrectionScale = 512;
-        static constexpr uint32_t MaterialCorrectionTableSize = 2048;
-        static constexpr uint32_t EvalCorrectionTableSize = 16384;
-        using EvalCorrectionTable = int16_t[2][EvalCorrectionTableSize]; // [stm][hash]
-        using ContCorrectionTable = int16_t[2][6*64][6*64]; // [stm][piece-to][piece-to]
-        EvalCorrectionTable pawnStructureCorrection;
-        EvalCorrectionTable nonPawnWhiteCorrection;
-        EvalCorrectionTable nonPawnBlackCorrection;
-        ContCorrectionTable continuationCorrection;
+        using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
+        using ContCorrTable = int16_t[2][6*64][6*64]; // [stm][piece-to][piece-to]
+        
+        NonPawnCorrTable nonPawnWhiteCorrection;
+        NonPawnCorrTable nonPawnBlackCorrection;
+        ContCorrTable continuationCorrection;
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
@@ -332,13 +331,13 @@ private:
 
         // get PV move from previous depth iteration
         const Move GetPvMove(const NodeInfo& node) const;
-
-        ScoreType GetEvalCorrection(const NodeInfo& node) const;
     };
 
     using ThreadDataPtr = std::unique_ptr<ThreadData>;
 
     std::vector<ThreadDataPtr> mThreadData;
+
+    //
 
     static constexpr uint32_t LMRTableSize = 64;
     using LMRTableType = uint16_t[LMRTableSize][LMRTableSize];
@@ -354,24 +353,33 @@ private:
         return mMoveReductionTable_Captures[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
     }
 
+    //
+
+    using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
+    alignas(64) PawnCorrTable mPawnStructureCorrection;
+
+    ScoreType GetEvalCorrection(const ThreadData& threadData, const NodeInfo& node) const;
+
+    //
+
     void BuildMoveReductionTable();
     void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
-    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam);
+    ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
-    PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param) const;
+    PvLine AspirationWindowSearch(ThreadData& thread, const AspirationWindowSearchParam& param);
 
     template<NodeType nodeType>
-    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
+    ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
     template<NodeType nodeType>
-    ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
+    ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
     // returns true if the search needs to be aborted immediately
     static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);
