@@ -159,7 +159,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             // skip drawn game based half-move counter
             if (outEntry.wdlScore == (uint8_t)Game::Score::Draw)
             {
-                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 120.0f;
+                const float hmcSkipProb = (float)outEntry.pos.halfMoveCount / 100.0f;
                 std::bernoulli_distribution skippingDistr(hmcSkipProb);
                 if (skippingDistr(gen))
                     continue;
@@ -168,15 +168,12 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
             // skip early moves
-            if (outEntry.pos.moveCount < 10 && numPieces > 24)
+            if (outEntry.pos.moveCount < 10 && numPieces > 28)
                 continue;
 
             // skip based on piece count
             {
                 if (numPieces <= 3)
-                    continue;
-
-                if (numPieces <= 4 && std::bernoulli_distribution(0.75f)(gen))
                     continue;
 
                 const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);

@@ -6,7 +6,7 @@
 #include "../backend/Tuning.hpp"
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.21.2"
+#define CAISSA_VERSION "1.21.3"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
