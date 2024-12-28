@@ -41,6 +41,7 @@ public:
         return killerMoves[treeHeight];
     }
 
+    void AddQuietMoveHistoryBonus(const NodeInfo& node, const Move move, int32_t bonus);
     void UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff);
     void UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove);
 
