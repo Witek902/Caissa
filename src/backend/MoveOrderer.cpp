@@ -203,6 +203,17 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
+void MoveOrderer::AddQuietMoveHistoryBonus(const NodeInfo& node, const Move move, int32_t bonus)
+{
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    const Bitboard threats = node.threats.allThreats;
+    const uint32_t from = move.FromSquare().Index();
+    const uint32_t to = move.ToSquare().Index();
+    ASSERT(from < 64);
+    ASSERT(to < 64);
+    UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], bonus);
+}
+
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
 {
     ASSERT(node.depth >= 0);
