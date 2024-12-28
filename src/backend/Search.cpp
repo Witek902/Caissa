@@ -1483,6 +1483,18 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
         node->depth--;
 
+    if constexpr (!isRootNode)
+    {
+        // adjust history based on static eval change
+        const Move prevMove = (node - 1)->previousMove;
+        if (!prevMove.IsCapture() && node->staticEval != InvalidValue && (node - 1)->staticEval != InvalidValue)
+        {
+            const int32_t theirLoss = (node - 1)->staticEval + node->staticEval - 60;
+            const int32_t bonus = std::clamp(-8 * theirLoss, -512, 512);
+            thread.moveOrderer.AddQuietMoveHistoryBonus(*(node - 1), prevMove, bonus);
+        }
+    }
+
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     bool isImproving = false;
