@@ -5,7 +5,7 @@
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 38, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 214, 150, 260);
-DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
+DEFINE_PARAM(TM_IdealTimeFactor, 839, 700, 1000);
 DEFINE_PARAM(TM_NodesCountScale, 203, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 60, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 52, 0, 200);
