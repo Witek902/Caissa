@@ -49,10 +49,10 @@ static constexpr int32_t c_nnOutputToCentiPawns = 174;
 namespace wld
 {
     // WLD model by Vondele
-    // coefficients computed with https://github.com/vondele/WLD_model on 60+0.6s games
-    constexpr double as[] = {   1.88054041,    2.39467539,   -3.78019886,  153.49644002 };
-    constexpr double bs[] = {  -4.24993229,   31.21455804,  -59.09168702,   68.89719592 };
-    constexpr int32_t NormalizeToPawnValue = 153;
+    // coefficients computed with https://github.com/vondele/WLD_model on LTC games
+    constexpr double as[] = { -4.77086221, 28.27738905, -24.61534095, 173.78497527 };
+    constexpr double bs[] = { -4.00916811, 26.84594500, -49.92465670, 62.70978360 };
+    constexpr int32_t NormalizeToPawnValue = 173;
 }
 
 inline int32_t NormalizeEval(int32_t eval)
