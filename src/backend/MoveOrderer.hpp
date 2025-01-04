@@ -21,6 +21,8 @@ public:
     static constexpr int32_t CounterMoveBonus       = KillerMoveBonus - 1;
     static constexpr int32_t LosingCaptureValue     = -4000;
 
+    static constexpr uint32_t PawnHistorySize       = 8192;
+
     using CounterType = int16_t;
     using PieceSquareHistory = CounterType[6][64];
     using PieceSquareHistoryPtr = PieceSquareHistory*;
@@ -73,6 +75,7 @@ private:
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
     Move counterMoves[2][6][64];                            // stm, piece, to-square
+    CounterType pawnHistory[PawnHistorySize][2][6][64];     // pawn hash, stm, piece, to-square
 
     Move killerMoves[MaxSearchDepth + 1];
 };
