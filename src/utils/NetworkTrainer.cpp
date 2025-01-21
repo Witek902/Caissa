@@ -136,8 +136,8 @@ void NetworkTrainer::InitNetwork()
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(networkInputs, accumulatorSize, 1);
     m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    m_featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 32 / nn::InputLayerWeightQuantizationScale;
-    m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 32 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = (float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
     //nn::WeightsStoragePtr layer1Weights = std::make_shared<nn::WeightsStorage>(2u * accumulatorSize, 1);
@@ -587,23 +587,6 @@ bool NetworkTrainer::PackNetwork()
             true);
     }
 
-    /*
-    // hidden layers
-    for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
-    {
-        for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
-        {
-            PackWeights(nodes[i],
-                variantIdx,
-                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
-                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
-                nn::HiddenLayerWeightQuantizationScale,
-                nn::HiddenLayerBiasQuantizationScale,
-                false);
-        }
-    }
-    */
-
     // last layer
     const uint32_t lastLayerIndex = 1;
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
@@ -624,6 +607,16 @@ bool NetworkTrainer::PackNetwork()
 
 bool NetworkTrainer::UnpackNetwork()
 {
+    constexpr float OldActivationRangeScaling = 256;
+    constexpr int32_t OldWeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
+    constexpr int32_t OldWeightScale = 1 << OldWeightScaleShift;
+    constexpr int32_t OldOutputScaleShift = 10;
+    constexpr int32_t OldOutputScale = 1 << OldOutputScaleShift;
+    constexpr float OldInputLayerWeightQuantizationScale = OldActivationRangeScaling;
+    constexpr float OldInputLayerBiasQuantizationScale = OldActivationRangeScaling;
+    constexpr float OldOutputLayerWeightQuantizationScale = OldWeightScale * OldOutputScale / OldActivationRangeScaling;
+    constexpr float OldOutputLayerBiasQuantizationScale = OldWeightScale * OldOutputScale;
+
     // feature transformer
     {
         UnpackWeights(
@@ -632,27 +625,10 @@ bool NetworkTrainer::UnpackNetwork()
             nn::AccumulatorSize,
             m_packedNet.GetAccumulatorWeights(),
             m_packedNet.GetAccumulatorBiases(),
-            nn::InputLayerWeightQuantizationScale,
-            nn::InputLayerBiasQuantizationScale,
+            OldInputLayerWeightQuantizationScale,
+            OldInputLayerBiasQuantizationScale,
             true);
     }
-
-    /*
-    // hidden layers
-    for (uint32_t i = 1; i + 1 < nodes.size(); ++i)
-    {
-        for (uint32_t variantIdx = 0; variantIdx < nodes[i].variants.size(); ++variantIdx)
-        {
-            UnpackWeights(nodes[i],
-                variantIdx,
-                const_cast<nn::HiddenLayerWeightType*>(outNetwork.GetLayerWeights<HiddenLayerWeightType>(uint32_t(i), variantIdx)),
-                const_cast<nn::HiddenLayerBiasType*>(outNetwork.GetLayerBiases<HiddenLayerBiasType>(uint32_t(i), variantIdx)),
-                nn::HiddenLayerWeightQuantizationScale,
-                nn::HiddenLayerBiasQuantizationScale,
-                false);
-        }
-    }
-    */
 
     // last layer
     const uint32_t lastLayerIndex = 1;
@@ -664,23 +640,23 @@ bool NetworkTrainer::UnpackNetwork()
             1u,
             m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx),
             m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx),
-            nn::OutputLayerWeightQuantizationScale,
-            nn::OutputLayerBiasQuantizationScale,
+            OldOutputLayerWeightQuantizationScale,
+            OldOutputLayerBiasQuantizationScale,
             false);
     }
 
     return true;
 }
 
-static volatile float g_learningRateScale = 0.2f;
-static volatile float g_lambdaScale = 0.00f;
-static volatile float g_weightDecay = 0.001f;
+static volatile float g_learningRateScale = 1.0f;
+static volatile float g_lambdaScale = 0.0f;
+static volatile float g_weightDecay = 1.0f / 256.0f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-33-4.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-54-11B.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
@@ -697,20 +673,21 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 0.0001f;
-    const float minLearningRate = 0.0001f;
+    const float maxLearningRate = 1.0e-4f;
+    const float minLearningRate = 1.0e-4f;
     const float maxLambda = 1.0f;
     const float minLambda = 1.0f;
 
     //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
+    m_featureTransformerWeights->m_updateWeights = false; // freeze feature transformer weights
 
     GenerateTrainingSet(m_validationSet, kingBucketMask, maxLambda);
 
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 20.0f ? (float)(iteration + 1) / 20.0f : 1.0f;
+        const float warmup = iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
@@ -802,6 +779,15 @@ bool NetworkTrainer::Train()
         std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << std::endl;
         std::cout << "Training rate :   " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl << std::endl;
 
+        // print weights stats
+        {
+            std::cout << "FT weights stats: ";
+            m_featureTransformerWeights->PrintStats();
+
+            std::cout << "LL weights stats: ";
+            m_lastLayerWeights->PrintStats();
+        }
+
         if (iteration % 10 == 0)
         {
             const std::string name = "eval";
@@ -809,6 +795,21 @@ bool NetworkTrainer::Train()
 #ifdef USE_PACKED_NET
             m_packedNet.Save((name + ".pnn").c_str());
 #endif // USE_PACKED_NET
+
+#ifdef DUMP_WEIGHTS
+            // dump weights to file
+            {
+                std::ofstream file("ft_weights.txt");
+                for (const float w : m_featureTransformerWeights->m_variants.front().m_weights)
+                    file << w << '\n';
+            }
+            {
+                std::ofstream file("ll_weights.txt");
+                for (const auto& variant : m_lastLayerWeights->m_variants)
+                    for (const float w : variant.m_weights)
+                        file << w << '\n';
+            }
+#endif // DUMP_WEIGHTS
         }
     }
 
