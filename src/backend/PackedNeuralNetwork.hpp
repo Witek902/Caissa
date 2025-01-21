@@ -100,13 +100,13 @@ static constexpr uint8_t KingBucketIndex[64] =
     10,10,10,10,10,10,10,10,
 };
 
-// by this value neuron inputs are scaled (so quantized 127 maps to 1.0 float)
-static constexpr float ActivationRangeScaling = 127;
+// by this value neuron inputs are scaled
+static constexpr int16_t ActivationRangeScaling = 256;
 
-static constexpr int32_t WeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
+static constexpr int32_t WeightScaleShift = 8;
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 
-static constexpr int32_t OutputScaleShift = 8;
+static constexpr int32_t OutputScaleShift = 10;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
 static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
