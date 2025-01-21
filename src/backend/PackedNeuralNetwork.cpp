@@ -70,8 +70,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         __m512i inB = Int16VecLoad(inputB + j);
 
         // apply clipped-ReLU
-        inA = _mm512_min_epi16(_mm512_max_epi16(inA, _mm512_setzero_si512()), _mm512_set1_epi16(127));
-        inB = _mm512_min_epi16(_mm512_max_epi16(inB, _mm512_setzero_si512()), _mm512_set1_epi16(127));
+        inA = _mm512_min_epi16(_mm512_max_epi16(inA, _mm512_setzero_si512()), _mm512_set1_epi16(ActivationRangeScaling));
+        inB = _mm512_min_epi16(_mm512_max_epi16(inB, _mm512_setzero_si512()), _mm512_set1_epi16(ActivationRangeScaling));
 
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m512i wA = Int16VecLoad(weights + j);
@@ -97,8 +97,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         __m256i inB = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j));
 
         // apply clipped-ReLU
-        inA = _mm256_min_epi16(_mm256_max_epi16(inA, _mm256_setzero_si256()), _mm256_set1_epi16(127));
-        inB = _mm256_min_epi16(_mm256_max_epi16(inB, _mm256_setzero_si256()), _mm256_set1_epi16(127));
+        inA = _mm256_min_epi16(_mm256_max_epi16(inA, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
+        inB = _mm256_min_epi16(_mm256_max_epi16(inB, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
 
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
@@ -130,8 +130,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         __m128i inB = _mm_load_si128(reinterpret_cast<const __m128i*>(inputB + j));
 
         // apply clipped-ReLU
-        inA = _mm_min_epi16(_mm_max_epi16(inA, _mm_setzero_si128()), _mm_set1_epi16(127));
-        inB = _mm_min_epi16(_mm_max_epi16(inB, _mm_setzero_si128()), _mm_set1_epi16(127));
+        inA = _mm_min_epi16(_mm_max_epi16(inA, _mm_setzero_si128()), _mm_set1_epi16(ActivationRangeScaling));
+        inB = _mm_min_epi16(_mm_max_epi16(inB, _mm_setzero_si128()), _mm_set1_epi16(ActivationRangeScaling));
 
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m128i wA = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j));
@@ -161,8 +161,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         int16x8_t inB = vld1q_s16(inputB + j);
 
         // apply clipped-ReLU
-        inA = vminq_s16(vmaxq_s16(inA, vdupq_n_s16(0)), vdupq_n_s16(127));
-        inB = vminq_s16(vmaxq_s16(inB, vdupq_n_s16(0)), vdupq_n_s16(127));
+        inA = vminq_s16(vmaxq_s16(inA, vdupq_n_s16(0)), vdupq_n_s16(ActivationRangeScaling));
+        inB = vminq_s16(vmaxq_s16(inB, vdupq_n_s16(0)), vdupq_n_s16(ActivationRangeScaling));
 
         // load 8 16bit weights
         const int16x8_t wA = vld1q_s16(weights + j);
@@ -181,12 +181,12 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 #else
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
-        const AccumulatorType in = std::clamp<AccumulatorType>(inputA[i], 0, std::numeric_limits<IntermediateType>::max());
+        const AccumulatorType in = std::clamp<AccumulatorType>(inputA[i], 0, ActivationRangeScaling);
         val += (int32_t)in * (int32_t)weights[i];
     }
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
-        const AccumulatorType in = std::clamp<AccumulatorType>(inputB[i], 0, std::numeric_limits<IntermediateType>::max());
+        const AccumulatorType in = std::clamp<AccumulatorType>(inputB[i], 0, ActivationRangeScaling);
         val += (int32_t)in * (int32_t)weights[i + AccumulatorSize];
     }
 #endif

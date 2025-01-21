@@ -13,6 +13,8 @@ public:
 
     void Init(uint32_t numActiveInputs, float bias = 0.0f);
 
+    void PrintStats() const;
+
     struct WeightsUpdateOptions
     {
         float learningRate = 1.0f;

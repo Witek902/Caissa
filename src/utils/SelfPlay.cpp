@@ -24,16 +24,16 @@
 
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 1;
-static const uint32_t c_minNodes = 15000;
-static const uint32_t c_maxNodes = 15000;
-static const uint32_t c_maxDepth = 25;
-static const int32_t c_maxEval = 1000;
-static const int32_t c_openingMaxEval = 2000;
+static const uint32_t c_minNodes = 80000;
+static const uint32_t c_maxNodes = 80000;
+static const uint32_t c_maxDepth = 32;
+static const int32_t c_maxEval = 3000;
+static const int32_t c_openingMaxEval = 1000;
 static const int32_t c_multiPv = 1;
 static const int32_t c_multiPvMaxPly = 0;
 static const int32_t c_multiPvScoreTreshold = 50;
-static const uint32_t c_minRandomMoves = 1;
-static const uint32_t c_maxRandomMoves = 8;
+static const uint32_t c_minRandomMoves = 2;
+static const uint32_t c_maxRandomMoves = 2;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -188,7 +188,7 @@ static bool SelfPlayThreadFunc(
             SearchParam searchParam{ tt };
             searchParam.debugLog = false;
             searchParam.useRootTablebase = false;
-            searchParam.evalRandomization = 2;
+            searchParam.evalRandomization = 1;
             searchParam.seed = searchSeed;
             searchParam.numPvLines = (halfMoveNumber < c_multiPvMaxPly) ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;

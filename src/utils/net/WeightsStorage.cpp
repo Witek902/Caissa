@@ -180,7 +180,7 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, uint32_t inputIndex
 
         const float cBeta1 = 0.9f;
         const float cBeta2 = 0.999f;
-        const float cEpsilon = 1.0e-8f;
+        const float cEpsilon = 1.0e-12f;
 
         const float cIter = (float)(options.iteration + 1);
         const float cBeta1Mult = 1.0f / (1.0f - powf(cBeta1, cIter));
@@ -278,6 +278,66 @@ void WeightsStorage::Update_Adam(const Gradients& gradients, uint32_t inputIndex
             }
         }
     }
+}
+
+void WeightsStorage::PrintStats() const
+{
+    float minWeight = std::numeric_limits<float>::max();
+    float maxWeight = -std::numeric_limits<float>::max();
+    float minBias = std::numeric_limits<float>::max();
+    float maxBias = -std::numeric_limits<float>::max();
+    float weightAvg = 0.0f;
+    float biasAvg = 0.0f;
+
+    for (const auto& variant : m_variants)
+    {
+        for (uint32_t i = 0; i < m_outputSize; i++)
+        {
+            const float bias = variant.m_weights[m_inputSize * m_outputSize + i];
+            minBias = std::min(minBias, bias);
+            maxBias = std::max(maxBias, bias);
+            biasAvg += bias;
+
+            for (uint32_t j = 0; j < m_inputSize; j++)
+            {
+                const float weight = variant.m_weights[j * m_outputSize + i];
+                minWeight = std::min(minWeight, weight);
+                maxWeight = std::max(maxWeight, weight);
+                weightAvg += weight;
+            }
+        }
+    }
+
+    weightAvg /= m_inputSize * m_outputSize * m_variants.size();
+    biasAvg /= m_outputSize * m_variants.size();
+
+    // calculate standard deviation
+    float weightStdDev = 0.0f;
+    float biasStdDev = 0.0f;
+    for (const auto& variant : m_variants)
+    {
+        for (uint32_t i = 0; i < m_outputSize; i++)
+        {
+            const float bias = variant.m_weights[m_inputSize * m_outputSize + i];
+            biasStdDev += (bias - biasAvg) * (bias - biasAvg);
+
+            for (uint32_t j = 0; j < m_inputSize; j++)
+            {
+                const float weight = variant.m_weights[j * m_outputSize + i];
+                weightStdDev += (weight - weightAvg) * (weight - weightAvg);
+            }
+        }
+    }
+
+    weightStdDev = sqrtf(weightStdDev / (m_inputSize * m_outputSize * m_variants.size()));
+    biasStdDev = sqrtf(biasStdDev / (m_outputSize * m_variants.size()));
+
+    std::cout
+        << "weight range: [" << minWeight << " ... " << maxWeight
+        << "], bias range: [" << minBias << " ... " << maxBias
+        << "], weight avg: " << weightAvg << ", bias avg: " << biasAvg
+        << ", weight std dev: " << weightStdDev << ", bias std dev: " << biasStdDev
+        << std::endl;
 }
 
 } // namespace nn
