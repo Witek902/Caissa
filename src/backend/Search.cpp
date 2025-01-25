@@ -64,7 +64,8 @@ DEFINE_PARAM(NmpEvalDiffDiv, 149, 64, 1024);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 
-DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
+DEFINE_PARAM(LmrStartDepth, 1, 1, 3);
+DEFINE_PARAM(LmrMoveCount, 2, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
 DEFINE_PARAM(HistoryPruningLinearFactor, 235, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 138, 60, 200);
@@ -1893,8 +1894,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // Late Move Reductions
         int32_t r = 0;
-        if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > 1 &&
+        if (node->depth >= LmrStartDepth &&
+            (moveIndex > (uint32_t)LmrMoveCount + isPvNode - ttMove.IsValid()) &&
             (!isPvNode || move.IsQuiet()))
         {
             if (move.IsQuiet())
