@@ -31,6 +31,21 @@ MoveOrderer::MoveOrderer()
 void MoveOrderer::DebugPrint() const
 {
 #ifndef CONFIGURATION_FINAL
+
+    std::cout << "=== ROOT MOVES HISTORY HEURISTICS ===" << std::endl;
+    for (uint32_t color = 0; color < 2; ++color)
+    {
+        std::cout << (color > 0 ? "Blacks:" : "Whites:") << std::endl;
+        for (uint32_t i = 0; i < 64; ++i)
+        {
+            const CounterType count = rootHistory[color][i];
+            if (count)
+            {
+                std::cout << Square(i).ToString() << " ==> " << count << '\n';
+            }
+        }
+    }
+
     std::cout << "=== QUIET MOVES HISTORY HEURISTICS ===" << std::endl;
     /*
     for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
@@ -162,6 +177,7 @@ void MoveOrderer::NewSearch()
 
 void MoveOrderer::Clear()
 {
+    memset(rootHistory, 0, sizeof(rootHistory));
     memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
     memset(continuationHistory, 0, sizeof(continuationHistory));
     memset(capturesHistory, 0, sizeof(capturesHistory));
@@ -247,6 +263,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta / 4);
         if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (node.ply == 0) UpdateHistoryCounter(rootHistory[color][move.FromTo()], delta);
     }
 }
 
@@ -290,10 +307,9 @@ void MoveOrderer::ScoreMoves(
     const NodeInfo& node,
     MoveList& moves,
     bool withQuiets,
-    const NodeCacheEntry* nodeCacheEntry) const
+    const NodeCacheEntry*) const
 {
     const Position& pos = node.position;
-
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
@@ -355,6 +371,9 @@ void MoveOrderer::ScoreMoves(
             if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] / 2;
             if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] / 2;
 
+            // root history
+            if (node.ply == 0) score += 4 * rootHistory[color][move.FromTo()]; // TODO tune
+
             switch (move.GetPiece())
             {
                 case Piece::Pawn:
@@ -389,18 +408,6 @@ void MoveOrderer::ScoreMoves(
                 case Piece::King:
                     if (pos.GetOurCastlingRights())             score -= 6000;
                     break;
-            }
-
-            // use node cache for scoring moves near the root
-            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 512)
-            {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
-                {
-                    const float fraction = static_cast<float>(moveInfo->nodesSearched) / static_cast<float>(nodeCacheEntry->nodesSum);
-                    ASSERT(fraction >= 0.0f);
-                    ASSERT(fraction <= 1.0f);
-                    score += static_cast<int32_t>(4096.0f * sqrtf(fraction) * FastLog2(static_cast<float>(nodeCacheEntry->nodesSum) / 512.0f));
-                }
             }
         }
 
