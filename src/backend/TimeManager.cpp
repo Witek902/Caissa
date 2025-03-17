@@ -6,6 +6,7 @@
 DEFINE_PARAM(TM_MovesLeftMidpoint, 38, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 214, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
+DEFINE_PARAM(TM_MaxTimeFactor, 400, 100, 1000);
 DEFINE_PARAM(TM_NodesCountScale, 203, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 60, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 52, 0, 200);
@@ -30,11 +31,12 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     if (data.remainingTime != INT32_MAX)
     {
         const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
+        const float maxTimeFactor = static_cast<float>(TM_MaxTimeFactor) / 100.0f;
         float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
-        float maxTime = (data.remainingTime - moveOverhead) / sqrtf(movesLeft) + (float)data.timeIncrement;
+        float maxTime = maxTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
 
         const float minMoveTime = 0.00001f;
-        const float timeMargin = 0.5f;
+        const float timeMargin = 0.75f; // don't spend more than 75% of remaining time on a single move
         maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
 
