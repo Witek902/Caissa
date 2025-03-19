@@ -262,7 +262,8 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     // don't overwrite entries with worse depth if the bounds are not exact
     if (entry.bounds != TTEntry::Bounds::Exact &&
         positionKey == prevKey &&
-        entry.depth < prevEntry.depth - 4)
+        entry.depth < prevEntry.depth - 4 &&
+        generation == prevEntry.generation)
     {
         return;
     }
