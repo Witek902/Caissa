@@ -33,12 +33,14 @@ DEFINE_PARAM(LmrQuietNonPv, 65, -128, 256);
 DEFINE_PARAM(LmrQuietTTCapture, 70, -128, 256);
 DEFINE_PARAM(LmrQuietRefutation, 153, -128, 256);
 DEFINE_PARAM(LmrQuietCutNode, 148, -128, 256);
+DEFINE_PARAM(LmrQuietCutNodeNoTT, 64, 0, 128);
 DEFINE_PARAM(LmrQuietImproving, 63, -128, 256);
 DEFINE_PARAM(LmrQuietInCheck, 71, -128, 256);
 
 DEFINE_PARAM(LmrCaptureWinning, 52, -128, 256);
 DEFINE_PARAM(LmrCaptureBad, 13, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 87, -128, 256);
+DEFINE_PARAM(LmrCaptureCutNodeNoTT, 64, 0, 128);
 DEFINE_PARAM(LmrCaptureImproving, 16, -128, 256);
 DEFINE_PARAM(LmrCaptureInCheck, 39, -128, 256);
 DEFINE_PARAM(LmrTTHighDepth, 50, -128, 256);
@@ -1915,7 +1917,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less based on move stat score
                 r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
 
-                if (node->isCutNode) r += LmrQuietCutNode;
+                // reduce more in cut nodes
+                if (node->isCutNode) r += LmrQuietCutNode + (ttMove.IsValid() ? 0 : LmrQuietCutNodeNoTT);
 
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrQuietImproving;
@@ -1933,7 +1936,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce bad captures more
                 if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad;
 
-                if (node->isCutNode) r += LmrCaptureCutNode;
+                // reduce more in cut nodes
+                if (node->isCutNode) r += LmrCaptureCutNode + (ttMove.IsValid() ? 0 : LmrCaptureCutNodeNoTT);
 
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrCaptureImproving;
