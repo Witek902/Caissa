@@ -3,16 +3,16 @@
 #include "Tuning.hpp"
 
 
-DEFINE_PARAM(TM_MovesLeftMidpoint, 38, 30, 60);
-DEFINE_PARAM(TM_MovesLeftSteepness, 214, 150, 260);
-DEFINE_PARAM(TM_IdealTimeFactor, 830, 700, 1000);
-DEFINE_PARAM(TM_MaxTimeFactor, 400, 100, 1000);
-DEFINE_PARAM(TM_NodesCountScale, 203, 160, 260);
-DEFINE_PARAM(TM_NodesCountOffset, 60, 10, 90);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 36, 30, 60);
+DEFINE_PARAM(TM_MovesLeftSteepness, 215, 150, 260);
+DEFINE_PARAM(TM_IdealTimeFactor, 827, 700, 1000);
+DEFINE_PARAM(TM_MaxTimeFactor, 473, 100, 1000);
+DEFINE_PARAM(TM_NodesCountScale, 202, 160, 260);
+DEFINE_PARAM(TM_NodesCountOffset, 61, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 52, 0, 200);
-DEFINE_PARAM(TM_StabilityOffset, 1411, 1000, 2000);
-DEFINE_PARAM(TM_PredictedMoveHitScale, 900, 800, 1000);
-DEFINE_PARAM(TM_PredictedMoveMissScale, 1100, 1000, 1500);
+DEFINE_PARAM(TM_StabilityOffset, 1473, 1000, 2000);
+DEFINE_PARAM(TM_PredictedMoveHitScale, 905, 800, 1000);
+DEFINE_PARAM(TM_PredictedMoveMissScale, 1122, 1000, 1500);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
