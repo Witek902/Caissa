@@ -4,22 +4,22 @@
 
 
 DEFINE_PARAM(QuietBonusOffset, -103, -200, 0);
-DEFINE_PARAM(QuietBonusLinear, 171, 100, 250);
-DEFINE_PARAM(QuietBonusScoreDiff, 151, 0, 400);
-DEFINE_PARAM(QuietBonusLimit, 1955, 1000, 3000);
+DEFINE_PARAM(QuietBonusLinear, 165, 100, 250);
+DEFINE_PARAM(QuietBonusScoreDiff, 150, 0, 400);
+DEFINE_PARAM(QuietBonusLimit, 1978, 1000, 3000);
 
-DEFINE_PARAM(QuietMalusOffset, -59, -200, 50);
-DEFINE_PARAM(QuietMalusLinear, 155, 75, 200);
-DEFINE_PARAM(QuietMalusScoreDiff, 158, 0, 400);
-DEFINE_PARAM(QuietMalusLimit, 2026, 1000, 3000);
+DEFINE_PARAM(QuietMalusOffset, -51, -200, 50);
+DEFINE_PARAM(QuietMalusLinear, 153, 75, 200);
+DEFINE_PARAM(QuietMalusScoreDiff, 160, 0, 400);
+DEFINE_PARAM(QuietMalusLimit, 1957, 1000, 3000);
 
 DEFINE_PARAM(CaptureBonusOffset, 28, 0, 100);
-DEFINE_PARAM(CaptureBonusLinear, 71, 20, 120);
-DEFINE_PARAM(CaptureBonusLimit, 2755, 1000, 4000);
+DEFINE_PARAM(CaptureBonusLinear, 67, 20, 120);
+DEFINE_PARAM(CaptureBonusLimit, 2630, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 33, 0, 100);
-DEFINE_PARAM(CaptureMalusLinear, 57, 20, 120);
-DEFINE_PARAM(CaptureMalusLimit, 1961, 1000, 4000);
+DEFINE_PARAM(CaptureMalusOffset, 25, 0, 100);
+DEFINE_PARAM(CaptureMalusLinear, 53, 20, 120);
+DEFINE_PARAM(CaptureMalusLimit, 1860, 1000, 4000);
 
 static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
 
