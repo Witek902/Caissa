@@ -1949,8 +1949,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
-            // scale down with randomization
-            r = (r + static_cast<int32_t>(thread.stats.nodesTotal) % LmrScale) / LmrScale;
+            // scale down
+            r = (r + LmrScale / 2) / LmrScale;
         }
 
         int32_t newDepth = node->depth + moveExtension - 1;
