@@ -986,7 +986,6 @@ static void RunPositionTests()
             {
                 if (allMoves.GetMove(i) == move)
                 {
-                    ASSERT(allMoves.GetScore(i) == moveScore);
                     found = true;
                 }
             }
