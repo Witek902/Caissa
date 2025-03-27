@@ -2,6 +2,9 @@
 #include "Search.hpp"
 #include "Tuning.hpp"
 
+DEFINE_PARAM(QuietMoveHistoryClear, 350, -4000, 4000);
+DEFINE_PARAM(ContinuationHistoryClear, 716, -4000, 4000);
+DEFINE_PARAM(CapturesHistoryClear, 202, -4000, 4000);
 
 DEFINE_PARAM(QuietBonusOffset, -103, -200, 0);
 DEFINE_PARAM(QuietBonusLinear, 165, 100, 250);
@@ -160,11 +163,24 @@ void MoveOrderer::NewSearch()
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
+static void ClearHistoryTable(MoveOrderer::CounterType* table, MoveOrderer::CounterType value, size_t size)
+{
+    for (size_t i = 0; i < size; ++i)
+    {
+        table[i] = value;
+    }
+}
+
 void MoveOrderer::Clear()
 {
-    memset(quietMoveHistory, 0, sizeof(quietMoveHistory));
-    memset(continuationHistory, 0, sizeof(continuationHistory));
-    memset(capturesHistory, 0, sizeof(capturesHistory));
+    // clear history tables with a value
+    ClearHistoryTable(reinterpret_cast<CounterType*>(quietMoveHistory),
+        static_cast<CounterType>(QuietMoveHistoryClear), sizeof(quietMoveHistory) / sizeof(CounterType));
+    ClearHistoryTable(reinterpret_cast<CounterType*>(continuationHistory),
+        static_cast<CounterType>(ContinuationHistoryClear), sizeof(continuationHistory) / sizeof(CounterType));
+    ClearHistoryTable(reinterpret_cast<CounterType*>(capturesHistory),
+        static_cast<CounterType>(CapturesHistoryClear), sizeof(capturesHistory) / sizeof(CounterType));
+
     memset(counterMoves, 0, sizeof(counterMoves));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
