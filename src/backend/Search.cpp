@@ -79,6 +79,7 @@ DEFINE_PARAM(SingularDoubleExtensionMarigin, 17, 5, 25);
 DEFINE_PARAM(SingularDoubleExtensionsLimit, 6, 4, 10);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 73, 40, 120);
+DEFINE_PARAM(QSearchSSEPruningCaptScoreDiv, 128, 32, 1024);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpMultiplier, 106, 80, 180);
@@ -1174,8 +1175,13 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
 
             // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move))
+            if (move.IsCapture())
+            {
+                const auto captureHistory = thread.moveOrderer.GetCaptureHistoryScore(*node, move);
+                if (!position.StaticExchangeEvaluation(move, -captureHistory / QSearchSSEPruningCaptScoreDiv))
+                    continue;
+            }
+            else if (moveScore < MoveOrderer::GoodCaptureValue && !position.StaticExchangeEvaluation(move))
                 break;
         }
 
