@@ -149,14 +149,6 @@ void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
 
 void MoveOrderer::NewSearch()
 {
-    const CounterType scaleDownFactor = 2;
-
-    for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
-        reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
-
-    for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
-        reinterpret_cast<CounterType*>(capturesHistory)[i] /= scaleDownFactor;
-
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
