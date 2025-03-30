@@ -1748,9 +1748,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // the higher depth is, the less aggressive pruning is
                 if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
                 {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
+                    movePicker.SkipQuiets();
                     continue;
                 }
 
@@ -1760,6 +1758,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     node->depth < 9 &&
                     moveStatScore < GetHistoryPruningTreshold(node->depth))
                 {
+                    movePicker.SkipQuiets();
                     continue;
                 }
 
@@ -1770,7 +1769,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
-                    if (quietMoveIndex > 1) continue;
+                    continue;
                 }
             }
 
