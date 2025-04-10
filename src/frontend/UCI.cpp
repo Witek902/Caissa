@@ -949,6 +949,7 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
         std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
         std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
         std::cout << "Bounds:     " << boundsStr << std::endl;
+        std::cout << "Was PV:     " << (ttEntry.wasPV ? "true" : "false") << std::endl;
         std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
         std::cout << "Moves:      " << ttEntry.move.ToString() << std::endl;
     }

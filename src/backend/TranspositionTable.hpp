@@ -8,7 +8,7 @@ class Position;
 
 struct TTEntry
 {
-    static constexpr uint32_t GenerationBits = 6;
+    static constexpr uint32_t GenerationBits = 5;
     static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
 
     enum class Bounds : uint8_t
@@ -24,6 +24,7 @@ struct TTEntry
     PackedMove move;
     int8_t depth;
     Bounds bounds : 2;
+    bool wasPV : 1;
     uint8_t generation : GenerationBits;
 
     INLINE TTEntry()
@@ -32,6 +33,7 @@ struct TTEntry
         , move(PackedMove::Invalid())
         , depth(0)
         , bounds(Bounds::Invalid)
+        , wasPV(false)
         , generation(0)
     {}
 
@@ -75,8 +77,13 @@ public:
     // should be called before running a new search
     void NextGeneration();
 
+    // returns true if entry was found
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
+
+    // store entry in the table
+    void Write(const Position& position, ScoreType score, ScoreType staticEval,
+        int32_t depth, TTEntry::Bounds bounds, bool wasPV, PackedMove move = PackedMove::Invalid());
+
     void Prefetch(const uint64_t hash) const;
 
     // invalidate all entries
