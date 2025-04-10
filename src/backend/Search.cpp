@@ -35,12 +35,15 @@ DEFINE_PARAM(LmrQuietRefutation, 154, -128, 256);
 DEFINE_PARAM(LmrQuietCutNode, 165, -128, 256);
 DEFINE_PARAM(LmrQuietImproving, 55, -128, 256);
 DEFINE_PARAM(LmrQuietInCheck, 84, -128, 256);
+DEFINE_PARAM(LmrQuietWasPV, 64, -128, 256);
 
 DEFINE_PARAM(LmrCaptureWinning, 67, -128, 256);
 DEFINE_PARAM(LmrCaptureBad, 2, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 77, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, 21, -128, 256);
 DEFINE_PARAM(LmrCaptureInCheck, 17, -128, 256);
+DEFINE_PARAM(LmrCaptureWasPV, 64, -128, 256);
+
 DEFINE_PARAM(LmrTTHighDepth, 33, -128, 256);
 
 DEFINE_PARAM(LmrDeeperTreshold, 92, 20, 200);
@@ -1050,9 +1053,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // transposition table lookup
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
+    bool wasPV = isPvNode;
     if (ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
         node->staticEval = ttEntry.staticEval;
+        wasPV = wasPV || ttEntry.wasPV;
 
         ttScore = ScoreFromTT(ttEntry.score, node->ply, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
@@ -1113,7 +1118,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 bestValue = (bestValue + beta) / 2;
 
             if (!ttEntry.IsValid())
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
+                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower, wasPV);
 
             return bestValue;
         }
@@ -1249,7 +1254,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
-    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, bounds, bestMove);
+    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, bounds, wasPV, bestMove);
 #ifdef COLLECT_SEARCH_STATS
     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1336,6 +1341,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // transposition table lookup
     TTEntry ttEntry;
     ScoreType ttScore = InvalidValue;
+    bool wasPV = isPvNode;
     if (!node->filteredMove.IsValid() &&
         ctx.searchParam.transpositionTable.Read(position, ttEntry))
     {
@@ -1344,6 +1350,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
         node->staticEval = ttEntry.staticEval;
+        wasPV = wasPV || ttEntry.wasPV;
 
         ttScore = ScoreFromTT(ttEntry.score, node->ply, position.GetHalfMoveCount());
         ASSERT(ttScore > -CheckmateValue && ttScore < CheckmateValue);
@@ -1418,7 +1425,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (!ttEntry.IsValid())
                 {
-                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->ply), node->staticEval, node->depth, bounds);
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->ply), node->staticEval, node->depth, bounds, wasPV);
 #ifdef COLLECT_SEARCH_STATS
                     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1446,7 +1453,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
 
-            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
+            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower, wasPV);
         }
         else if (!node->isCutNode)
         {
@@ -1626,7 +1633,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // probcut failed
                     if (score >= probBeta)
                     {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, wasPV, move);
                         return score;
                     }
                 }
@@ -1922,6 +1929,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce less if the move was in PV line before
+                if (wasPV) r -= LmrQuietWasPV;
             }
             else
             {
@@ -1940,6 +1950,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
+
+                // reduce less if the move was in PV line before
+                if (wasPV) r -= LmrCaptureWasPV;
             }
 
             // reduce low-ply moves less
@@ -2156,7 +2169,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, wasPV, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
