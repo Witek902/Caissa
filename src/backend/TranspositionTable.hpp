@@ -50,6 +50,9 @@ struct TTEntry
 class TranspositionTable
 {
 public:
+
+    static uint32_t NumInitThreads;
+
     struct InternalEntry
     {
         uint16_t key;
