@@ -5,8 +5,7 @@
 #include <algorithm>
 #include <thread>
 
-#ifdef USE_SSE
-    #endif // USE_SSE
+uint32_t TranspositionTable::NumInitThreads = 1;
 
 static_assert(sizeof(TTEntry) == 2 * sizeof(uint32_t), "Invalid TT entry size");
 static_assert(sizeof(TranspositionTable::TTCluster) == 32, "Invalid TT cluster size");
@@ -95,7 +94,8 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
 void TranspositionTable::Clear()
 {
-    const size_t numThreads = std::min(std::thread::hardware_concurrency(), 4u);
+    const uint32_t maxThreads = std::max(1u, std::thread::hardware_concurrency() / 2u);
+    const size_t numThreads = std::clamp(NumInitThreads, 1u, maxThreads);
 
     if (numClusters * sizeof(TTCluster) <= 256 * 1024 * 1024 || numThreads == 1)
     {
