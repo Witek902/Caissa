@@ -6,7 +6,7 @@
 #include "../backend/Tuning.hpp"
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.21.12"
+#define CAISSA_VERSION "1.21.13"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -823,6 +823,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
         {
             mSearch.StopWorkerThreads();
             mOptions.threads = newNumThreads;
+            TranspositionTable::NumInitThreads = newNumThreads;
         }
     }
     else if (lowerCaseName == "moveoverhead")
