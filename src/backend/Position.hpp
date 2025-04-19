@@ -281,6 +281,7 @@ public:
     INLINE uint64_t GetHash() const { return mHash; }
     INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
     INLINE uint32_t GetNonPawnsHash(Color color) const { return mNonPawnsHash[color]; }
+    INLINE uint64_t GetHashIncludingHMC() const { return mHash ^ ((mHalfMoveCount / 16u) << 1u); }
     uint64_t HashAfterMove(const Move move) const;
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
