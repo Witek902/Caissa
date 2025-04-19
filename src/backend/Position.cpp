@@ -124,6 +124,8 @@ uint64_t Position::HashAfterMove(const Move move) const
         hash ^= GetPieceZobristHash(mSideToMove ^ 1, capturedPiece, move.ToSquare().Index());
     }
 
+    hash ^= ((mHalfMoveCount + 1u) / 16u) << 1u;
+
     return hash;
 }
 

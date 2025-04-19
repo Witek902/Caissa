@@ -183,9 +183,10 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
 {
     if (clusters)
     {
-        TTCluster& cluster = GetCluster(position.GetHash());
+        const uint64_t positionHash = position.GetHashIncludingHMC();
+        const uint16_t posKey = (uint16_t)positionHash;
 
-        const uint16_t posKey = (uint16_t)position.GetHash();
+        TTCluster& cluster = GetCluster(positionHash);
 
         for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
         {
@@ -221,10 +222,10 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         return;
     }
 
-    const uint64_t positionHash = position.GetHash();
+    const uint64_t positionHash = position.GetHashIncludingHMC();
     const uint16_t positionKey = (uint16_t)positionHash;
 
-    TTCluster& cluster = GetCluster(position.GetHash());
+    TTCluster& cluster = GetCluster(positionHash);
 
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;
