@@ -290,7 +290,7 @@ public:
 
     void SetSideToMove(Color color);
     void SetCastlingRights(Color color, uint8_t rightsMask);
-    INLINE void SetHalfMoveCount(uint16_t halfMoveCount) { mHalfMoveCount = halfMoveCount; }
+    void SetHalfMoveCount(uint16_t halfMoveCount);
     INLINE void SetMoveCount(uint16_t moveCount) { mMoveCount = moveCount; }
 
     // check if a side features non-pawn pieces

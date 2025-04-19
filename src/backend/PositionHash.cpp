@@ -34,4 +34,6 @@ void InitZobristHash()
     {
         s_ZobristHash[i] = xoroshiro128(s);
     }
+
+    s_ZobristHash[2 * 6 * 64 + 8 + 2 * 8] = 0; // hmc < 16
 }

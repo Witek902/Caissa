@@ -4,10 +4,12 @@
 #include "Piece.hpp"
 #include "Square.hpp"
 
-static constexpr uint32_t c_ZobristHashSize = 792;
+static constexpr uint32_t c_ZobristHashSize = 800;
 
 static constexpr uint64_t c_SideToMoveZobristHash = 1u;
 extern uint64_t s_ZobristHash[c_ZobristHashSize];
+
+static constexpr uint32_t c_HalfMoveZobristDiv = 16u;
 
 void InitZobristHash();
 
@@ -38,3 +40,14 @@ INLINE static uint64_t GetCastlingRightsZobristHash(const Color color, uint32_t 
     ASSERT(offset < 2 * 6 * 64 + 8 + 16);
     return s_ZobristHash[offset];
 }
+
+INLINE static uint64_t GetHalfMoveZobristHash(const uint32_t hmc)
+{
+    ASSERT(hmc <= 110);
+
+    // skip position hashes, castling rights and en passant hashes
+    const uint32_t offset = 2 * 6 * 64 + 8 + 2 * 8 + (hmc / c_HalfMoveZobristDiv);
+    ASSERT(offset < 2 * 6 * 64 + 8 + 2 * 8 + 8);
+    return s_ZobristHash[offset];
+}
+
