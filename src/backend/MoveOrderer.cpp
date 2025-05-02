@@ -181,6 +181,7 @@ void MoveOrderer::Clear()
     ClearHistoryTable(reinterpret_cast<CounterType*>(capturesHistory),
         static_cast<CounterType>(CapturesHistoryClear), sizeof(capturesHistory) / sizeof(CounterType));
 
+    memset(pawnHistory, 0, sizeof(pawnHistory));
     memset(counterMoves, 0, sizeof(counterMoves));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
@@ -189,11 +190,14 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
 {
     ASSERT(move.IsValid());
     const Bitboard threats = node.threats.allThreats;
+    const uint32_t stm = node.position.GetSideToMove();
     const uint32_t from = move.FromSquare().Index();
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
     ASSERT(to < 64);
-    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+    return
+        quietMoveHistory[stm][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()] +
+        pawnHistory[stm][node.position.GetPawnsHash() % PawnHistSize][move.FromTo()];
 }
 
 Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
@@ -257,6 +261,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t to = move.ToSquare().Index();
         
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
+        UpdateHistoryCounter(pawnHistory[color][node.position.GetPawnsHash() % PawnHistSize][move.FromTo()], delta);
 
         if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
         if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
@@ -364,6 +369,7 @@ void MoveOrderer::ScoreMoves(
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+            score += pawnHistory[color][pos.GetPawnsHash() % PawnHistSize][move.FromTo()];
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
