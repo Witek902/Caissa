@@ -225,6 +225,10 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
+    // don't update uncertain moves
+    if (numMoves <= 1 && node.depth < 2)
+        return;
+
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
     // update counter move
@@ -234,12 +238,6 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
         const uint32_t to = prevMove.ToSquare().Index();
         counterMoves[color][piece][to] = bestMove;
-    }
-
-    // don't update uncertain moves
-    if (numMoves <= 1 && node.depth < 2)
-    {
-        return;
     }
 
     const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusScoreDiff * scoreDiff / 64, QuietBonusLimit);
