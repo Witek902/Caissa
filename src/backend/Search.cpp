@@ -1560,7 +1560,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                             nullMoveScore = beta;
 
                         if (std::abs(beta) < KnownWinValue && node->depth < 10)
+                        {
+                            ctx.searchParam.transpositionTable.Write(position, nullMoveScore, node->staticEval, 0, TTEntry::Bounds::Lower);
                             return nullMoveScore;
+                        }
 
                         node->depth -= static_cast<uint16_t>(NmpReSearchDepthReduction);
 
