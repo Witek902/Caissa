@@ -215,11 +215,12 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
     // apply scaling based on game phase (0 - endgame, 24 - opening)
-    const int32_t gamePhase = std::min(24,
-        whiteKnights + blackKnights + whiteBishops + blackBishops +
-        2 * (whiteRooks + blackRooks) +
-        4 * (whiteQueens + blackQueens));
-    value = value * (52 + gamePhase) / 64;
+    const int32_t gamePhase =
+        (whitePawns + blackPawns) +
+        2 * (whiteKnights + blackKnights + whiteBishops + blackBishops) +
+        4 * (whiteRooks + blackRooks) +
+        9 * (whiteQueens + blackQueens);
+    value = value * (95 + gamePhase) / 128;
 
     // apply castling rights bonus
     {
