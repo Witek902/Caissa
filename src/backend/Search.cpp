@@ -2003,8 +2003,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // full search for PV nodes
         if constexpr (isPvNode)
         {
-            if (moveIndex == 1 ||
-                (score > alpha && (isRootNode || score < beta)))
+            if (moveIndex == 1 || score > alpha)
             {
                 childNode.depth = static_cast<int16_t>(newDepth);
                 childNode.alpha = -beta;
