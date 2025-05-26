@@ -2006,6 +2006,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (moveIndex == 1 ||
                 (score > alpha && (isRootNode || score < beta)))
             {
+                // extend move from TT if the search is about to enter quiescence search
+                if (move == ttMove)
+                    newDepth = std::max(newDepth, 1);
+
                 childNode.depth = static_cast<int16_t>(newDepth);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
