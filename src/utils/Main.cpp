@@ -22,7 +22,7 @@ int main(int argc, const char* argv[])
 {
 #ifdef _MSC_VER
     // increase max open files limit (required for neural net training)
-    _setmaxstdio(2048);
+    _setmaxstdio(4096);
 #endif // _MSC_VER
 
     std::vector<std::string> args;

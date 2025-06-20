@@ -41,8 +41,6 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
     if (std::filesystem::exists(outputPath))
     {
-        std::unique_lock<std::mutex> lock(g_mutex);
-        std::cout << "INFO: Output training data file " << outputPath << " already exists. Skipping" << std::endl;
         return true;
     }
 
