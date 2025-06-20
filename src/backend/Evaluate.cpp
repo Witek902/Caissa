@@ -183,22 +183,15 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 {
     const Position& pos = node.position;
 
-    const int32_t whiteQueens = pos.Whites().queens.Count();
-    const int32_t whiteRooks = pos.Whites().rooks.Count();
-    const int32_t whiteBishops = pos.Whites().bishops.Count();
-    const int32_t whiteKnights = pos.Whites().knights.Count();
-    const int32_t whitePawns = pos.Whites().pawns.Count();
-    const int32_t blackQueens = pos.Blacks().queens.Count();
-    const int32_t blackRooks = pos.Blacks().rooks.Count();
-    const int32_t blackBishops = pos.Blacks().bishops.Count();
-    const int32_t blackKnights = pos.Blacks().knights.Count();
-    const int32_t blackPawns = pos.Blacks().pawns.Count();
+    const int32_t queens = (pos.Whites().queens | pos.Blacks().queens).Count();
+    const int32_t rooks = (pos.Whites().rooks | pos.Blacks().rooks).Count();
+    const int32_t bishopsAndKnights = (pos.Whites().bishops | pos.Blacks().bishops | pos.Whites().knights | pos.Blacks().knights).Count();
+    const int32_t pawns = (pos.Whites().pawns | pos.Blacks().pawns).Count();
 
-    const int32_t whitePieceCount = whiteQueens + whiteRooks + whiteBishops + whiteKnights + whitePawns;
-    const int32_t blackPieceCount = blackQueens + blackRooks + blackBishops + blackKnights + blackPawns;
+    const int32_t pieceCount = queens + rooks + bishopsAndKnights + pawns;
 
     // check endgame evaluation first
-    if (whitePieceCount + blackPieceCount <= 6 || blackPieceCount == 0 || whitePieceCount == 0) [[unlikely]]
+    if (pieceCount <= 6) [[unlikely]]
     {
         int32_t endgameScore;
         if (EvaluateEndgame(pos, endgameScore))
@@ -215,19 +208,8 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
     // apply scaling based on game phase (0 - endgame, 24 - opening)
-    const int32_t gamePhase = std::min(24,
-        whiteKnights + blackKnights + whiteBishops + blackBishops +
-        2 * (whiteRooks + blackRooks) +
-        4 * (whiteQueens + blackQueens));
+    const int32_t gamePhase = bishopsAndKnights + 2 * rooks + 4 * queens;
     value = value * (52 + gamePhase) / 64;
-
-    // apply castling rights bonus
-    {
-        ScoreType bonus = 0;
-        if (pos.Whites().GetKingSquare() != Square_e1) bonus += c_castlingRightsBonus * (ScoreType)PopCount(pos.GetWhitesCastlingRights());
-        if (pos.Blacks().GetKingSquare() != Square_e8) bonus -= c_castlingRightsBonus * (ScoreType)PopCount(pos.GetBlacksCastlingRights());
-        value += pos.GetSideToMove() == White ? bonus : -bonus;
-    }
 
     // saturate eval value so it doesn't exceed KnownWinValue
     if (value > c_evalSaturationTreshold)
