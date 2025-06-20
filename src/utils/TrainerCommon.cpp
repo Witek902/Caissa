@@ -168,7 +168,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
             // skip early moves
-            if (outEntry.pos.moveCount < 10 && numPieces >= 30)
+            if (outEntry.pos.moveCount < 8 && numPieces >= 30)
                 continue;
 
             // skip based on piece count
@@ -176,27 +176,9 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (numPieces <= 3)
                     continue;
 
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);
-                if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
-                    continue;
-            }
-
-            // skip based on WDL
-            // the idea is to skip positions where for instance eval is high, but game result is loss
-            {
-                const uint32_t ply = 2 * outEntry.pos.moveCount;
-                const float w = EvalToWinProbability(outEntry.score / 100.0f, ply);
-                const float l = EvalToWinProbability(-outEntry.score / 100.0f, ply);
-                const float d = 1.0f - w - l;
-
-                float prob = d;
-                if (outEntry.wdlScore == (uint8_t)Game::Score::WhiteWins) prob = w;
-                if (outEntry.wdlScore == (uint8_t)Game::Score::BlackWins) prob = l;
-
-                const float maxSkippingProb = 0.25f;
-                std::bernoulli_distribution skippingDistr(maxSkippingProb * (1.0f - prob));
-                if (skippingDistr(gen))
-                    continue;
+                //const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 28) / 40.0f);
+                //if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
+                //    continue;
             }
         }
 

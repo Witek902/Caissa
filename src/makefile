@@ -1,7 +1,7 @@
 EXE                = caissa
-VERSION            = 1.22
+VERSION            = 1.22.1
 EXE_NAME           = $(EXE)-$(VERSION)
-DEFAULT_EVALFILE   = ../data/neuralNets/eval-57.pnn
+DEFAULT_EVALFILE   = ../data/neuralNets/eval-61.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 CC                 = g++
 SRC                = $(wildcard backend/*.cpp) $(wildcard frontend/*.cpp) backend/syzygy/tbprobe.cpp

@@ -39,7 +39,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cBatchSize = 32 * 1024;
+static const uint32_t cBatchSize = 64 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -442,6 +442,7 @@ void NetworkTrainer::Validate(size_t iteration)
             "4k3/5p2/2K1p3/1Q1rP3/8/8/8/8 w - - 0 1", // should be 0
             "8/8/8/5B1p/5p1r/4kP2/6K1/8 w - - 0 1", // should be 0
             "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
+            "8/8/2k3N1/8/Nn2N3/4K3/8/7n w - - 0 1", // should be 1
         };
 
         for (const char* testPosition : s_testPositions)
@@ -648,15 +649,15 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 1.0f;
+static volatile float g_learningRateScale = 0.5f;
 static volatile float g_lambdaScale = 0.0f;
-static volatile float g_weightDecay = 1.0f / 256.0f;
+static volatile float g_weightDecay = 1.0f / 512.0f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-54-11B.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-61.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
@@ -673,21 +674,21 @@ bool NetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLearningRate = 1.0e-4f;
-    const float minLearningRate = 1.0e-4f;
+    const float maxLearningRate = 1.0e-5f;
+    const float minLearningRate = 1.0e-5f;
     const float maxLambda = 1.0f;
     const float minLambda = 1.0f;
 
-    //uint64_t kingBucketMask = (1 << 4) | (1 << 3) | (1 << 2);
     uint64_t kingBucketMask = UINT64_MAX;
-    m_featureTransformerWeights->m_updateWeights = false; // freeze feature transformer weights
+    // m_featureTransformerWeights->m_updateWeights = false; // freeze feature transformer weights
+    // m_lastLayerWeights->m_updateWeights = false; // freeze last layer weights
 
     GenerateTrainingSet(m_validationSet, kingBucketMask, maxLambda);
 
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 10.0f ? (float)(iteration + 1) / 10.0f : 1.0f;
+        const float warmup = iteration < 20.0f ? (float)(iteration + 1) / 20.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
