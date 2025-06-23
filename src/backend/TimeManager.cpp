@@ -2,7 +2,7 @@
 #include "Game.hpp"
 #include "Tuning.hpp"
 
-
+DEFINE_PARAM(TM_FirstSearchMult, 150, 100, 200);
 DEFINE_PARAM(TM_MovesLeftMidpoint, 36, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 215, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 827, 700, 1000);
@@ -45,6 +45,10 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
             idealTime *= static_cast<float>(TM_PredictedMoveHitScale) / 1000.0f;
         else if (data.previousSearchHint == PreviousSearchHint::Miss)
             idealTime *= static_cast<float>(TM_PredictedMoveMissScale) / 1000.0f;
+
+        // increase time for the first search
+        if (data.isFirstSearch)
+            idealTime *= static_cast<float>(TM_FirstSearchMult) / 100.0f;
 
 #ifndef CONFIGURATION_FINAL
         std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;

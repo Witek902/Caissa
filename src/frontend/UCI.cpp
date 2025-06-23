@@ -204,6 +204,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         mSearch.Clear();
         mPrevSearchPosition = Position();
         mPrevSearchPvLine.clear();
+        mIsFirstSearch = true;
     }
     else if (command == "setoption")
     {
@@ -576,6 +577,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         data.theirTimeIncrement = mGame.GetSideToMove() == White ? blacksTimeIncrement : whiteTimeIncrement;
         data.movesToGo = movesToGo;
         data.moveOverhead = mOptions.moveOverhead;
+        data.isFirstSearch = mIsFirstSearch;
 
         // check if opponent played a move predicted by the previous search
         if (mPrevSearchPvLine.size() >= 2)
@@ -732,6 +734,7 @@ void UniversalChessInterface::DoSearch()
     // remember search result
     mPrevSearchPosition = mGame.GetPosition();
     mPrevSearchPvLine = std::move(mSearchCtx->searchResult[0].moves);
+    mIsFirstSearch = false;
     
     mSearchCtx->waitable.OnFinished();
 }
