@@ -2,7 +2,7 @@
 
 #include "Search.hpp"
 
-enum class PreviousSearchHint
+enum class PreviousSearchHint : uint8_t
 {
     Hit,
     Miss,
@@ -19,6 +19,7 @@ struct TimeManagerInitData
     uint32_t movesToGo;
     int32_t moveOverhead;
     PreviousSearchHint previousSearchHint = PreviousSearchHint::Unknown;
+    bool isFirstSearch = false;
 };
 
 struct TimeManagerUpdateData

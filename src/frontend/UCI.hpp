@@ -67,6 +67,7 @@ private:
 
     Position mPrevSearchPosition;
     std::vector<Move> mPrevSearchPvLine;
+    bool mIsFirstSearch = true;
 
     std::thread mSearchThread;
 
