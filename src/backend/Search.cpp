@@ -1732,7 +1732,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
             if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
             if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
+            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to] / 2;
+            if (const auto* h = node->continuationHistories[5]) moveStatScore += (*h)[piece][to] / 2;
 
             quietMoveIndex++;
         }
