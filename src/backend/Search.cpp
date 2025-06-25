@@ -1479,7 +1479,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return node->isInCheck ? 0 : eval;
     }
 
-    // reduce depth if position was not found in transposition table
+    // IIR: reduce depth if position was not found in transposition table
     if (node->depth >= 4
         && (node->isCutNode || isPvNode)
         && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
@@ -1648,6 +1648,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             std::abs(ttScore) < KnownWinValue && std::abs(node->beta) < KnownWinValue)
             return probCutBeta;
     }
+
+    // Secondary IIR
+    if (node->depth >= 4 && isPvNode && !ttEntry.move.IsValid())
+        node->depth--;
 
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
