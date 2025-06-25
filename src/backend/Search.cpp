@@ -1776,7 +1776,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
             // the higher depth is, the less aggressive pruning is
-            if (move.ToSquare().GetBitboard() & node->threats.allThreats)
+            if (!isPvNode && (move.ToSquare().GetBitboard() & node->threats.allThreats))
             {
                 if (move.IsCapture())
                 {
