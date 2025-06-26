@@ -1351,7 +1351,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (ttEntry.depth >= node->depth &&
+            if (ttEntry.depth >= node->depth + (ttScore >= beta) &&
                 position.GetHalfMoveCount() < 80)
             {
                 // transposition table cutoff
