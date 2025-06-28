@@ -2097,11 +2097,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (!searchAborted && moveIndex == 0u)
     {
         if (filteredSomeMove)
-            bestValue = -InfValue;
-        else
-            bestValue = node->isInCheck ? -CheckmateValue + (ScoreType)node->ply : 0;
+            return alpha;
 
-        return bestValue;
+        return node->isInCheck ? -CheckmateValue + (ScoreType)node->ply : 0;
     }
 
     // update move orderer
