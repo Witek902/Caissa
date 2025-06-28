@@ -1656,14 +1656,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
 
-    int32_t extension = 0;
-
-    // check extension
-    if (node->isInCheck)
-    {
-        extension++;
-    }
-
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
@@ -1792,23 +1784,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
 
-        int32_t moveExtension = extension;
-        {
-            // promotion extension
-            if (move.GetPromoteTo() == Piece::Queen)
-            {
-                moveExtension++;
-            }
+        int32_t extension = 0;
 
-            // pawn advanced to 6th row so is about to promote
-            if (move.GetPiece() == Piece::Pawn &&
-                move.ToSquare().RelativeRank(position.GetSideToMove()) == 6)
-            {
-                moveExtension++;
-            }
-        }
-
-        // Singular move detection
+        // Singular Extensions
         if constexpr (!isRootNode)
         {
             if (!node->filteredMove.IsValid() &&
@@ -1843,12 +1821,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->ply < 2 * thread.rootDepth)
                     {
-                        moveExtension = 1;
+                        extension = 1;
                         // double extension if singular score is way below beta
                         if constexpr (!isPvNode)
                             if (node->doubleExtensions <= SingularDoubleExtensionsLimit &&
                                 singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                moveExtension = 2;
+                                extension = 2;
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
@@ -1856,11 +1834,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (singularBeta >= beta)
                     return (singularBeta + beta) / 2;
                 else if (ttScore >= beta)
-                    moveExtension = -2 - !isPvNode;
+                    extension = -2 - !isPvNode;
                 else if (node->isCutNode)
-                    moveExtension = -2;
+                    extension = -2;
                 else if (ttScore <= alpha)
-                    moveExtension = -1;
+                    extension = -1;
             }
         }
 
@@ -1889,7 +1867,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
-        childNode.doubleExtensions = node->doubleExtensions + (moveExtension >= 2);
+        childNode.doubleExtensions = node->doubleExtensions + (extension >= 2);
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
 
@@ -1953,7 +1931,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             r = (r + LmrScale / 2) / LmrScale;
         }
 
-        int32_t newDepth = node->depth + moveExtension - 1;
+        int32_t newDepth = node->depth + extension - 1;
 
         // limit reduction, don't drop into QS
         r = std::clamp(r, 0, newDepth);
