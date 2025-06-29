@@ -1789,7 +1789,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // Singular Extensions
         if constexpr (!isRootNode)
         {
-            if (!node->filteredMove.IsValid() &&
+            if (node->isInCheck)
+            {
+                extension = 1;
+            }
+            else if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
                 node->depth >= SingularExtMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
