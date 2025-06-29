@@ -65,7 +65,7 @@ DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
-DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
+DEFINE_PARAM(LateMovePruningBase, 3, 1, 8);
 DEFINE_PARAM(HistoryPruningLinearFactor, 228, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 138, 60, 200);
 
@@ -1733,19 +1733,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            // Late Move Pruning
+            // skip quiet moves that are far in the list
+            // the higher depth is, the less aggressive pruning is
+            if (moveIndex >= GetLateMovePruningTreshold(node->depth, isImproving))
+                movePicker.SkipQuiets();
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
-                // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
-                {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
-                }
-
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
