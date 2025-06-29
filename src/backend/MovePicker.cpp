@@ -102,18 +102,22 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
         case Stage::GenerateQuiets:
         {
-            m_stage = Stage::PickQuiets;
-            if (m_generateQuiets)
+            if (!m_generateQuiets)
             {
-                GenerateMoveList<MoveGenerationMode::Quiets>(m_position, node.threats.allThreats, m_moves);
-
-                // remove played moves from generated list
-                m_moves.RemoveMove(m_ttMove);
-                m_moves.RemoveMove(m_killerMove);
-                m_moves.RemoveMove(m_counterMove);
-
-                m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
+                m_stage = Stage::End;
+                return false;
             }
+
+            m_stage = Stage::PickQuiets;
+            GenerateMoveList<MoveGenerationMode::Quiets>(m_position, node.threats.allThreats, m_moves);
+
+            // remove played moves from generated list
+            m_moves.RemoveMove(m_ttMove);
+            m_moves.RemoveMove(m_killerMove);
+            m_moves.RemoveMove(m_counterMove);
+
+            m_moveOrderer.ScoreMoves(node, m_moves, true, m_nodeCacheEntry);
+
             [[fallthrough]];
         }
 
