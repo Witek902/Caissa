@@ -41,7 +41,14 @@ public:
 
     INLINE Stage GetStage() const { return m_stage; }
     INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
-    INLINE void SkipQuiets() { m_generateQuiets = false; }
+
+    INLINE void SkipQuiets()
+    {
+        m_generateQuiets = false;
+
+        if (m_stage == Stage::PickQuiets)
+            m_stage = Stage::End;
+    }
 
 private:
 
