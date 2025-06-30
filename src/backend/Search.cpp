@@ -1438,7 +1438,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
 
-            ctx.searchParam.transpositionTable.Write(position, node->staticEval, node->staticEval, -1, TTEntry::Bounds::Lower);
+            ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower);
         }
         else if (!node->isCutNode)
         {
