@@ -203,14 +203,14 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, PackedMove move)
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;
-    entry.depth = (int8_t)std::clamp<int32_t>(depth, INT8_MIN, INT8_MAX);
+    entry.depth = (uint8_t)std::min<uint32_t>(depth, UINT8_MAX);
     entry.bounds = bounds;
     entry.move = move;
 

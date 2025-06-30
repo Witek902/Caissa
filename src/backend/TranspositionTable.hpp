@@ -22,7 +22,7 @@ struct TTEntry
     ScoreType score;
     ScoreType staticEval;
     PackedMove move;
-    int8_t depth;
+    uint8_t depth;
     Bounds bounds : 2;
     uint8_t generation : GenerationBits;
 
@@ -76,7 +76,7 @@ public:
     void NextGeneration();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, int32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
     void Prefetch(const uint64_t hash) const;
 
     // invalidate all entries
