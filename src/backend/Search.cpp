@@ -1363,14 +1363,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (ttCutoffValue != InvalidValue)
                     return ttCutoffValue;
             }
-            else if ((ttEntry.bounds == TTEntry::Bounds::Upper || ttEntry.bounds == TTEntry::Bounds::Exact) &&
-                ttEntry.depth < node->depth && node->depth - ttEntry.depth < 5 &&
-                ttScore > -KnownWinValue && alpha < KnownWinValue &&
-                ttScore + 128 * (node->depth - ttEntry.depth) <= alpha)
-            {
-                // accept TT cutoff from shallower search if the score is way below alpha
-                return alpha;
-            }
         }
     }
 
