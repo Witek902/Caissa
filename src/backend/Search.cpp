@@ -1062,7 +1062,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 #endif // COLLECT_SEARCH_STATS
 
         // don't prune in PV nodes, because TT does not contain path information
-        if constexpr (!isPvNode)
+        if (!isPvNode && (ttEntry.depth >= (ttScore >= beta ? 1 : 0)))
         {
             if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
             else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
