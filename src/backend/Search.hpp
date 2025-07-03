@@ -325,6 +325,7 @@ private:
         EvalCorrectionTable nonPawnWhiteCorrection;
         EvalCorrectionTable nonPawnBlackCorrection;
         ContCorrectionTable continuationCorrection;
+        ContCorrectionTable continuationCorrection2;
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
