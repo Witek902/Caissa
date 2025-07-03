@@ -99,6 +99,7 @@ DEFINE_PARAM(ReductionStatDiv, 227, 10, 400);
 DEFINE_PARAM(EvalCorrectionPawnsScale, 49, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 63, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 69, 1, 128);
+DEFINE_PARAM(ContCorrectionScale2, 50, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 253, 128, 512);
 
 
@@ -201,6 +202,7 @@ void Search::Clear()
         memset(threadData->nonPawnWhiteCorrection, 0, sizeof(threadData->nonPawnWhiteCorrection));
         memset(threadData->nonPawnBlackCorrection, 0, sizeof(threadData->nonPawnBlackCorrection));
         memset(threadData->continuationCorrection, 0, sizeof(threadData->continuationCorrection));
+        memset(threadData->continuationCorrection2, 0, sizeof(threadData->continuationCorrection2));
     }
 }
 
@@ -969,6 +971,8 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+    if (node.ply >= 3 && node.previousMove.IsValid() && (&node - 2)->previousMove.IsValid())
+        corr += ContCorrectionScale2 * continuationCorrection2[stm][node.previousMove.PieceTo()][(&node - 2)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -2145,6 +2149,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
             if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                 AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            if (node->ply >= 3 && node->previousMove.IsValid() && (node - 2)->previousMove.IsValid())
+                AddToCorrHist(thread.continuationCorrection2[stm][node->previousMove.PieceTo()][(node - 2)->previousMove.PieceTo()], bonus);
         }
     }
 
