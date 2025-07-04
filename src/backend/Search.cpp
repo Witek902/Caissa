@@ -1828,7 +1828,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (ttScore >= beta)
                     extension = -2 - !isPvNode;
                 else if (node->isCutNode)
-                    extension = -2;
+                    extension = -3;
                 else if (ttScore <= alpha)
                     extension = -1;
             }
