@@ -2107,6 +2107,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(!isPvNode || node->pvLine[0] == bestMove);
     }
 
+    // adjust best value for fail high cases (idea from Stockfish)
+    if (bestValue >= beta && std::abs(bestValue) < KnownWinValue && std::abs(alpha) < KnownWinValue)
+        bestValue = (bestValue * node->depth + beta) / (node->depth + 1);
+
     // clamp score to TB bounds
     if constexpr (isPvNode)
         bestValue = std::clamp(bestValue, tbMinValue, tbMaxValue);
