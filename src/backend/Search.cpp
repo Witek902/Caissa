@@ -2075,7 +2075,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // update move orderer
-    if (bestValue >= beta)
+    if (bestValue >= beta && moveIndex > 1)
     {
         if (bestMove.IsQuiet())
         {
