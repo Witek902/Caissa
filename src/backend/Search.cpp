@@ -1740,10 +1740,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
+                if (moveStatScore < GetHistoryPruningTreshold(node->depth))
                 {
+                    movePicker.SkipQuiets();
                     continue;
                 }
 
