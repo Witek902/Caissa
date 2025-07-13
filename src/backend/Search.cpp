@@ -325,41 +325,6 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
     SearchStats globalStats;
 
-    // Quiescence search debugging 
-    if (param.limits.maxDepth == 0)
-    {
-        ThreadData& thread = *mThreadData.front();
-
-        NodeInfo& rootNode = thread.searchStack[0];
-        rootNode = NodeInfo{};
-        rootNode.position = game.GetPosition();
-        rootNode.isInCheck = game.GetPosition().IsInCheck();
-        rootNode.position.ComputeThreats(rootNode.threats);
-        rootNode.isPvNodeFromPrevIteration = true;
-        rootNode.alpha = -InfValue;
-        rootNode.beta = InfValue;
-        rootNode.nnContext.MarkAsDirty();
-
-        SearchContext searchContext{ game, param, globalStats, param.excludedMoves };
-        outResult.resize(1);
-        outResult.front().score = QuiescenceNegaMax<NodeType::Root>(thread, &rootNode, searchContext);
-        SearchUtils::GetPvLine(rootNode, DefaultMaxPvLineLength, outResult.front().moves);
-
-        // flush pending stats
-        searchContext.stats.Append(thread.stats, true);
-
-        const AspirationWindowSearchParam aspirationWindowSearchParam =
-        {
-            game.GetPosition(),
-            param,
-            0,
-            0,
-            searchContext,
-        };
-
-        ReportPV(aspirationWindowSearchParam, outResult[0], BoundsType::Exact, TimePoint());
-    }
-
     // kick off worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
