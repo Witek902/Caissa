@@ -1120,7 +1120,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
-        if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
+        if (bestValue > -TablebaseWinValue)
         {
             ASSERT(!node->isInCheck);
 
@@ -1138,9 +1138,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 continue;
             }
 
-            // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move))
+            // skip bad captures
+            if (moveScore < MoveOrderer::GoodCaptureValue)
                 break;
         }
 
