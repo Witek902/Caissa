@@ -131,7 +131,7 @@ public:
         if constexpr (dir == Direction::NorthEast) return North().East();
         if constexpr (dir == Direction::NorthWest) return North().West();
         if constexpr (dir == Direction::SouthEast) return South().East();
-        if constexpr (dir == Direction::SouthWest) return South().East();
+        if constexpr (dir == Direction::SouthWest) return South().West();
     }
 
     template<Direction dir>
@@ -144,7 +144,7 @@ public:
         if constexpr (dir == Direction::NorthEast) return North_Unsafe().East_Unsafe();
         if constexpr (dir == Direction::NorthWest) return North_Unsafe().West_Unsafe();
         if constexpr (dir == Direction::SouthEast) return South_Unsafe().East_Unsafe();
-        if constexpr (dir == Direction::SouthWest) return South_Unsafe().East_Unsafe();
+        if constexpr (dir == Direction::SouthWest) return South_Unsafe().West_Unsafe();
     }
 
     INLINE Square FlippedFile() const
