@@ -248,7 +248,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
         // old entriess are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
-        const int32_t entryRelevance = (int32_t)data.depth - entryAge;
+        const int32_t entryRelevance = (int32_t)data.depth - entryAge / 2;
 
         if (entryRelevance < minRelevanceInCluster)
         {
