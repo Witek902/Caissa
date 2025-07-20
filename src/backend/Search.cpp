@@ -50,8 +50,13 @@ DEFINE_PARAM(ProbcutBetaOffset, 138, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 315, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
+DEFINE_PARAM(FutilityPruningBase, 0, 0, 64);
 DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 402, 128, 1024);
+
+DEFINE_PARAM(CaptFutilityPruningDepth, 8, 5, 15);
+DEFINE_PARAM(CaptFutilityPruningBase, 20, 16, 128);
+DEFINE_PARAM(CaptFutilityPruningScale, 150, 16, 256);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 209, 100, 300);
@@ -1719,11 +1724,20 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    node->staticEval + FutilityPruningBase + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
                 }
+            }
+
+            // Futility Pruning (captures)
+            if (!isPvNode && move.IsCapture() && !move.IsPromotion())
+            {
+                const Piece capturedPiece = position.GetCapturedPiece(move);
+                if (node->depth < CaptFutilityPruningDepth &&
+                    node->staticEval + c_pieceValues[(uint32_t)capturedPiece].mg + CaptFutilityPruningBase + CaptFutilityPruningScale * node->depth < alpha)
+                    continue;
             }
 
             // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
