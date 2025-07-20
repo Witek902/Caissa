@@ -1456,6 +1456,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 4)->staticEval;
     }
 
+    if (!isRootNode && node->reduction >= 1 && node->depth >= 2 && node->staticEval + (node - 1)->staticEval > 300)
+        node->depth--;
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
@@ -1910,9 +1913,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = true;
+            childNode.reduction = static_cast<uint8_t>(r);
 
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+            childNode.reduction = 0;
 
             if (score > alpha)
             {
