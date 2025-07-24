@@ -1894,7 +1894,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         int32_t newDepth = node->depth + extension - 1;
 
         // limit reduction, don't drop into QS
-        r = std::clamp(r, 0, newDepth);
+        r = std::clamp(r, 0, newDepth - 1);
 
         ScoreType score = InvalidValue;
 
