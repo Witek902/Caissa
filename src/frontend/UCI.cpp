@@ -933,7 +933,8 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
     TTEntry ttEntry;
 
     std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
-    std::cout << "PawnHash:   " << mGame.GetPosition().GetPawnsHash() << std::endl;
+    std::cout << "Pawns Hash: " << mGame.GetPosition().GetPawnsHash() << std::endl;
+    std::cout << "Minor Pieces Hash: " << mGame.GetPosition().GetMinorPiecesHash() << std::endl;
     std::cout << "Non-Pawn Hash (Whites): " << mGame.GetPosition().GetNonPawnsHash(White) << std::endl;
     std::cout << "Non-Pawn Hash (Blacks): " << mGame.GetPosition().GetNonPawnsHash(Black) << std::endl;
 
