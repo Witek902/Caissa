@@ -97,6 +97,7 @@ DEFINE_PARAM(ReductionStatOffset, 7016, 5000, 10000);
 DEFINE_PARAM(ReductionStatDiv, 229, 100, 400);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
+DEFINE_PARAM(EvalCorrectionMajorPiecesScale, 50, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 66, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 72, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 243, 128, 512);
@@ -198,6 +199,7 @@ void Search::Clear()
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
         memset(threadData->pawnStructureCorrection, 0, sizeof(threadData->pawnStructureCorrection));
+        memset(threadData->majorPiecesCorrection, 0, sizeof(threadData->majorPiecesCorrection));
         memset(threadData->nonPawnWhiteCorrection, 0, sizeof(threadData->nonPawnWhiteCorrection));
         memset(threadData->nonPawnBlackCorrection, 0, sizeof(threadData->nonPawnBlackCorrection));
         memset(threadData->continuationCorrection, 0, sizeof(threadData->continuationCorrection));
@@ -929,6 +931,7 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
 
     int32_t corr = 0;
     corr += EvalCorrectionPawnsScale * pawnStructureCorrection[stm][node.position.GetPawnsHash() % EvalCorrectionTableSize];
+    corr += EvalCorrectionMajorPiecesScale * majorPiecesCorrection[stm][node.position.GetMajorPiecesHash() % EvalCorrectionTableSize];
     corr += EvalCorrectionNonPawnsScale * nonPawnWhiteCorrection[stm][node.position.GetNonPawnsHash(White) % EvalCorrectionTableSize];
     corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
 
@@ -2109,6 +2112,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 4, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
             AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
+            AddToCorrHist(thread.majorPiecesCorrection[stm][position.GetMajorPiecesHash() % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
             if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
