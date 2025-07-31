@@ -99,7 +99,7 @@ DEFINE_PARAM(ReductionStatDiv, 229, 100, 400);
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 66, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 72, 1, 128);
-DEFINE_PARAM(CorrHistMaxBonus, 243, 128, 512);
+DEFINE_PARAM(CorrHistMaxBonus, 128, 128, 512);
 
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
