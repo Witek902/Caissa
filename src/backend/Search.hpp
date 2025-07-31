@@ -128,6 +128,7 @@ struct NodeInfo
     ScoreType alpha;
     ScoreType beta;
 
+    // static evaluation, including correction history and fifty-move rule
     ScoreType staticEval = InvalidValue;
 
     Move previousMove = Move::Invalid();
@@ -359,7 +360,7 @@ private:
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
-    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam);
+    static ScoreType AdjustEvalScore(ScoreType rawStaticEval, const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam);
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
