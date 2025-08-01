@@ -7,6 +7,8 @@
 static constexpr uint32_t c_ZobristHashSize = 792;
 
 static constexpr uint64_t c_SideToMoveZobristHash = 1u;
+static constexpr uint8_t c_HalfMoveZorbristHash[8] = { 0, 2, 4, 6, 8, 10, 12, 14 };
+
 extern uint64_t s_ZobristHash[c_ZobristHashSize];
 
 void InitZobristHash();

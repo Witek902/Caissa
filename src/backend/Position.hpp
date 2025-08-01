@@ -285,12 +285,12 @@ public:
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
-    INLINE uint16_t GetHalfMoveCount() const { return mHalfMoveCount; }
+    INLINE uint8_t GetHalfMoveCount() const { return mHalfMoveCount; }
     INLINE uint16_t GetMoveCount() const { return mMoveCount; }
 
     void SetSideToMove(Color color);
     void SetCastlingRights(Color color, uint8_t rightsMask);
-    INLINE void SetHalfMoveCount(uint16_t halfMoveCount) { mHalfMoveCount = halfMoveCount; }
+    void SetHalfMoveCount(uint8_t halfMoveCount);
     INLINE void SetMoveCount(uint16_t moveCount) { mMoveCount = moveCount; }
 
     // check if a side features non-pawn pieces
@@ -327,7 +327,7 @@ private:
 
     uint8_t mCastlingRights[2];
 
-    uint16_t mHalfMoveCount;
+    uint8_t mHalfMoveCount;
     uint16_t mMoveCount;
 
     // METADATA
