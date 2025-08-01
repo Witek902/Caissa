@@ -439,11 +439,11 @@ bool Position::FromFEN(const std::string& fenString)
 
         if (!halfMovesStr.empty())
         {
-            mHalfMoveCount = (int16_t)atoi(halfMovesStr.c_str());
+            SetHalfMoveCount((uint8_t)atoi(halfMovesStr.c_str()));
         }
         else
         {
-            mHalfMoveCount = 0;
+            SetHalfMoveCount(0);
         }
     }
 

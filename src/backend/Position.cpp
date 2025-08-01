@@ -41,6 +41,9 @@ uint64_t Position::ComputeHash() const
         }
     }
 
+    ASSERT(mHalfMoveCount < 128);
+    hash ^= c_HalfMoveZorbristHash[mHalfMoveCount / 16];
+
     return hash;
 }
 
@@ -184,6 +187,19 @@ void Position::ClearEnPassantSquare()
     }
 
     mEnPassantSquare = Square::Invalid();
+}
+
+void Position::SetHalfMoveCount(uint8_t halfMoveCount)
+{
+    ASSERT(halfMoveCount < 128);
+
+    const uint8_t oldBucket = mHalfMoveCount / 16;
+    const uint8_t newBucket = halfMoveCount / 16;
+
+    mHalfMoveCount = halfMoveCount;
+
+    if (oldBucket != newBucket)
+        mHash ^= c_HalfMoveZorbristHash[oldBucket] ^ c_HalfMoveZorbristHash[newBucket];
 }
 
 Bitboard Position::GetAttackedSquares(Color side) const
@@ -609,13 +625,9 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     if (mSideToMove == Black)
         mMoveCount++;
 
-    if (move.GetPiece() == Piece::Pawn || move.IsCapture())
-        mHalfMoveCount = 0;
-    else
-        mHalfMoveCount++;
+    SetHalfMoveCount((move.GetPiece() == Piece::Pawn || move.IsCapture()) ? 0 : (mHalfMoveCount + 1));
 
     const Color prevToMove = mSideToMove;
-
     mSideToMove = mSideToMove ^ 1;
     mHash ^= c_SideToMoveZobristHash;
 
@@ -643,13 +655,11 @@ bool Position::DoNullMove()
     ASSERT(!IsInCheck(mSideToMove));
 
     SetEnPassantSquare(Square::Invalid());
-
+    
     if (mSideToMove == Black)
-    {
         mMoveCount++;
-    }
 
-    mHalfMoveCount++;
+    SetHalfMoveCount(mHalfMoveCount + 1);
 
     mSideToMove = mSideToMove ^ 1;
     mHash ^= c_SideToMoveZobristHash;
