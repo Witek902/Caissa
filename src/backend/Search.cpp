@@ -1480,7 +1480,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
-            if (eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
+            if (node->isCutNode &&
+                eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1503,7 +1504,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.alpha = -beta;
                     childNode.beta = -beta + 1;
                     childNode.isNullMove = true;
-                    childNode.isCutNode = !node->isCutNode;
                     childNode.doubleExtensions = node->doubleExtensions;
                     childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
