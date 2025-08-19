@@ -946,14 +946,14 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
 ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
 {
     int32_t adjustedScore = node.staticEval;
-    
+
+    // scale down when approaching 50-move draw
+    adjustedScore = adjustedScore * (256 - node.position.GetHalfMoveCount()) / 256;
+
     if (std::abs(adjustedScore) < KnownWinValue)
     {
         // apply eval correction term
         adjustedScore += threadData.GetEvalCorrection(node);
-
-        // scale down when approaching 50-move draw
-        adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
 
         if (searchParam.evalRandomization > 0)
             adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
