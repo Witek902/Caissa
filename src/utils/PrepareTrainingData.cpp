@@ -19,8 +19,8 @@ using namespace threadpool;
 
 static std::mutex g_mutex;
 
-static constexpr int32_t c_ScoreTreshold = 1000;
-static constexpr int32_t c_EvalTreshold = 500;
+static constexpr int32_t c_ScoreTreshold = 1600;
+static constexpr int32_t c_EvalTreshold = 800;
 
 static bool IsPositionImbalanced(const Position& pos, ScoreType moveScore)
 {
@@ -87,9 +87,8 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
             if (move.IsQuiet() &&                                               // best move must be quiet
                 pos.GetNumPieces() >= 4 &&                                      // skip known endgames
-                //(i + 1 >= game.GetMoves().size() || moves[i + 1].IsQuiet()) &&  // next best move must be quiet
-                !pos.IsInCheck() &&                                             // skip check positions
-                !IsPositionImbalanced(pos, moveScore))                          // skip imbalanced positions
+                !pos.IsInCheck() /* &&                                             // skip check positions
+                !IsPositionImbalanced(pos, moveScore)*/)                          // skip imbalanced positions
             {
                 PositionEntry entry{};
 
