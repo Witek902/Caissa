@@ -12,6 +12,7 @@ extern bool RunPerformanceTests(const std::vector<std::string>& paths);
 extern void SelfPlay(const std::vector<std::string>& args);
 extern void PrepareTrainingData(const std::vector<std::string>& args);
 extern void PlainTextToTrainingData(const std::vector<std::string>& args);
+extern void DumpGames(const std::vector<std::string>& args);
 extern void GenerateEndgamePositions();
 extern bool TestNetwork();
 extern bool TrainNetwork();
@@ -65,6 +66,8 @@ int main(int argc, const char* argv[])
         PrepareTrainingData(args);
     else if (toolName == "plainTextToTrainingData")
         PlainTextToTrainingData(args);
+    else if (toolName == "dumpGames")
+        DumpGames(args);
     else if (toolName == "testNetwork")
         TestNetwork();
     else if (toolName == "validateEndgame")

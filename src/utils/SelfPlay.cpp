@@ -24,16 +24,16 @@
 
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 1;
-static const uint32_t c_minNodes = 80000;
-static const uint32_t c_maxNodes = 80000;
-static const uint32_t c_maxDepth = 32;
-static const int32_t c_maxEval = 3000;
-static const int32_t c_openingMaxEval = 1000;
-static const int32_t c_multiPv = 1;
-static const int32_t c_multiPvMaxPly = 0;
-static const int32_t c_multiPvScoreTreshold = 50;
-static const uint32_t c_minRandomMoves = 2;
-static const uint32_t c_maxRandomMoves = 2;
+
+static const uint32_t c_minNodes = 25'000;
+static const uint32_t c_maxNodes = 30'000;
+static const uint32_t c_maxDepth = 40;
+
+static const int32_t c_maxEval = 2000;
+static const int32_t c_openingMaxEval = 300;
+
+static const uint32_t c_minRandomMoves = 6;
+static const uint32_t c_maxRandomMoves = 10;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -64,8 +64,6 @@ bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& 
         PackPosition(pos, packedPos);
         outPositions.push_back(packedPos);
     }
-
-    std::cout << "Loaded " << outPositions.size() << " opening positions" << std::endl;
 
     return true;
 }
@@ -107,7 +105,7 @@ static bool SelfPlayThreadFunc(
     const std::vector<PackedPosition>& openingPositions,
     SelfPlayStats& stats)
 {
-    const size_t c_transpositionTableSize = 2ull * 1024ull * 1024ull;
+    const size_t c_transpositionTableSize = 4ull * 1024ull * 1024ull;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -175,7 +173,6 @@ static bool SelfPlayThreadFunc(
         search.Clear();
         game.Reset(openingPos);
 
-        int32_t multiPvScoreTreshold = c_multiPvScoreTreshold;
         int32_t halfMoveNumber = 0;
         uint32_t drawScoreCounter = 0;
         uint32_t whiteWinsCounter = 0;
@@ -190,9 +187,9 @@ static bool SelfPlayThreadFunc(
             searchParam.useRootTablebase = false;
             searchParam.evalRandomization = 1;
             searchParam.seed = searchSeed;
-            searchParam.numPvLines = (halfMoveNumber < c_multiPvMaxPly) ? c_multiPv : 1;
             searchParam.limits.maxDepth = c_maxDepth;
             searchParam.limits.maxNodesSoft = c_minNodes + (c_maxNodes - c_minNodes) * std::max(0, 80 - halfMoveNumber) / 80;
+            if (halfMoveNumber < 10) searchParam.limits.maxNodesSoft *= 2; // more nodes in the first moves
             searchParam.limits.maxNodes = 5 * searchParam.limits.maxNodesSoft;
 
             searchResult.clear();
@@ -202,39 +199,13 @@ static bool SelfPlayThreadFunc(
             ASSERT(!searchResult.empty());
 
             // skip game if starting position is unbalanced
-            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) > c_openingMaxEval)
+            if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) * 100 / wld::NormalizeToPawnValue > c_openingMaxEval)
                 break;
 
-            // sort moves by score
-            std::sort(searchResult.begin(), searchResult.end(), [](const PvLine& a, const PvLine& b)
-            {
-                return a.score > b.score;
-            });
+            ASSERT(!searchResult.front().moves.empty());
+            Move move = searchResult.front().moves.front();
 
-            // if one of the move is much worse than the best candidate, ignore it and the rest
-            for (size_t i = 1; i < searchResult.size(); ++i)
-            {
-                ASSERT(searchResult[i].score <= searchResult[0].score);
-                const int32_t diff = std::abs((int32_t)searchResult[i].score - (int32_t)searchResult[0].score);
-                if (diff > multiPvScoreTreshold)
-                {
-                    searchResult.erase(searchResult.begin() + i, searchResult.end());
-                    break;
-                }
-            }
-
-            // select random move
-            // TODO prefer moves with higher score
-            std::uniform_int_distribution<size_t> distrib(0, searchResult.size() - 1);
-            const size_t moveIndex = distrib(gen);
-            ASSERT(!searchResult[moveIndex].moves.empty());
-            Move move = searchResult[moveIndex].moves.front();
-
-            // reduce threshold of picking worse move
-            // this way the game will be more random at the beginning and there will be less blunders later in the game
-            multiPvScoreTreshold = std::max(10, multiPvScoreTreshold - 2);
-
-            ScoreType moveScore = searchResult[moveIndex].score;
+            ScoreType moveScore = searchResult.front().score;
             ScoreType eval = Evaluate(game.GetPosition());
 
             if (game.GetSideToMove() == Black)
@@ -261,12 +232,12 @@ static bool SelfPlayThreadFunc(
             }
 
             // adjudicate win
-            if (halfMoveNumber >= 20)
+            if (halfMoveNumber >= 40)
             {
                 if (moveScore > c_maxEval && eval > c_maxEval / 4)
                 {
                     whiteWinsCounter++;
-                    if (whiteWinsCounter > 3) game.SetScore(Game::Score::WhiteWins);
+                    if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
                 }
                 else
                 {
@@ -276,7 +247,7 @@ static bool SelfPlayThreadFunc(
                 if (moveScore < -c_maxEval && eval < -c_maxEval / 4)
                 {
                     blackWinsCounter++;
-                    if (blackWinsCounter > 3) game.SetScore(Game::Score::BlackWins);
+                    if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
                 }
                 else
                 {
@@ -311,11 +282,11 @@ static bool SelfPlayThreadFunc(
         // save game
         if (halfMoveNumber > 0)
         {
-            writer.WriteGame(game);
-
             GameMetadata metadata;
             metadata.roundNumber = index;
             game.SetMetadata(metadata);
+
+            writer.WriteGame(game);
 
             if (threadIndex == 0 && c_printPgnFrequency != 0 && (index % c_printPgnFrequency == 0))
             {
@@ -353,10 +324,11 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Loading opening positions..." << std::endl;
     std::vector<PackedPosition> openingPositions;
-    if (!args.empty())
+    for (const std::string& path : args)
     {
-        LoadOpeningPositions(args[0], openingPositions);
+        LoadOpeningPositions(path, openingPositions);
     }
+    std::cout << "Loaded " << openingPositions.size() << " opening positions" << std::endl;
 
     alignas(CACHELINE_SIZE) SelfPlayStats stats;
 
