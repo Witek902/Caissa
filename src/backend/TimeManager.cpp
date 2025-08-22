@@ -9,8 +9,16 @@ DEFINE_PARAM(TM_IdealTimeFactor, 823, 700, 1000);
 DEFINE_PARAM(TM_MaxTimeFactor, 493, 100, 1000);
 DEFINE_PARAM(TM_NodesCountScale, 205, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 63, 10, 90);
-DEFINE_PARAM(TM_StabilityScale, 61, 0, 200);
-DEFINE_PARAM(TM_StabilityOffset, 1520, 1000, 2000);
+
+DEFINE_PARAM(TM_StabilityFactor0, 1520, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor1, 1459, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor2, 1398, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor3, 1337, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor4, 1276, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor5, 1215, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor6, 1154, 0, 200);
+DEFINE_PARAM(TM_StabilityFactor7, 1093, 0, 200);
+
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1128, 1000, 1400);
 
@@ -89,10 +97,19 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         else
             state.stabilityCounter = 0;
 
-        const double stabilityFactor = static_cast<double>(TM_StabilityScale) / 1000.0;
-        const double stabilityOffset = static_cast<double>(TM_StabilityOffset) / 1000.0;
-        const double stabilityTimeFactor = stabilityOffset - stabilityFactor * std::min(10u, state.stabilityCounter);
-        limits.idealTimeCurrent *= stabilityTimeFactor;
+        const double stabilityFactors[] =
+        {
+            static_cast<double>(TM_StabilityFactor0) / 1000.0,
+            static_cast<double>(TM_StabilityFactor1) / 1000.0,
+            static_cast<double>(TM_StabilityFactor2) / 1000.0,
+            static_cast<double>(TM_StabilityFactor3) / 1000.0,
+            static_cast<double>(TM_StabilityFactor4) / 1000.0,
+            static_cast<double>(TM_StabilityFactor5) / 1000.0,
+            static_cast<double>(TM_StabilityFactor6) / 1000.0,
+            static_cast<double>(TM_StabilityFactor7) / 1000.0,
+        };
+
+        limits.idealTimeCurrent *= stabilityFactors[std::min(7u, state.stabilityCounter)];
     }
 
     // decrease time if nodes fraction spent on best move is high

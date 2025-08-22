@@ -24,10 +24,16 @@ static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 64;
 
-DEFINE_PARAM(LmrScale_Quiets, 42, 20, 70);
 DEFINE_PARAM(LmrBias_Quiets, 54, 20, 80);
-DEFINE_PARAM(LmrScale_Captures, 44, 20, 70);
+DEFINE_PARAM(LmrScaleA_Quiets, 0, -50, -50);
+DEFINE_PARAM(LmrScaleB_Quiets, 0, -50, -50);
+DEFINE_PARAM(LmrScaleAB_Quiets, 42, 20, 70);
+
 DEFINE_PARAM(LmrBias_Captures, 64, 20, 80);
+DEFINE_PARAM(LmrScaleA_Captures, 0, -50, -50);
+DEFINE_PARAM(LmrScaleB_Captures, 0, -50, -50);
+DEFINE_PARAM(LmrScaleAB_Captures, 44, 20, 70);
+
 
 DEFINE_PARAM(LmrQuietNonPv, 42, -128, 256);
 DEFINE_PARAM(LmrQuietTTCapture, 67, -128, 256);
@@ -161,7 +167,7 @@ void Search::StopWorkerThreads()
     mThreadData.erase(mThreadData.begin() + 1, mThreadData.end());
 }
 
-void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bias)
+void Search::BuildMoveReductionTable(LMRTableType& table, float bias, float scaleA, float scaleB, float scaleAB)
 {
     // clear first row and column
     for (uint32_t i = 0; i < LMRTableSize; ++i)
@@ -173,7 +179,10 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            table[depth][moveIndex] = int16_t(LmrScale * (bias + scale * Log(float(depth)) * Log(float(moveIndex))));
+            const float a = Log(float(depth));
+            const float b = Log(float(moveIndex));
+            const float r = bias + scaleA * a + scaleB * b + scaleAB * a * b;
+            table[depth][moveIndex] = int16_t(LmrScale * r);
         }
     }
 }
@@ -181,12 +190,16 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
 void Search::BuildMoveReductionTable()
 {
     BuildMoveReductionTable(mMoveReductionTable_Quiets,
-        static_cast<float>(LmrScale_Quiets) / 100.0f,
-        static_cast<float>(LmrBias_Quiets) / 100.0f);
+        static_cast<float>(LmrBias_Quiets) / 100.0f,
+        static_cast<float>(LmrScaleA_Quiets) / 100.0f,
+        static_cast<float>(LmrScaleB_Quiets) / 100.0f,
+        static_cast<float>(LmrScaleAB_Quiets) / 100.0f);
 
     BuildMoveReductionTable(mMoveReductionTable_Captures,
-        static_cast<float>(LmrScale_Captures) / 100.0f,
-        static_cast<float>(LmrBias_Captures) / 100.0f);
+        static_cast<float>(LmrBias_Captures) / 100.0f,
+        static_cast<float>(LmrScaleA_Captures) / 100.0f,
+        static_cast<float>(LmrScaleB_Captures) / 100.0f,
+        static_cast<float>(LmrScaleAB_Captures) / 100.0f);
 }
 
 void Search::Clear()
@@ -1839,7 +1852,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (move.IsQuiet())
             {
-                r = GetQuietsDepthReduction(node->depth, moveIndex);
+                r = GetQuietsDepthReduction(node->depth, moveIndex - 1);
 
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r += LmrQuietNonPv;
@@ -1863,7 +1876,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
             else
             {
-                r = GetCapturesDepthReduction(node->depth, moveIndex);
+                r = GetCapturesDepthReduction(node->depth, moveIndex - 1);
 
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
