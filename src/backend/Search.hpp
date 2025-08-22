@@ -355,7 +355,7 @@ private:
     }
 
     void BuildMoveReductionTable();
-    void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
+    void BuildMoveReductionTable(LMRTableType& table, float bias, float scaleA, float scaleB, float scaleAB);
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
