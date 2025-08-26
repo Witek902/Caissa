@@ -70,7 +70,7 @@ DEFINE_PARAM(HistoryPruningLinearFactor, 236, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 142, 60, 300);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 567, 200, 800);
-DEFINE_PARAM(AspirationWindow, 7, 5, 20);
+DEFINE_PARAM(AspirationWindow, 5, 4, 20);
 
 DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 70, 32, 128);
