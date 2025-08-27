@@ -61,7 +61,7 @@ AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
 # for OpenBench
 ob: $(OBJ)
-	$(CC) $(OBJ) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+	$(CC) $(OBJ) -march=native $(BMI2FLAGS) -o $(EXE)$(EXT)
 	$(CLEAN_OBJS)
 
 bmi2:
