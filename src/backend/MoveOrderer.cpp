@@ -237,7 +237,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     }
 
     // don't update uncertain moves
-    if (numMoves <= 1 && node.depth < 2)
+    if (numMoves <= 1 && node.depth < 4)
     {
         return;
     }
