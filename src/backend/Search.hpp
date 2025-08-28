@@ -359,7 +359,7 @@ private:
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
-    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam);
+    static ScoreType AdjustEvalScore(const ScoreType correction, const NodeInfo& node, const SearchParam& searchParam);
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
     void ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const;
