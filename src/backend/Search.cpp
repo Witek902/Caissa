@@ -35,12 +35,14 @@ DEFINE_PARAM(LmrQuietRefutation, 156, -128, 256);
 DEFINE_PARAM(LmrQuietCutNode, 163, -128, 256);
 DEFINE_PARAM(LmrQuietImproving, 43, -128, 256);
 DEFINE_PARAM(LmrQuietInCheck, 79, -128, 256);
+DEFINE_PARAM(LmrQuietCorrAdj, 0, 0, 1024);
 
 DEFINE_PARAM(LmrCaptureWinning, 58, -128, 256);
 DEFINE_PARAM(LmrCaptureBad, -7, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 86, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, -4, -128, 128);
 DEFINE_PARAM(LmrCaptureInCheck, 21, -128, 256);
+DEFINE_PARAM(LmrCaptureCorrAdj, 0, 0, 1024);
 DEFINE_PARAM(LmrTTHighDepth, 46, -128, 256);
 
 DEFINE_PARAM(LmrDeeperTreshold, 94, 20, 200);
@@ -943,14 +945,14 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ScoreType correction, const NodeInfo& node, const SearchParam& searchParam)
 {
     int32_t adjustedScore = node.staticEval;
     
     if (std::abs(adjustedScore) < KnownWinValue)
     {
         // apply eval correction term
-        adjustedScore += threadData.GetEvalCorrection(node);
+        adjustedScore += correction;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1057,7 +1059,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
+        const ScoreType correction = thread.GetEvalCorrection(*node);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(correction, *node, ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1300,6 +1303,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     ScoreType unadjustedEval = InvalidValue; // eval before TT adjustment
     ScoreType tbMinValue = -InfValue; // min value according to tablebases
     ScoreType tbMaxValue = InfValue; // max value according to tablebases
+    ScoreType correction = 0;
 
     // transposition table lookup
     TTEntry ttEntry;
@@ -1415,8 +1419,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         ASSERT(node->staticEval != InvalidValue);
 
-        // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        correction = thread.GetEvalCorrection(*node);
+        unadjustedEval = eval = AdjustEvalScore(correction, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
@@ -1860,6 +1864,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce less if correction history is high
+                r -= std::abs(correction * LmrQuietCorrAdj / 1024);
             }
             else
             {
@@ -1878,6 +1885,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
+
+                // reduce less if correction history is high
+                r -= std::abs(correction * LmrCaptureCorrAdj / 1024);
             }
 
             // reduce low-ply moves less
