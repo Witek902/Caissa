@@ -1225,10 +1225,14 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     return bestValue;
 }
 
+static uint64_t countA = 0;
+static uint64_t countB = 0;
+
 template<NodeType nodeType>
-ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
+ScoreType Search::NegaMax_Internal(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
 {
     ASSERT(node->ply < MaxSearchDepth);
+    ASSERT(node->depth > 0);
 
     constexpr bool isRootNode = nodeType == NodeType::Root;
     constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
@@ -1237,12 +1241,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->alpha == node->beta - 1);
     else
         ASSERT(node->alpha < node->beta);
-
-    // maximum search depth reached, enter quiescence search to find final evaluation
-    if (node->depth <= 0)
-    {
-        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
-    }
 
     // clear PV line
     node->pvLength = 0;
@@ -1768,7 +1766,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
-                const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
+                const ScoreType singularScore = NegaMax_Internal<NodeType::NonPV>(thread, node, ctx);
 
                 // restore node state
                 node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
