@@ -371,7 +371,16 @@ private:
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
 
     template<NodeType nodeType>
-    ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
+    ScoreType NegaMax_Internal(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const;
+
+    template<NodeType nodeType>
+    INLINE ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx) const
+    {
+        return
+            node->depth <= 0 ?
+            QuiescenceNegaMax<nodeType>(thread, node, ctx) :
+            NegaMax_Internal<nodeType>(thread, node, ctx);
+    }
 
     // returns true if the search needs to be aborted immediately
     static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);
