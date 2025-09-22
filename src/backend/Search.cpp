@@ -1944,6 +1944,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (moveIndex == 1 ||
                 (score > alpha && (isRootNode || score < beta)))
             {
+                // Don't dive into QS if we have TT move
+                if (move == ttMove && thread.rootDepth > 8 && ttEntry.depth > 1)
+                    newDepth = std::max(newDepth, 1);
+
                 childNode.depth = static_cast<int16_t>(newDepth);
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
