@@ -1833,9 +1833,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // Late Move Reductions
         int32_t r = 0;
-        if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > 1 &&
-            (!isPvNode || move.IsQuiet()))
+        if (node->depth >= LateMoveReductionStartDepth && moveIndex > 1)
         {
             if (move.IsQuiet())
             {
