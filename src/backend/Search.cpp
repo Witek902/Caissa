@@ -105,8 +105,8 @@ DEFINE_PARAM(CorrHistMaxBonus, 243, 128, 512);
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
-        LateMovePruningBase + depth * depth :
-        LateMovePruningBase + depth * depth / 2;
+        (LateMovePruningBase + depth * depth) :
+        (LateMovePruningBase + depth * depth) / 2;
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
@@ -1693,19 +1693,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            // Late Move Pruning
+            if (moveIndex >= GetLateMovePruningTreshold(node->depth, isImproving))
+            {
+                movePicker.SkipQuiets();
+            }
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
-                // Late Move Pruning
-                // skip quiet moves that are far in the list
-                // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
-                {
-                    // if we're in quiets stage, skip everything
-                    if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
-
-                    continue;
-                }
-
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
