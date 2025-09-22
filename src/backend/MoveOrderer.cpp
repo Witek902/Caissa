@@ -242,8 +242,11 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusScoreDiff * scoreDiff / 64, QuietBonusLimit);
+    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusScoreDiff * scoreDiff / 64 - node.isCutNode * 48, QuietBonusLimit);
     const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusScoreDiff * scoreDiff / 64, QuietMalusLimit);
+
+    ASSERT(bonus > 0);
+    ASSERT(malus < 0);
 
     const Bitboard threats = node.threats.allThreats;
 
