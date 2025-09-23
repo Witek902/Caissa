@@ -207,6 +207,11 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
+    if (bounds == TTEntry::Bounds::Exact)
+    {
+        ASSERT(move.IsValid());
+    }
+
     TTEntry entry;
     entry.score = score;
     entry.staticEval = staticEval;
@@ -229,20 +234,20 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;
     uint16_t prevKey = 0;
-    TTEntry prevEntry;
+    TTEntry* prevEntry = nullptr;
 
     // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
     {
         const uint16_t key = cluster.entries[i].key;
-        const TTEntry data = cluster.entries[i].entry;
+        TTEntry& data = cluster.entries[i].entry;
 
         // found entry with same hash or empty entry
         if (key == positionKey || !data.IsValid())
         {
             replaceIndex = i;
             prevKey = key;
-            prevEntry = data;
+            prevEntry = &data;
             break;
         }
 
@@ -255,22 +260,26 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
             minRelevanceInCluster = entryRelevance;
             replaceIndex = i;
             prevKey = key;
-            prevEntry = data;
+            prevEntry = &data;
         }
     }
 
     // don't overwrite entries with worse depth if the bounds are not exact
     if (entry.bounds != TTEntry::Bounds::Exact &&
         positionKey == prevKey &&
-        entry.depth < prevEntry.depth - 4)
+        entry.depth < prevEntry->depth - 4)
     {
+        // secondary aging
+        if (prevEntry->depth >= 5 && prevEntry->bounds != TTEntry::Bounds::Exact)
+            prevEntry->depth--;
+
         return;
     }
 
     // preserve existing move
     if (positionKey == prevKey && !entry.move.IsValid())
     {
-        entry.move = prevEntry.move;
+        entry.move = prevEntry->move;
     }
 
     entry.generation = generation;
