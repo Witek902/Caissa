@@ -1120,18 +1120,29 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
-        if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
+
+        childNode.position = position;
+        if (!childNode.position.DoMove(move, childNode.nnContext))
+            continue;
+
+        moveIndex++;
+
+        if (bestValue > -TablebaseWinValue && move.ToSquare() != prevSquare)
         {
             ASSERT(!node->isInCheck);
 
             // skip underpromotions
             if (move.IsUnderpromotion()) continue;
 
+            // move count pruning
+            if (moveIndex >= 3) break;
+
             // futility pruning - skip captures that won't beat alpha
             if (move.IsCapture() &&
                 futilityBase > -KnownWinValue &&
                 futilityBase <= alpha &&
-                move.ToSquare() != prevSquare &&
                 !position.StaticExchangeEvaluation(move, 1))
             {
                 bestValue = std::max(bestValue, futilityBase);
@@ -1139,27 +1150,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
 
             // skip very bad captures
-            if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move))
+            if (moveScore < MoveOrderer::GoodCaptureValue && !position.StaticExchangeEvaluation(move))
                 break;
-        }
-
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
-
-        childNode.position = position;
-        if (!childNode.position.DoMove(move, childNode.nnContext))
-            continue;
-        moveIndex++;
-
-        // Move Count Pruning
-        // skip everything after some sane amount of moves has been tried
-        // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -TablebaseWinValue)
-        {
-                 if (node->depth < -4 && moveIndex > 1) break;
-            else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth <  0 && moveIndex > 3) break;
         }
 
         childNode.previousMove = move;
