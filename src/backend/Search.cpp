@@ -1048,6 +1048,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
 
+            if (!ttEntry.IsValid())
+                ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower);
+
 #ifdef COLLECT_SEARCH_STATS
             int32_t binIndex = (evalScore + SearchStats::EvalHistogramMaxValue) * SearchStats::EvalHistogramBins / (2 * SearchStats::EvalHistogramMaxValue);
             binIndex = std::clamp<int32_t>(binIndex, 0, SearchStats::EvalHistogramBins - 1);
@@ -1073,20 +1076,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
 
         if (bestValue >= beta)
-        {
-            if (std::abs(bestValue) < KnownWinValue && std::abs(beta) < KnownWinValue)
-                bestValue = (bestValue + beta) / 2;
-
-            if (!ttEntry.IsValid())
-                ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, TTEntry::Bounds::Lower);
-
-            return bestValue;
-        }
+            return (bestValue + beta) / 2;
 
         if (bestValue > alpha)
-        {
             alpha = bestValue;
-        }
 
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
     }
