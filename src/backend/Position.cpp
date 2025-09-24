@@ -54,6 +54,7 @@ Position::Position()
     , mMoveCount(1u)
     , mHash(0u)
     , mPawnsHash(0u)
+    , mMinorsHash(0u)
     , mNonPawnsHash{0u,0u}
 {}
 
@@ -75,13 +76,17 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT(pos.pieces[square.Index()] == Piece::None);
 
     const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
+
     mHash ^= pieceHash;
     if (piece == Piece::Pawn)
-        mPawnsHash ^= pieceHash;
+        mPawnsHash ^= (uint32_t)pieceHash;
     else if (color == White)
         mNonPawnsHash[White] ^= (uint32_t)pieceHash;
     else
         mNonPawnsHash[Black] ^= (uint32_t)pieceHash;
+
+    if (piece == Piece::Knight || piece == Piece::Bishop)
+        mMinorsHash ^= (uint32_t)pieceHash;
 
     pos.GetPieceBitBoard(piece) |= mask;
     pos.pieces[square.Index()] = piece;
@@ -100,13 +105,17 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
     pos.pieces[square.Index()] = Piece::None;
 
     const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
+
     mHash ^= pieceHash;
     if (piece == Piece::Pawn)
-        mPawnsHash ^= pieceHash;
+        mPawnsHash ^= (uint32_t)pieceHash;
     else if (color == White)
         mNonPawnsHash[White] ^= (uint32_t)pieceHash;
     else
         mNonPawnsHash[Black] ^= (uint32_t)pieceHash;
+
+    if (piece == Piece::Knight || piece == Piece::Bishop)
+        mMinorsHash ^= (uint32_t)pieceHash;
 }
 
 uint64_t Position::HashAfterMove(const Move move) const
@@ -697,6 +706,7 @@ Position Position::SwappedColors() const
     result.mHalfMoveCount           = mHalfMoveCount;
     result.mHash                    = 0;
     result.mPawnsHash               = 0;
+    result.mMinorsHash              = 0;
     result.mNonPawnsHash[0]         = 0;
     result.mNonPawnsHash[1]         = 0;
 
@@ -724,6 +734,7 @@ void Position::MirrorVertically()
 
     mHash = ComputeHash();
     mPawnsHash = 0; // TODO
+    mMinorsHash = 0; // TODO
     mNonPawnsHash[0] = 0; // TODO
     mNonPawnsHash[1] = 0; // TODO
 }
@@ -749,6 +760,7 @@ void Position::MirrorHorizontally()
 
     mHash = ComputeHash();
     mPawnsHash = 0; // TODO
+    mMinorsHash = 0; // TODO
     mNonPawnsHash[0] = 0; // TODO
     mNonPawnsHash[1] = 0; // TODO
 }
@@ -774,6 +786,7 @@ void Position::FlipDiagonally()
 
     mHash = ComputeHash();
     mPawnsHash = 0; // TODO
+    mMinorsHash = 0; // TODO
     mNonPawnsHash[0] = 0; // TODO
     mNonPawnsHash[1] = 0; // TODO
 }
