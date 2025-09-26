@@ -80,6 +80,10 @@ DEFINE_PARAM(SingularDoubleExtensionsLimit, 7, 4, 10);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 74, 40, 120);
 
+DEFINE_PARAM(StaticEvalRfpStartDepth, 8, 4, 12);
+DEFINE_PARAM(StaticEvalRfpDepthScale, 103, 40, 200);
+DEFINE_PARAM(StaticEvalRfpImprovingScale, 82, 40, 200);
+
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpMultiplier, 96, 80, 180);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
@@ -1453,6 +1457,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
+            // Reverse Futility Pruning (static eval based)
+            if (node->depth <= StaticEvalRfpStartDepth &&
+                eval < KnownWinValue && beta > -KnownWinValue &&
+                eval >= beta &&
+                node->staticEval >= beta + StaticEvalRfpDepthScale * node->depth - StaticEvalRfpImprovingScale * isImproving)
+            {
+                return (node->staticEval + beta) / 2;
+            }
+
             // Reverse Futility Pruning
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
