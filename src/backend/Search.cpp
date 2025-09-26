@@ -830,6 +830,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.depth = static_cast<int16_t>(depth);
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
+        thread.rootDelta = rootNode.beta - rootNode.alpha;
 
         pvLine.score = NegaMax<NodeType::Root>(thread, &rootNode, param.searchContext);
         ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
@@ -1872,6 +1873,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
+
+            // reduce less in PV nodes
+            if constexpr (isPvNode)
+                r -= 35 * (beta - alpha > thread.rootDelta / 4);
 
             // reduce low-ply moves less
             if constexpr (isPvNode)
