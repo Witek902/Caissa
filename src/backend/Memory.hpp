@@ -29,6 +29,14 @@ inline void AlignedFree(void* ptr)
 #endif
 }
 
+inline void Prefetch(const void* ptr)
+{
+#ifdef USE_SSE
+    _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0);
+#elif defined(USE_ARM_NEON)
+    __builtin_prefetch(reinterpret_cast<const char*>(ptr), 0, 0);
+#endif
+}
 
 bool EnableLargePagesSupport();
 
