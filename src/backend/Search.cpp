@@ -1801,6 +1801,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             continue;
         moveIndex++;
 
+        // prefetch correction histories
+        {
+            const Color stm = childNode.position.GetSideToMove();
+            Prefetch(&thread.pawnStructureCorrection[stm][childNode.position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize]);
+            Prefetch(&thread.nonPawnWhiteCorrection[stm][childNode.position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize]);
+            Prefetch(&thread.nonPawnBlackCorrection[stm][childNode.position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize]);
+        }
+
         // report current move to UCI
         if constexpr (isRootNode)
         {
