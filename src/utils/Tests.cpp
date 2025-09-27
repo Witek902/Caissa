@@ -394,6 +394,8 @@ static void RunPositionTests()
         {
             Position pos(Position::InitPositionFEN);
             const Move move = pos.MoveFromString("e2e4");
+            const uint64_t hashAfterMove = pos.HashAfterMove(move);
+            TEST_EXPECT(hashAfterMove == pos.HashAfterMove(PackedMove(move)));
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move == pos.MoveFromString("e4", MoveNotation::SAN));
             TEST_EXPECT(move.FromSquare() == Square_e2);
@@ -405,6 +407,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.GetHash() == hashAfterMove);
         }
 
         // move pawn (invalid, blocked)
@@ -448,6 +451,8 @@ static void RunPositionTests()
         {
             Position pos("rnbqkbnr/p1pppppp/8/1p6/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 1");
             const Move move = pos.MoveFromString("c4b5");
+            const uint64_t hashAfterMove = pos.HashAfterMove(move);
+            TEST_EXPECT(hashAfterMove == pos.HashAfterMove(PackedMove(move)));
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move == pos.MoveFromString("cxb5", MoveNotation::SAN));
             TEST_EXPECT(move.FromSquare() == Square_c4);
@@ -460,6 +465,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/p1pppppp/8/1P6/8/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1");
+            TEST_EXPECT(pos.GetHash() == hashAfterMove);
         }
 
         // en passant capture
@@ -531,6 +537,8 @@ static void RunPositionTests()
         {
             Position pos("4k3/8/8/8/8/3N4/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("d3f4");
+            const uint64_t hashAfterMove = pos.HashAfterMove(move);
+            TEST_EXPECT(hashAfterMove == pos.HashAfterMove(PackedMove(move)));
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.FromSquare() == Square_d3);
             TEST_EXPECT(move.ToSquare() == Square_f4);
@@ -540,12 +548,15 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 1 1");
+            TEST_EXPECT(pos.GetHash() == hashAfterMove);
         }
 
         // move knight (valid capture)
         {
             Position pos("4k3/8/8/8/5q2/3N4/8/4K3 w - - 0 1");
             const Move move = pos.MoveFromString("d3f4");
+            const uint64_t hashAfterMove = pos.HashAfterMove(move);
+            TEST_EXPECT(hashAfterMove == pos.HashAfterMove(PackedMove(move)));
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(move.FromSquare() == Square_d3);
             TEST_EXPECT(move.ToSquare() == Square_f4);
@@ -555,6 +566,7 @@ static void RunPositionTests()
             TEST_EXPECT(pos.IsMoveLegal(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 0 1");
+            TEST_EXPECT(pos.GetHash() == hashAfterMove);
         }
 
         // castling, whites, king side

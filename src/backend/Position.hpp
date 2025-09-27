@@ -282,6 +282,7 @@ public:
     INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
     INLINE uint32_t GetNonPawnsHash(Color color) const { return mNonPawnsHash[color]; }
     uint64_t HashAfterMove(const Move move) const;
+    uint64_t HashAfterMove(const PackedMove move) const;
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
     INLINE Square GetEnPassantSquare() const { return mEnPassantSquare; }
