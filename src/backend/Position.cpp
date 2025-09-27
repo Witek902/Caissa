@@ -127,6 +127,25 @@ uint64_t Position::HashAfterMove(const Move move) const
     return hash;
 }
 
+uint64_t Position::HashAfterMove(const PackedMove move) const
+{
+    ASSERT(move.IsValid());
+
+    const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(move.FromSquare());
+    const Piece capturedPiece = GetOpponentSide().GetPieceAtSquare(move.ToSquare());
+
+    uint64_t hash = mHash ^ c_SideToMoveZobristHash;
+    hash ^= GetPieceZobristHash(mSideToMove, movedPiece, move.FromSquare().Index());
+    hash ^= GetPieceZobristHash(mSideToMove, movedPiece, move.ToSquare().Index());
+
+    if (capturedPiece != Piece::None)
+    {
+        hash ^= GetPieceZobristHash(mSideToMove ^ 1, capturedPiece, move.ToSquare().Index());
+    }
+
+    return hash;
+}
+
 void Position::SetSideToMove(Color color)
 {
     ASSERT(color == White || color == Black);
