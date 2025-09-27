@@ -1137,9 +1137,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 break;
         }
 
-        // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
-
         childNode.position = position;
         if (!childNode.position.DoMove(move, childNode.nnContext))
             continue;
@@ -1154,6 +1151,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             else if (node->depth < -2 && moveIndex > 2) break;
             else if (node->depth <  0 && moveIndex > 3) break;
         }
+
+        // start prefetching child node's TT entry
+        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
         childNode.previousMove = move;
         childNode.position.ComputeThreats(childNode.threats);
@@ -1325,6 +1325,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     return ttCutoffValue;
             }
         }
+
+        // start prefetching child node's TT entry as soon as we have TT move
+        if (ttEntry.move.IsValid())
+            ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(ttEntry.move));
     }
 
     // try probing Win-Draw-Loose endgame tables
@@ -1644,7 +1648,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     while (movePicker.PickMove(*node, move, moveScore))
     {
         // start prefetching child node's TT entry
-        ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
+        if (move != ttMove)
+            ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
 #ifdef VALIDATE_MOVE_PICKER
         for (uint32_t i = 0; i < numGeneratedMoves; ++i) ASSERT(generatedSoFar[i] != move);
