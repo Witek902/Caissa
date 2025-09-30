@@ -17,7 +17,6 @@
 // #define VALIDATE_MOVE_PICKER
 
 static const float PvLineReportDelay = 0.005f;
-static const float CurrentMoveReportDelay = 5.0f;
 static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 static const int32_t WdlTablebaseProbeDepth = 5;
@@ -566,17 +565,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
         }
     }
 #endif // COLLECT_SEARCH_STATS
-
-    std::cout << std::move(ss.str()) << std::endl;
-}
-
-void Search::ReportCurrentMove(const Move& move, int32_t depth, uint32_t moveNumber) const
-{
-    std::stringstream ss{ std::ios_base::out };
-
-    ss << "info depth " << depth;
-    ss << " currmove " << move.ToString();
-    ss << " currmovenumber " << moveNumber;
 
     std::cout << std::move(ss.str()) << std::endl;
 }
@@ -1800,19 +1788,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!childNode.position.DoMove(move, childNode.nnContext))
             continue;
         moveIndex++;
-
-        // report current move to UCI
-        if constexpr (isRootNode)
-        {
-            if (thread.isMainThread && ctx.searchParam.debugLog && node->pvIndex == 0)
-            {
-                const float timeElapsed = (TimePoint::GetCurrent() - ctx.searchParam.limits.startTimePoint).ToSeconds();
-                if (timeElapsed > CurrentMoveReportDelay)
-                {
-                    ReportCurrentMove(move, node->depth, moveIndex + node->pvIndex);
-                }
-            }
-        }
 
         childNode.staticEval = InvalidValue;
         childNode.position.ComputeThreats(childNode.threats);
