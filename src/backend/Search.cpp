@@ -81,7 +81,8 @@ DEFINE_PARAM(SingularDoubleExtensionsLimit, 7, 4, 10);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 74, 40, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
-DEFINE_PARAM(RfpMultiplier, 96, 80, 180);
+DEFINE_PARAM(RfpDepthScale, 96, 80, 180);
+DEFINE_PARAM(RfpImprovingScale, 48, 0, 120);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 
 DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
@@ -1454,9 +1455,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
+            const int32_t rfpMargin = RfpDepthScale * node->depth - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta + std::max<int32_t>(RfpMultiplier * (node->depth - (isImproving && !OppCanWinMaterial(position, node->threats))), RfpTreshold))
+                eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
             {
                 return (eval + beta) / 2;
             }
