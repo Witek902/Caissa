@@ -931,7 +931,7 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
+ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam, const Color rootStm)
 {
     int32_t adjustedScore = node.staticEval;
     
@@ -939,6 +939,9 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     {
         // apply eval correction term
         adjustedScore += threadData.GetEvalCorrection(node);
+
+        // apply contempt
+        adjustedScore += (node.position.GetSideToMove() == rootStm) ? searchParam.contemptFactor : -searchParam.contemptFactor;
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -1048,7 +1051,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam, ctx.game.GetPosition().GetSideToMove());
 
         bestValue = adjustedEvalScore;
 
@@ -1397,7 +1400,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam, ctx.game.GetPosition().GetSideToMove());
 
         if (!node->filteredMove.IsValid())
         {

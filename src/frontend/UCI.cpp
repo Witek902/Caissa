@@ -173,6 +173,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name Ponder type check default false\n";
         std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
         std::cout << "option name EvalRandomization type spin default 0 min 0 max 100\n";
+        std::cout << "option name Contempt type spin default 0 min -1000 max 1000\n";
 #ifdef USE_SYZYGY_TABLEBASES
         std::cout << "option name SyzygyPath type string default <empty>\n";
         std::cout << "option name SyzygyProbeLimit type spin default 6 min 4 max 7\n";
@@ -609,6 +610,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.evalRandomization = mOptions.evalRandomization;
+    mSearchCtx->searchParam.contemptFactor = (ScoreType)mOptions.contemptFactor;
     mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
@@ -833,6 +835,10 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "evalrandomization")
     {
         mOptions.evalRandomization = std::clamp(atoi(value.c_str()), 0, 100);
+    }
+    else if (lowerCaseName == "contempt")
+    {
+        mOptions.contemptFactor = std::clamp(atoi(value.c_str()), -1000, 1000);
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {

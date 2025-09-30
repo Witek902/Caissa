@@ -61,6 +61,8 @@ struct SearchParam
 
     uint32_t numThreads = 1;
 
+    ScoreType contemptFactor = 0;
+
     // number of PV lines to report
     uint32_t numPvLines = 1;
 
@@ -359,7 +361,7 @@ private:
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
-    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam);
+    static ScoreType AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam, const Color rootStm);
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
