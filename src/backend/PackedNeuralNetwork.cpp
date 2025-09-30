@@ -88,32 +88,81 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     ASSERT((size_t)weights % (2 * registerWidth) == 0);
     ASSERT((size_t)biases % (2 * registerWidth) == 0);
 
-    // unroll 2x so two sums can be calculated independently
-    __m256i sumA = _mm256_setzero_si256();
-    __m256i sumB = _mm256_setzero_si256();
-    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    const __m256i vecZero = _mm256_setzero_si256();
+    const __m256i vecMax = _mm256_set1_epi16(ActivationRangeScaling);
+
+    __m256i sum0 = _mm256_setzero_si256();
+    __m256i sum1 = _mm256_setzero_si256();
+    __m256i sum2 = _mm256_setzero_si256();
+    __m256i sum3 = _mm256_setzero_si256();
+    __m256i sum4 = _mm256_setzero_si256();
+    __m256i sum5 = _mm256_setzero_si256();
+    __m256i sum6 = _mm256_setzero_si256();
+    __m256i sum7 = _mm256_setzero_si256();
+
+    for (uint32_t j = 0; j < AccumulatorSize; j += 4 * registerWidth)
     {
-        __m256i inA = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j));
-        __m256i inB = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j));
+        // load inputs
+        __m256i in0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j     ));
+        __m256i in1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j + 16));
+        __m256i in2 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j + 32));
+        __m256i in3 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j + 48));
+        __m256i in4 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j     ));
+        __m256i in5 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j + 16));
+        __m256i in6 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j + 32));
+        __m256i in7 = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j + 48));
 
         // apply clipped-ReLU
-        inA = _mm256_min_epi16(_mm256_max_epi16(inA, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
-        inB = _mm256_min_epi16(_mm256_max_epi16(inB, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
+        in0 = _mm256_min_epi16(_mm256_max_epi16(in0, vecZero), vecMax);
+        in1 = _mm256_min_epi16(_mm256_max_epi16(in1, vecZero), vecMax);
+        in2 = _mm256_min_epi16(_mm256_max_epi16(in2, vecZero), vecMax);
+        in3 = _mm256_min_epi16(_mm256_max_epi16(in3, vecZero), vecMax);
+        in4 = _mm256_min_epi16(_mm256_max_epi16(in4, vecZero), vecMax);
+        in5 = _mm256_min_epi16(_mm256_max_epi16(in5, vecZero), vecMax);
+        in6 = _mm256_min_epi16(_mm256_max_epi16(in6, vecZero), vecMax);
+        in7 = _mm256_min_epi16(_mm256_max_epi16(in7, vecZero), vecMax);
 
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
-        const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize));
+        const __m256i w0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j     ));
+        const __m256i w1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + 16));
+        const __m256i w2 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + 32));
+        const __m256i w3 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + 48));
+        const __m256i w4 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize     ));
+        const __m256i w5 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize + 16));
+        const __m256i w6 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize + 32));
+        const __m256i w7 = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize + 48));
+
 #ifdef NN_USE_VNNI
-        sumA = _mm256_dpwssd_epi32(sumA, inA, wA);
-        sumB = _mm256_dpwssd_epi32(sumB, inB, wB);
+        sum0 = _mm256_dpwssd_epi32(sum0, in0, w0);
+        sum1 = _mm256_dpwssd_epi32(sum1, in1, w1);
+        sum2 = _mm256_dpwssd_epi32(sum2, in2, w2);
+        sum3 = _mm256_dpwssd_epi32(sum3, in3, w3);
+        sum4 = _mm256_dpwssd_epi32(sum4, in4, w4);
+        sum5 = _mm256_dpwssd_epi32(sum5, in5, w5);
+        sum6 = _mm256_dpwssd_epi32(sum6, in6, w6);
+        sum7 = _mm256_dpwssd_epi32(sum7, in7, w7);
 #else
-        sumA = _mm256_add_epi32(sumA, _mm256_madd_epi16(inA, wA));
-        sumB = _mm256_add_epi32(sumB, _mm256_madd_epi16(inB, wB));
+        sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(in0, w0));
+        sum1 = _mm256_add_epi32(sum1, _mm256_madd_epi16(in1, w1));
+        sum2 = _mm256_add_epi32(sum2, _mm256_madd_epi16(in2, w2));
+        sum3 = _mm256_add_epi32(sum3, _mm256_madd_epi16(in3, w3));
+        sum4 = _mm256_add_epi32(sum4, _mm256_madd_epi16(in4, w4));
+        sum5 = _mm256_add_epi32(sum5, _mm256_madd_epi16(in5, w5));
+        sum6 = _mm256_add_epi32(sum6, _mm256_madd_epi16(in6, w6));
+        sum7 = _mm256_add_epi32(sum7, _mm256_madd_epi16(in7, w7));
 #endif // NN_USE_VNNI
     }
 
-    // add 8 int32s horizontally
-    val += m256_hadd(_mm256_add_epi32(sumA, sumB));
+    // add everything together
+    sum0 = _mm256_add_epi32(sum0, sum1);
+    sum2 = _mm256_add_epi32(sum2, sum3);
+    sum4 = _mm256_add_epi32(sum4, sum5);
+    sum6 = _mm256_add_epi32(sum6, sum7);
+
+    sum0 = _mm256_add_epi32(sum0, sum2);
+    sum4 = _mm256_add_epi32(sum4, sum6);
+
+    val += m256_hadd(_mm256_add_epi32(sum0, sum4));
 
 #elif defined(NN_USE_SSE4)
     constexpr uint32_t registerWidth = 8;
