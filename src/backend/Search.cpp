@@ -1740,6 +1740,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ttEntry.depth >= node->depth - 3)
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
                 const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const int16_t originalDepth = node->depth;
@@ -1747,7 +1748,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType originalBeta = node->beta;
 
                 node->isPvNodeFromPrevIteration = false;
-                node->depth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
+                node->depth = singularDepth;
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
@@ -1775,7 +1776,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if second best move beats current beta, there most likely would be beta cutoff
                 // when searching it at full depth
                 else if (singularBeta >= beta)
+                {
+                    // update correction histories
+                    if (!node->isInCheck && singularBeta > unadjustedEval)
+                    {
+                        const int32_t bonus = std::clamp<int32_t>((singularBeta - unadjustedEval) * singularDepth / 4, -CorrHistMaxBonus, CorrHistMaxBonus);
+                        const Color stm = position.GetSideToMove();
+                        AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
+                        AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
+                        AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
+                        if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
+                            AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                    }
+
                     return (singularBeta + beta) / 2;
+                }
                 else if (ttScore >= beta)
                     extension = -2 - !isPvNode;
                 else if (node->isCutNode)
