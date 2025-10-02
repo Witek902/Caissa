@@ -79,7 +79,7 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
     if (data.depth < 5)
         return;
 
-    limits.idealTimeCurrent = limits.idealTimeBase;
+    double idealTimeFactor = 1.0;
 
     // decrease time if PV move is stable
     {
@@ -92,7 +92,13 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double stabilityFactor = static_cast<double>(TM_StabilityScale) / 1000.0;
         const double stabilityOffset = static_cast<double>(TM_StabilityOffset) / 1000.0;
         const double stabilityTimeFactor = stabilityOffset - stabilityFactor * std::min(10u, state.stabilityCounter);
-        limits.idealTimeCurrent *= stabilityTimeFactor;
+        idealTimeFactor *= stabilityTimeFactor;
+    }
+
+    // increase time if eval changed significantly
+    {
+        const int32_t evalDiff = std::abs((int32_t)data.currResult[0].score - (int32_t)data.prevResult[0].score);
+        idealTimeFactor *= 0.95 + 0.005 * std::min(evalDiff, 400);
     }
 
     // decrease time if nodes fraction spent on best move is high
@@ -101,8 +107,14 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double scale = static_cast<double>(TM_NodesCountScale) / 100.0;
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
-        limits.idealTimeCurrent *= nodeCountFactor;
+        idealTimeFactor *= nodeCountFactor;
     }
+
+    // clamp time factor
+    idealTimeFactor = std::clamp(idealTimeFactor, 0.25, 4.0);
+
+    limits.idealTimeCurrent = limits.idealTimeBase;
+    limits.idealTimeCurrent *= idealTimeFactor;
 
 #ifndef CONFIGURATION_FINAL
     std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
