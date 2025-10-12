@@ -36,7 +36,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         float maxTime = maxTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
 
         const float minMoveTime = 0.00001f;
-        const float timeMargin = 0.75f; // don't spend more than 75% of remaining time on a single move
+        const float timeMargin = 0.95f;
         maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
 
