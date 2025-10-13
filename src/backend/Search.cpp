@@ -1835,6 +1835,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 r = GetCapturesDepthReduction(node->depth, moveIndex);
 
+                // reduce more if TT move is capture
+                if (ttCapture) r += LmrQuietTTCapture;
+
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
 
