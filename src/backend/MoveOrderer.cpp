@@ -24,8 +24,6 @@ DEFINE_PARAM(CaptureMalusOffset, 27, 0, 100);
 DEFINE_PARAM(CaptureMalusLinear, 50, 20, 120);
 DEFINE_PARAM(CaptureMalusLimit, 1859, 1000, 4000);
 
-static constexpr int32_t PawnPushBonus[8] = { 0, 0, 0, 0, 500, 2000, 8000, 0 };
-
 MoveOrderer::MoveOrderer()
 {
     Clear();
@@ -373,22 +371,6 @@ void MoveOrderer::ScoreMoves(
 
             switch (move.GetPiece())
             {
-                case Piece::Pawn:
-                    score += PawnPushBonus[move.ToSquare().RelativeRank(pos.GetSideToMove())];
-                    // check if pushed pawn is protected by other pawn
-                    if (Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove() ^ 1) & pos.GetCurrentSide().pawns)
-                    {
-                        // bonus for creating threats
-                        const Bitboard pawnAttacks = Bitboard::GetPawnAttacks(move.ToSquare(), pos.GetSideToMove());
-                        const auto& opponentSide = pos.GetOpponentSide();
-                             if (pawnAttacks & opponentSide.king)       score += 10000;
-                        else if (pawnAttacks & opponentSide.pawns)      score += 1000;
-                        else if (pawnAttacks & opponentSide.queens)     score += 8000;
-                        else if (pawnAttacks & opponentSide.rooks)      score += 6000;
-                        else if (pawnAttacks & opponentSide.bishops)    score += 4000;
-                        else if (pawnAttacks & opponentSide.knights)    score += 4000;
-                    }
-                    break;
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
                     if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
@@ -402,8 +384,7 @@ void MoveOrderer::ScoreMoves(
                     if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
                     if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
                     break;
-                case Piece::King:
-                    if (pos.GetOurCastlingRights())             score -= 6000;
+                default:
                     break;
             }
 
