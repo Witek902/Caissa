@@ -2077,8 +2077,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // update correction histories
         if (!node->isInCheck &&
             (!bestMove.IsValid() || bestMove.IsQuiet()) &&
-            ((bestValue < unadjustedEval && bestValue < beta) ||
-             (bestValue > unadjustedEval && bestMove.IsValid())))
+            (bestValue >= unadjustedEval || bestValue < beta) &&
+            (bestValue <= unadjustedEval || bestValue > oldAlpha))
         {
             const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 4, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
