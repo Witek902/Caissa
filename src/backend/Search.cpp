@@ -927,9 +927,9 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
 
-INLINE static void AddToCorrHist(int16_t& history, int32_t value)
+INLINE static void AddToCorrHist(int16_t& history, int32_t delta)
 {
-    history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
+    history = static_cast<int16_t>(history + delta - history * std::abs(delta) / 512 - history / 256);
 }
 
 ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
