@@ -927,9 +927,9 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
 
-INLINE static void AddToCorrHist(int16_t& history, int32_t value)
+INLINE static void AddToCorrHist(int16_t& history, int16_t value)
 {
-    history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
+    history = static_cast<int16_t>(history + value - history * std::abs(value) / 2048);
 }
 
 ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& node, const SearchParam& searchParam)
@@ -939,7 +939,8 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     if (std::abs(adjustedScore) < KnownWinValue)
     {
         // apply eval correction term
-        adjustedScore += threadData.GetEvalCorrection(node);
+        if (std::abs(adjustedScore) < KnownWinValue)
+            adjustedScore += threadData.GetEvalCorrection(node);
 
         // scale down when approaching 50-move draw
         adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
@@ -2078,9 +2079,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->isInCheck &&
             (!bestMove.IsValid() || bestMove.IsQuiet()) &&
             ((bestValue < unadjustedEval && bestValue < beta) ||
-             (bestValue > unadjustedEval && bestMove.IsValid())))
+             (bestValue > unadjustedEval && bestMove.IsValid())) &&
+            std::abs(bestValue) < KnownWinValue)
         {
-            const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 4, -CorrHistMaxBonus, CorrHistMaxBonus);
+            const int16_t bonus = (int16_t)std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / 4, -CorrHistMaxBonus, CorrHistMaxBonus);
             const Color stm = position.GetSideToMove();
             AddToCorrHist(thread.pawnStructureCorrection[stm][position.GetPawnsHash() % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
