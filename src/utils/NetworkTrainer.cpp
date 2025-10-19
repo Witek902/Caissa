@@ -17,7 +17,6 @@
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Material.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
@@ -651,7 +650,7 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 0.5f;
+static volatile float g_learningRateScale = 1.0f;
 static volatile float g_lambdaScale = 0.0f;
 static volatile float g_weightDecay = 0.0f; // 1.0f / 512.0f;
 
@@ -659,7 +658,7 @@ bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-64-38-9.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-64.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;

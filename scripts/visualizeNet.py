@@ -3,7 +3,7 @@ import struct
 import math 
 from math import ceil
 
-filePath = "../build_bmi2/src/utils/eval.pnn"
+filePath = "../build_bmi2/src/utils/eval-65-78B.pnn"
 marginSize = 1
 headerSize = 64
 numKingBuckets = 11
@@ -103,7 +103,7 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
-    kingBucket = 5
+    kingBucket = 1
 
     for i in range(768):
         for j in range(accumulatorSize):

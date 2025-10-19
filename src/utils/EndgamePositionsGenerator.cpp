@@ -10,7 +10,6 @@
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Material.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"

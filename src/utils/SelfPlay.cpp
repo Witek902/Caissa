@@ -10,7 +10,6 @@
 #include "../backend/Search.hpp"
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Waitable.hpp"
 
@@ -25,15 +24,15 @@
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 1;
 
-static const uint32_t c_minNodes = 25'000;
-static const uint32_t c_maxNodes = 30'000;
+static const uint32_t c_minNodes = 15'000;
+static const uint32_t c_maxNodes = 20'000;
 static const uint32_t c_maxDepth = 40;
 
-static const int32_t c_maxEval = 2000;
+static const int32_t c_maxEval = 1500;
 static const int32_t c_openingMaxEval = 300;
 
-static const uint32_t c_minRandomMoves = 6;
-static const uint32_t c_maxRandomMoves = 10;
+static const uint32_t c_minRandomMoves = 1;
+static const uint32_t c_maxRandomMoves = 4;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -220,13 +219,13 @@ static bool SelfPlayThreadFunc(
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
-            if (std::abs(moveScore) < 4)
+            if (std::abs(moveScore) < 3)
                 drawScoreCounter++;
             else
                 drawScoreCounter = 0;
 
             // adjudicate draw if eval is zero
-            if (drawScoreCounter > 8 && halfMoveNumber >= 60)
+            if (drawScoreCounter > 10 && halfMoveNumber >= 80)
             {
                 game.SetScore(Game::Score::Draw);
             }
@@ -334,7 +333,7 @@ void SelfPlay(const std::vector<std::string>& args)
 
     std::cout << "Starting games..." << std::endl;
 
-    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+    const uint32_t numThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency() - 1);
 
     std::vector<std::thread> threads;
     for (uint32_t i = 0; i < numThreads; ++i)

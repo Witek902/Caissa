@@ -7,7 +7,6 @@
 #include "../backend/Material.hpp"
 #include "../backend/Waitable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 
 #include <filesystem>
