@@ -1,5 +1,4 @@
 #include "Evaluate.hpp"
-#include "Endgame.hpp"
 #include "Search.hpp"
 
 #include <fstream>
@@ -186,21 +185,6 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     const int32_t queens = (pos.Whites().queens | pos.Blacks().queens).Count();
     const int32_t rooks = (pos.Whites().rooks | pos.Blacks().rooks).Count();
     const int32_t bishopsAndKnights = (pos.Whites().bishops | pos.Blacks().bishops | pos.Whites().knights | pos.Blacks().knights).Count();
-    const int32_t pawns = (pos.Whites().pawns | pos.Blacks().pawns).Count();
-
-    const int32_t pieceCount = queens + rooks + bishopsAndKnights + pawns;
-
-    // check endgame evaluation first
-    if (pieceCount <= 6) [[unlikely]]
-    {
-        int32_t endgameScore;
-        if (EvaluateEndgame(pos, endgameScore))
-        {
-            ASSERT(endgameScore < TablebaseWinValue && endgameScore > -TablebaseWinValue);
-            if (pos.GetSideToMove() == Black) endgameScore = -endgameScore;
-            return (ScoreType)endgameScore;
-        }
-    }
 
     int32_t value = NNEvaluator::Evaluate(*g_mainNeuralNetwork, node, cache);
 

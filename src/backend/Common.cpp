@@ -2,7 +2,6 @@
 
 #include "Memory.hpp"
 #include "PositionHash.hpp"
-#include "Endgame.hpp"
 #include "SearchUtils.hpp"
 
 #if defined(PLATFORM_WINDOWS)
@@ -25,7 +24,6 @@ void InitEngine()
     Square::Init();
     InitBitboards();
     InitZobristHash();
-    InitEndgame();
     SearchUtils::Init();
 }
 

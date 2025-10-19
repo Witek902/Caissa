@@ -46,7 +46,7 @@ bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingData
             // so there's lower chance of generating similar batches from different streams.
             // Basically, it's another layer of data shuffling.
             {
-                std::uniform_real_distribution<float> distr(0.0f, 0.1f);
+                std::uniform_real_distribution<float> distr(0.0f, 0.05f);
                 ctx.skippingProbability = distr(gen);
             }
 

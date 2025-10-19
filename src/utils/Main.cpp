@@ -16,7 +16,6 @@ extern void DumpGames(const std::vector<std::string>& args);
 extern void GenerateEndgamePositions();
 extern bool TestNetwork();
 extern bool TrainNetwork();
-extern void ValidateEndgame();
 extern void AnalyzeGames();
 
 int main(int argc, const char* argv[])
@@ -70,8 +69,6 @@ int main(int argc, const char* argv[])
         DumpGames(args);
     else if (toolName == "testNetwork")
         TestNetwork();
-    else if (toolName == "validateEndgame")
-        ValidateEndgame();
     else if (toolName == "analyzeGames")
         AnalyzeGames();
     else if (toolName == "trainNetwork")
