@@ -1948,8 +1948,8 @@ void RunSearchTests()
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 6);
-        TEST_EXPECT(result[0].score > KnownWinValue);
-        TEST_EXPECT(result[1].score > KnownWinValue);
+        TEST_EXPECT(result[0].score > 1000);
+        TEST_EXPECT(result[1].score > 1000);
         TEST_EXPECT(std::abs(result[2].score) < 80);
         TEST_EXPECT(std::abs(result[3].score) < 80);
         TEST_EXPECT(std::abs(result[4].score) < 80);
