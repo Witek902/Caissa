@@ -936,17 +936,14 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
 {
     int32_t adjustedScore = node.staticEval;
     
-    if (std::abs(adjustedScore) < KnownWinValue)
-    {
-        // apply eval correction term
-        adjustedScore += threadData.GetEvalCorrection(node);
+    // apply eval correction term
+    adjustedScore += threadData.GetEvalCorrection(node);
 
-        // scale down when approaching 50-move draw
-        adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
+    // scale down when approaching 50-move draw
+    adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
 
-        if (searchParam.evalRandomization > 0)
-            adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
-    }
+    if (searchParam.evalRandomization > 0)
+        adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
 
     return static_cast<ScoreType>(adjustedScore);
 }
