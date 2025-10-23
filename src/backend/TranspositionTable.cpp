@@ -264,6 +264,12 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         positionKey == prevKey &&
         entry.depth < prevEntry.depth - 4)
     {
+        if (!prevEntry.move.IsValid() && entry.move.IsValid())
+        {
+            // but update move if needed
+            cluster.entries[replaceIndex].entry.move = entry.move;
+        }
+
         return;
     }
 
