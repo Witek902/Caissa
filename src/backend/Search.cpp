@@ -1847,6 +1847,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            if (moveIndex == 2) r -= LmrScale;
+
             // reduce low-ply moves less
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
