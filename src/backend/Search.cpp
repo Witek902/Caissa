@@ -1299,6 +1299,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
         {
             if (ttEntry.depth >= node->depth + (ttScore >= beta) &&
+                (node->isCutNode == (ttScore >= beta) || node->depth > 5) &&
                 position.GetHalfMoveCount() < 80)
             {
                 // transposition table cutoff
