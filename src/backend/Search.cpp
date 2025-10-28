@@ -49,6 +49,7 @@ DEFINE_PARAM(ProbcutBetaOffset, 138, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 315, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
+DEFINE_PARAM(FutilityPruningBase, 33, 0, 128);
 DEFINE_PARAM(FutilityPruningScale, 33, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 402, 128, 1024);
 
@@ -1695,11 +1696,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     continue;
                 }
 
+                const int32_t r = GetQuietsDepthReduction(node->depth, moveIndex) + LmrQuietNonPv + LmrScale / 2;
+                const int32_t lmrDepth = std::max(0, node->depth - r / LmrScale);
+
                 // Futility Pruning
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
-                    node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    lmrDepth < FutilityPruningDepth &&
+                    node->staticEval + FutilityPruningBase + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
