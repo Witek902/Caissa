@@ -79,7 +79,7 @@ DEFINE_PARAM(SingularDoubleExtensionsLimit, 7, 4, 10);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 74, 40, 120);
 
-DEFINE_PARAM(RfpDepth, 6, 4, 10);
+DEFINE_PARAM(RfpDepth, 9, 4, 10);
 DEFINE_PARAM(RfpDepthScale, 96, 80, 180);
 DEFINE_PARAM(RfpImprovingScale, 140, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
