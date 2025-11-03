@@ -25,15 +25,15 @@
 static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 1;
 
-static const uint32_t c_minNodes = 25'000;
-static const uint32_t c_maxNodes = 30'000;
-static const uint32_t c_maxDepth = 40;
+static const uint32_t c_minNodes = 10'000;
+static const uint32_t c_maxNodes = 12'000;
+static const uint32_t c_maxDepth = 50;
 
 static const int32_t c_maxEval = 2000;
-static const int32_t c_openingMaxEval = 300;
+static const int32_t c_openingMaxEval = 250;
 
 static const uint32_t c_minRandomMoves = 6;
-static const uint32_t c_maxRandomMoves = 10;
+static const uint32_t c_maxRandomMoves = 8;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
 {
@@ -147,6 +147,25 @@ static bool SelfPlayThreadFunc(
             }
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
+        /*
+        else
+        {
+            RandomPosDesc desc;
+            desc.materialKey.numWhiteQueens = std::uniform_int_distribution<uint32_t>(0, 1)(gen);
+            desc.materialKey.numWhiteRooks = std::uniform_int_distribution<uint32_t>(0, 2)(gen);
+            desc.materialKey.numWhiteBishops = std::uniform_int_distribution<uint32_t>(0, 2)(gen);
+            desc.materialKey.numWhiteKnights = std::uniform_int_distribution<uint32_t>(0, 2)(gen);
+            desc.materialKey.numWhitePawns = std::uniform_int_distribution<uint32_t>(1, 8)(gen);
+            desc.materialKey.numBlackQueens = desc.materialKey.numWhiteQueens;
+            desc.materialKey.numBlackRooks = desc.materialKey.numWhiteRooks;
+            desc.materialKey.numBlackBishops = desc.materialKey.numWhiteBishops;
+            desc.materialKey.numBlackKnights = desc.materialKey.numWhiteKnights;
+            desc.materialKey.numBlackPawns = desc.materialKey.numWhitePawns;
+            desc.allowedWhitePawns = ~Bitboard::RankBitboard<7>() & ~Bitboard::RankBitboard<6>();
+            desc.allowedBlackPawns = ~Bitboard::RankBitboard<0>() & ~Bitboard::RankBitboard<1>();
+            GenerateRandomPosition(gen, desc, openingPos);
+        }
+        */
 
         if constexpr (c_maxRandomMoves > 0)
         {
@@ -189,8 +208,8 @@ static bool SelfPlayThreadFunc(
             searchParam.seed = searchSeed;
             searchParam.limits.maxDepth = c_maxDepth;
             searchParam.limits.maxNodesSoft = c_minNodes + (c_maxNodes - c_minNodes) * std::max(0, 80 - halfMoveNumber) / 80;
-            if (halfMoveNumber < 10) searchParam.limits.maxNodesSoft *= 2; // more nodes in the first moves
-            searchParam.limits.maxNodes = 5 * searchParam.limits.maxNodesSoft;
+            if (halfMoveNumber < 4) searchParam.limits.maxNodesSoft *= 2; // more nodes in the first moves
+            searchParam.limits.maxNodes = 4 * searchParam.limits.maxNodesSoft;
 
             searchResult.clear();
             tt.NextGeneration();
@@ -220,7 +239,7 @@ static bool SelfPlayThreadFunc(
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
-            if (std::abs(moveScore) < 4)
+            if (std::abs(moveScore) < 3)
                 drawScoreCounter++;
             else
                 drawScoreCounter = 0;
@@ -234,7 +253,7 @@ static bool SelfPlayThreadFunc(
             // adjudicate win
             if (halfMoveNumber >= 40)
             {
-                if (moveScore > c_maxEval && eval > c_maxEval / 4)
+                if (moveScore > c_maxEval)
                 {
                     whiteWinsCounter++;
                     if (whiteWinsCounter > 4) game.SetScore(Game::Score::WhiteWins);
@@ -244,7 +263,7 @@ static bool SelfPlayThreadFunc(
                     whiteWinsCounter = 0;
                 }
 
-                if (moveScore < -c_maxEval && eval < -c_maxEval / 4)
+                if (moveScore < -c_maxEval)
                 {
                     blackWinsCounter++;
                     if (blackWinsCounter > 4) game.SetScore(Game::Score::BlackWins);
