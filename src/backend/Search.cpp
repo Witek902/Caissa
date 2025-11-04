@@ -1024,7 +1024,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     // do not consider stand pat if in check
     if (node->isInCheck)
     {
-        node->staticEval = InvalidValue;
+        node->staticEval = -InfValue;
     }
     else
     {
@@ -1370,7 +1370,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // evaluate position
     if (node->isInCheck)
     {
-        unadjustedEval = eval = node->staticEval = InvalidValue;
+        unadjustedEval = eval = node->staticEval = -InfValue;
 
         if (!node->isCutNode)
         {
