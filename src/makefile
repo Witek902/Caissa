@@ -73,7 +73,7 @@ sse4:
 sse2:
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
 avx512:
-	$(CC) $(SRC) -march=core-avx2 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
+	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
 legacy:
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
 
@@ -89,6 +89,12 @@ avx2_pgo:
 	$(BENCH)
 	$(PGO_MERGE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CLEAN)
+avx512_pgo:
+	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+	$(BENCH)
+	$(PGO_MERGE)
+	$(CC) $(SRC) -march=core-avx2 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
 
 release:
