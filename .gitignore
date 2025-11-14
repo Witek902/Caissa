@@ -8,5 +8,7 @@ bin/
 releases/
 release/
 src/*.exe
+src/*.o
+src/caissa
 src/pgo/
 CMakeSettings.json
