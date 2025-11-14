@@ -1577,6 +1577,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     const Move pvMove = thread.GetPvMove(*node);
     const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+    const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
 
     // in-check probcut (idea from Stockfish)
     if constexpr (!isPvNode)
@@ -1780,6 +1781,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (ttScore <= alpha)
                     extension = -1;
             }
+            else if (isPvNode && move == ttMove && ttRecapture)
+                extension = 1; // recapture extension
         }
 
         // do the move
