@@ -695,7 +695,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 }
             }
 
-            UpdateTimeManager(data, searchContext.searchParam.limits, timeManagerState);
+            UpdateTimeManager(data, searchContext.game, searchContext.searchParam.limits, timeManagerState);
         }
 
         // remember PV lines so they can be used in next iteration

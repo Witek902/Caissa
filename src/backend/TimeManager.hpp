@@ -38,4 +38,4 @@ struct TimeManagerState
 void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLimits& limits);
 
 // update time limits after one search iteration
-void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state);
+void UpdateTimeManager(const TimeManagerUpdateData& data, const Game& game, SearchLimits& limits, TimeManagerState& state);

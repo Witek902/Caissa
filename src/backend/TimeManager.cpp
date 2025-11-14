@@ -7,6 +7,8 @@ DEFINE_PARAM(TM_MovesLeftMidpoint, 36, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 210, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 823, 700, 1000);
 DEFINE_PARAM(TM_MaxTimeFactor, 493, 100, 1000);
+
+DEFINE_PARAM(TM_RecaptureScale, 80, 50, 100);
 DEFINE_PARAM(TM_NodesCountScale, 205, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 63, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 61, 0, 200);
@@ -67,7 +69,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     }
 }
 
-void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state)
+void UpdateTimeManager(const TimeManagerUpdateData& data, const Game& game, SearchLimits& limits, TimeManagerState& state)
 {
     ASSERT(!data.currResult.empty());
     ASSERT(!data.currResult[0].moves.empty());
@@ -80,6 +82,18 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         return;
 
     limits.idealTimeCurrent = limits.idealTimeBase;
+
+    // decrease time if the move is recapture
+    {
+        const Move currBestMove = data.currResult[0].moves.front();
+
+        if (!game.GetMoves().empty() &&
+            currBestMove.IsCapture() &&
+            currBestMove.ToSquare() == game.GetMoves().back().ToSquare())
+        {
+            limits.idealTimeCurrent *= static_cast<double>(TM_RecaptureScale) / 100.0;
+        }
+    }
 
     // decrease time if PV move is stable
     {
