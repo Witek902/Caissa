@@ -832,16 +832,15 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         // out of aspiration window, redo the search in wider score range
         if (pvLine.score <= alpha)
         {
-            pvLine.score = ScoreType(alpha);
-            beta = (alpha + beta + 1) / 2;
-            alpha = std::max<int32_t>(alpha - window, -CheckmateValue);
+            beta = (3 * alpha + beta) / 4;
+            alpha = std::max<int32_t>(pvLine.score - window, -CheckmateValue);
             depth = param.depth;
             boundsType = BoundsType::UpperBound;
         }
         else if (pvLine.score >= beta)
         {
-            pvLine.score = ScoreType(beta);
-            beta = std::min<int32_t>(beta + window, CheckmateValue);
+            alpha = std::max<int32_t>(beta - window, alpha);
+            beta = std::min<int32_t>(pvLine.score + window, CheckmateValue);
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
