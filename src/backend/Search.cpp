@@ -42,6 +42,8 @@ DEFINE_PARAM(LmrCaptureImproving, -4, -128, 128);
 DEFINE_PARAM(LmrCaptureInCheck, 21, -128, 256);
 DEFINE_PARAM(LmrTTHighDepth, 46, -128, 256);
 
+DEFINE_PARAM(FiftyMoveRuleEvalScale, 256, 120, 600);
+
 DEFINE_PARAM(LmrDeeperTreshold, 94, 20, 200);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
@@ -57,19 +59,28 @@ DEFINE_PARAM(SingularitySearchScoreTresholdMin, 209, 100, 300);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 411, 200, 600);
 DEFINE_PARAM(SingularitySearchScoreStep, 24, 10, 50);
 
+DEFINE_PARAM(IIRStartDepth, 4, 2, 6);
+
 DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 18, 0, 40);
+DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
+DEFINE_PARAM(NmpEvalRedDiv, 3, 2, 5);
 DEFINE_PARAM(NmpEvalDiffDiv, 69, 16, 512);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
+DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
+DEFINE_PARAM(LateMovePruningPVScale, 2, 0, 4);
+
 DEFINE_PARAM(HistoryPruningLinearFactor, 236, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 142, 60, 300);
+DEFINE_PARAM(HistoryPruningMaxDepth, 9, 4, 12);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 567, 200, 800);
 DEFINE_PARAM(AspirationWindow, 7, 5, 20);
+DEFINE_PARAM(AspirationWindowScoreScale, 16, 8, 32);
 
 DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 70, 32, 128);
@@ -80,7 +91,8 @@ DEFINE_PARAM(SingularDoubleExtensionsLimit, 7, 4, 10);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 74, 40, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
-DEFINE_PARAM(RfpDepthScale, 96, 80, 180);
+DEFINE_PARAM(RfpDepthScaleLinear, 96, 80, 180);
+DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 140, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 
@@ -88,6 +100,7 @@ DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
 DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 119, 60, 180);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 55, 10, 100);
+DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 128, 64, 256);
 
 DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 157, 100, 200);
@@ -786,7 +799,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t window = AspirationWindow;
 
     // increase window based on score
-    window += std::abs(param.previousScore) / 16;
+    window += std::abs(param.previousScore) / AspirationWindowScoreScale;
 
     // start applying aspiration window at given depth
     if (param.previousScore != InvalidValue &&
@@ -940,7 +953,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& threadData, const NodeInfo& 
     adjustedScore += threadData.GetEvalCorrection(node);
 
     // scale down when approaching 50-move draw
-    adjustedScore = adjustedScore * (256 - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / 256;
+    adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
 
     if (searchParam.evalRandomization > 0)
         adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
@@ -1419,7 +1432,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // reduce depth if position was not found in transposition table
-    if (node->depth >= 4
+    if (node->depth >= IIRStartDepth
         && (node->isCutNode || isPvNode)
         && (!ttEntry.move.IsValid() || ttEntry.depth + 4 < node->depth))
         node->depth--;
@@ -1440,7 +1453,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
-            const int32_t rfpMargin = RfpDepthScale * node->depth - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
+            const int32_t rfpMargin =
+                RfpDepthScaleLinear * node->depth
+                + RfpDepthScaleQuad * (node->depth * node->depth)
+                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
@@ -1461,7 +1477,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Null Move Pruning
             if (node->isCutNode &&
-                eval >= beta + (node->depth < 4 ? NmpEvalTreshold : 0) &&
+                eval >= beta + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0) &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1474,7 +1490,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     const int32_t r =
                         NmpNullMoveDepthReduction +
-                        node->depth / 3 +
+                        node->depth / NmpEvalRedDiv +
                         std::min(3, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
@@ -1499,7 +1515,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         if (nullMoveScore >= TablebaseWinValue)
                             nullMoveScore = beta;
 
-                        if (std::abs(beta) < KnownWinValue && node->depth < 10)
+                        if (std::abs(beta) < KnownWinValue && node->depth < NmpReSearchMaxDepth)
                             return nullMoveScore;
 
                         node->depth -= static_cast<uint16_t>(NmpReSearchDepthReduction);
@@ -1679,7 +1695,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Late Move Pruning
                 // skip quiet moves that are far in the list
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + 2 * isPvNode, isImproving))
+                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + LateMovePruningPVScale * isPvNode, isImproving))
                 {
                     // if we're in quiets stage, skip everything
                     if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
@@ -1690,7 +1706,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
-                    node->depth < 9 &&
+                    node->depth < HistoryPruningMaxDepth &&
                     moveStatScore < GetHistoryPruningTreshold(node->depth))
                 {
                     continue;
@@ -1720,7 +1736,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else
                 {
                     if (node->depth <= SSEPruningDepth_NonCaptures &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth - moveStatScore / 128)) continue;
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
                 }
             }
         }
