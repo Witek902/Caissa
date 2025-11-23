@@ -217,6 +217,21 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
+void MoveOrderer::UpdateContinuationHistories(const NodeInfo& node, const Piece piece, const Square toSquare, int32_t bonus)
+{
+    const uint32_t pieceIdx = (uint32_t)piece - (uint32_t)Piece::Pawn;
+    ASSERT(pieceIdx < 6);
+
+    const uint32_t to = toSquare.Index();
+    ASSERT(to < 64);
+
+    if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[pieceIdx][to], bonus);
+    if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[pieceIdx][to], bonus);
+    if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[pieceIdx][to], bonus / 4);
+    if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[pieceIdx][to], bonus);
+    if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[pieceIdx][to], bonus);
+}
+
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
 {
     ASSERT(node.depth >= 0);
@@ -249,18 +264,11 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     {
         const Move move = moves[i];
         const int32_t delta = move == bestMove ? bonus : malus;
-
-        const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
         
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
-
-        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta / 4);
-        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+        UpdateContinuationHistories(node, move.GetPiece(), move.ToSquare(), delta);
     }
 }
 

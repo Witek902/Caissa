@@ -114,6 +114,10 @@ DEFINE_PARAM(EvalCorrectionNonPawnsScale, 66, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 72, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 243, 128, 512);
 
+DEFINE_PARAM(TTCutoffContBonusOffset, -107, -200, 0);
+DEFINE_PARAM(TTCutoffContBonusLinear, 163, 100, 250);
+DEFINE_PARAM(TTCutoffContBonusScoreDiff, 148, 0, 400);
+DEFINE_PARAM(TTCutoffContBonusLimit, 2018, 1000, 4000);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
@@ -1311,8 +1315,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (ttEntry.depth >= node->depth + (ttScore >= beta) &&
-                position.GetHalfMoveCount() < 80)
+            if (ttEntry.depth >= node->depth + (ttScore >= beta))
             {
                 // transposition table cutoff
                 ScoreType ttCutoffValue = InvalidValue;
@@ -1321,7 +1324,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
 
                 if (ttCutoffValue != InvalidValue)
-                    return ttCutoffValue;
+                {
+                    // update move orderer
+                    if (ttScore >= beta && !position.IsCapture(ttEntry.move))
+                    {
+                        const Piece movedPiece = position.GetCurrentSide().GetPieceAtSquare(ttEntry.move.FromSquare());
+                        if (movedPiece != Piece::None)
+                        {
+                            const int32_t contBonus = std::min<int32_t>(TTCutoffContBonusOffset + TTCutoffContBonusLinear * node->depth + TTCutoffContBonusScoreDiff * std::min(ttScore - beta, 256) / 64, TTCutoffContBonusLimit);
+                            thread.moveOrderer.UpdateContinuationHistories(*node, movedPiece, ttEntry.move.ToSquare(), contBonus);
+                        }
+                    }
+
+                    // TT cutoff
+                    if (position.GetHalfMoveCount() < 80)
+                        return ttCutoffValue;
+                }
             }
         }
     }
