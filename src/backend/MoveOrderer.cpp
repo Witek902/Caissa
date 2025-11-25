@@ -2,27 +2,27 @@
 #include "Search.hpp"
 #include "Tuning.hpp"
 
-DEFINE_PARAM(QuietMoveHistoryClear, 670, -2000, 2000);
-DEFINE_PARAM(ContinuationHistoryClear, 775, -2000, 2000);
-DEFINE_PARAM(CapturesHistoryClear, 190, -2000, 2000);
+DEFINE_PARAM(QuietMoveHistoryClear, 628, -2000, 2000);
+DEFINE_PARAM(ContinuationHistoryClear, 736, -2000, 2000);
+DEFINE_PARAM(CapturesHistoryClear, 322, -2000, 2000);
 
-DEFINE_PARAM(QuietBonusOffset, -107, -200, 0);
-DEFINE_PARAM(QuietBonusLinear, 163, 100, 250);
-DEFINE_PARAM(QuietBonusScoreDiff, 148, 0, 400);
-DEFINE_PARAM(QuietBonusLimit, 2018, 1000, 4000);
+DEFINE_PARAM(QuietBonusOffset, -113, -200, 0);
+DEFINE_PARAM(QuietBonusLinear, 159, 100, 250);
+DEFINE_PARAM(QuietBonusScoreDiff, 153, 0, 400);
+DEFINE_PARAM(QuietBonusLimit, 2090, 1000, 4000);
 
-DEFINE_PARAM(QuietMalusOffset, -55, -200, 50);
-DEFINE_PARAM(QuietMalusLinear, 153, 75, 200);
-DEFINE_PARAM(QuietMalusScoreDiff, 164, 0, 400);
-DEFINE_PARAM(QuietMalusLimit, 1897, 1000, 4000);
+DEFINE_PARAM(QuietMalusOffset, -51, -200, 50);
+DEFINE_PARAM(QuietMalusLinear, 160, 75, 200);
+DEFINE_PARAM(QuietMalusScoreDiff, 167, 0, 400);
+DEFINE_PARAM(QuietMalusLimit, 1912, 1000, 4000);
 
-DEFINE_PARAM(CaptureBonusOffset, 25, 0, 100);
-DEFINE_PARAM(CaptureBonusLinear, 69, 20, 120);
-DEFINE_PARAM(CaptureBonusLimit, 2622, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 27, 0, 100);
+DEFINE_PARAM(CaptureBonusLinear, 71, 20, 120);
+DEFINE_PARAM(CaptureBonusLimit, 2543, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 27, 0, 100);
-DEFINE_PARAM(CaptureMalusLinear, 50, 20, 120);
-DEFINE_PARAM(CaptureMalusLimit, 1859, 1000, 4000);
+DEFINE_PARAM(CaptureMalusOffset, 25, 0, 100);
+DEFINE_PARAM(CaptureMalusLinear, 48, 20, 120);
+DEFINE_PARAM(CaptureMalusLimit, 1793, 1000, 4000);
 
 MoveOrderer::MoveOrderer()
 {
