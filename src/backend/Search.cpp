@@ -61,7 +61,7 @@ DEFINE_PARAM(SingularitySearchScoreStep, 25, 10, 50);
 
 DEFINE_PARAM(IIRStartDepth, 4, 2, 6);
 
-DEFINE_PARAM(NmpStartDepth, 2, 1, 10);
+DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 17, 0, 40);
 DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
 DEFINE_PARAM(NmpEvalRedDiv, 3, 2, 5);
