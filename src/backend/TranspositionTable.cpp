@@ -171,7 +171,7 @@ void TranspositionTable::NextGeneration()
 void TranspositionTable::Prefetch(const uint64_t hash) const
 {
 #ifdef USE_SSE
-    _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), _MM_HINT_T0);
+    _mm_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), _MM_HINT_T1);
 #elif defined(USE_ARM_NEON)
     __builtin_prefetch(reinterpret_cast<const char*>(&GetCluster(hash)), 0, 0);
 #else
