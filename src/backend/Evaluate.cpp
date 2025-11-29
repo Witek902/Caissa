@@ -211,6 +211,14 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     const int32_t gamePhase = bishopsAndKnights + 2 * rooks + 4 * queens;
     value = value * (52 + gamePhase) / 64;
 
+    // apply castling rights bonus
+    {
+        ScoreType bonus = 0;
+        if (pos.Whites().GetKingSquare() != Square_e1) bonus += c_castlingRightsBonus * (ScoreType)PopCount(pos.GetWhitesCastlingRights());
+        if (pos.Blacks().GetKingSquare() != Square_e8) bonus -= c_castlingRightsBonus * (ScoreType)PopCount(pos.GetBlacksCastlingRights());
+        value += pos.GetSideToMove() == White ? bonus : -bonus;
+    }
+
     // saturate eval value so it doesn't exceed KnownWinValue
     if (value > c_evalSaturationTreshold)
         value = c_evalSaturationTreshold + (value - c_evalSaturationTreshold) / 8;
