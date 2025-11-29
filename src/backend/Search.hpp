@@ -317,10 +317,9 @@ private:
         NodeInfo searchStack[MaxSearchDepth];
 
         static constexpr int32_t EvalCorrectionScale = 512;
-        static constexpr uint32_t MaterialCorrectionTableSize = 2048;
         static constexpr uint32_t EvalCorrectionTableSize = 16384;
         using EvalCorrectionTable = int16_t[2][EvalCorrectionTableSize]; // [stm][hash]
-        using ContCorrectionTable = int16_t[2][6*64][6*64]; // [stm][piece-to][piece-to]
+        using ContCorrectionTable = int16_t[2][2][2][6*64][6*64]; // [stm][threat][threat][piece-to][piece-to]
         EvalCorrectionTable pawnStructureCorrection;
         EvalCorrectionTable nonPawnWhiteCorrection;
         EvalCorrectionTable nonPawnBlackCorrection;
