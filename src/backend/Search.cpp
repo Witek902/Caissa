@@ -935,7 +935,14 @@ ScoreType Search::ThreadData::GetEvalCorrection(const NodeInfo& node) const
     corr += EvalCorrectionNonPawnsScale * nonPawnBlackCorrection[stm][node.position.GetNonPawnsHash(Black) % EvalCorrectionTableSize];
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * continuationCorrection[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+    {
+        const Bitboard threats = node.threats.allThreats;
+        const uint32_t to = node.previousMove.ToSquare().Index();
+        const uint32_t prevTo = (&node-1)->previousMove.ToSquare().Index();
+        const uint32_t pieceTo = node.previousMove.PieceTo();
+        const uint32_t prevPieceTo = (&node-1)->previousMove.PieceTo();
+        corr += ContCorrectionScale * continuationCorrection[stm][threats.IsBitSet(to)][threats.IsBitSet(prevTo)][pieceTo][prevPieceTo];
+    }
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -2102,7 +2109,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             AddToCorrHist(thread.nonPawnWhiteCorrection[stm][position.GetNonPawnsHash(White) % ThreadData::EvalCorrectionTableSize], bonus);
             AddToCorrHist(thread.nonPawnBlackCorrection[stm][position.GetNonPawnsHash(Black) % ThreadData::EvalCorrectionTableSize], bonus);
             if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                AddToCorrHist(thread.continuationCorrection[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+            {
+                const Bitboard threats = node->threats.allThreats;
+                const uint32_t to = node->previousMove.ToSquare().Index();
+                const uint32_t prevTo = (node-1)->previousMove.ToSquare().Index();
+                const uint32_t pieceTo = node->previousMove.PieceTo();
+                const uint32_t prevPieceTo = (node-1)->previousMove.PieceTo();
+                AddToCorrHist(thread.continuationCorrection[stm][threats.IsBitSet(to)][threats.IsBitSet(prevTo)][pieceTo][prevPieceTo], bonus);
+            }
         }
     }
 
