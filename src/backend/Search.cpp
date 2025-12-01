@@ -52,7 +52,7 @@ DEFINE_PARAM(ProbcutBetaOffsetInCheck, 316, 100, 500);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 34, 16, 64);
-DEFINE_PARAM(FutilityPruningStatscoreDiv, 394, 128, 1024);
+DEFINE_PARAM(FutilityPruningStatscoreDiv, 32, 16, 512);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 209, 100, 300);
