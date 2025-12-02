@@ -24,7 +24,7 @@
 namespace {
 
 static constexpr int32_t c_evalSaturationTreshold   = 8000;
-static constexpr ScoreType c_castlingRightsBonus = 5;
+static constexpr ScoreType c_castlingRightsBonus = 10;
 
 } // namespace
 
