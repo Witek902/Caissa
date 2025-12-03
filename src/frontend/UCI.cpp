@@ -1181,10 +1181,10 @@ bool UniversalChessInterface::Command_Benchmark()
         "rknnbqrb/pppppppp/8/8/8/8/PPPPPPPP/NQBBRKNR w HEga - 0 1",
     };
 
-    const uint32_t maxDepth = 12;
+    const uint32_t maxDepth = 15;
 
     Search search;
-    TranspositionTable tt(4 * 1024 * 1024);
+    TranspositionTable tt(8 * 1024 * 1024);
 
     uint64_t totalNodes = 0;
     double totalTime = 0.0;
