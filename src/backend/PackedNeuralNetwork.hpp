@@ -84,7 +84,7 @@ static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 11;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
-static constexpr uint32_t AccumulatorSize = 1024;
+static constexpr uint32_t AccumulatorSize = 1536;
 static constexpr uint32_t OutputSize = 1;
 static constexpr uint32_t NumVariants = 8;
 
