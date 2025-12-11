@@ -690,6 +690,8 @@ void UniversalChessInterface::DoSearch()
 
     // report best move
     {
+        std::stringstream ss{ std::ios_base::out };
+
         Move bestMove = Move::Invalid();
         if (!mSearchCtx->searchResult.empty())
         {
@@ -700,13 +702,13 @@ void UniversalChessInterface::DoSearch()
             {
                 bestMove = bestLine[0];
 
-                std::cout << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
+                ss << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
 
                 if (bestLine.size() > 1)
                 {
                     Position posAfterBestMove = mGame.GetPosition();
                     posAfterBestMove.DoMove(bestMove);
-                    std::cout << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
+                    ss << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
                 }
             }
         }
@@ -714,15 +716,17 @@ void UniversalChessInterface::DoSearch()
         if (mSearchCtx->searchParam.verboseStats)
         {
             const float elapsedTime = (TimePoint::GetCurrent() - mSearchCtx->searchParam.limits.startTimePoint).ToSeconds();
-            std::cout << std::endl << "info string total time " << elapsedTime << " seconds";
+            ss << "\ninfo string total time " << elapsedTime << " seconds";
         }
 
         if (!bestMove.IsValid()) // null move
         {
-            std::cout << "bestmove 0000";
+            ss << "bestmove 0000";
         }
 
-        std::cout << std::endl;
+        ss << '\n';
+
+        std::cout << std::move(ss.str()) << std::flush;
 
 #ifdef NN_ACCUMULATOR_STATS
         PrintNNEvaluatorStats();

@@ -109,14 +109,14 @@ static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 static constexpr int32_t OutputScaleShift = 10;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
-static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
+static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling / 8;
 static constexpr float InputLayerBiasQuantizationScale = ActivationRangeScaling;
 static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
 static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * ActivationRangeScaling;
 static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
-using FirstLayerWeightType = int16_t;
+using FirstLayerWeightType = int8_t;
 using FirstLayerBiasType = int16_t;
 
 using HiddenLayerWeightType = int8_t;
