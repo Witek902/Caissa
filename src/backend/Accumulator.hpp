@@ -29,7 +29,7 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
         constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
         static_assert(AccumulatorSize % registerWidth == 0);
-        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)weights % 16 == 0);
         ASSERT((size_t)biases % 32 == 0);
         ASSERT((size_t)values % 32 == 0);
 
@@ -58,7 +58,9 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
                 for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
                 {
-                    regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
+                    const __m128i packedWeights = _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth));
+                    regs[i] = _mm256_add_epi16(regs[i], _mm256_slli_epi16(_mm256_cvtepi8_epi16(packedWeights), 3));
+                    //regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
                 }
             }
 
@@ -112,7 +114,7 @@ struct alignas(CACHELINE_SIZE) Accumulator
         const uint32_t numChunks = AccumulatorSize / registerWidth;
         static_assert(numChunks % OptimalRegisterCount == 0);
         const uint32_t numTiles = numChunks / OptimalRegisterCount;
-        ASSERT((size_t)weights % 32 == 0);
+        ASSERT((size_t)weights % 16 == 0);
         ASSERT((size_t)source.values % 32 == 0);
         ASSERT((size_t)values % 32 == 0);
 
@@ -135,7 +137,9 @@ struct alignas(CACHELINE_SIZE) Accumulator
                 const FirstLayerWeightType* weightsStart = weights + (chunkBase + removedFeatures[j] * AccumulatorSize);
                 for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
                 {
-                    regs[i] = Int16VecSub(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
+                    const __m128i packedWeights = _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth));
+                    regs[i] = _mm256_sub_epi16(regs[i], _mm256_slli_epi16(_mm256_cvtepi8_epi16(packedWeights), 3));
+                    //regs[i] = Int16VecSub(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
                 }
             }
 
@@ -145,7 +149,9 @@ struct alignas(CACHELINE_SIZE) Accumulator
                 const FirstLayerWeightType* weightsStart = weights + (chunkBase + addedFeatures[j] * AccumulatorSize);
                 for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
                 {
-                    regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
+                    const __m128i packedWeights = _mm_load_si128(reinterpret_cast<const __m128i*>(weightsStart + i * registerWidth));
+                    regs[i] = _mm256_add_epi16(regs[i], _mm256_slli_epi16(_mm256_cvtepi8_epi16(packedWeights), 3));
+                    //regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
                 }
             }
 
