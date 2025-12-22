@@ -2058,6 +2058,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     ASSERT(bestValue >= -CheckmateValue && bestValue <= CheckmateValue);
 
+    // fail-high adjustments
+    if (!isRootNode && bestValue >= beta && std::abs(bestValue) < KnownWinValue && std::abs(alpha) < KnownWinValue)
+        bestValue = (bestValue * node->depth + beta) / (node->depth + 1);
+
     if constexpr (isRootNode)
     {
         ASSERT(bestMove.IsValid());
