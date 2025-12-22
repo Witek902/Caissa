@@ -1900,7 +1900,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
-            if (score > alpha)
+            if (score > alpha && !isRootNode)
             {
                 newDepth += (score > bestValue + LmrDeeperTreshold) && (node->ply < 2 * thread.rootDepth); // prevent search explosions
                 newDepth -= (score < bestValue + newDepth);
