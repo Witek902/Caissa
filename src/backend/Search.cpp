@@ -1748,6 +1748,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
+                node->ply < 2 * thread.rootDepth &&
                 node->depth >= SingularExtMinDepth &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
@@ -1779,15 +1780,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (singularScore < singularBeta)
                 {
-                    if (node->ply < 2 * thread.rootDepth)
-                    {
-                        extension = 1;
-                        // double extension if singular score is way below beta
-                        if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= SingularDoubleExtensionsLimit &&
-                                singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                extension = 2;
-                    }
+                    extension = 1;
+                    // double extension if singular score is way below beta
+                    if constexpr (!isPvNode)
+                        if (node->doubleExtensions <= SingularDoubleExtensionsLimit &&
+                            singularScore < singularBeta - SingularDoubleExtensionMarigin)
+                            extension = 2;
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff
                 // when searching it at full depth
