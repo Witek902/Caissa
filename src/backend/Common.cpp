@@ -24,7 +24,6 @@ void InitEngine()
     EnableLargePagesSupport();
     Square::Init();
     InitBitboards();
-    InitZobristHash();
     InitEndgame();
     SearchUtils::Init();
 }
