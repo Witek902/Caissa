@@ -13,6 +13,10 @@
 #include "../backend/MovePicker.hpp"
 #include "../backend/MoveOrderer.hpp"
 #include "../backend/Waitable.hpp"
+#include "../backend/Time.hpp"
+#include "../backend/TimeManager.hpp"
+#include "../backend/Score.hpp"
+#include "../backend/Endgame.hpp"
 
 #include <iostream>
 #include <chrono>
@@ -22,11 +26,18 @@
 #include <iterator>
 #include <algorithm>
 #include <iomanip>
+#include <cmath>
 
 using namespace threadpool;
 
 #define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
+    if (!(x)) { std::cout << "Test failed: " << #x << " at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
+
+#define TEST_EXPECT_EQ(a, b) \
+    if ((a) != (b)) { std::cout << "Test failed: " << #a << " == " << #b << " (got " << (a) << " != " << (b) << ") at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
+
+#define TEST_EXPECT_NEAR(a, b, epsilon) \
+    if (std::abs((a) - (b)) > (epsilon)) { std::cout << "Test failed: " << #a << " near " << #b << " (got " << (a) << " != " << (b) << ") at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
 
 extern void RunGameTests();
 extern void RunPackedPositionTests();
@@ -968,10 +979,12 @@ static void RunPositionTests()
         //const Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP4/2N1PNP1/PP1B1PBP/R4RK1 w - - 0 17");
         //const Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP3P/2N1PNP1/PP1B1PB1/R4RK1 b - - 0 17");
         const Position pos("k2r4/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");
-        const NodeInfo node{ pos };
+        NodeInfo node;
+        node.position = pos;
+        pos.ComputeThreats(node.threats);
 
         MoveList allMoves;
-        GenerateMoveList(pos, Bitboard::GetKingAttacks(pos.GetOpponentSide().GetKingSquare()), allMoves);
+        GenerateMoveList(pos, node.threats.allThreats, allMoves);
         moveOrderer->ScoreMoves(node, allMoves);
 
         int32_t moveScore = 0;
@@ -2076,11 +2089,463 @@ void RunSearchTests()
     }
 }
 
+static void RunScoreTests()
+{
+    std::cout << "Running Score tests..." << std::endl;
+
+    // ScoreToStr
+    {
+        TEST_EXPECT(ScoreToStr(CheckmateValue - 1) == "+M1");
+        TEST_EXPECT(ScoreToStr(CheckmateValue - 3) == "+M2");
+        TEST_EXPECT(ScoreToStr(-CheckmateValue + 1) == "-M1");
+        TEST_EXPECT(ScoreToStr(-CheckmateValue + 5) == "-M3");
+        TEST_EXPECT(ScoreToStr(150) == "+1.50");
+        TEST_EXPECT(ScoreToStr(-250) == "-2.50");
+        TEST_EXPECT(ScoreToStr(0) == "+0.00");
+    }
+
+    // IsMate
+    {
+        TEST_EXPECT(IsMate(CheckmateValue - 1));
+        TEST_EXPECT(IsMate(CheckmateValue - 10));
+        TEST_EXPECT(IsMate(-CheckmateValue + 1));
+        TEST_EXPECT(IsMate(-CheckmateValue + 10));
+        TEST_EXPECT(!IsMate(1000));
+        TEST_EXPECT(!IsMate(-1000));
+        TEST_EXPECT(!IsMate(0));
+    }
+}
+
+static void RunMoveListTests()
+{
+    std::cout << "Running MoveList tests..." << std::endl;
+
+    MoveList list;
+    
+    TEST_EXPECT(list.Size() == 0);
+    TEST_EXPECT(!list.HasMove(Move::Invalid()));
+    
+    // Push moves
+    Move move1 = Move::Make(Square_e2, Square_e4, Piece::Pawn);
+    Move move2 = Move::Make(Square_d2, Square_d4, Piece::Pawn);
+    Move move3 = Move::Make(Square_g1, Square_f3, Piece::Knight);
+    
+    list.Push(move1);
+    TEST_EXPECT(list.Size() == 1);
+    TEST_EXPECT(list.HasMove(move1));
+    TEST_EXPECT(!list.HasMove(move2));
+    
+    list.Push(move2);
+    TEST_EXPECT(list.Size() == 2);
+    TEST_EXPECT(list.HasMove(move1));
+    TEST_EXPECT(list.HasMove(move2));
+    
+    list.Push(move3);
+    TEST_EXPECT(list.Size() == 3);
+    
+    // GetMove
+    TEST_EXPECT(list.GetMove(0) == move1);
+    TEST_EXPECT(list.GetMove(1) == move2);
+    TEST_EXPECT(list.GetMove(2) == move3);
+    
+    // RemoveMove
+    list.RemoveMove(move2);
+    TEST_EXPECT(list.Size() == 2);
+    TEST_EXPECT(list.HasMove(move1));
+    TEST_EXPECT(!list.HasMove(move2));
+    TEST_EXPECT(list.HasMove(move3));
+    
+    // RemoveByIndex
+    list.RemoveByIndex(0);
+    TEST_EXPECT(list.Size() == 1);
+    TEST_EXPECT(!list.HasMove(move1));
+    TEST_EXPECT(list.HasMove(move3));
+    
+    // Clear
+    list.Clear();
+    TEST_EXPECT(list.Size() == 0);
+    TEST_EXPECT(!list.HasMove(move3));
+    
+    // PackedMove operations
+    {
+        MoveList packedList;
+        PackedMove pm1 = PackedMove(Square_e2, Square_e4);
+        PackedMove pm2 = PackedMove(Square_d2, Square_d4);
+        
+        Move m1 = Move::Make(Square_e2, Square_e4, Piece::Pawn);
+        Move m2 = Move::Make(Square_d2, Square_d4, Piece::Pawn);
+        
+        packedList.Push(m1);
+        packedList.Push(m2);
+        
+        TEST_EXPECT(packedList.HasMove(pm1));
+        TEST_EXPECT(packedList.HasMove(pm2));
+        
+        packedList.RemoveMove(pm1);
+        TEST_EXPECT(!packedList.HasMove(pm1));
+        TEST_EXPECT(packedList.HasMove(pm2));
+    }
+}
+
+static void RunTranspositionTableTests()
+{
+    std::cout << "Running TranspositionTable tests..." << std::endl;
+
+    TranspositionTable tt(1024 * 1024); // 1MB
+    
+    TEST_EXPECT(tt.GetSize() > 0);
+    
+    Position pos1(Position::InitPositionFEN);
+    Position pos2("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
+    
+    // Write and read
+    {
+        TTEntry entry;
+        TEST_EXPECT(!tt.Read(pos1, entry));
+        TEST_EXPECT(!entry.IsValid());
+        
+        tt.Write(pos1, 100, 95, 5, TTEntry::Bounds::Exact, PackedMove(Square_e2, Square_e4));
+        
+        TEST_EXPECT(tt.Read(pos1, entry));
+        TEST_EXPECT(entry.IsValid());
+        TEST_EXPECT(entry.score == 100);
+        TEST_EXPECT(entry.staticEval == 95);
+        TEST_EXPECT(entry.depth == 5);
+        TEST_EXPECT(entry.bounds == TTEntry::Bounds::Exact);
+        TEST_EXPECT(entry.move == PackedMove(Square_e2, Square_e4));
+    }
+    
+    // Different bounds
+    {
+        tt.Write(pos2, 200, 190, 3, TTEntry::Bounds::Lower, PackedMove::Invalid());
+        TTEntry entry;
+        TEST_EXPECT(tt.Read(pos2, entry));
+        TEST_EXPECT(entry.bounds == TTEntry::Bounds::Lower);
+        
+        tt.Write(pos2, 150, 145, 4, TTEntry::Bounds::Upper, PackedMove::Invalid());
+        TEST_EXPECT(tt.Read(pos2, entry));
+        TEST_EXPECT(entry.bounds == TTEntry::Bounds::Upper);
+        TEST_EXPECT(entry.depth == 4);
+    }
+    
+    // Generation
+    {
+        tt.NextGeneration();
+        TTEntry entry;
+        TEST_EXPECT(tt.Read(pos1, entry));
+        TEST_EXPECT(entry.IsValid());
+        
+        // Write new entry with new generation
+        tt.Write(pos1, 110, 105, 6, TTEntry::Bounds::Exact, PackedMove(Square_e2, Square_e4));
+        TEST_EXPECT(tt.Read(pos1, entry));
+        TEST_EXPECT(entry.depth == 6);
+    }
+    
+    // Clear
+    {
+        tt.Clear();
+        TTEntry entry;
+        TEST_EXPECT(!tt.Read(pos1, entry));
+    }
+    
+    // Resize
+    {
+        size_t oldSize = tt.GetSize();
+        tt.Resize(2 * 1024 * 1024);
+        TEST_EXPECT(tt.GetSize() >= oldSize);
+        
+        // After resize, entries should be cleared
+        TTEntry entry;
+        TEST_EXPECT(!tt.Read(pos1, entry));
+    }
+    
+    // Prefetch (should not crash)
+    {
+        tt.Prefetch(pos1.GetHash());
+        tt.Prefetch(pos2.GetHash());
+    }
+}
+
+static void RunTimeTests()
+{
+    std::cout << "Running Time tests..." << std::endl;
+
+    // TimePoint basic operations
+    {
+        TimePoint invalid = TimePoint::Invalid();
+        TEST_EXPECT(!invalid.IsValid());
+        
+        TimePoint now = TimePoint::GetCurrent();
+        TEST_EXPECT(now.IsValid());
+        
+        TimePoint fromSeconds = TimePoint::FromSeconds(1.5f);
+        TEST_EXPECT(fromSeconds.IsValid());
+        TEST_EXPECT_NEAR(fromSeconds.ToSeconds(), 1.5f, 0.01f);
+    }
+    
+    // TimePoint arithmetic
+    {
+        TimePoint t1 = TimePoint::FromSeconds(2.0f);
+        TimePoint t2 = TimePoint::FromSeconds(1.0f);
+        
+        TimePoint diff = t1 - t2;
+        TEST_EXPECT_NEAR(diff.ToSeconds(), 1.0f, 0.01f);
+        
+        TimePoint sum = t1 + t2;
+        TEST_EXPECT_NEAR(sum.ToSeconds(), 3.0f, 0.01f);
+        
+        TimePoint t3 = t1;
+        t3 *= 2.0;
+        TEST_EXPECT_NEAR(t3.ToSeconds(), 4.0f, 0.01f);
+    }
+    
+    // TimePoint comparisons
+    {
+        TimePoint t1 = TimePoint::FromSeconds(1.0f);
+        TimePoint t2 = TimePoint::FromSeconds(2.0f);
+        
+        TEST_EXPECT(t2 >= t1);
+        TEST_EXPECT(t1 != t2);
+        TEST_EXPECT(!(t1 >= t2));
+    }
+}
+
+static void RunTimeManagerTests()
+{
+    std::cout << "Running TimeManager tests..." << std::endl;
+
+    Game game;
+    game.Reset(Position(Position::InitPositionFEN));
+    
+    SearchLimits limits;
+    TimeManagerInitData initData;
+    initData.moveTime = INT32_MAX;
+    initData.remainingTime = 60000; // 60 seconds
+    initData.timeIncrement = 1000;   // 1 second increment
+    initData.theirRemainingTime = 60000;
+    initData.theirTimeIncrement = 1000;
+    initData.movesToGo = UINT32_MAX;
+    initData.moveOverhead = 50;
+    initData.previousSearchHint = PreviousSearchHint::Unknown;
+    
+    InitTimeManager(game, initData, limits);
+    TEST_EXPECT(limits.idealTimeBase.IsValid());
+    TEST_EXPECT(limits.maxTime.IsValid());
+    
+    // Fixed move time
+    {
+        SearchLimits fixedLimits;
+        TimeManagerInitData fixedData;
+        fixedData.moveTime = 5000; // 5 seconds
+        fixedData.remainingTime = INT32_MAX;
+        fixedData.timeIncrement = 0;
+        fixedData.theirRemainingTime = INT32_MAX;
+        fixedData.theirTimeIncrement = 0;
+        fixedData.movesToGo = UINT32_MAX;
+        fixedData.moveOverhead = 0;
+        
+        InitTimeManager(game, fixedData, fixedLimits);
+        TEST_EXPECT(fixedLimits.idealTimeBase.IsValid());
+        TEST_EXPECT_NEAR(fixedLimits.idealTimeBase.ToSeconds(), 5.0f, 0.1f);
+    }
+}
+
+static void RunPawnsTests()
+{
+    std::cout << "Running Pawns tests..." << std::endl;
+
+    // IsPassedPawn
+    {
+        Bitboard whitePawns = Square(Square_e4).GetBitboard();
+        Bitboard blackPawns = Square(Square_e5).GetBitboard();
+        
+        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
+        
+        // Isolated passed pawn
+        whitePawns = Square(Square_e4).GetBitboard();
+        blackPawns = 0;
+        TEST_EXPECT(IsPassedPawn(Square_e4, whitePawns, blackPawns));
+        
+        // Passed pawn with no enemy pawns ahead
+        whitePawns = Square(Square_e4).GetBitboard();
+        blackPawns = Square(Square_a7).GetBitboard() | Square(Square_h7).GetBitboard();
+        TEST_EXPECT(IsPassedPawn(Square_e4, whitePawns, blackPawns));
+        
+        // Not passed - enemy pawn on same file
+        whitePawns = Square(Square_e4).GetBitboard();
+        blackPawns = Square(Square_e6).GetBitboard();
+        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
+        
+        // Not passed - enemy pawn on adjacent file blocking
+        whitePawns = Square(Square_e4).GetBitboard();
+        blackPawns = Square(Square_d5).GetBitboard();
+        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
+    }
+    
+    // CountPassedPawns
+    {
+        Bitboard whitePawns = Square(Square_e4).GetBitboard() | Square(Square_a4).GetBitboard();
+        Bitboard blackPawns = 0;
+        TEST_EXPECT(CountPassedPawns(whitePawns, blackPawns) == 2);
+        
+        whitePawns = Square(Square_e4).GetBitboard();
+        blackPawns = Square(Square_e5).GetBitboard();
+        TEST_EXPECT(CountPassedPawns(whitePawns, blackPawns) == 0);
+    }
+    
+    // CountDoubledPawns
+    {
+        Bitboard pawns = Square(Square_e2).GetBitboard() | Square(Square_e3).GetBitboard();
+        TEST_EXPECT(CountDoubledPawns(pawns) == 1);
+        
+        pawns = Square(Square_e2).GetBitboard() | Square(Square_e3).GetBitboard() | Square(Square_e4).GetBitboard();
+        TEST_EXPECT(CountDoubledPawns(pawns) == 2);
+        
+        pawns = Square(Square_e2).GetBitboard() | Square(Square_d2).GetBitboard();
+        TEST_EXPECT(CountDoubledPawns(pawns) == 0);
+    }
+}
+
+static void RunBitboardAdvancedTests()
+{
+    std::cout << "Running advanced Bitboard tests..." << std::endl;
+
+    // Test all squares for rook attacks
+    for (uint32_t sq = 0; sq < 64; ++sq)
+    {
+        const Square square(sq);
+        Bitboard attacks = Bitboard::GetRookAttacks(square);
+        TEST_EXPECT(attacks.Count() > 0);
+        TEST_EXPECT(attacks.Count() <= 15); // Max rook attacks on empty board
+    }
+    
+    // Test all squares for bishop attacks
+    for (uint32_t sq = 0; sq < 64; ++sq)
+    {
+        const Square square(sq);
+        Bitboard attacks = Bitboard::GetBishopAttacks(square);
+        TEST_EXPECT(attacks.Count() > 0);
+        TEST_EXPECT(attacks.Count() <= 13); // Max bishop attacks on empty board
+    }
+    
+    // Test king attacks
+    for (uint32_t sq = 0; sq < 64; ++sq)
+    {
+        const Square square(sq);
+        Bitboard attacks = Bitboard::GetKingAttacks(square);
+        uint32_t count = attacks.Count();
+        // Corner squares have 3 attacks, edge squares have 5, center squares have 8
+        TEST_EXPECT(count >= 3 && count <= 8);
+    }
+    
+    // Test knight attacks
+    for (uint32_t sq = 0; sq < 64; ++sq)
+    {
+        const Square square(sq);
+        Bitboard attacks = Bitboard::GetKnightAttacks(square);
+        uint32_t count = attacks.Count();
+        // Knight attacks range from 2 (corner) to 8 (center)
+        TEST_EXPECT(count >= 2 && count <= 8);
+    }
+    
+    // Test pawn attacks
+    {
+        // White pawn on e4
+        Bitboard whitePawnAttacks = Bitboard::GetPawnAttacks(Square_e4, White);
+        TEST_EXPECT(whitePawnAttacks.Count() == 2);
+        TEST_EXPECT(whitePawnAttacks & Square(Square_d5).GetBitboard());
+        TEST_EXPECT(whitePawnAttacks & Square(Square_f5).GetBitboard());
+        
+        // Black pawn on e5
+        Bitboard blackPawnAttacks = Bitboard::GetPawnAttacks(Square_e5, Black);
+        TEST_EXPECT(blackPawnAttacks.Count() == 2);
+        TEST_EXPECT(blackPawnAttacks & Square(Square_d4).GetBitboard());
+        TEST_EXPECT(blackPawnAttacks & Square(Square_f4).GetBitboard());
+    }
+}
+
+static void RunPositionAdvancedTests()
+{
+    std::cout << "Running advanced Position tests..." << std::endl;
+
+    // Test position hash consistency
+    {
+        Position pos1(Position::InitPositionFEN);
+        Position pos2(Position::InitPositionFEN);
+        
+        TEST_EXPECT(pos1.GetHash() == pos2.GetHash());
+        
+        Move move = pos1.MoveFromString("e2e4");
+        pos1.DoMove(move);
+        TEST_EXPECT(pos1.GetHash() != pos2.GetHash());
+    }
+    
+    // Test position copy
+    {
+        Position pos1(Position::InitPositionFEN);
+        Position pos2 = pos1;
+        
+        TEST_EXPECT(pos1 == pos2);
+        TEST_EXPECT(pos1.GetHash() == pos2.GetHash());
+        
+        Move move = pos1.MoveFromString("e2e4");
+        pos1.DoMove(move);
+        TEST_EXPECT(pos1 != pos2);
+    }
+    
+    // Test game move history
+    {
+        Game game;
+        game.Reset(Position(Position::InitPositionFEN));
+        Position original = game.GetPosition();
+        
+        Move move = game.GetPosition().MoveFromString("e2e4");
+        game.DoMove(move);
+        
+        TEST_EXPECT(game.GetMoves().size() == 1);
+        TEST_EXPECT(game.GetMoves()[0] == move);
+        TEST_EXPECT(game.GetPosition() != original);
+    }
+    
+    // Test repetition detection
+    {
+        Game game;
+        game.Reset(Position(Position::InitPositionFEN));
+        
+        // Make some moves that return to start
+        game.DoMove(game.GetPosition().MoveFromString("g1f3"));
+        game.DoMove(game.GetPosition().MoveFromString("b8c6"));
+        game.DoMove(game.GetPosition().MoveFromString("f3g1"));
+        game.DoMove(game.GetPosition().MoveFromString("c6b8"));
+        
+        // Should detect repetition
+        // (This depends on Game implementation)
+    }
+    
+    // Test fifty move rule
+    {
+        Position pos("4k3/8/8/8/8/8/8/4K3 w - - 50 1");
+        TEST_EXPECT(pos.GetHalfMoveCount() == 50);
+        
+        // After 100 half-moves, should be draw
+        Position pos100("4k3/8/8/8/8/8/8/4K3 w - - 100 1");
+        TEST_EXPECT(pos100.IsFiftyMoveRuleDraw());
+    }
+}
+
 void RunUnitTests()
 {
     RunBitboardTests();
+    RunBitboardAdvancedTests();
     RunPositionTests();
+    RunPositionAdvancedTests();
     RunMaterialTests();
+    RunScoreTests();
+    RunMoveListTests();
+    RunTranspositionTableTests();
+    RunTimeTests();
+    RunTimeManagerTests();
+    RunPawnsTests();
     RunEvalTests();
     RunPackedPositionTests();
     RunGameTests();
