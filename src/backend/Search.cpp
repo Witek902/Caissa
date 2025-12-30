@@ -1764,6 +1764,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ttEntry.depth >= node->depth - 3)
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
                 const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const bool originalIsCutNode = node->isCutNode;
@@ -1772,7 +1773,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType originalBeta = node->beta;
 
                 node->isPvNodeFromPrevIteration = false;
-                node->depth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
+                node->depth = singularDepth;
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
                 node->filteredMove = move;
@@ -1799,10 +1800,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                                 extension = 2;
                     }
                 }
-                // if second best move beats current beta, there most likely would be beta cutoff
-                // when searching it at full depth
-                else if (singularBeta >= beta)
-                    return (singularBeta + beta) / 2;
+                // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
+                else if (singularScore >= beta)
+                    return (singularScore * singularDepth + beta) / (singularDepth + 1);
+                // otherwise, reduce the depth
                 else if (ttScore >= beta)
                     extension = -2 - !isPvNode;
                 else if (node->isCutNode)
