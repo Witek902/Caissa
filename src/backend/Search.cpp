@@ -1477,7 +1477,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Razoring
             // prune if quiescence search on current position can't beat beta
             if (node->depth <= RazoringStartDepth &&
-                beta < KnownWinValue &&
+                alpha < 1200 &&
                 eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
                 const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
