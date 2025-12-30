@@ -1212,8 +1212,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         return -CheckmateValue + (ScoreType)node->ply;
     }
 
+    // fail-high adjustments
     if (std::abs(bestValue) < KnownWinValue && bestValue > beta)
-        bestValue = (bestValue + beta) / 2;
+        bestValue = (bestValue + beta * 3) / 4;
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
