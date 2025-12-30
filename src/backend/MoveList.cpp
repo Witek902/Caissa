@@ -7,7 +7,7 @@ void PrintMoveList(const Position& pos, const MoveList& moves)
 {
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
-        const Move move = moves.entries[i].move;
+        const Move move = moves.moves[i];
 
         if (!pos.IsMoveLegal(move)) continue;
 
@@ -15,7 +15,7 @@ void PrintMoveList(const Position& pos, const MoveList& moves)
             << std::right << std::setw(3) << (i + 1) << ". "
             << move.ToString() << "\t("
             << pos.MoveToString(move, MoveNotation::SAN) << ")\t"
-            << moves.entries[i].score;
+            << moves.scores[i];
 
         if (!pos.StaticExchangeEvaluation(move))
         {
