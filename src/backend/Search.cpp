@@ -944,6 +944,8 @@ ScoreType Search::GetEvalCorrection(const NodeInfo& node) const
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * mCorrectionHistories->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+    if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
+        corr += ContCorrectionScale * mCorrectionHistories->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -2120,6 +2122,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 AddToCorrHist(mCorrectionHistories->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                     AddToCorrHist(mCorrectionHistories->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
+                    AddToCorrHist(mCorrectionHistories->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
             }
         }
     }
