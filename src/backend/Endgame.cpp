@@ -686,6 +686,7 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
     const Square strongKing(FirstBitSet(pos.Whites().king));
     const Square weakKing(FirstBitSet(pos.Blacks().king));
 
+    const int32_t whiteToMove = pos.GetSideToMove() == White;
     const int32_t blackToMove = pos.GetSideToMove() == Black;
 
     // if all pawns are on A/H file and we have a wrong bishop, then it's a draw
@@ -705,6 +706,24 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
         if (((pos.Whites().pawns & ~Bitboard::FileBitboard<7>()) == 0) &&
             ((pos.Whites().bishops & Bitboard::DarkSquares()) == 0) &&
             ((Square::Distance(weakKing, Square_h8) <= 1)))
+        {
+            outScore = 0;
+            return true;
+        }
+
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<0>()) == 0) &&
+            ((pos.Whites().bishops & Bitboard::LightSquares()) == 0) &&
+            (Square::Distance(weakKing, Square_a8) + whiteToMove < Square::Distance(strongKing, Square_a8)) &&
+            (Square::Distance(weakKing, Square_a8) + whiteToMove < Square::Distance(pawnSquare, Square_a8)))
+        {
+            outScore = 0;
+            return true;
+        }
+
+        if (((pos.Whites().pawns & ~Bitboard::FileBitboard<7>()) == 0) &&
+            ((pos.Whites().bishops & Bitboard::DarkSquares()) == 0) &&
+            (Square::Distance(weakKing, Square_h8) + whiteToMove < Square::Distance(strongKing, Square_h8)) &&
+            (Square::Distance(weakKing, Square_h8) + whiteToMove < Square::Distance(pawnSquare, Square_h8)))
         {
             outScore = 0;
             return true;
