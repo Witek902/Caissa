@@ -1,8 +1,9 @@
 # Caissa Chess Engine
 
-[![Linux Build Status](https://github.com/Witek902/Caissa/workflows/Linux/badge.svg)](https://github.com/Witek902/Caissa/actions/workflows/linux.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++ Standard](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
+[![Linux Build Status](https://github.com/Witek902/Caissa/workflows/Linux/badge.svg)](https://github.com/Witek902/Caissa/actions/workflows/linux.yml)
+[![GitHub License](https://img.shields.io/github/license/Witek902/Caissa?logo=github)](https://github.com/Witek902/Caissa/blob/master/LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/Witek902/Caissa?logo=github)](https://github.com/Witek902/Caissa/releases/latest)
 
 ![ArtImage](https://user-images.githubusercontent.com/5882734/193368109-abce432b-85e9-4f11-bb3c-57fd3d27db22.jpg?raw=true)
 <p style='text-align: right;'><em>(image generated with DALL·E 2)</em></p>
