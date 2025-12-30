@@ -936,12 +936,14 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
 ScoreType Search::GetEvalCorrection(const NodeInfo& node) const
 {
     const Color stm = node.position.GetSideToMove();
-    
-    int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * mCorrectionHistories->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
+    int32_t corr = 0;
+    if (node.position.GetPawnsHash())
+        corr += EvalCorrectionPawnsScale * mCorrectionHistories->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    if (node.position.GetNonPawnsHash(White))
+        corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+    if (node.position.GetNonPawnsHash(Black))
+        corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * mCorrectionHistories->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
 
@@ -2107,6 +2109,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // update correction histories
         if (!node->isInCheck &&
+            std::abs(bestValue) < KnownWinValue &&
             (!bestMove.IsValid() || bestMove.IsQuiet()) &&
             ((bestValue < unadjustedEval && bestValue < beta) ||
              (bestValue > unadjustedEval && bestMove.IsValid())))
@@ -2115,9 +2118,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (bonus != 0)
             {
                 const Color stm = position.GetSideToMove();
-                AddToCorrHist(mCorrectionHistories->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
-                AddToCorrHist(mCorrectionHistories->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
-                AddToCorrHist(mCorrectionHistories->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
+                if (position.GetPawnsHash())
+                    AddToCorrHist(mCorrectionHistories->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+                if (position.GetNonPawnsHash(White))
+                    AddToCorrHist(mCorrectionHistories->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
+                if (position.GetNonPawnsHash(Black))
+                    AddToCorrHist(mCorrectionHistories->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                     AddToCorrHist(mCorrectionHistories->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
             }
