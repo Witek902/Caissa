@@ -407,6 +407,6 @@ void MoveOrderer::ScoreMoves(
             score += PromotionValues[uint32_t(move.GetPromoteTo())];
         }
 
-        moves.entries[i].score = score;
+        moves.scores[i] = score;
     }
 }
