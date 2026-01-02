@@ -132,6 +132,7 @@ struct NodeInfo
 
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
+    uint32_t cutoffCount = 0;
 
     bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
@@ -315,7 +316,7 @@ private:
         MoveOrderer moveOrderer;
         NodeCache nodeCache;
         AccumulatorCache accumulatorCache;
-        NodeInfo searchStack[MaxSearchDepth];
+        NodeInfo searchStack[MaxSearchDepth + 2];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
