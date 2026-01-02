@@ -23,10 +23,10 @@ static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 64;
 
-DEFINE_PARAM(LmrScale_Quiets, 43, 20, 70);
-DEFINE_PARAM(LmrBias_Quiets, 55, 20, 80);
-DEFINE_PARAM(LmrScale_Captures, 42, 20, 70);
-DEFINE_PARAM(LmrBias_Captures, 66, 20, 80);
+DEFINE_PARAM(LmrScale_Quiets, 46, 20, 70);
+DEFINE_PARAM(LmrBias_Quiets, 58, 20, 80);
+DEFINE_PARAM(LmrScale_Captures, 45, 20, 70);
+DEFINE_PARAM(LmrBias_Captures, 70, 20, 80);
 
 DEFINE_PARAM(LmrQuietNonPv, 23, -128, 256);
 DEFINE_PARAM(LmrQuietTTCapture, 67, -128, 256);
@@ -1874,16 +1874,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            // reduce less if previous move was reduced
+            if constexpr (!isRootNode)
+                r -= node->reduction / 8;
+
             // reduce low-ply moves less
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
 
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
-
-            // scale down
-            r = (r + LmrScale / 2) / LmrScale;
         }
+
+        childNode.reduction = r;
+
+        // scale down
+        r = (r + LmrScale / 2) / LmrScale;
 
         int32_t newDepth = node->depth + extension - 1;
 
