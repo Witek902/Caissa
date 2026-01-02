@@ -1880,16 +1880,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            // reduce less if previous move was reduced
+            if constexpr (!isRootNode)
+                r -= node->reduction / 4;
+
             // reduce low-ply moves less
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
 
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
-
-            // scale down
-            r = (r + LmrScale / 2) / LmrScale;
         }
+
+        childNode.reduction = r;
+
+        // scale down
+        r = (r + LmrScale / 2) / LmrScale;
 
         int32_t newDepth = node->depth + extension - 1;
 
