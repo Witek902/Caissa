@@ -117,8 +117,6 @@ struct NodeInfo
 
     uint16_t pvIndex = 0;
 
-    uint8_t doubleExtensions = 0;
-
     // remaining depth
     int16_t depth = 0;
 
@@ -161,7 +159,6 @@ struct NodeInfo
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
-        doubleExtensions = 0;
         nnContext.MarkAsDirty();
         continuationHistories[0] = nullptr;
         continuationHistories[1] = nullptr;
