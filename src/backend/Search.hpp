@@ -123,6 +123,9 @@ struct NodeInfo
     // distance to the root
     uint16_t ply = 0;
 
+    // LMR reduction for this node
+    int32_t reduction = 0;
+
     ScoreType alpha;
     ScoreType beta;
 
@@ -159,6 +162,7 @@ struct NodeInfo
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
+        reduction = 0;
         nnContext.MarkAsDirty();
         continuationHistories[0] = nullptr;
         continuationHistories[1] = nullptr;
