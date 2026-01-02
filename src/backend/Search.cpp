@@ -1234,6 +1234,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     constexpr bool isRootNode = nodeType == NodeType::Root;
     constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
+    const bool isAllNode = !(isPvNode || node->isCutNode);
 
     if constexpr (!isPvNode)
         ASSERT(node->alpha == node->beta - 1);
@@ -1886,6 +1887,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
+
+            // more reductions for expected all-nodes
+            if (isAllNode) r += r / (node->depth + 1);
 
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
