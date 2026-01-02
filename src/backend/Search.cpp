@@ -1296,6 +1296,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // clear killer moves for next ply
     thread.moveOrderer.ClearKillerMoves(node->ply + 1);
 
+    // clear cutoff count for next ply
+    if constexpr (isRootNode) { (node + 1)->cutoffCount = 0; }
+    (node + 2)->cutoffCount = 0;
+
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue; // fully adjusted eval
@@ -1880,6 +1884,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            if ((node + 1)->cutoffCount > 2)
+                r += 64 + ((node + 1)->cutoffCount > 3) * 8; // TODO tune
+
             // reduce low-ply moves less
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
@@ -2000,10 +2007,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             alpha = score;
             bestMove = move;
 
-            if (score >= beta)
+            if (score >= beta) // beta cutoff
             {
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
+
+                if (extension < 2 || isPvNode) node->cutoffCount++;
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
