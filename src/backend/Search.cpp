@@ -86,7 +86,7 @@ DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 67, 32, 128);
 DEFINE_PARAM(SingularExtDepthRedSub, 216, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 15, 5, 25);
-DEFINE_PARAM(SingularDoubleExtensionsLimit, 7, 4, 10);
+DEFINE_PARAM(SingularTripleExtensionMarigin, 50, 15, 100);
 
 DEFINE_PARAM(QSearchFutilityPruningOffset, 73, 40, 120);
 
@@ -1510,7 +1510,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     childNode.alpha = -beta;
                     childNode.beta = -beta + 1;
                     childNode.isNullMove = true;
-                    childNode.doubleExtensions = node->doubleExtensions;
                     childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
                     childNode.nnContext.MarkAsDirty();
@@ -1548,7 +1547,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 childNode.Clear();
                 childNode.ply = node->ply + 1;
                 childNode.pvIndex = node->pvIndex;
-                childNode.doubleExtensions = node->doubleExtensions;
                 childNode.nnContext.MarkAsDirty();
                 childNode.alpha = -probBeta;
                 childNode.beta = -probBeta + 1;
@@ -1620,7 +1618,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     childNode.Clear();
     childNode.ply = node->ply + 1;
     childNode.pvIndex = node->pvIndex;
-    childNode.doubleExtensions = node->doubleExtensions;
     childNode.nnContext.MarkAsDirty();
 
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
@@ -1793,11 +1790,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (node->ply < 2 * thread.rootDepth)
                     {
                         extension = 1;
-                        // double extension if singular score is way below beta
-                        if constexpr (!isPvNode)
-                            if (node->doubleExtensions <= SingularDoubleExtensionsLimit &&
-                                singularScore < singularBeta - SingularDoubleExtensionMarigin)
-                                extension = 2;
+                        // multiple extensions if singular score is way below beta
+                        extension += (singularScore < singularBeta - SingularDoubleExtensionMarigin - 256 * isPvNode);
+                        extension += (singularScore < singularBeta - SingularTripleExtensionMarigin - 256 * isPvNode);
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
@@ -1827,7 +1822,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
         childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
-        childNode.doubleExtensions = node->doubleExtensions + (extension >= 2);
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
 
