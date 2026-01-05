@@ -46,7 +46,7 @@ DEFINE_PARAM(FiftyMoveRuleEvalScale, 236, 120, 600);
 
 DEFINE_PARAM(LmrDeeperTreshold, 90, 20, 200);
 
-DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
+DEFINE_PARAM(ProbcutStartDepth, 4, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 141, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 316, 100, 500);
 
@@ -1538,21 +1538,21 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Probcut
-            const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
+            const ScoreType probCutBeta = ScoreType(beta + ProbcutBetaOffset - 40 * isImproving);
             if (node->depth >= ProbcutStartDepth &&
-                abs(beta) < TablebaseWinValue &&
-                !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probBeta))
+                std::abs(beta) < TablebaseWinValue &&
+                !(ttEntry.IsValid() && ttEntry.depth >= node->depth - 3 && ttEntry.score < probCutBeta))
             {
                 NodeInfo& childNode = *(node + 1);
                 childNode.Clear();
                 childNode.ply = node->ply + 1;
                 childNode.pvIndex = node->pvIndex;
                 childNode.nnContext.MarkAsDirty();
-                childNode.alpha = -probBeta;
-                childNode.beta = -probBeta + 1;
+                childNode.alpha = -probCutBeta;
+                childNode.beta = -probCutBeta + 1;
                 childNode.isCutNode = !node->isCutNode;
 
-                const ScoreType seeThreshold = probBeta - node->staticEval;
+                const ScoreType seeThreshold = probCutBeta - node->staticEval;
                 MovePicker movePicker(position, thread.moveOrderer, nullptr,
                     (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
 
@@ -1580,18 +1580,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     ScoreType score = -QuiescenceNegaMax<NodeType::NonPV>(thread, &childNode, ctx);
                     ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
 
+                    const int16_t probCutDepth = std::max<int16_t>(0, node->depth - ProbcutStartDepth + 1);
+
                     // verification search
-                    if (score >= probBeta)
+                    if (score >= probCutBeta)
                     {
-                        childNode.depth = static_cast<int16_t>(node->depth - ProbcutStartDepth + 1);
+                        childNode.depth = probCutDepth;
                         score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
                     }
 
                     // probcut failed
-                    if (score >= probBeta)
+                    if (score >= probCutBeta)
                     {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
-                        return score;
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, probCutDepth + 1, TTEntry::Bounds::Lower, move);
+                        
+                        if (std::abs(score) < TablebaseWinValue)
+                            return score - (probCutBeta - beta);
                     }
                 }
             }
