@@ -96,11 +96,11 @@ DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 139, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 
-DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
-DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
-DEFINE_PARAM(SSEPruningMultiplier_Captures, 117, 60, 180);
-DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 55, 10, 100);
-DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 131, 64, 256);
+DEFINE_PARAM(SEEPruningDepth_Captures, 5, 1, 12);
+DEFINE_PARAM(SEEPruningDepth_NonCaptures, 9, 1, 12);
+DEFINE_PARAM(SEEPruningMultiplier_Captures, 117, 60, 180);
+DEFINE_PARAM(SEEPruningMultiplier_NonCaptures, 55, 10, 100);
+DEFINE_PARAM(SEEPruningMoveStatDivNonCaptures, 131, 64, 256);
 
 DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 155, 100, 200);
@@ -1736,14 +1736,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (move.IsCapture())
                 {
-                    if (node->depth <= SSEPruningDepth_Captures &&
+                    if (node->depth <= SEEPruningDepth_Captures &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                        !position.StaticExchangeEvaluation(move, -SEEPruningMultiplier_Captures * node->depth)) continue;
                 }
                 else
                 {
-                    if (node->depth <= SSEPruningDepth_NonCaptures &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
+                    const int32_t threshold = std::min<int32_t>(0, -SEEPruningMultiplier_NonCaptures * node->depth - moveStatScore / SEEPruningMoveStatDivNonCaptures);
+                    if (node->depth <= SEEPruningDepth_NonCaptures &&
+                        !position.StaticExchangeEvaluation(move, threshold)) continue;
                 }
             }
         }
