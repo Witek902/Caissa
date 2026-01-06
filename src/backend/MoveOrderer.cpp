@@ -201,7 +201,7 @@ Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
         const Move prevMove = node.previousMove;
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
         const uint32_t to = prevMove.ToSquare().Index();
-        return counterMoves[(uint32_t)node.position.GetSideToMove()][piece][to];
+        return counterMoves[(uint32_t)node.position.GetSideToMove()][prevMove.IsCapture()][piece][to];
     }
     return Move::Invalid();
 }
@@ -231,7 +231,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const Move prevMove = node.previousMove;
         const uint32_t piece = (uint32_t)prevMove.GetPiece() - 1;
         const uint32_t to = prevMove.ToSquare().Index();
-        counterMoves[color][piece][to] = bestMove;
+        counterMoves[color][prevMove.IsCapture()][piece][to] = bestMove;
     }
 
     // don't update uncertain moves

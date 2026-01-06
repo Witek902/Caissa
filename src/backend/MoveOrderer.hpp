@@ -72,7 +72,7 @@ private:
     CounterType quietMoveHistory[2][2][2][64*64];           // stm, from-threated, to-threated, from-square, to-square
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
-    Move counterMoves[2][6][64];                            // stm, piece, to-square
+    Move counterMoves[2][2][6][64];                         // stm, prev is capture, prev move piece, to-square
 
     Move killerMoves[MaxSearchDepth + 1];
 };
