@@ -1828,12 +1828,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // Late Move Reductions
         int32_t r = 0;
         if (node->depth >= LateMoveReductionStartDepth &&
-            moveIndex > 1 &&
+            moveIndex > 1 + isRootNode * 2 &&
             (!isPvNode || move.IsQuiet()))
         {
             if (move.IsQuiet())
             {
-                r = GetQuietsDepthReduction(node->depth, moveIndex);
+                r = GetQuietsDepthReduction(node->depth, moveIndex - isRootNode * 2);
 
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r += LmrQuietNonPv;
@@ -1857,7 +1857,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
             else
             {
-                r = GetCapturesDepthReduction(node->depth, moveIndex);
+                r = GetCapturesDepthReduction(node->depth, moveIndex - isRootNode * 2);
 
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
