@@ -39,7 +39,7 @@ using namespace threadpool;
 static const uint32_t cMaxIterations = 1'000'000'000;
 static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
 static const uint32_t cNumValidationVectorsPerIteration = 128 * 1024;
-static const uint32_t cBatchSize = 32 * 1024;
+static const uint32_t cBatchSize = 64 * 1024;
 #ifdef USE_VIRTUAL_FEATURES
 static const uint32_t cNumVirtualFeatures = 12 * 64;
 #endif // USE_VIRTUAL_FEATURES
@@ -651,15 +651,15 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 0.5f;
+static volatile float g_learningRateScale = 1.0f;
 static volatile float g_lambdaScale = 0.0f;
-static volatile float g_weightDecay = 0.0f; // 1.0f / 512.0f;
+static volatile float g_weightDecay = 1.0f / 1024.0f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-64-38-9.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-68-91B.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
