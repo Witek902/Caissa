@@ -4,6 +4,7 @@
 
 #include "../backend/Math.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
@@ -26,8 +27,6 @@ bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingData
 
         if (fileStream->IsOpen() && fileSize > sizeof(PositionEntry))
         {
-            std::cout << "Using " << fileName << std::endl;
-
             InputFileContext& ctx = mContexts.emplace_back();
             ctx.fileStream = std::move(fileStream);
             ctx.fileName = fileName;
@@ -178,7 +177,12 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (CheckInsufficientMaterial(outPosition))
                     continue;
 
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 26) / 50.0f);
+                // skip recognized endgames
+                int32_t endgameScore = 0;
+                if (EvaluateEndgame(outPosition, endgameScore))
+                    continue;
+
+                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 22) / 30.0f);
                 if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
                     continue;
             }
