@@ -841,8 +841,8 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.alpha = ScoreType(alpha);
         rootNode.beta = ScoreType(beta);
 
-        pvLine.score = NegaMax<NodeType::Root>(thread, &rootNode, param.searchContext);
-        ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
+        const ScoreType score = NegaMax<NodeType::Root>(thread, &rootNode, param.searchContext);
+        ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
         SearchUtils::GetPvLine(rootNode, maxPvLine, pvLine.moves);
 
         // flush pending per-thread stats
@@ -850,23 +850,32 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
         BoundsType boundsType = BoundsType::Exact;
 
-        // out of aspiration window, redo the search in wider score range
-        if (pvLine.score <= alpha)
+        // out of aspiration window, redo the search with adjusted window
+        if (score <= alpha)
         {
             pvLine.score = ScoreType(alpha);
-            beta = (alpha + beta + 1) / 2;
-            alpha = std::max<int32_t>(alpha - window, -CheckmateValue);
-            depth = param.depth;
+            beta = (alpha + beta) / 2;
+            alpha = std::max<int32_t>(score - window, -CheckmateValue);
+            window += window / 4;
             boundsType = BoundsType::UpperBound;
+
+            // reset depth reduction
+            depth = param.depth;
         }
-        else if (pvLine.score >= beta)
+        else if (score >= beta)
         {
             pvLine.score = ScoreType(beta);
-            beta = std::min<int32_t>(beta + window, CheckmateValue);
+            alpha = std::max<int32_t>(beta - window, alpha);
+            beta = std::min<int32_t>(score + window, CheckmateValue);
+            window += window / 2;
             boundsType = BoundsType::LowerBound;
 
             // reduce re-search depth
             if (depth > 1 && depth + 5 > param.depth) depth--;
+        }
+        else
+        {
+            pvLine.score = score;
         }
 
         const bool stopSearch = param.depth > 1 && CheckStopCondition(thread, param.searchContext, true);
@@ -893,8 +902,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             break;
         }
 
-        // increase window, fallback to full window after some threshold
-        window += window / 3;
+        // fallback to full window after some threshold
         if (window > AspirationWindowMaxSize) window = CheckmateValue;
     }
 
