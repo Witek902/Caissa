@@ -10,16 +10,15 @@
 
 namespace nn
 {
-class PackedNeuralNetwork;
+struct PackedNeuralNetwork;
 }
-using PackedNeuralNetworkPtr = std::unique_ptr<nn::PackedNeuralNetwork>;
 
 struct DirtyPiece;
 struct AccumulatorCache;
 
 extern const char* c_DefaultEvalFile;
 
-extern PackedNeuralNetworkPtr g_mainNeuralNetwork;
+extern const nn::PackedNeuralNetwork* g_mainNeuralNetwork;
 
 static constexpr PieceScore c_pawnValue     = {   97, 166 };
 static constexpr PieceScore c_knightValue   = {  455, 371 };

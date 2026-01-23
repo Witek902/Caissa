@@ -538,16 +538,6 @@ static void UnpackWeights(nn::Values& outWeights, uint32_t numInputs, uint32_t n
 
 bool NetworkTrainer::PackNetwork()
 {
-    {
-        const std::vector<uint32_t> layerSizes = { nn::NumNetworkInputs, 2u * nn::AccumulatorSize };
-        const std::vector<uint32_t> layerVariants = { 1, nn::NumVariants };
-
-        if (!m_packedNet.Resize(layerSizes, layerVariants))
-        {
-            return false;
-        }
-    }
-
     // feature transformer
     {
 #ifdef USE_VIRTUAL_FEATURES
@@ -583,23 +573,22 @@ bool NetworkTrainer::PackNetwork()
             weights,
             nn::NumNetworkInputs,
             nn::AccumulatorSize,
-            const_cast<nn::FirstLayerWeightType*>(m_packedNet.GetAccumulatorWeights()),
-            const_cast<nn::FirstLayerBiasType*>(m_packedNet.GetAccumulatorBiases()),
+            const_cast<nn::FirstLayerWeightType*>(m_packedNet.accumulatorWeights),
+            const_cast<nn::FirstLayerBiasType*>(m_packedNet.accumulatorBiases),
             nn::InputLayerWeightQuantizationScale,
             nn::InputLayerBiasQuantizationScale,
             true);
     }
 
     // last layer
-    const uint32_t lastLayerIndex = 1;
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
     {
         PackWeights(
             m_lastLayerWeights->m_variants[variantIdx].m_weights,
             m_lastLayerWeights->m_inputSize,
             1u,
-            const_cast<nn::LastLayerWeightType*>(m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx)),
-            const_cast<nn::LastLayerBiasType*>(m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx)),
+            const_cast<nn::LastLayerWeightType*>(m_packedNet.lastLayerVariants[variantIdx].weights),
+            const_cast<nn::LastLayerBiasType*>(&m_packedNet.lastLayerVariants[variantIdx].bias),
             nn::OutputLayerWeightQuantizationScale,
             nn::OutputLayerBiasQuantizationScale,
             false);
@@ -626,23 +615,22 @@ bool NetworkTrainer::UnpackNetwork()
             m_featureTransformerWeights->m_variants.front().m_weights,
             nn::NumNetworkInputs,
             nn::AccumulatorSize,
-            m_packedNet.GetAccumulatorWeights(),
-            m_packedNet.GetAccumulatorBiases(),
+            m_packedNet.accumulatorWeights,
+            m_packedNet.accumulatorBiases,
             OldInputLayerWeightQuantizationScale,
             OldInputLayerBiasQuantizationScale,
             true);
     }
 
     // last layer
-    const uint32_t lastLayerIndex = 1;
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
     {
         UnpackWeights(
             m_lastLayerWeights->m_variants[variantIdx].m_weights,
             m_lastLayerWeights->m_inputSize,
             1u,
-            m_packedNet.GetLayerWeights<nn::LastLayerWeightType>(lastLayerIndex, variantIdx),
-            m_packedNet.GetLayerBiases<nn::LastLayerBiasType>(lastLayerIndex, variantIdx),
+            m_packedNet.lastLayerVariants[variantIdx].weights,
+            &m_packedNet.lastLayerVariants[variantIdx].bias,
             OldOutputLayerWeightQuantizationScale,
             OldOutputLayerBiasQuantizationScale,
             false);
@@ -651,15 +639,15 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 1.0f;
+static volatile float g_learningRateScale = 0.75f;
 static volatile float g_lambdaScale = 0.0f;
-static volatile float g_weightDecay = 1.0f / 1024.0f;
+static volatile float g_weightDecay = 1.0f / 2048.0f;
 
 bool NetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet.LoadFromFile("eval-68-91B.pnn"))
+    if (!m_packedNet.LoadFromFile("eval-68.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
@@ -690,7 +678,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 50.0f ? (float)(iteration + 1) / 50.0f : 1.0f;
+        const float warmup = iteration < 100.0f ? (float)(iteration + 1) / 100.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
@@ -765,7 +753,6 @@ bool NetworkTrainer::Train()
 
 #ifdef USE_PACKED_NET
         PackNetwork();
-        ASSERT(m_packedNet.IsValid());
 #endif // USE_PACKED_NET
 
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
@@ -796,7 +783,7 @@ bool NetworkTrainer::Train()
             const std::string name = "eval";
             m_network.Save((name + ".nn").c_str());
 #ifdef USE_PACKED_NET
-            m_packedNet.Save((name + ".pnn").c_str());
+            m_packedNet.SaveToFile((name + ".pnn").c_str());
 #endif // USE_PACKED_NET
 
 #ifdef DUMP_WEIGHTS

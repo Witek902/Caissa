@@ -30,7 +30,7 @@ void AccumulatorCache::Init(const nn::PackedNeuralNetwork* net)
         {
             for (uint32_t b = 0; b < 2 * nn::NumKingBuckets; ++b)
             {
-                memcpy(kingBuckets[c][b].accum.values, net->GetAccumulatorBiases(), sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
+                memcpy(kingBuckets[c][b].accum.values, net->accumulatorBiases, sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
                 memset(kingBuckets[c][b].pieces, 0, sizeof(kingBuckets[c][b].pieces));
             }
         }
@@ -287,7 +287,7 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             node.accumulatorPtr[color] = &node.accumulatorData[color];
             node.accumulatorData[color].Update(
                 *(prevAccumNode->accumulatorPtr[color]),
-                network.GetAccumulatorWeights(),
+                network.accumulatorWeights,
                 numAddedFeatures, addedFeatures,
                 numRemovedFeatures, removedFeatures);
         }
@@ -324,7 +324,7 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
 
         cache.accum.Update(
             cache.accum,
-            network.GetAccumulatorWeights(),
+            network.accumulatorWeights,
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
 
