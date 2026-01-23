@@ -127,117 +127,40 @@ using LastLayerBiasType = int32_t;
 
 using IntermediateType = int8_t;
 
-class PackedNeuralNetwork
+struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
 {
-public:
-
-    friend class NeuralNetwork;
-
-    static constexpr uint32_t MaxInputs = 262144;
-    static constexpr uint32_t MaxNeuronsInHiddenLayers = 128;
-    static constexpr uint32_t MinNeuronsInHiddenLayers = 8;
-    static constexpr uint32_t MaxNumLayers = 4;
-
     struct Header
     {
         uint32_t magic = 0;
         uint32_t version = 0;
-        uint32_t layerSizes[MaxNumLayers] = { 0, 0, 0, 0 };
-        uint32_t layerVariants[MaxNumLayers] = { 0, 0, 0, 0 };
+        uint32_t layerSizes[4] = { 0, 0, 0, 0 };
+        uint32_t layerVariants[4] = { 0, 0, 0, 0 };
         uint32_t padding[6];
     };
 
-    PackedNeuralNetwork();
-    ~PackedNeuralNetwork();
+    struct alignas(CACHELINE_SIZE) LastLayerVariant
+    {
+        LastLayerWeightType weights[2 * AccumulatorSize];
+        LastLayerBiasType bias;
+        int32_t padding[15];
+    };
 
-    // unload weights
-    void Release();
-
-    // allocate weights
-    bool Resize(const std::vector<uint32_t>& layerSizes,
-                const std::vector<uint32_t>& numVariantsPerLayer = std::vector<uint32_t>());
+    Header header;
+    FirstLayerWeightType accumulatorWeights[NumNetworkInputs * AccumulatorSize];
+    FirstLayerBiasType accumulatorBiases[AccumulatorSize];
+    LastLayerVariant lastLayerVariants[NumVariants];
 
     // load from file
     bool LoadFromFile(const char* filePath);
 
-    // load from memory
-    bool LoadFromMemory(const void* data);
-
     // save to file
-    bool Save(const char* filePath) const;
+    bool SaveToFile(const char* filePath) const;
 
     // Calculate neural network output based on incrementally updated accumulators
     int32_t Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const;
 
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const;
-
-    INLINE uint32_t GetNumInputs() const { return header.layerSizes[0]; }
-    INLINE uint32_t GetAccumulatorSize() const { return header.layerSizes[1] / 2; }
-    INLINE uint32_t GetLayerSize(uint32_t i) const { return header.layerSizes[i]; }
-
-    void GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const;
-
-    INLINE const FirstLayerWeightType* GetAccumulatorWeights() const
-    {
-        return reinterpret_cast<const FirstLayerWeightType*>(layerDataPointers[0]);
-    }
-    INLINE const FirstLayerBiasType* GetAccumulatorBiases() const
-    {
-        return reinterpret_cast<const FirstLayerBiasType*>(GetAccumulatorWeights() + GetNumInputs() * GetAccumulatorSize());
-    }
-
-    template<typename T>
-    INLINE const T* GetLayerWeights(uint32_t index, uint32_t variant) const
-    {
-        const void* weights;
-        const void* biases;
-        GetLayerWeightsAndBiases(index, variant, weights, biases);
-        return reinterpret_cast<const T*>(weights);
-    }
-
-    template<typename T>
-    INLINE const T* GetLayerBiases(uint32_t index, uint32_t variant) const
-    {
-        const void* weights;
-        const void* biases;
-        GetLayerWeightsAndBiases(index, variant, weights, biases);
-        return reinterpret_cast<const T*>(biases);
-    }
-
-    // calculate size of all weights buffer
-    size_t GetWeightsBufferSize() const;
-
-    bool IsValid() const { return GetNumInputs() > 0; }
-
-private:
-
-    void ReleaseFileMapping();
-
-    void InitLayerDataSizes();
-    void InitLayerDataPointers();
-
-    Header header;
-
-    uint32_t numActiveLayers = 0;
-    uint32_t layerDataSizes[MaxNumLayers];  // size of each layer (in bytes)
-    const uint8_t* layerDataPointers[MaxNumLayers];  // base pointer to weights of each layer
-
-    // file mapping
-#if defined(PLATFORM_WINDOWS)
-    HANDLE fileHandle = INVALID_HANDLE_VALUE;
-    HANDLE fileMapping = INVALID_HANDLE_VALUE;
-#else
-    int fileDesc = -1;
-#endif // PLATFORM_WINDOWS
-
-    void* mappedData = nullptr;
-    size_t mappedSize = 0;
-
-    void* allocatedData = nullptr;
-
-    // all weights and biases are stored in this buffer
-    const uint8_t* weightsBuffer = nullptr;
 };
 
 } // namespace nn

@@ -833,7 +833,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext.MarkAsDirty();
 
-    thread.accumulatorCache.Init(g_mainNeuralNetwork.get());
+    thread.accumulatorCache.Init(g_mainNeuralNetwork);
 
     for (;;)
     {

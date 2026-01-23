@@ -28,38 +28,47 @@ static constexpr ScoreType c_castlingRightsBonus = 5;
 
 } // namespace
 
-PackedNeuralNetworkPtr g_mainNeuralNetwork;
+const nn::PackedNeuralNetwork* g_mainNeuralNetwork = nullptr;
+static bool g_usingEmbeddedNeuralNetwork = false;
 
 bool LoadMainNeuralNetwork(const char* path)
 {
-    PackedNeuralNetworkPtr network = std::make_unique<nn::PackedNeuralNetwork>();
+    if (!g_usingEmbeddedNeuralNetwork)
+    {
+        // release previous network
+        delete g_mainNeuralNetwork;
+        g_mainNeuralNetwork = nullptr;
+    }
 
     if (path == nullptr || strcmp(path, "") == 0 || strcmp(path, "<empty>") == 0)
     {
 #if defined(CAISSA_EVALFILE)
-        if (network->LoadFromMemory(EmbedData))
-        {
-            g_mainNeuralNetwork = std::move(network);
-            std::cout << "info string Using embedded neural network" << std::endl;
-            return true;
-        }
-#endif // defined(CAISSA_EVALFILE)
-
-        std::cout << "info string disabled neural network evaluation" << std::endl;
-        g_mainNeuralNetwork.reset();
+        g_mainNeuralNetwork = reinterpret_cast<const nn::PackedNeuralNetwork*>(EmbedData);
+        g_usingEmbeddedNeuralNetwork = true;
+        std::cout << "info string Using embedded neural network" << std::endl;
         return true;
+#else
+        std::cout << "info string disabled neural network evaluation" << std::endl;
+        g_mainNeuralNetwork = nullptr;
+        g_usingEmbeddedNeuralNetwork = false;
+        return true;
+#endif // defined(CAISSA_EVALFILE)
     }
 
-    if (network->LoadFromFile(path))
+    auto* newNetwork = new nn::PackedNeuralNetwork();
+    if (newNetwork->LoadFromFile(path))
     {
-        g_mainNeuralNetwork = std::move(network);
+        g_mainNeuralNetwork = newNetwork;
         std::cout << "info string Loaded neural network: " << path << std::endl;
         return true;
     }
+    else
+    {
+        delete newNetwork;
+    }
 
     // TODO use embedded net?
-
-    g_mainNeuralNetwork.reset();
+    
     return false;
 }
 
@@ -173,7 +182,7 @@ ScoreType Evaluate(const Position& pos)
     AccumulatorCache dummyCache;
     if (g_mainNeuralNetwork)
     {
-        dummyCache.Init(g_mainNeuralNetwork.get());
+        dummyCache.Init(g_mainNeuralNetwork);
     }
 
     return Evaluate(dummyNode, dummyCache);

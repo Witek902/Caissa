@@ -196,163 +196,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
 ///
 
-PackedNeuralNetwork::PackedNeuralNetwork()
+bool PackedNeuralNetwork::SaveToFile(const char* filePath) const
 {
-}
-
-PackedNeuralNetwork::~PackedNeuralNetwork()
-{
-    Release();
-}
-
-void PackedNeuralNetwork::Release()
-{
-    ReleaseFileMapping();
-
-    if (allocatedData)
-    {
-        AlignedFree(allocatedData);
-        allocatedData = nullptr;
-    }
-
-    weightsBuffer = nullptr;
-
-    header = Header{};
-}
-
-size_t PackedNeuralNetwork::GetWeightsBufferSize() const
-{
-    return layerDataSizes[0] + layerDataSizes[1] + layerDataSizes[2] + layerDataSizes[3];
-}
-
-bool PackedNeuralNetwork::Resize(const std::vector<uint32_t>& layerSizes,
-                                 const std::vector<uint32_t>& numVariantsPerLayer)
-{
-    Release();
-
-    if (layerSizes.size() < 2 || layerSizes.size() > MaxNumLayers)
-    {
-        return false;
-    }
-
-    header.magic = MagicNumber;
-    header.version = CurrentVersion;
-
-    for (size_t i = 0; i < layerSizes.size(); ++i)
-    {
-        header.layerSizes[i] = layerSizes[i];
-        header.layerVariants[i] = i < numVariantsPerLayer.size() ? numVariantsPerLayer[i] : 1;
-    }
-    numActiveLayers = (uint32_t)layerSizes.size();
-
-    InitLayerDataSizes();
-
-    const size_t weightsSize = GetWeightsBufferSize();
-    allocatedData = AlignedMalloc(weightsSize, CACHELINE_SIZE);
-    weightsBuffer = (uint8_t*)allocatedData;
-
-    InitLayerDataPointers();
-
-    if (!weightsBuffer)
-    {
-        Release();
-        std::cerr << "Failed to allocate weights buffer" << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-void PackedNeuralNetwork::InitLayerDataSizes()
-{
-    ASSERT(numActiveLayers >= 2);
-
-    memset(layerDataSizes, 0, sizeof(layerDataSizes));
-
-    layerDataSizes[0] = header.layerVariants[0] * RoundUp<uint32_t, CACHELINE_SIZE>(
-        (header.layerSizes[0] * (header.layerSizes[1] / 2) * sizeof(FirstLayerWeightType) +
-        (header.layerSizes[1] / 2) * sizeof(FirstLayerBiasType)));
-    ASSERT(layerDataSizes[0] > 0);
-
-    for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
-    {
-        layerDataSizes[i] = header.layerVariants[i] * RoundUp<uint32_t, CACHELINE_SIZE>(
-            (header.layerSizes[i] * header.layerSizes[i+1] * sizeof(HiddenLayerWeightType) +
-             header.layerSizes[i+1] * sizeof(HiddenLayerBiasType)));
-        ASSERT(layerDataSizes[i] > 0);
-    }
-
-    layerDataSizes[numActiveLayers-1] = header.layerVariants[numActiveLayers-1] * RoundUp<uint32_t, CACHELINE_SIZE>(
-        (header.layerSizes[numActiveLayers-1] * OutputSize * sizeof(LastLayerWeightType) +
-        OutputSize * sizeof(LastLayerBiasType)));
-    ASSERT(layerDataSizes[numActiveLayers-1]);
-}
-
-void PackedNeuralNetwork::InitLayerDataPointers()
-{
-    ASSERT(numActiveLayers >= 2);
-
-    memset(layerDataPointers, 0, sizeof(layerDataPointers));
-
-    ASSERT((size_t)weightsBuffer % CACHELINE_SIZE == 0);
-    layerDataPointers[0] = weightsBuffer;
-
-    for (uint32_t i = 1; i + 1 < numActiveLayers; ++i)
-    {
-        ASSERT(layerDataSizes[i - 1] > 0);
-        layerDataPointers[i] = layerDataPointers[i - 1] + layerDataSizes[i - 1];
-        ASSERT((size_t)layerDataPointers[i] % CACHELINE_SIZE == 0);
-    }
-
-    ASSERT(layerDataSizes[numActiveLayers - 2] > 0);
-    layerDataPointers[numActiveLayers - 1] = layerDataPointers[numActiveLayers - 2] + layerDataSizes[numActiveLayers - 2];
-    ASSERT((size_t)layerDataPointers[numActiveLayers - 1] % CACHELINE_SIZE == 0);
-}
-
-void PackedNeuralNetwork::GetLayerWeightsAndBiases(uint32_t layerIndex, uint32_t layerVariant, const void*& outWeights, const void*& outBiases) const
-{
-    ASSERT(layerIndex < MaxNumLayers);
-    ASSERT(layerVariant < header.layerVariants[layerIndex]);
-    ASSERT(header.layerSizes[layerIndex] > 0);
-
-    size_t weightSize = sizeof(HiddenLayerWeightType);
-    size_t biasSize = sizeof(HiddenLayerBiasType);
-
-    if (layerIndex == 0)
-    {
-        weightSize = sizeof(FirstLayerWeightType);
-        biasSize = sizeof(FirstLayerBiasType);
-    }
-    else if (layerIndex + 1 == numActiveLayers)
-    {
-        weightSize = sizeof(LastLayerWeightType);
-        biasSize = sizeof(LastLayerBiasType);
-    }
-
-    const size_t nextLayerSize = (layerIndex + 1 < numActiveLayers) ? header.layerSizes[layerIndex + 1] : 1;
-    const size_t weightsBlockSize = weightSize * (size_t)header.layerSizes[layerIndex] * nextLayerSize;
-    const size_t biasesBlockSize = biasSize * nextLayerSize;
-    ASSERT(weightsBlockSize > 0);
-    ASSERT(biasesBlockSize > 0);
-
-    const uint8_t* basePointer = layerDataPointers[layerIndex];
-    ASSERT(basePointer != nullptr);
-
-    const uint8_t* weightsPointer = basePointer + layerVariant * RoundUp<size_t, CACHELINE_SIZE>(weightsBlockSize + biasesBlockSize);
-    const uint8_t* biasesPointer = weightsPointer + weightsBlockSize;
-
-    outWeights = weightsPointer;
-    outBiases = biasesPointer;
-}
-
-bool PackedNeuralNetwork::Save(const char* filePath) const
-{
-    if (!IsValid())
-    {
-        std::cerr << "Failed to save neural network: " << "invalid network" << std::endl;
-        return false;
-    }
-
     FILE* file = fopen(filePath, "wb");
     if (!file)
     {
@@ -360,17 +205,10 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
         return false;
     }
 
-    if (1 != fwrite(&header, sizeof(Header), 1, file))
+    if (1 != fwrite(this, sizeof(PackedNeuralNetwork), 1, file))
     {
         fclose(file);
         std::cerr << "Failed to save neural network: " << "cannot write header" << std::endl;
-        return false;
-    }
-    
-    if (1 != fwrite(weightsBuffer, GetWeightsBufferSize(), 1, file))
-    {
-        fclose(file);
-        std::cerr << "Failed to save neural network: " << "cannot write weights" << std::endl;
         return false;
     }
 
@@ -378,215 +216,31 @@ bool PackedNeuralNetwork::Save(const char* filePath) const
     return true;
 }
 
-void PackedNeuralNetwork::ReleaseFileMapping()
-{
-    if (mappedData)
-    {
-#if defined(PLATFORM_WINDOWS)
-        if (fileMapping == INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(fileMapping);
-            fileMapping = INVALID_HANDLE_VALUE;
-        }
-
-        if (fileHandle == INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(fileHandle);
-            fileHandle = INVALID_HANDLE_VALUE;
-        }
-#else
-        if (mappedData)
-        {
-            if (0 != munmap(mappedData, mappedSize))
-            {
-                perror("munmap");
-            }
-        }
-
-        if (fileDesc != -1)
-        {
-            close(fileDesc);
-            fileDesc = -1;
-        }
-#endif // PLATFORM_WINDOWS
-    }
-
-    mappedData = nullptr;
-    mappedSize = 0;
-}
-
 bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
 {
-    Release();
-
-#if defined(PLATFORM_WINDOWS)
-
-    DWORD sizeLow = 0, sizeHigh = 0;
-    
-    // open file
+    FILE* file = fopen(filePath, "rb");
+    if (!file)
     {
-#ifdef _UNICODE
-        wchar_t wideFilePath[4096];
-        size_t len = 0;
-        mbstowcs_s(&len, wideFilePath, 4096, filePath, _TRUNCATE);
-        fileHandle = ::CreateFile(wideFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-#else
-        fileHandle = ::CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-#endif
-
-        if (fileHandle == INVALID_HANDLE_VALUE)
-        {
-            fprintf(stderr, "CreateFile() failed, error = %lu.\n", GetLastError());
-            goto onError;
-        }
-    }
-    
-    sizeLow = ::GetFileSize(fileHandle, &sizeHigh);
-    fileMapping = ::CreateFileMapping(fileHandle, NULL, PAGE_READONLY, sizeHigh, sizeLow, NULL);
-    if (fileMapping == INVALID_HANDLE_VALUE)
-    {
-        fprintf(stderr, "CreateFileMapping() failed, error = %lu.\n", GetLastError());
-        goto onError;
+        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
+        return false;
     }
 
-    mappedSize = (uint64_t)sizeLow + ((uint64_t)sizeHigh << 32);
-    mappedData = (void*)MapViewOfFile(fileMapping, FILE_MAP_READ, 0, 0, 0);
-    if (mappedData == nullptr)
+    if (1 != fread(this, sizeof(PackedNeuralNetwork), 1, file))
     {
-        fprintf(stderr, "MapViewOfFile() failed, error = %lu.\n", GetLastError());
-        goto onError;
+        fclose(file);
+        std::cerr << "Failed to load neural network: " << "cannot read header" << std::endl;
+        return false;
     }
 
-#else
-
-    fileDesc = open(filePath, O_RDONLY);
-    if (fileDesc == -1)
-    {
-        perror("open");
-        goto onError;
-    }
-
-    struct stat statbuf;
-    if (fstat(fileDesc, &statbuf))
-    {
-        perror("fstat");
-        goto onError;
-    }
-
-    mappedSize = statbuf.st_size;
-    mappedData = mmap(NULL, statbuf.st_size, PROT_READ, MAP_SHARED, fileDesc, 0);
-    if (mappedData == MAP_FAILED)
-    {
-        perror("mmap");
-        goto onError;
-    }
-
-#endif // PLATFORM_WINDOWS
-
-    memcpy(&header, mappedData, sizeof(Header));
-
-    if (header.magic != MagicNumber)
-    {
-        std::cerr << "Failed to load neural network: " << "invalid magic" << std::endl;
-        goto onError;
-    }
-
-    if (header.version != CurrentVersion)
-    {
-        std::cerr << "Failed to load neural network: " << "unsupported version" << std::endl;
-        goto onError;
-    }
-
-    if (header.layerSizes[0] == 0 || header.layerSizes[0] > MaxInputs)
-    {
-        std::cerr << "Failed to load neural network: " << "invalid number of inputs" << std::endl;
-        goto onError;
-    }
-
-    if (header.layerSizes[1] == 0 || header.layerSizes[1] / 2 != AccumulatorSize)
-    {
-        std::cerr << "Failed to load neural network: " << "invalid first layer size" << std::endl;
-        goto onError;
-    }
-
-    numActiveLayers = 0;
-    for (uint32_t i = 0; i < MaxNumLayers; ++i)
-    {
-        if (header.layerSizes[i] == 0) break;
-
-        // handle pre-variants format
-        if (header.layerVariants[i] == 0) header.layerVariants[i] = 1;
-
-        if (header.layerVariants[i] != 1 && header.layerVariants[i] != NumVariants)
-        {
-            std::cerr << "Failed to load neural network: " << "unexpected number of variants" << std::endl;
-            goto onError;
-        }
-
-        numActiveLayers = i + 1;
-    }
-
-    if (numActiveLayers < 2)
-    {
-        std::cerr << "Failed to load neural network: " << "invalid number of layers" << std::endl;
-        goto onError;
-    }
-
-    weightsBuffer = reinterpret_cast<const uint8_t*>(mappedData) + sizeof(Header);
-
-    InitLayerDataSizes();
-    InitLayerDataPointers();
-
-    if (sizeof(Header) + GetWeightsBufferSize() > mappedSize)
-    {
-        std::cerr << "Failed to load neural network: " << "file is too small" << std::endl;
-        goto onError;
-    }
-
-    return true;
-
-onError:
-    Release();
-    return false;
-}
-
-bool PackedNeuralNetwork::LoadFromMemory(const void* data)
-{
-    Release();
-
-    // TODO this should be all hardcoded
-    header = Header{};
-    header.layerSizes[0] = nn::NumNetworkInputs;
-    header.layerSizes[1] = nn::AccumulatorSize * 2;
-    header.layerVariants[0] = 1;
-    header.layerVariants[1] = nn::NumVariants;
-    numActiveLayers = 2;
-
-    weightsBuffer = reinterpret_cast<const uint8_t*>(data) + sizeof(Header);
-
-    InitLayerDataSizes();
-    InitLayerDataPointers();
-
+    fclose(file);
     return true;
 }
 
 int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const
 {
-    ASSERT(numActiveLayers > 1);
-    ASSERT(GetAccumulatorSize() == AccumulatorSize);
-    ASSERT(GetLayerSize(2) <= MaxNeuronsInHiddenLayers);
-    ASSERT(GetLayerSize(3) <= MaxNeuronsInHiddenLayers);
-
-    constexpr uint32_t weightSize = sizeof(LastLayerWeightType);
-    constexpr uint32_t biasSize = sizeof(LastLayerBiasType);
-    constexpr uint32_t weightsBlockSize = 2u * nn::AccumulatorSize * weightSize;
-
-    const uint8_t* weights = layerDataPointers[1] + variant * RoundUp<uint32_t, CACHELINE_SIZE>(weightsBlockSize + biasSize);
-    const uint8_t* biases = weights + weightsBlockSize;
-
     return LinearLayer_Accum_SingleOutput(
-        reinterpret_cast<const LastLayerWeightType*>(weights),
-        reinterpret_cast<const LastLayerBiasType*>(biases),
+        lastLayerVariants[variant].weights,
+        &lastLayerVariants[variant].bias,
         stmAccum.values,
         nstmAccum.values);
 }
@@ -594,10 +248,10 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator&
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const
 {
     Accumulator stmAccum;
-    stmAccum.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), stmNumFeatures, stmFeatures);
+    stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
 
     Accumulator nstmAccum;
-    nstmAccum.Refresh(GetAccumulatorWeights(), GetAccumulatorBiases(), nstmNumFeatures, nstmFeatures);
+    nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
 
     return Run(stmAccum, nstmAccum, variant);
 }
