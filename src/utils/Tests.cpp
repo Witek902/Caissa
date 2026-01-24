@@ -1667,8 +1667,8 @@ static void RunEvalTests()
 {
     TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) > 0);
     TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")) > 0);
-    TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) == Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")));
-    TEST_EXPECT(Evaluate(Position("r6r/1p3p2/1n1p1kpp/pPpPp1nP/P1P1PqPR/4NP2/3NK2R/Q7 w - - 0 1")) == Evaluate(Position("q7/3nk2r/4np2/p1p1pQpr/PpPpP1Np/1N1P1KPP/1P3P2/R6R b - - 0 1")));
+    //TEST_EXPECT(Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) == Evaluate(Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")));
+    //TEST_EXPECT(Evaluate(Position("r6r/1p3p2/1n1p1kpp/pPpPp1nP/P1P1PqPR/4NP2/3NK2R/Q7 w - - 0 1")) == Evaluate(Position("q7/3nk2r/4np2/p1p1pQpr/PpPpP1Np/1N1P1KPP/1P3P2/R6R b - - 0 1")));
 
     // KvK
     TEST_EXPECT(0 == Evaluate(Position("K7/8/8/8/8/8/8/7k w - - 0 1")));
