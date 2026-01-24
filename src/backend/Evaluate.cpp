@@ -219,6 +219,9 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
         value += pos.GetSideToMove() == White ? bonus : -bonus;
     }
 
+    // add eval noise
+    value += static_cast<ScoreType>(pos.GetHash() % 8) - 3;
+
     // saturate eval value so it doesn't exceed KnownWinValue
     if (value > c_evalSaturationTreshold)
         value = c_evalSaturationTreshold + (value - c_evalSaturationTreshold) / 8;
