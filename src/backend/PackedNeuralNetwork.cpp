@@ -196,6 +196,22 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
 
 ///
 
+PackedNeuralNetwork::PackedNeuralNetwork()
+{
+    header.magic = MagicNumber;
+    header.version = CurrentVersion;
+
+    header.layerSizes[0] = NumNetworkInputs;
+    header.layerSizes[1] = 2u * AccumulatorSize;
+    header.layerSizes[2] = 0;
+    header.layerSizes[3] = 0;
+
+    header.layerVariants[0] = 1;
+    header.layerVariants[1] = 8;
+    header.layerVariants[2] = 0;
+    header.layerVariants[3] = 0;
+}
+
 bool PackedNeuralNetwork::SaveToFile(const char* filePath) const
 {
     FILE* file = fopen(filePath, "wb");

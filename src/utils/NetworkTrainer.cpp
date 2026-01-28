@@ -182,7 +182,7 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
 {
     ASSERT(pos.GetSideToMove() == White);
 
-    constexpr uint32_t maxFeatures = 64;
+    constexpr uint32_t maxFeatures = 32;
 #ifdef USE_VIRTUAL_FEATURES
     constexpr bool useVirtualFeatures = true;
 #else
@@ -639,7 +639,7 @@ bool NetworkTrainer::UnpackNetwork()
     return true;
 }
 
-static volatile float g_learningRateScale = 0.75f;
+static volatile float g_learningRateScale = 0.5f;
 static volatile float g_lambdaScale = 0.0f;
 static volatile float g_weightDecay = 1.0f / 2048.0f;
 
@@ -678,7 +678,7 @@ bool NetworkTrainer::Train()
     size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
-        const float warmup = iteration < 100.0f ? (float)(iteration + 1) / 100.0f : 1.0f;
+        const float warmup = (iteration < 10.0f) ? (float)(iteration + 1) / 10.0f : 1.0f;
         const float learningRate = g_learningRateScale * warmup * std::lerp(minLearningRate, maxLearningRate, expf(-0.0005f * (float)iteration));
         const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 

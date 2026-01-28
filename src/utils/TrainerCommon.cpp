@@ -166,7 +166,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
             // skip early moves
-            if (outEntry.pos.moveCount < 8 && numPieces >= 30)
+            if (outEntry.pos.moveCount < 10 && numPieces >= 30)
                 continue;
 
             // skip based on piece count
@@ -182,7 +182,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (EvaluateEndgame(outPosition, endgameScore))
                     continue;
 
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 22) / 30.0f);
+                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 30.0f);
                 if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
                     continue;
             }
