@@ -96,7 +96,7 @@ INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bu
 
 INLINE uint32_t GetNetworkVariant(const Position& pos)
 {
-    return std::min(pos.GetNumPiecesExcludingKing() / 4u, 7u);
+    return std::min(pos.GetNumPiecesExcludingKing() / 4u, nn::NumVariants - 1u);
 }
 
 template<bool IncludePieceFeatures = false>

@@ -150,6 +150,8 @@ struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
     FirstLayerBiasType accumulatorBiases[AccumulatorSize];
     LastLayerVariant lastLayerVariants[NumVariants];
 
+    PackedNeuralNetwork();
+
     // load from file
     bool LoadFromFile(const char* filePath);
 
