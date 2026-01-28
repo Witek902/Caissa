@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.24)
 
 project(caissa LANGUAGES C CXX)
 
@@ -188,7 +188,7 @@ endif()
 
 # warning exceptions
 if (MSVC)
-    add_compile_options(/W4 /WX /GR- /MP)
+    # add_compile_options(/W4 /WX /GR-)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
