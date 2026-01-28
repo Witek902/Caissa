@@ -337,7 +337,7 @@ void WeightsStorage::PrintStats() const
         << "], bias range: [" << minBias << " ... " << maxBias
         << "], weight avg: " << weightAvg << ", bias avg: " << biasAvg
         << ", weight std dev: " << weightStdDev << ", bias std dev: " << biasStdDev
-        << std::endl;
+        << '\n';
 }
 
 } // namespace nn
