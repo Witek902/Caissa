@@ -8,7 +8,16 @@ namespace cuda {
 // Activation functions
 __device__ __forceinline__ float Sigmoid(float x)
 {
-    return 1.0f / (1.0f + expf(-x));
+    if (x >= 0.0f)
+    {
+        const float z = expf(-x);
+        return 1.0f / (1.0f + z);
+    }
+    else
+    {
+        const float z = expf(x);
+        return z / (1.0f + z);
+    }
 }
 
 __device__ __forceinline__ float CReLU(float x)
@@ -74,7 +83,7 @@ __global__ void CopyBiasesKernel(
 
 // CUDA kernel for sparse binary input accumulation
 __global__ void SparseBinaryInputKernel(
-    const CudaTrainingVector* __restrict__ trainingVectors,
+    const TrainingEntry* __restrict__ trainingVectors,
     const float* __restrict__ weights,
     float* __restrict__ accumulators,
     uint32_t batchSize,
@@ -86,7 +95,7 @@ __global__ void SparseBinaryInputKernel(
     const uint32_t batchIdx = blockIdx.y * blockDim.y + threadIdx.y;
     if (batchIdx >= batchSize || accumulatorIdx >= accumulatorSize) return;
 
-    const CudaTrainingVector* trainingVector = trainingVectors + batchIdx;
+    const TrainingEntry* trainingVector = trainingVectors + batchIdx;
 
     // Process white features
     for (uint32_t i = 0; i < trainingVector->numWhiteFeatures; ++i)
@@ -122,7 +131,7 @@ __global__ void CReLUActivationKernel(
 
 // CUDA kernel for fully connected layer (last layer)
 __global__ void FullyConnectedKernel(
-    const CudaTrainingVector* __restrict__ trainingVectors,
+    const TrainingEntry* __restrict__ trainingVectors,
     const float* __restrict__ inputs,
     const float* __restrict__ weights,
     float* __restrict__ outputs,
@@ -133,7 +142,8 @@ __global__ void FullyConnectedKernel(
     const uint32_t batchIdx = blockIdx.x * blockDim.x + threadIdx.x;
     if (batchIdx >= batchSize) return;
 
-    const uint32_t weightsOffset = trainingVectors[batchIdx].variant * (inputSize + 1);
+    const uint32_t variant = trainingVectors[batchIdx].variant;
+    const uint32_t weightsOffset = variant * (inputSize + 1);
 
     // Single output per batch
     float sum = weights[weightsOffset + inputSize];
@@ -245,7 +255,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 // Backward pass kernels
 __global__ void SigmoidDerivativeKernel(
     const float* __restrict__ outputs,
-    const CudaTrainingVector* __restrict__ trainingVectors,
+    const TrainingEntry* __restrict__ trainingVectors,
     float* __restrict__ outputErrors,
     uint32_t batchSize
 )
@@ -256,14 +266,14 @@ __global__ void SigmoidDerivativeKernel(
     const float output = outputs[batchIdx];
     const float target = trainingVectors[batchIdx].targetOutput;
     const float derivative = output * (1.0f - output);
-    outputErrors[batchIdx] = fmin(1.0f, fmax(-1.0f, 2.0f * (output - target) * derivative));
+    outputErrors[batchIdx] = 2.0f * (output - target) * derivative;
 }
 
 __global__ void LastLayerGradientsKernel(
-    const CudaTrainingVector* __restrict__ trainingVectors,
+    const TrainingEntry* __restrict__ trainingVectors,
     const float* __restrict__ activations,
     const float* __restrict__ outputErrors,
-    double* __restrict__ weightGradients,
+    float* __restrict__ weightGradients,
     uint32_t batchSize,
     uint32_t inputSize
 )
@@ -278,7 +288,7 @@ __global__ void LastLayerGradientsKernel(
         float gradient = 0.0f;
         for (uint32_t batchIdx = 0; batchIdx < batchSize; ++batchIdx)
         {
-            const CudaTrainingVector* trainingVector = trainingVectors + batchIdx;
+            const TrainingEntry* trainingVector = trainingVectors + batchIdx;
             if (trainingVector->variant != variantIdx) continue;
             gradient += activations[batchIdx * inputSize + inputIdx] * outputErrors[batchIdx];
         }
@@ -289,7 +299,7 @@ __global__ void LastLayerGradientsKernel(
         float gradient = 0.0f;
         for (uint32_t batchIdx = 0; batchIdx < batchSize; ++batchIdx)
         {
-            const CudaTrainingVector* trainingVector = trainingVectors + batchIdx;
+            const TrainingEntry* trainingVector = trainingVectors + batchIdx;
             if (trainingVector->variant != variantIdx) continue;
             gradient += outputErrors[batchIdx];
         }
@@ -298,7 +308,7 @@ __global__ void LastLayerGradientsKernel(
 }
 
 __global__ void BackpropToCReLUKernel(
-    const CudaTrainingVector* __restrict__ trainingVectors,
+    const TrainingEntry* __restrict__ trainingVectors,
     const float* __restrict__ outputErrors,
     const float* __restrict__ creluInputs,
     float* __restrict__ creluErrors,
@@ -323,8 +333,8 @@ __global__ void BackpropToCReLUKernel(
 
 __global__ void FeatureTransformerGradientsKernel(
     const float* __restrict__ creluErrors,
-    const CudaTrainingVector* __restrict__ trainingVectors,
-    double* __restrict__ weightGradients,
+    const TrainingEntry* __restrict__ trainingVectors,
+    float* __restrict__ weightGradients,
     uint32_t batchSize,
     uint32_t inputSize,
     uint32_t accumulatorSize
@@ -334,7 +344,7 @@ __global__ void FeatureTransformerGradientsKernel(
     const uint32_t batchIdx = blockIdx.y * blockDim.y + threadIdx.y;
     if (batchIdx >= batchSize || accumulatorIdx >= accumulatorSize) return;
 
-    const CudaTrainingVector* trainingVector = trainingVectors + batchIdx;
+    const TrainingEntry* trainingVector = trainingVectors + batchIdx;
 
     // Process white features
     const float whitesError = creluErrors[2 * batchIdx * accumulatorSize + accumulatorIdx];
@@ -371,7 +381,7 @@ __global__ void FeatureTransformerGradientsKernel(
     atomicAdd(&weightGradients[biasGradientIdx], (whitesError + blacksError));
 }
 
-void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, float weightDecay, size_t iteration)
+void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_t iteration)
 {
     const uint32_t batchSize = batch.batchSize;
 
@@ -443,7 +453,6 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, float
     m_lastLayerWeights->UpdateAdam(
         batch.lastLayerGradients.Get(),
         learningRate,
-        weightDecay,
         iteration,
         m_stream.Get()
     );
@@ -452,12 +461,9 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, float
     m_featureTransformerWeights->UpdateAdam(
         batch.featureTransformerGradients.Get(),
         learningRate,
-        weightDecay,
         iteration,
         m_stream.Get()
     );
-
-    m_stream.Synchronize();
 }
 
 } // namespace cuda

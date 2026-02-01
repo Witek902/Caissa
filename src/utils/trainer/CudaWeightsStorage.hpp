@@ -21,7 +21,7 @@ public:
     void CopyToHost(nn::WeightsStorage& hostWeights) const;
 
     // Update weights using gradients
-    void UpdateAdam(const double* gradients, float learningRate, float weightDecay, size_t iteration, cudaStream_t stream);
+    void UpdateAdam(const float* gradients, float learningRate, size_t iteration, cudaStream_t stream);
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;
@@ -34,7 +34,6 @@ public:
     CudaBuffer<float> m_weights;
     CudaBuffer<float> m_moment1;  // Adam moment 1
     CudaBuffer<float> m_moment2;  // Adam moment 2
-    CudaBuffer<float> m_weightsMask;
 
 private:
     void AllocateBuffers();
