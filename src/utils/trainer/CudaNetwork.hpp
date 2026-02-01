@@ -2,24 +2,15 @@
 
 #include "CudaCommon.hpp"
 #include "CudaWeightsStorage.hpp"
+#include "../TrainerCommon.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"
 
 namespace nn {
 namespace cuda {
 
-struct CudaTrainingVector
-{
-    uint32_t variant;
-    uint16_t whiteFeatures[32];  // Max features per position
-    uint16_t blackFeatures[32];
-    uint32_t numWhiteFeatures;
-    uint32_t numBlackFeatures;
-    float targetOutput;
-};
-
 struct CudaBatchData
 {
-    CudaBuffer<CudaTrainingVector> trainingVectors;
+    CudaBuffer<TrainingEntry> trainingVectors;
     CudaBuffer<float> networkOutputs;
     CudaBuffer<float> outputErrors;
     CudaBuffer<float> creluErrors;
@@ -30,8 +21,8 @@ struct CudaBatchData
     CudaBuffer<float> activationBuffer;     // For activation outputs
 
     // Temporary buffers for gradients
-    CudaBuffer<double> lastLayerGradients;
-    CudaBuffer<double> featureTransformerGradients;
+    CudaBuffer<float> lastLayerGradients;
+    CudaBuffer<float> featureTransformerGradients;
 
     uint32_t batchSize;
 
@@ -62,11 +53,13 @@ public:
 
     void Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
     void Forward(CudaBatchData& batch);
-    void Backward(CudaBatchData& batch, float learningRate, float weightDecay, size_t iteration);
+    void Backward(CudaBatchData& batch, float learningRate, size_t iteration);
 
     // Weight management
     void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
     void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights) const;
+
+    const CudaStream& GetStream() const { return m_stream; }
 
     // Network architecture parameters
     static constexpr uint32_t c_accumulatorSize = nn::AccumulatorSize;
