@@ -28,6 +28,7 @@ bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingData
         if (fileStream->IsOpen() && fileSize > sizeof(PositionEntry))
         {
             InputFileContext& ctx = mContexts.emplace_back();
+            ctx.mutex = std::make_unique<std::mutex>();
             ctx.fileStream = std::move(fileStream);
             ctx.fileName = fileName;
             ctx.fileSize = fileSize;
@@ -91,7 +92,7 @@ uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
     return low - 1u;
 }
 
-bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask)
+bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
 {
     std::uniform_real_distribution<double> distr;
     const double u = distr(gen);
@@ -104,27 +105,32 @@ bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& out
     return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition, kingBucketMask);
 }
 
-bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask)
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
 {
     for (;;)
     {
-        if (!fileStream->Read(&outEntry, sizeof(PositionEntry)))
         {
-            // if read failed, reset to the file beginning and try again
-
-            if (fileStream->GetPosition() > 0)
-            {
-                std::cout << "Resetting stream " << fileName << std::endl;
-                fileStream->SetPosition(0);
-            }
-            else
-            {
-                return false;
-            }
-
+            std::scoped_lock lock(*mutex);
             if (!fileStream->Read(&outEntry, sizeof(PositionEntry)))
             {
-                return false;
+                // if read failed, reset to the file beginning and try again
+
+                if (fileStream->GetPosition() > 0)
+                {
+                    std::cout << "Resetting stream " << fileName << std::endl;
+                    fileStream->SetPosition(0);
+                }
+                else
+                {
+                    std::cout << "ERROR: Failed to read from stream " << fileName << std::endl;
+                    return false;
+                }
+
+                if (!fileStream->Read(&outEntry, sizeof(PositionEntry)))
+                {
+                    std::cout << "ERROR: Failed to read from stream " << fileName << " after reset" << std::endl;
+                    return false;
+                }
             }
         }
 
@@ -166,7 +172,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
             // skip early moves
-            if (outEntry.pos.moveCount < 10 && numPieces >= 30)
+            if (outEntry.pos.moveCount < 8 && numPieces >= 30)
                 continue;
 
             // skip based on piece count
@@ -182,7 +188,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (EvaluateEndgame(outPosition, endgameScore))
                     continue;
 
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 24) / 30.0f);
+                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 22) / 30.0f);
                 if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
                     continue;
             }

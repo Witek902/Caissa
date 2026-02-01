@@ -68,15 +68,11 @@ private:
     {
         float nnMinError = std::numeric_limits<float>::max();
         float nnMaxError = 0.0f, nnErrorSum = 0.0f;
-
 #ifdef USE_PACKED_NET
         float nnPackedQuantizationErrorSum = 0.0f;
         float nnPackedMinError = std::numeric_limits<float>::max();
         float nnPackedMaxError = 0.0f, nnPackedErrorSum = 0.0f;
 #endif // USE_PACKED_NET
-
-        float evalMinError = std::numeric_limits<float>::max();
-        float evalMaxError = 0.0f, evalErrorSum = 0.0f;
     };
 
     struct alignas(CACHELINE_SIZE) ValidationPerThreadData
@@ -197,30 +193,27 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     uint32_t numBlackFeatures = PositionToFeaturesVector<useVirtualFeatures>(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
-    outEntry.whiteFeatures.clear();
-    outEntry.whiteFeatures.reserve(numWhiteFeatures);
+    outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
+    outEntry.numBlackFeatures = (uint8_t)numBlackFeatures;
     for (uint32_t i = 0; i < numWhiteFeatures; ++i)
-        outEntry.whiteFeatures.emplace_back(whiteFeatures[i]);
-
-    outEntry.blackFeatures.clear();
-    outEntry.blackFeatures.reserve(numBlackFeatures);
+        outEntry.whiteFeatures[i] = whiteFeatures[i];
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
-        outEntry.blackFeatures.emplace_back(blackFeatures[i]);
+        outEntry.blackFeatures[i] = blackFeatures[i];
 
-    outEntry.networkVariant = GetNetworkVariant(pos);
+    outEntry.variant = GetNetworkVariant(pos);
 }
 
 static void TrainingEntryToNetworkInput(const TrainingEntry& entry, nn::InputDesc& inputDesc)
 {
-    inputDesc.variant = entry.networkVariant;
+    inputDesc.variant = entry.variant;
 
     inputDesc.inputs[0].mode = nn::InputMode::SparseBinary;
-    inputDesc.inputs[0].binaryFeatures = entry.whiteFeatures.data();
-    inputDesc.inputs[0].numFeatures = static_cast<uint32_t>(entry.whiteFeatures.size());
+    inputDesc.inputs[0].binaryFeatures = entry.whiteFeatures;
+    inputDesc.inputs[0].numFeatures = entry.numWhiteFeatures;
 
     inputDesc.inputs[1].mode = nn::InputMode::SparseBinary;
-    inputDesc.inputs[1].binaryFeatures = entry.blackFeatures.data();
-    inputDesc.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
+    inputDesc.inputs[1].binaryFeatures = entry.blackFeatures;
+    inputDesc.inputs[1].numFeatures = entry.numBlackFeatures;
 }
 
 bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask, float baseLambda)
@@ -268,8 +261,7 @@ bool NetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries,
         }
 
         PositionToTrainingEntry(pos, outEntries[i]);
-        outEntries[i].output = score;
-        outEntries[i].pos = pos;
+        outEntries[i].targetOutput = score;
     }
 
     return true;
@@ -288,25 +280,10 @@ static void ParallelFor(const char* debugName, uint32_t arraySize, const threadp
 #ifdef USE_PACKED_NET
 static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeuralNetwork& net)
 {
-    uint32_t numWhiteFeatures = 0;
-    uint32_t numBlackFeatures = 0;
-
-    // skip virtual features
-    for (size_t i = 0; i < entry.whiteFeatures.size(); ++i)
-    {
-        if (entry.whiteFeatures[i] >= nn::NumNetworkInputs) break;
-        ++numWhiteFeatures;
-    }
-    for (size_t i = 0; i < entry.blackFeatures.size(); ++i)
-    {
-        if (entry.blackFeatures[i] >= nn::NumNetworkInputs) break;
-        ++numBlackFeatures;
-    }
-
     const int32_t packedNetworkOutput = net.Run(
-        entry.whiteFeatures.data(), numWhiteFeatures,
-        entry.blackFeatures.data(), numBlackFeatures,
-        entry.networkVariant);
+        entry.whiteFeatures, entry.numWhiteFeatures,
+        entry.blackFeatures, entry.numBlackFeatures,
+        entry.variant);
     const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)(nn::OutputScale * nn::WeightScale) * c_nnOutputToCentiPawns / 100.0f;
     return EvalToExpectedGameScore(scaledPackedNetworkOutput);
 }
@@ -329,9 +306,7 @@ void NetworkTrainer::Validate(size_t iteration)
 
             const TrainingEntry& entry = m_validationSet[i];
 
-            const float expectedValue = entry.output;
-
-            const ScoreType evalValue = Evaluate(entry.pos);
+            const float expectedValue = entry.targetOutput;
 
 #ifdef USE_PACKED_NET
             const float nnPackedValue = EvalPackedNetwork(entry, m_packedNet);
@@ -346,13 +321,11 @@ void NetworkTrainer::Validate(size_t iteration)
             if (i + 1 == cNumValidationVectorsPerIteration)
             {
                 std::cout
-                    << entry.pos.ToFEN() << std::endl << entry.pos.Print() << std::endl
                     << "True Score:     " << expectedValue << " (" << ExpectedGameScoreToInternalEval(expectedValue) << ")" << std::endl
                     << "NN eval:        " << nnValue << " (" << ExpectedGameScoreToInternalEval(nnValue) << ")" << std::endl
 #ifdef USE_PACKED_NET
                     << "Packed NN eval: " << nnPackedValue << " (" << ExpectedGameScoreToInternalEval(nnPackedValue) << ")" << std::endl
 #endif // USE_PACKED_NET
-                    << "Static eval:    " << InternalEvalToExpectedGameScore(evalValue) << " (" << evalValue << ")" << std::endl
                     << std::endl;
             }
 
@@ -363,13 +336,6 @@ void NetworkTrainer::Validate(size_t iteration)
                 stats.nnErrorSum += error * error;
                 stats.nnMinError = std::min(stats.nnMinError, errorDiff);
                 stats.nnMaxError = std::max(stats.nnMaxError, errorDiff);
-            }
-            {
-                const float error = expectedValue - InternalEvalToExpectedGameScore(evalValue);
-                const float errorDiff = std::abs(error);
-                stats.evalErrorSum += error * error;
-                stats.evalMinError = std::min(stats.evalMinError, errorDiff);
-                stats.evalMaxError = std::max(stats.evalMaxError, errorDiff);
             }
 #ifdef USE_PACKED_NET
             stats.nnPackedQuantizationErrorSum += (nnValue - nnPackedValue) * (nnValue - nnPackedValue);
@@ -403,13 +369,9 @@ void NetworkTrainer::Validate(size_t iteration)
         stats.nnPackedMinError = std::min(stats.nnPackedMinError, threadStats.nnPackedMinError);
         stats.nnPackedMaxError = std::max(stats.nnPackedMaxError, threadStats.nnPackedMaxError);
 #endif // USE_PACKED_NET
-        stats.evalErrorSum += threadStats.evalErrorSum;
-        stats.evalMinError = std::min(stats.evalMinError, threadStats.evalMinError);
-        stats.evalMaxError = std::max(stats.evalMaxError, threadStats.evalMaxError);
     }
 
     stats.nnErrorSum = sqrtf(stats.nnErrorSum / cNumValidationVectorsPerIteration);
-    stats.evalErrorSum = sqrtf(stats.evalErrorSum / cNumValidationVectorsPerIteration);
 #ifdef USE_PACKED_NET
     stats.nnPackedErrorSum = sqrtf(stats.nnPackedErrorSum / cNumValidationVectorsPerIteration);
     stats.nnPackedQuantizationErrorSum = sqrtf(stats.nnPackedQuantizationErrorSum / cNumValidationVectorsPerIteration);
@@ -422,7 +384,7 @@ void NetworkTrainer::Validate(size_t iteration)
         << "PNN avg/min/max error:  " << std::setprecision(5) << stats.nnPackedErrorSum << " " << std::setprecision(4) << stats.nnPackedMinError << " " << std::setprecision(4) << stats.nnPackedMaxError << std::endl
         << "Quantization error:     " << std::setprecision(5) << stats.nnPackedQuantizationErrorSum << std::endl
 #endif // USE_PACKED_NET
-        << "Eval avg/min/max error: " << std::setprecision(5) << stats.evalErrorSum << " " << std::setprecision(4) << stats.evalMinError << " " << std::setprecision(4) << stats.evalMaxError << std::endl;
+        ;
 
     {
         const char* s_testPositions[] =
@@ -700,9 +662,9 @@ bool NetworkTrainer::Train()
             const TrainingEntry& entry = m_trainingSetCopy[i];
 
             nn::TrainingVector& trainingVector = batch[i];
-            trainingVector.input.variant = entry.networkVariant;
+            trainingVector.input.variant = entry.variant;
             trainingVector.output.mode = nn::OutputMode::Single;
-            trainingVector.output.singleValue = entry.output;
+            trainingVector.output.singleValue = entry.targetOutput;
 
             TrainingEntryToNetworkInput(entry, trainingVector.input);
         });

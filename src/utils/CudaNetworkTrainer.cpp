@@ -29,21 +29,21 @@
 #include <limits.h>
 #include <cmath>
 
-#define USE_PACKED_NET
+#define USE_PACKED_NET_VALIDATION
+// #define USE_EVAL_VALIDATION
 
 using namespace threadpool;
 
-static const uint32_t cMaxIterations = 1'000'000'000;
-static const uint32_t cNumTrainingVectorsPerIteration = 512 * 1024;
-static const uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
-static const uint32_t cBatchSize = 32 * 1024;
+static constexpr uint32_t cMaxIterations = 4'000'000'000;
+static constexpr uint32_t cNumTrainingVectorsPerIteration = 2 * 1024 * 1024;
+static constexpr uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
+static constexpr uint32_t cBatchSize = 32 * 1024;
 
 class CudaNetworkTrainer
 {
 public:
     CudaNetworkTrainer()
-        : m_randomGenerator(m_randomDevice())
-        , m_trainingLog("training.log")
+        : m_trainingLog("training.log")
     {
         m_packedNet = std::make_unique<nn::PackedNeuralNetwork>();
 
@@ -51,6 +51,11 @@ public:
         m_trainingSet_Read.resize(cNumTrainingVectorsPerIteration);
         m_trainingSet_Write.resize(cNumTrainingVectorsPerIteration);
         m_validationPerThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
+
+        for (uint32_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
+        {
+            m_randomGenerators.emplace_back(m_randomDevice());
+        }
 
         // Initialize CUDA batch data
         m_cudaBatchData.Allocate(cBatchSize);
@@ -72,15 +77,16 @@ private:
 
     struct ValidationStats
     {
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
         float nnPackedMinError = std::numeric_limits<float>::max();
         float nnPackedMaxError = 0.0f;
         double nnPackedErrorSum = 0.0f;
-#endif // USE_PACKED_NET
-
+#endif // USE_PACKED_NET_VALIDATION
+#ifdef USE_EVAL_VALIDATION
         float evalMinError = std::numeric_limits<float>::max();
         float evalMaxError = 0.0f;
         double evalErrorSum = 0.0f;
+#endif // USE_EVAL_VALIDATION
     };
 
     struct alignas(CACHELINE_SIZE) ValidationPerThreadData
@@ -96,13 +102,13 @@ private:
 
     nn::cuda::CudaNeuralNetwork m_cudaNetwork;
     nn::cuda::CudaBatchData m_cudaBatchData;
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
     std::unique_ptr<nn::PackedNeuralNetwork> m_packedNet;
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
 
-    std::vector<TrainingEntry> m_validationSet; // TODO remove
-    std::vector<TrainingEntry> m_trainingSet_Write; // training set written to by IO
-    std::vector<TrainingEntry> m_trainingSet_Read; // training set used by trainer
+    TrainingDataSet m_validationSet; // TODO remove
+    TrainingDataSet m_trainingSet_Write; // training set written to by IO
+    TrainingDataSet m_trainingSet_Read; // training set used by trainer
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
     alignas(CACHELINE_SIZE)
@@ -112,11 +118,11 @@ private:
     std::mutex m_mutex;
 
     std::random_device m_randomDevice;
-    std::mt19937 m_randomGenerator;
+    std::vector<std::mt19937> m_randomGenerators; // per-thread RNGs
 
     std::ofstream m_trainingLog;
 
-    bool GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask, float baseLambda);
+    void GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda);
 
     void Validate(const TaskContext& ctx, size_t iteration);
 
@@ -126,7 +132,6 @@ private:
     bool UnpackNetwork();
 
     // CUDA-specific methods
-    void PrepareCudaBatch(const std::vector<TrainingEntry>& entries, uint32_t startIndex, uint32_t batchSize);
     void RunCudaTrainingIteration(float learningRate, size_t iteration);
 };
 
@@ -165,53 +170,40 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     uint32_t numBlackFeatures = PositionToFeaturesVector<false>(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
-    outEntry.whiteFeatures.clear();
-    outEntry.whiteFeatures.reserve(numWhiteFeatures);
+    outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
+    outEntry.numBlackFeatures = (uint8_t)numBlackFeatures;
     for (uint32_t i = 0; i < numWhiteFeatures; ++i)
-        outEntry.whiteFeatures.emplace_back(whiteFeatures[i]);
-
-    outEntry.blackFeatures.clear();
-    outEntry.blackFeatures.reserve(numBlackFeatures);
+        outEntry.whiteFeatures[i] = whiteFeatures[i];
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
-        outEntry.blackFeatures.emplace_back(blackFeatures[i]);
+        outEntry.blackFeatures[i] = blackFeatures[i];
 
-    outEntry.networkVariant = GetNetworkVariant(pos);
+    outEntry.variant = GetNetworkVariant(pos);
 }
 
-static void TrainingEntryToNetworkInput(const TrainingEntry& entry, nn::InputDesc& inputDesc)
+void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda)
 {
-    inputDesc.variant = entry.networkVariant;
-
-    inputDesc.inputs[0].mode = nn::InputMode::SparseBinary;
-    inputDesc.inputs[0].binaryFeatures = entry.whiteFeatures.data();
-    inputDesc.inputs[0].numFeatures = static_cast<uint32_t>(entry.whiteFeatures.size());
-
-    inputDesc.inputs[1].mode = nn::InputMode::SparseBinary;
-    inputDesc.inputs[1].binaryFeatures = entry.blackFeatures.data();
-    inputDesc.inputs[1].numFeatures = static_cast<uint32_t>(entry.blackFeatures.size());
-}
-
-bool CudaNetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntries, uint64_t kingBucketMask, float baseLambda)
-{
-    Position pos;
-    PositionEntry entry;
-
-    for (uint32_t i = 0; i < cNumTrainingVectorsPerIteration; ++i)
+    builder.ParallelFor("GenerateSet", static_cast<uint32_t>(outSet.size()),
+        [this, &outSet, kingBucketMask, lambda](const TaskContext& ctx, uint32_t index)
     {
-        if (!m_dataLoader.FetchNextPosition(m_randomGenerator, entry, pos, kingBucketMask))
-            return false;
+        Position pos;
+        PositionEntry entry;
+
+        auto& rng = m_randomGenerators[ctx.threadId];
+
+        if (!m_dataLoader.FetchNextPosition(rng, entry, pos, kingBucketMask))
+            return;
 
         // flip the board randomly in pawnless positions
         if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
         {
-            if (std::uniform_int_distribution<>(0, 1)(m_randomGenerator) != 0)
+            if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
                 pos.MirrorVertically();
-            if (std::uniform_int_distribution<>(0, 1)(m_randomGenerator) != 0)
+            if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
                 pos.FlipDiagonally();
         }
 
         // make game score more important for high move count
-        const float wdlLambda = baseLambda * expf(-(float)pos.GetMoveCount() / 120.0f);
+        const float wdlLambda = lambda * expf(-(float)pos.GetMoveCount() / 120.0f);
 
         const Game::Score gameScore = (Game::Score)entry.wdlScore;
         const Game::Score tbScore = (Game::Score)entry.tbScore;
@@ -235,39 +227,13 @@ bool CudaNetworkTrainer::GenerateTrainingSet(std::vector<TrainingEntry>& outEntr
             score = std::lerp(wdlScore, score, tbLambda);
         }
 
-        PositionToTrainingEntry(pos, outEntries[i]);
-        outEntries[i].output = score;
-        outEntries[i].pos = pos;
-    }
-
-    return true;
-}
-
-void CudaNetworkTrainer::PrepareCudaBatch(const std::vector<TrainingEntry>& entries, uint32_t startIndex, uint32_t batchSize)
-{
-    std::vector<nn::cuda::CudaTrainingVector> hostBatch(batchSize);
-
-    for (uint32_t i = 0; i < batchSize; ++i)
-    {
-        const TrainingEntry& entry = entries[startIndex + i];
-        nn::cuda::CudaTrainingVector& cudaEntry = hostBatch[i];
-
-        cudaEntry.variant = entry.networkVariant;
-        cudaEntry.targetOutput = entry.output;
-
-        cudaEntry.numWhiteFeatures = std::min(32u, (uint32_t)entry.whiteFeatures.size());
-        cudaEntry.numBlackFeatures = std::min(32u, (uint32_t)entry.blackFeatures.size());
-
-        std::fill_n(cudaEntry.whiteFeatures, 32, (uint16_t)0);
-        std::fill_n(cudaEntry.blackFeatures, 32, (uint16_t)0);
-
-        for (uint32_t j = 0; j < cudaEntry.numWhiteFeatures; ++j)
-            cudaEntry.whiteFeatures[j] = entry.whiteFeatures[j];
-        for (uint32_t j = 0; j < cudaEntry.numBlackFeatures; ++j)
-            cudaEntry.blackFeatures[j] = entry.blackFeatures[j];
-    }
-
-    m_cudaBatchData.trainingVectors.CopyFromHost(hostBatch.data(), batchSize);
+        // emit training entry
+        {
+            TrainingEntry& trainingEntry = outSet[index];
+            PositionToTrainingEntry(pos, trainingEntry);
+            trainingEntry.targetOutput = score;
+        }
+    }, 0);
 }
 
 void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t iteration)
@@ -275,20 +241,22 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t ite
     // Process training set in batches
     for (uint32_t batchStart = 0; batchStart < cNumTrainingVectorsPerIteration; batchStart += cBatchSize)
     {
-        const uint32_t currentBatchSize = std::min(cBatchSize, cNumTrainingVectorsPerIteration - batchStart);
-
-        // Prepare batch data for GPU
-        PrepareCudaBatch(m_trainingSet_Read, batchStart, currentBatchSize);
+        // Copy batch data to CUDA
+        m_cudaBatchData.trainingVectors.CopyFromHost(
+            m_trainingSet_Read.data() + batchStart, cBatchSize,
+            m_cudaNetwork.GetStream().Get());
 
         // Update batch size in CUDA structure
-        m_cudaBatchData.batchSize = currentBatchSize;
+        m_cudaBatchData.batchSize = cBatchSize;
 
         // Forward pass
         m_cudaNetwork.Forward(m_cudaBatchData);
 
         // Backward pass
-        m_cudaNetwork.Backward(m_cudaBatchData, learningRate, 1.0f / 2048.0f, iteration);
+        m_cudaNetwork.Backward(m_cudaBatchData, learningRate, iteration);
     }
+
+    m_cudaNetwork.GetStream().Synchronize();
 
     // Copy weights from CUDA to host
     m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_lastLayerWeights);
@@ -304,32 +272,17 @@ static void ParallelFor(const char* debugName, uint32_t arraySize, const threadp
     waitable.Wait();
 }
 
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
 static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeuralNetwork& net)
 {
-    uint32_t numWhiteFeatures = 0;
-    uint32_t numBlackFeatures = 0;
-
-    // skip virtual features
-    for (size_t i = 0; i < entry.whiteFeatures.size(); ++i)
-    {
-        if (entry.whiteFeatures[i] >= nn::NumNetworkInputs) break;
-        ++numWhiteFeatures;
-    }
-    for (size_t i = 0; i < entry.blackFeatures.size(); ++i)
-    {
-        if (entry.blackFeatures[i] >= nn::NumNetworkInputs) break;
-        ++numBlackFeatures;
-    }
-
     const int32_t packedNetworkOutput = net.Run(
-        entry.whiteFeatures.data(), numWhiteFeatures,
-        entry.blackFeatures.data(), numBlackFeatures,
-        entry.networkVariant);
+        entry.whiteFeatures, entry.numWhiteFeatures,
+        entry.blackFeatures, entry.numBlackFeatures,
+        entry.variant);
     const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)(nn::OutputScale * nn::WeightScale) * c_nnOutputToCentiPawns / 100.0f;
     return EvalToExpectedGameScore(scaledPackedNetworkOutput);
 }
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
 
 void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
 {
@@ -345,32 +298,23 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
         ValidationPerThreadData& threadData = m_validationPerThreadData[ctx.threadId];
 
         const TrainingEntry& entry = m_validationSet[i];
-
-        const float expectedValue = entry.output;
-
-        const ScoreType evalValue = Evaluate(entry.pos);
-
-#ifdef USE_PACKED_NET
-        const float nnPackedValue = EvalPackedNetwork(entry, *m_packedNet);
-#endif // USE_PACKED_NET
+        const float expectedValue = entry.targetOutput;
 
         ValidationStats& stats = threadData.stats;
+#ifdef USE_EVAL_VALIDATION
+        // TrainingEntry has no Position (only features); eval validation would require reconstructing Position from features.
+#error "USE_EVAL_VALIDATION not supported in CudaNetworkTrainer: TrainingEntry has no Position"
+#endif // USE_EVAL_VALIDATION
+#ifdef USE_PACKED_NET_VALIDATION
         {
-            const float error = expectedValue - InternalEvalToExpectedGameScore(evalValue);
-            const float errorDiff = std::abs(error);
-            stats.evalErrorSum += (double)error * (double)error;
-            stats.evalMinError = std::min(stats.evalMinError, errorDiff);
-            stats.evalMaxError = std::max(stats.evalMaxError, errorDiff);
-        }
-#ifdef USE_PACKED_NET
-        {
+            const float nnPackedValue = EvalPackedNetwork(entry, *m_packedNet);
             const float error = expectedValue - nnPackedValue;
             const float errorDiff = std::abs(error);
             stats.nnPackedErrorSum += (double)error * (double)error;
             stats.nnPackedMinError = std::min(stats.nnPackedMinError, errorDiff);
             stats.nnPackedMaxError = std::max(stats.nnPackedMaxError, errorDiff);
         }
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
     });
 
     taskBuilder.Fence();
@@ -383,28 +327,35 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
         {
             const ValidationStats& threadStats = m_validationPerThreadData[i].stats;
 
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
             stats.nnPackedErrorSum += threadStats.nnPackedErrorSum;
             stats.nnPackedMinError = std::min(stats.nnPackedMinError, threadStats.nnPackedMinError);
             stats.nnPackedMaxError = std::max(stats.nnPackedMaxError, threadStats.nnPackedMaxError);
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
+#ifdef USE_EVAL_VALIDATION
             stats.evalErrorSum += threadStats.evalErrorSum;
             stats.evalMinError = std::min(stats.evalMinError, threadStats.evalMinError);
             stats.evalMaxError = std::max(stats.evalMaxError, threadStats.evalMaxError);
+#endif // USE_EVAL_VALIDATION
         }
 
+#ifdef USE_EVAL_VALIDATION
         stats.evalErrorSum = sqrt(stats.evalErrorSum / cNumValidationVectorsPerIteration);
-#ifdef USE_PACKED_NET
+#endif // USE_EVAL_VALIDATION
+#ifdef USE_PACKED_NET_VALIDATION
         stats.nnPackedErrorSum = sqrt(stats.nnPackedErrorSum / cNumValidationVectorsPerIteration);
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
 
 
         std::cout
             << "-------------------------------------------------------------------------\n"
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
             << "PNN avg/min/max error:  " << std::setprecision(6) << stats.nnPackedErrorSum << " " << std::setprecision(5) << stats.nnPackedMinError << " " << std::setprecision(5) << stats.nnPackedMaxError << '\n'
-#endif // USE_PACKED_NET
-            << "Eval avg/min/max error: " << std::setprecision(6) << stats.evalErrorSum << " " << std::setprecision(5) << stats.evalMinError << " " << std::setprecision(5) << stats.evalMaxError << '\n';
+#endif // USE_PACKED_NET_VALIDATION
+#ifdef USE_EVAL_VALIDATION
+            << "Eval avg/min/max error: " << std::setprecision(6) << stats.evalErrorSum << " " << std::setprecision(5) << stats.evalMinError << " " << std::setprecision(5) << stats.evalMaxError << '\n'
+#endif // USE_EVAL_VALIDATION
+            ;
 
         {
             const char* s_testPositions[] =
@@ -436,24 +387,24 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
                 TrainingEntry entry;
                 PositionToTrainingEntry(pos, entry);
 
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
                 const float scaledPackedNetworkOutput = EvalPackedNetwork(entry, *m_packedNet);
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
 
                 std::cout
                     << "TEST " << testPosition
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
                     << "  pnn=" << ExpectedGameScoreToInternalEval(scaledPackedNetworkOutput)
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
                     << '\n';
             }
         }
 
         m_trainingLog
             << iteration << "\t"
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
             << "\t" << std::setprecision(8) << stats.nnPackedErrorSum
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
             << std::endl;
     });
 }
@@ -597,7 +548,7 @@ bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet->LoadFromFile("eval-69-44B.pnn"))
+    if (!m_packedNet->LoadFromFile("eval-69-44B-88B.pnn"))
     {
         std::cout << "ERROR: Failed to load packed network" << std::endl;
         return false;
@@ -607,7 +558,7 @@ bool CudaNetworkTrainer::Train()
     // Copy unpacked weights to CUDA
     m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_lastLayerWeights);
 
-    if (!m_dataLoader.Init(m_randomGenerator))
+    if (!m_dataLoader.Init(m_randomGenerators[0]))
     {
         std::cout << "ERROR: Failed to initialize data loader" << std::endl;
         return false;
@@ -615,20 +566,26 @@ bool CudaNetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float baseLearningRate = 1.0e-4f;
+    const float baseLearningRate = 1.0e-5f;
     const float maxLambda = 1.0f;
-    const float minLambda = 1.0f;
 
     uint64_t kingBucketMask = UINT64_MAX;
 
-    GenerateTrainingSet(m_validationSet, kingBucketMask, maxLambda);
+    // initial training set generation
+    {
+        Waitable waitable;
+        {
+            TaskBuilder taskBuilder{ waitable };
+            GenerateTrainingSet(m_validationSet, taskBuilder, kingBucketMask, maxLambda);
+        }
+        waitable.Wait();
+    }
 
-    size_t epoch = 0;
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
+        const float lambda = g_lambdaScale * maxLambda;
         const float warmup = g_warmupTime > 0.0f ? (iteration < g_warmupTime ? (float)(iteration + 1) / g_warmupTime : 1.0f) : 1.0f;
         const float learningRate = g_learningRateScale * warmup * baseLearningRate;
-        const float lambda = g_lambdaScale * std::lerp(minLambda, maxLambda, expf(-0.0005f * (float)iteration));
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
@@ -638,67 +595,53 @@ bool CudaNetworkTrainer::Train()
         Waitable waitable;
         {
             TaskBuilder taskBuilder{ waitable };
-            taskBuilder.Task("GenerateSet", [this, kingBucketMask, lambda](const TaskContext&)
-            {
-                GenerateTrainingSet(m_trainingSet_Write, kingBucketMask, lambda);
-            });
 
             // skip training in the first iteration, as the data is not ready yet
             if (iteration > 0)
             {
-                taskBuilder.Task("CudaTrain", [this, learningRate, &epoch, iteration](const TaskContext&)
+                taskBuilder.Task("CudaTrain", [this, learningRate, iteration](const TaskContext&)
                 {
                     RunCudaTrainingIteration(learningRate, iteration);
-                    epoch += cNumTrainingVectorsPerIteration / cBatchSize;
                 });
             }
 
             if (iteration > 1)
             {
-                taskBuilder.Task("Validate", [this, learningRate, &epoch, iteration](const TaskContext& ctx)
+                taskBuilder.Task("Validate", [this, learningRate, iteration](const TaskContext& ctx)
                 {
                     Validate(ctx, iteration);
                 });
             }
+
+            taskBuilder.Task("GenerateTrainingSet", [this, kingBucketMask, lambda](const TaskContext& ctx)
+            {
+                TaskBuilder taskBuilder{ ctx };
+                GenerateTrainingSet(m_trainingSet_Write, taskBuilder, kingBucketMask, lambda);
+            });
         }
         waitable.Wait();
 
         // swap read and write buffers
         std::swap(m_trainingSet_Write, m_trainingSet_Read);
 
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
         PackNetwork();
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
 
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
-        /*
-        // print weights stats
-        {
-            std::cout << "FT weights stats: ";
-            m_featureTransformerWeights->PrintStats();
-
-            std::cout << "LL weights stats: ";
-            m_lastLayerWeights->PrintStats();
-        }
-        */
-
         std::cout
-            << "Lambda:                 " << lambda << '\n'
-            << "Iteration:              " << iteration << '\n'
-            << "Epoch:                  " << epoch << '\n'
-            << "Num training vectors:   " << std::setprecision(3) << m_numTrainingVectorsPassed / 1.0e9f << "B" << '\n'
-            << "Learning rate:          " << learningRate << '\n';
+            << "Iteration:            " << iteration << '\n'
+            << "Num training vectors: " << std::setprecision(4) << m_numTrainingVectorsPassed / 1.0e9f << "B" << '\n'
+            << "Learning rate:        " << learningRate << '\n'
+            << "Training speed :      " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl;
 
-        std::cout << "Iteration time:   " << 1000.0f * iterationTime << " ms" << '\n';
-        std::cout << "Training rate :   " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl;
-
-        if (iteration % 10 == 0)
+        if (iteration % 20 == 0)
         {
             const std::string name = "eval";
-#ifdef USE_PACKED_NET
+#ifdef USE_PACKED_NET_VALIDATION
             m_packedNet->SaveToFile((name + ".pnn").c_str());
-#endif // USE_PACKED_NET
+#endif // USE_PACKED_NET_VALIDATION
         }
     }
 

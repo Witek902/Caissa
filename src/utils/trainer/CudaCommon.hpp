@@ -54,6 +54,12 @@ public:
         CUDA_CHECK(cudaMemsetAsync(m_data, 0, m_size * sizeof(T), stream));
     }
 
+    void CopyFromHost(const T* hostData, size_t size, cudaStream_t stream)
+    {
+        if (size > m_size) Allocate(size);
+        CUDA_CHECK(cudaMemcpyAsync(m_data, hostData, size * sizeof(T), cudaMemcpyHostToDevice, stream));
+    }
+
     void CopyFromHost(const T* hostData, size_t size)
     {
         if (size > m_size) Allocate(size);
@@ -62,6 +68,12 @@ public:
 
     void CopyToHost(T* hostData, size_t size) const
     {
+        if (size > m_size)
+        {
+            std::cerr << "CudaBuffer::CopyToHost size " << size << " exceeds buffer size " << m_size << std::endl;
+            __debugbreak();
+            exit(1);
+        }
         CUDA_CHECK(cudaMemcpy(hostData, m_data, size * sizeof(T), cudaMemcpyDeviceToHost));
     }
 
@@ -122,9 +134,9 @@ public:
     CudaStream() { CUDA_CHECK(cudaStreamCreate(&m_stream)); }
     ~CudaStream() { CUDA_CHECK(cudaStreamDestroy(m_stream)); }
 
-    cudaStream_t Get() { return m_stream; }
+    cudaStream_t Get() const { return m_stream; }
 
-    void Synchronize() { CUDA_CHECK(cudaStreamSynchronize(m_stream)); }
+    void Synchronize() const { CUDA_CHECK(cudaStreamSynchronize(m_stream)); }
 
 private:
     cudaStream_t m_stream;

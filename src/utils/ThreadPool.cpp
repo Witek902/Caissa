@@ -492,7 +492,7 @@ void TaskBuilder::Fence(Waitable* waitable)
     mDependencyTask = dependency;
 }
 
-void TaskBuilder::Task(const char* debugName, const TaskFunction& func)
+void TaskBuilder::Task(const char* debugName, const TaskFunction& func, uint8_t priority)
 {
     ThreadPool& tp = ThreadPool::GetInstance();
 
@@ -501,6 +501,7 @@ void TaskBuilder::Task(const char* debugName, const TaskFunction& func)
     desc.debugName = debugName;
     desc.parent = mParentTask;
     desc.dependency = mDependencyTask;
+    desc.priority = priority;
 
     TaskID taskID = tp.CreateTask(desc);
     mPendingTasks[mNumPendingTasks++] = taskID;

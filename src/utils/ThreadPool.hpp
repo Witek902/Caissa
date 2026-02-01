@@ -222,7 +222,7 @@ public:
 
     // push a new task
     // Note: multiple pushed tasks can run in parallel
-    void Task(const char* debugName, const TaskFunction& func);
+    void Task(const char* debugName, const TaskFunction& func, uint8_t priority = 1);
 
     // Push a custom task
     // Note: The task must be created, but not yet dispatched
