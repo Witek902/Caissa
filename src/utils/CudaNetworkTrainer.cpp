@@ -129,7 +129,7 @@ private:
     void BlendLastLayerWeights();
 
     bool PackNetwork();
-    bool UnpackNetwork();
+    bool UnpackNetwork(const char* path);
 
     // CUDA-specific methods
     void RunCudaTrainingIteration(float learningRate, size_t iteration);
@@ -498,8 +498,9 @@ bool CudaNetworkTrainer::PackNetwork()
     return true;
 }
 
-bool CudaNetworkTrainer::UnpackNetwork()
+bool CudaNetworkTrainer::UnpackNetwork(const char* path)
 {
+    constexpr uint32_t OldKingBuckets = 11;
     constexpr float OldActivationRangeScaling = 256;
     constexpr int32_t OldWeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
     constexpr int32_t OldWeightScale = 1 << OldWeightScaleShift;
@@ -510,17 +511,59 @@ bool CudaNetworkTrainer::UnpackNetwork()
     constexpr float OldOutputLayerWeightQuantizationScale = OldWeightScale * OldOutputScale / OldActivationRangeScaling;
     constexpr float OldOutputLayerBiasQuantizationScale = OldWeightScale * OldOutputScale;
 
+    struct alignas(CACHELINE_SIZE) OldPackedNeuralNetwork
+    {
+        nn::PackedNeuralNetwork::Header header;
+        nn::FirstLayerWeightType accumulatorWeights[768u * OldKingBuckets * nn::AccumulatorSize];
+        nn::FirstLayerBiasType accumulatorBiases[nn::AccumulatorSize];
+        nn::PackedNeuralNetwork::LastLayerVariant lastLayerVariants[nn::NumVariants];
+    };
+
+    FILE* file = fopen(path, "rb");
+    if (!file)
+    {
+        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
+        return false;
+    }
+
+    auto oldPackedNet = std::make_unique<OldPackedNeuralNetwork>();
+    if (1 != fread(oldPackedNet.get(), sizeof(OldPackedNeuralNetwork), 1, file))
+    {
+        fclose(file);
+        std::cerr << "Failed to load neural network: " << "cannot read header" << std::endl;
+        return false;
+    }
+
     // feature transformer
     {
         UnpackWeights(
             m_featureTransformerWeights->m_variants.front().m_weights,
-            nn::NumNetworkInputs,
+            OldKingBuckets * 768,
             nn::AccumulatorSize,
-            m_packedNet->accumulatorWeights,
-            m_packedNet->accumulatorBiases,
+            oldPackedNet->accumulatorWeights,
+            oldPackedNet->accumulatorBiases,
             OldInputLayerWeightQuantizationScale,
             OldInputLayerBiasQuantizationScale,
             true);
+    }
+
+    {
+        float* ftWeights = m_featureTransformerWeights->m_variants.front().m_weights.data();
+
+        // move biases
+        memcpy(
+            ftWeights + 14 * 768 * nn::AccumulatorSize,
+            ftWeights + 11 * 768 * nn::AccumulatorSize,
+            nn::AccumulatorSize * sizeof(float));
+
+        // copy weight from old network (king bucket 10) to all king buckets in the new network (10, 11, 12, 13)
+        for (uint32_t i = 1; i < 4; ++i)
+        {
+            memcpy(
+                ftWeights + (10 + i) * 768 * nn::AccumulatorSize,
+                ftWeights + 10 * 768 * nn::AccumulatorSize,
+                768u * nn::AccumulatorSize * sizeof(float));
+        }
     }
 
     // last layer
@@ -530,30 +573,27 @@ bool CudaNetworkTrainer::UnpackNetwork()
             m_lastLayerWeights->m_variants[variantIdx].m_weights,
             m_lastLayerWeights->m_inputSize,
             1u,
-            m_packedNet->lastLayerVariants[variantIdx].weights,
-            &m_packedNet->lastLayerVariants[variantIdx].bias,
+            oldPackedNet->lastLayerVariants[variantIdx].weights,
+            &oldPackedNet->lastLayerVariants[variantIdx].bias,
             OldOutputLayerWeightQuantizationScale,
             OldOutputLayerBiasQuantizationScale,
             false);
     }
 
+    fclose(file);
     return true;
 }
 
 static const float g_warmupTime = 20.0f;
-static volatile float g_learningRateScale = 1.0f;
+static volatile float g_learningRateScale = 5.0f;
 static volatile float g_lambdaScale = 0.0f;
 
 bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!m_packedNet->LoadFromFile("eval-71.pnn"))
-    {
-        std::cout << "ERROR: Failed to load packed network" << std::endl;
+    if (!UnpackNetwork("eval-71.pnn"))
         return false;
-    }
-    UnpackNetwork();
 
     // Copy unpacked weights to CUDA
     m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_lastLayerWeights);
@@ -609,6 +649,10 @@ bool CudaNetworkTrainer::Train()
             {
                 taskBuilder.Task("Validate", [this, learningRate, iteration](const TaskContext& ctx)
                 {
+#ifdef USE_PACKED_NET_VALIDATION
+                    PackNetwork();
+#endif // USE_PACKED_NET_VALIDATION
+
                     Validate(ctx, iteration);
                 });
             }
@@ -624,10 +668,6 @@ bool CudaNetworkTrainer::Train()
         // swap read and write buffers
         std::swap(m_trainingSet_Write, m_trainingSet_Read);
 
-#ifdef USE_PACKED_NET_VALIDATION
-        PackNetwork();
-#endif // USE_PACKED_NET_VALIDATION
-
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
         std::cout
@@ -636,7 +676,7 @@ bool CudaNetworkTrainer::Train()
             << "Learning rate:        " << learningRate << '\n'
             << "Training speed :      " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl;
 
-        if (iteration % 20 == 0)
+        if (iteration % 20 == 2)
         {
             const std::string name = "eval";
 #ifdef USE_PACKED_NET_VALIDATION
