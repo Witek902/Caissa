@@ -113,7 +113,7 @@ __global__ void AdamUpdateKernel(
     // Adam parameters
     const float c_beta1 = 0.95f;
     const float c_beta2 = 0.999f;
-    const float c_epsilon = 1.0e-12f;
+    const float c_epsilon = 1.0e-8f;
 
     const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numWeights) return;

@@ -118,17 +118,6 @@ __global__ void SparseBinaryInputKernel(
     }
 }
 
-// CUDA kernel for CReLU activation
-__global__ void CReLUActivationKernel(
-    const float* __restrict__ inputs,
-    float* __restrict__ outputs,
-    uint32_t bufferSize)
-{
-    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= bufferSize) return;
-    outputs[idx] = CReLU(inputs[idx]);
-}
-
 // CUDA kernel for fully connected layer (last layer)
 __global__ void FullyConnectedKernel(
     const TrainingEntry* __restrict__ trainingVectors,
@@ -149,7 +138,7 @@ __global__ void FullyConnectedKernel(
     float sum = weights[weightsOffset + inputSize];
     for (uint32_t i = 0; i < inputSize; ++i)
     {
-        sum += inputs[batchIdx * inputSize + i] * weights[weightsOffset + i];
+        sum += CReLU(inputs[batchIdx * inputSize + i]) * weights[weightsOffset + i];
     }
 
     outputs[batchIdx] = sum;
@@ -209,19 +198,6 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // CReLU activation
-    {
-        const dim3 blockSize(256);
-        const dim3 gridSize((batchSize * 2 * c_accumulatorSize + blockSize.x - 1) / blockSize.x);
-        
-        CReLUActivationKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
-            batch.accumulatorBuffer.Get(),
-            batch.activationBuffer.Get(),
-            c_accumulatorSize * batchSize * 2
-        );
-        CUDA_CHECK(cudaGetLastError());
-    }
-
     // Fully connected layer (last layer)
     {
         const dim3 blockSize(256);
@@ -229,7 +205,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 
         FullyConnectedKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
             batch.trainingVectors.Get(),
-            batch.activationBuffer.Get(),
+            batch.accumulatorBuffer.Get(),
             m_lastLayerWeights->m_weights.Get(),
             batch.hiddenBuffer.Get(),
             batchSize,
@@ -271,7 +247,7 @@ __global__ void SigmoidDerivativeKernel(
 
 __global__ void LastLayerGradientsKernel(
     const TrainingEntry* __restrict__ trainingVectors,
-    const float* __restrict__ activations,
+    const float* __restrict__ accumulatorBuffer,
     const float* __restrict__ outputErrors,
     float* __restrict__ weightGradients,
     uint32_t batchSize,
@@ -290,7 +266,7 @@ __global__ void LastLayerGradientsKernel(
         {
             const TrainingEntry* trainingVector = trainingVectors + batchIdx;
             if (trainingVector->variant != variantIdx) continue;
-            gradient += activations[batchIdx * inputSize + inputIdx] * outputErrors[batchIdx];
+            gradient += CReLU(accumulatorBuffer[batchIdx * inputSize + inputIdx]) * outputErrors[batchIdx];
         }
         weightGradients[weightsOffset + inputIdx] = gradient;
     }
@@ -404,7 +380,7 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
         const dim3 gridSize(((2 * c_accumulatorSize + 1) + blockSize.x - 1) / blockSize.x);
         LastLayerGradientsKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
             batch.trainingVectors.Get(),
-            batch.activationBuffer.Get(),
+            batch.accumulatorBuffer.Get(),
             batch.outputErrors.Get(),
             batch.lastLayerGradients.Get(),
             batchSize,
