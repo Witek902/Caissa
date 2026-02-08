@@ -103,7 +103,7 @@ def main():
     boardViewImg = Image.new('RGB', (imgWidth, imgHeight), color='black')
     boardViewPixels = boardViewImg.load()
 
-    kingBucket = 10
+    kingBucket = 30
 
     for i in range(768):
         for j in range(accumulatorSize):

@@ -172,7 +172,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             const int32_t numPieces = outEntry.pos.occupied.Count();
 
             // skip early moves
-            if (outEntry.pos.moveCount <= 10)
+            if (outEntry.pos.moveCount <= 12 && numPieces > 24)
                 continue;
 
             // skip based on piece count
