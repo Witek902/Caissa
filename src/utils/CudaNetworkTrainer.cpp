@@ -500,7 +500,7 @@ bool CudaNetworkTrainer::PackNetwork()
 
 bool CudaNetworkTrainer::UnpackNetwork(const char* path)
 {
-    constexpr uint32_t OldKingBuckets = 11;
+    constexpr uint32_t OldKingBuckets = 32;
     constexpr float OldActivationRangeScaling = 256;
     constexpr int32_t OldWeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
     constexpr int32_t OldWeightScale = 1 << OldWeightScaleShift;
@@ -547,24 +547,46 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
             true);
     }
 
+    /*
     {
         float* ftWeights = m_featureTransformerWeights->m_variants.front().m_weights.data();
 
         // move biases
-        memcpy(
-            ftWeights + 14 * 768 * nn::AccumulatorSize,
-            ftWeights + 11 * 768 * nn::AccumulatorSize,
-            nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 32 * 768 * nn::AccumulatorSize, ftWeights + 14 * 768 * nn::AccumulatorSize, nn::AccumulatorSize * sizeof(float));
 
-        // copy weight from old network (king bucket 10) to all king buckets in the new network (10, 11, 12, 13)
-        for (uint32_t i = 1; i < 4; ++i)
-        {
-            memcpy(
-                ftWeights + (10 + i) * 768 * nn::AccumulatorSize,
-                ftWeights + 10 * 768 * nn::AccumulatorSize,
-                768u * nn::AccumulatorSize * sizeof(float));
-        }
+        // copy weight from old network to all king buckets in the new network
+
+        memcpy(ftWeights + 26 * 768 * nn::AccumulatorSize, ftWeights + 13 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 27 * 768 * nn::AccumulatorSize, ftWeights + 13 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 30 * 768 * nn::AccumulatorSize, ftWeights + 13 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 31 * 768 * nn::AccumulatorSize, ftWeights + 13 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+
+        memcpy(ftWeights + 24 * 768 * nn::AccumulatorSize, ftWeights + 12 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 25 * 768 * nn::AccumulatorSize, ftWeights + 12 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 28 * 768 * nn::AccumulatorSize, ftWeights + 12 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 29 * 768 * nn::AccumulatorSize, ftWeights + 12 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+
+        memcpy(ftWeights + 18 * 768 * nn::AccumulatorSize, ftWeights + 11 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 19 * 768 * nn::AccumulatorSize, ftWeights + 11 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 22 * 768 * nn::AccumulatorSize, ftWeights + 11 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 23 * 768 * nn::AccumulatorSize, ftWeights + 11 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+
+        memcpy(ftWeights + 16 * 768 * nn::AccumulatorSize, ftWeights + 10 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 17 * 768 * nn::AccumulatorSize, ftWeights + 10 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 20 * 768 * nn::AccumulatorSize, ftWeights + 10 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 21 * 768 * nn::AccumulatorSize, ftWeights + 10 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+
+        memcpy(ftWeights + 10 * 768 * nn::AccumulatorSize, ftWeights + 9 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 11 * 768 * nn::AccumulatorSize, ftWeights + 9 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 14 * 768 * nn::AccumulatorSize, ftWeights + 9 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 15 * 768 * nn::AccumulatorSize, ftWeights + 9 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+
+        //memcpy(ftWeights +  8 * 768 * nn::AccumulatorSize, ftWeights + 8 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights +  9 * 768 * nn::AccumulatorSize, ftWeights + 8 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 12 * 768 * nn::AccumulatorSize, ftWeights + 8 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
+        memcpy(ftWeights + 13 * 768 * nn::AccumulatorSize, ftWeights + 8 * 768 * nn::AccumulatorSize, 768u * nn::AccumulatorSize * sizeof(float));
     }
+    */
 
     // last layer
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
@@ -584,8 +606,8 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
     return true;
 }
 
-static const float g_warmupTime = 20.0f;
-static volatile float g_learningRateScale = 5.0f;
+static const float g_warmupTime = 50.0f;
+static volatile float g_learningRateScale = 1.0f;
 static volatile float g_lambdaScale = 0.0f;
 
 bool CudaNetworkTrainer::Train()

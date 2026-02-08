@@ -18,7 +18,6 @@ struct CudaBatchData
     // Intermediate buffers for forward/backward pass
     CudaBuffer<float> accumulatorBuffer;    // For sparse input accumulation
     CudaBuffer<float> hiddenBuffer;         // For hidden layer outputs
-    CudaBuffer<float> activationBuffer;     // For activation outputs
 
     // Temporary buffers for gradients
     CudaBuffer<float> lastLayerGradients;
@@ -38,7 +37,6 @@ struct CudaBatchData
         // Allocate intermediate buffers based on network size
         accumulatorBuffer.Allocate(batchSize * nn::AccumulatorSize * 2); // For white and black accumulators
         hiddenBuffer.Allocate(batchSize); // Single output for final layer
-        activationBuffer.Allocate(batchSize * nn::AccumulatorSize * 2);
 
         lastLayerGradients.Allocate((2 * nn::AccumulatorSize + 1) * nn::NumVariants);
         featureTransformerGradients.Allocate((nn::NumNetworkInputs + 1) * nn::AccumulatorSize);
