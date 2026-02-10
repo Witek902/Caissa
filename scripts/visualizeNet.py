@@ -6,7 +6,7 @@ from math import ceil
 filePath = "../build_bmi2/src/utils/eval.pnn"
 marginSize = 1
 headerSize = 64
-numKingBuckets = 14
+numKingBuckets = 32
 
 def lerp(a: float, b: float, t: float) -> float:
     return (1 - t) * a + t * b
