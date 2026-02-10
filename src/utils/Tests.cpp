@@ -1820,12 +1820,12 @@ static void RunEvalTests()
         }
         {
             const ScoreType score = Evaluate(Position("RRRRRRpk/RRRRRRpp/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/KRRRRRRR w - - 0 1"));
-            TEST_EXPECT(score > 2000);
+            TEST_EXPECT(score > 1000);
             TEST_EXPECT(score < KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("rrrrkrrr/rrrrrrrr/rrrrrrrr/rrrrrrrr/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
-            TEST_EXPECT(score < -2000);
+            TEST_EXPECT(score < -1000);
             TEST_EXPECT(score > -KnownWinValue);
         }
     }

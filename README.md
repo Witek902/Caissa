@@ -83,7 +83,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 - ✅ **Multithreaded Search** - Parallel search with shared TT
 
 ### Neural Network Evaluation
-- **Architecture**: (11×768→1024)×2→1
+- **Architecture**: (32×768→1024)×2→1
 - **Incremental Updates** - Efficiently updated first layer
 - **Vectorized Code** - Manual SIMD optimization for:
   - AVX-512 (fastest)
@@ -92,7 +92,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
   - ARM NEON
 - **Activation**: Clipped-ReLU
 - **Variants**: 8 variants of last layer weights (piece count dependent)
-- **Features**: Absolute piece coordinates with horizontal symmetry, 11 king buckets
+- **Features**: Absolute piece coordinates with horizontal symmetry, 32 king buckets
 - **Special Endgame Routines** - Enhanced endgame evaluation
 
 ### Neural Network Trainer
@@ -119,8 +119,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
    - **AVX2**: Older CPUs with AVX2 support
    - **POPCNT**: Older CPUs with SSE4.2
    - **Legacy**: Very old x64 CPUs
-3. Copy the neural network file (`.pnn`) from `data/neuralNets/` to the same directory as the executable
-4. Run the engine with any UCI-compatible chess GUI
+3. Run the engine with any UCI-compatible chess GUI
 
 ### Running from Source
 
