@@ -6,15 +6,32 @@ DEFINE_PARAM(QuietMoveHistoryClear, 628, -2000, 2000);
 DEFINE_PARAM(ContinuationHistoryClear, 736, -2000, 2000);
 DEFINE_PARAM(CapturesHistoryClear, 322, -2000, 2000);
 
-DEFINE_PARAM(QuietBonusOffset, -113, -200, 0);
-DEFINE_PARAM(QuietBonusLinear, 159, 100, 250);
-DEFINE_PARAM(QuietBonusScoreDiff, 153, 0, 400);
-DEFINE_PARAM(QuietBonusLimit, 2090, 1000, 4000);
+DEFINE_PARAM(HistBonusOffset, -113, -200, 0);
+DEFINE_PARAM(HistBonusLinear, 159, 100, 250);
+DEFINE_PARAM(HistBonusScoreDiff, 153, 0, 400);
+DEFINE_PARAM(HistBonusLimit, 2090, 1000, 4000);
+DEFINE_PARAM(HistMalusOffset, -51, -200, 50);
+DEFINE_PARAM(HistMalusLinear, 160, 75, 200);
+DEFINE_PARAM(HistMalusScoreDiff, 167, 0, 400);
+DEFINE_PARAM(HistMalusLimit, 1912, 1000, 4000);
 
-DEFINE_PARAM(QuietMalusOffset, -51, -200, 50);
-DEFINE_PARAM(QuietMalusLinear, 160, 75, 200);
-DEFINE_PARAM(QuietMalusScoreDiff, 167, 0, 400);
-DEFINE_PARAM(QuietMalusLimit, 1912, 1000, 4000);
+DEFINE_PARAM(ContBonusOffset, -113, -200, 0);
+DEFINE_PARAM(ContBonusLinear, 159, 100, 250);
+DEFINE_PARAM(ContBonusScoreDiff, 153, 0, 400);
+DEFINE_PARAM(ContBonusLimit, 2090, 1000, 4000);
+DEFINE_PARAM(ContMalusOffset, -51, -200, 50);
+DEFINE_PARAM(ContMalusLinear, 160, 75, 200);
+DEFINE_PARAM(ContMalusScoreDiff, 167, 0, 400);
+DEFINE_PARAM(ContMalusLimit, 1912, 1000, 4000);
+
+DEFINE_PARAM(ContUpdateWeight1, 1024, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight2, 256, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight3, 1024, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight5, 1024, 1, 2048);
+
+DEFINE_PARAM(ContWeight1, 1024, 1, 2048);
+DEFINE_PARAM(ContWeight3, 512, 1, 2048);
+DEFINE_PARAM(ContWeight5, 512, 1, 2048);
 
 DEFINE_PARAM(CaptureBonusOffset, 27, 0, 100);
 DEFINE_PARAM(CaptureBonusLinear, 71, 20, 120);
@@ -240,27 +257,30 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t bonus = std::min<int32_t>(QuietBonusOffset + QuietBonusLinear * node.depth + QuietBonusScoreDiff * scoreDiff / 64, QuietBonusLimit);
-    const int32_t malus = -std::min<int32_t>(QuietMalusOffset + QuietMalusLinear * node.depth + QuietMalusScoreDiff * scoreDiff / 64, QuietMalusLimit);
+    const int32_t histBonus = std::min<int32_t>(HistBonusOffset + HistBonusLinear * node.depth + HistBonusScoreDiff * scoreDiff / 64, HistBonusLimit);
+    const int32_t histMalus = -std::min<int32_t>(HistMalusOffset + HistMalusLinear * node.depth + HistMalusScoreDiff * scoreDiff / 64, HistMalusLimit);
+    const int32_t contBonus = std::min<int32_t>(ContBonusOffset + ContBonusLinear * node.depth + ContBonusScoreDiff * scoreDiff / 64, ContBonusLimit);
+    const int32_t contMalus = -std::min<int32_t>(ContMalusOffset + ContMalusLinear * node.depth + ContMalusScoreDiff * scoreDiff / 64, ContMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
 
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
-        const int32_t delta = move == bestMove ? bonus : malus;
+        const int32_t histDelta = move == bestMove ? histBonus : histMalus;
+        const int32_t contDelta = move == bestMove ? contBonus : contMalus;
 
         const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
         
-        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
+        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
 
-        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta / 4);
-        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta);
-        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta);
+        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], contDelta);
+        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight1 / 1024);
+        if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight2 / 1024);
+        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight3 / 1024);
+        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight5 / 1024);
     }
 }
 
@@ -365,9 +385,9 @@ void MoveOrderer::ScoreMoves(
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] / 2;
-            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] / 2;
+            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to] * ContWeight1 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] * ContWeight3 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] * ContWeight5 / 1024;
 
             switch (move.GetPiece())
             {

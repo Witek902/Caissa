@@ -88,6 +88,8 @@ DEFINE_PARAM(SingularExtDepthRedSub, 216, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 15, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 50, 15, 100);
 
+DEFINE_PARAM(QSearchStandPatBetaScale, 512, 1, 1024);
+DEFINE_PARAM(QSearchAdjBetaScale, 512, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 73, 40, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
@@ -95,6 +97,7 @@ DEFINE_PARAM(RfpDepthScaleLinear, 92, 80, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 139, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
+DEFINE_PARAM(RfpAdjBetaScale, 512, 1, 1024);
 
 DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
 DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
@@ -1084,8 +1087,9 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             }
         }
 
+        // return value adjusted towards beta to avoid large swings
         if (bestValue >= beta)
-            return (bestValue + beta) / 2;
+            return static_cast<ScoreType>((bestValue * (1024 - QSearchStandPatBetaScale) + beta * QSearchStandPatBetaScale) / 1024);
 
         if (bestValue > alpha)
             alpha = bestValue;
@@ -1215,7 +1219,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     }
 
     if (std::abs(bestValue) < KnownWinValue && bestValue > beta)
-        bestValue = (bestValue + beta) / 2;
+        bestValue = (ScoreType)((bestValue * (1024 - QSearchAdjBetaScale) + beta * QSearchAdjBetaScale) / 1024);
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
@@ -1471,7 +1475,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
             {
-                return (eval + beta) / 2;
+                return (ScoreType)((eval * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
             }
 
             // Razoring
