@@ -1264,6 +1264,26 @@ bool Position::IsCapture(const PackedMove& move) const
         (GetOpponentSide().Occupied() & move.ToSquare().GetBitboard());
 }
 
+bool Position::IsCaptureOrPromotion(const PackedMove& move) const
+{
+    const Square toSquare = move.ToSquare();
+    const Piece movedPiece = GetCurrentSide().GetPieceAtSquare(move.FromSquare());
+    const Piece targetPiece = GetOpponentSide().GetPieceAtSquare(toSquare);
+
+    if (movedPiece == Piece::None)
+        return false; // invalid move
+
+    if (targetPiece != Piece::None)
+        return true; // capture
+
+    if (movedPiece == Piece::Pawn &&
+        ((GetSideToMove() == White && toSquare.Rank() == 7) ||
+         (GetSideToMove() == Black && toSquare.Rank() == 0)))
+        return true; // promotion
+
+    return false;
+}
+
 uint64_t Position::Perft(uint32_t depth, bool print) const
 {
     TimePoint startTime;

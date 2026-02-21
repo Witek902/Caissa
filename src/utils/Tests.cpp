@@ -414,6 +414,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(!pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
         }
@@ -469,6 +470,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.GetPromoteTo() == Piece::None);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/p1pppppp/8/1P6/8/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1");
         }
@@ -517,6 +519,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.GetPromoteTo() == Piece::Queen);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "1k3Q2/8/8/8/8/8/8/4K3 b - - 0 1");
         }
@@ -549,6 +552,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.IsCapture() == false);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(!pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 1 1");
         }
@@ -564,6 +568,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.IsCapture() == true);
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "4k3/8/8/8/5N2/8/8/4K3 b - - 0 1");
         }
@@ -582,6 +587,7 @@ static void RunPositionTests()
             TEST_EXPECT(move == pos.MoveFromString("e1h1"));
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(!pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 b kq - 1 1");
         }
@@ -607,6 +613,7 @@ static void RunPositionTests()
             TEST_EXPECT(move == pos.MoveFromString("e1a1"));
             TEST_EXPECT(pos.IsMoveValid(move));
             TEST_EXPECT(pos.IsMoveLegal(move));
+            TEST_EXPECT(!pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.DoMove(move));
             TEST_EXPECT(pos.ToFEN() == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/2KR1BNR b kq - 1 1");
         }
@@ -1020,6 +1027,7 @@ static void RunPositionTests()
             TEST_EXPECT(move.GetPromoteTo() == Piece::Queen);
             TEST_EXPECT(move.GetPiece() == Piece::Pawn);
             TEST_EXPECT(move.IsPromotion());
+            TEST_EXPECT(pos.IsCaptureOrPromotion(move));
             TEST_EXPECT(pos.MoveToString(move) == "a1=Q+");
         }
         // bishop takes pawn

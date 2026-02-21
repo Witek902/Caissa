@@ -1045,6 +1045,19 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
             else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   return ttScore;
         }
+
+        // "reverse" QSearch - enter normal search again if TT move is quiet
+        if (!isPvNode && !thread.isReverseQSearch &&
+            ttEntry.move.IsValid() && !position.IsCaptureOrPromotion(ttEntry.move) &&
+            ttEntry.bounds != TTEntry::Bounds::Upper)
+        {
+            node->depth = 1;
+            node->isCutNode = true;
+            thread.isReverseQSearch = true;
+            const ScoreType score = NegaMax<NodeType::NonPV>(thread, node, ctx);
+            thread.isReverseQSearch = false;
+            return score;
+        }
     }
 
     // do not consider stand pat if in check

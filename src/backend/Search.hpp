@@ -307,6 +307,7 @@ private:
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
+        bool isReverseQSearch = false;      // indicates if the thread is currently doing reverse quiescence search
 
         // per-thread move orderer
         MoveOrderer moveOrderer;

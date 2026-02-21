@@ -210,6 +210,7 @@ public:
 
     // Approximate check if packed move is a capture
     bool IsCapture(const PackedMove& move) const;
+    bool IsCaptureOrPromotion(const PackedMove& move) const;
 
     // get captured piece type
     Piece GetCapturedPiece(const Move move) const;
