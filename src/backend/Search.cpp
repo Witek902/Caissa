@@ -44,6 +44,7 @@ DEFINE_PARAM(LmrTTHighDepth, 13, -128, 256);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
+DEFINE_PARAM(LmrAlphaRaise, 81, 32, 128);
 DEFINE_PARAM(LmrDeeperTreshold, 85, 20, 200);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
@@ -1649,6 +1650,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     Move captureMovesTried[maxMovesTried];
     uint32_t numQuietMovesTried = 0;
     uint32_t numCaptureMovesTried = 0;
+    uint32_t numAlphaRaises = 0;
 
 #ifdef VALIDATE_MOVE_PICKER
     uint32_t numGeneratedMoves = 0;
@@ -1878,6 +1880,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
+            // reduce more depending on past alpha raises - the more we raised alpha, the more likely it is that moves later in the move list are bad
+            r += numAlphaRaises * LmrAlphaRaise;
+
             // reduce low-ply moves less
             if constexpr (isPvNode)
                 r -= LmrScale * node->depth / (1 + node->ply + node->depth);
@@ -1998,6 +2003,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             alpha = score;
             bestMove = move;
 
+            if (std::abs(score) < KnownWinValue)
+                numAlphaRaises++;
+
             if (score >= beta)
             {
                 ASSERT(moveIndex > 0);
@@ -2017,9 +2025,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 break;
             }
-
-            // reduce remaining moves more if we managed to find new best move
-            if (node->depth > 2) node->depth--;
         }
 
         if constexpr (!isRootNode)
