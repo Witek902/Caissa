@@ -1831,6 +1831,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // Late Move Reductions
         int32_t r = 0;
+        int32_t rawReduction = 0;
         if (node->depth >= LateMoveReductionStartDepth &&
             moveIndex > 1 &&
             (!isPvNode || move.IsQuiet()))
@@ -1885,7 +1886,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
+            // reduction optimism - reduce more if previous node has more reduction than what we want to apply now
+            if (!isPvNode && node->reduction > r + 32) r += 8;
+
             // scale down
+            rawReduction = r;
             r = (r + LmrScale / 2) / LmrScale;
         }
 
@@ -1908,6 +1913,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = true;
+            childNode.reduction = rawReduction;
 
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -1931,6 +1937,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             childNode.alpha = -alpha - 1;
             childNode.beta = -alpha;
             childNode.isCutNode = !node->isCutNode;
+            childNode.reduction = 0;
 
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -1950,6 +1957,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 childNode.alpha = -beta;
                 childNode.beta = -alpha;
                 childNode.isCutNode = false;
+                childNode.reduction = 0;
 
                 score = -NegaMax<NodeType::PV>(thread, &childNode, ctx);
             }
