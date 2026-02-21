@@ -123,6 +123,9 @@ struct NodeInfo
     // distance to the root
     uint16_t ply = 0;
 
+    // reduction applied to this node
+    int32_t reduction = 0;
+
     ScoreType alpha;
     ScoreType beta;
 
@@ -150,6 +153,7 @@ struct NodeInfo
 
     INLINE void Clear()
     {
+        reduction = 0;
         pvIndex = 0;
         filteredMove = PackedMove::Invalid();
         staticEval = InvalidValue;
