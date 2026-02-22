@@ -731,20 +731,28 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             thread.depthCompleted = depth;
         }
 
-        if (isMainThread &&
-            !param.isPonder.load(std::memory_order_acquire))
+        if (!param.isPonder.load(std::memory_order_acquire))
         {
             // check soft time limit every depth iteration
             if (param.limits.idealTimeCurrent.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
                 TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.idealTimeCurrent)
             {
-                param.stopSearch = true;
-                break;
+#ifndef CONFIGURATION_FINAL
+                std::cout << "info string soft time limit reached at depth " << depth << " by thread " << threadID << '\n';
+#endif // CONFIGURATION_FINAL
+                const uint32_t softTimeLimitThreads = ++param.softTimeLimitThreads;
+                // if half of threads reached soft time limit, stop the search
+                if (softTimeLimitThreads * 2 >= mThreadData.size())
+                {
+                    param.stopSearch = true;
+                    break;
+                }
             }
 
             // check soft node limit
-            if (param.limits.maxNodesSoft < UINT64_MAX &&
+            if (isMainThread &&
+                param.limits.maxNodesSoft < UINT64_MAX &&
                 searchContext.stats.nodes > param.limits.maxNodesSoft)
             {
                 param.stopSearch = true;
@@ -752,7 +760,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             }
 
             // stop the search if found mate in multiple depths in a row
-            if (!param.limits.analysisMode &&
+            if (isMainThread &&
+                !param.limits.analysisMode &&
                 mateCounter >= MateCountStopCondition &&
                 param.limits.maxDepth == UINT16_MAX)
             {

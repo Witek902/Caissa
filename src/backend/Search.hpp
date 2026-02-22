@@ -79,6 +79,9 @@ struct SearchParam
     // used to stop search
     std::atomic<bool> stopSearch = false;
 
+    // number of threads that reached soft time limit
+    std::atomic<uint32_t> softTimeLimitThreads = 0;
+
     // print UCI-style output
     bool debugLog = true;
 
