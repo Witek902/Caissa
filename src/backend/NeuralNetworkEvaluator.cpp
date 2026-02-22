@@ -285,7 +285,8 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
         else
         {
             node.accumulatorPtr[color] = &node.accumulatorData[color];
-            node.accumulatorData[color].Update(
+            nn::Accumulator::Update(
+                node.accumulatorData[color],
                 *(prevAccumNode->accumulatorPtr[color]),
                 network.accumulatorWeights,
                 numAddedFeatures, addedFeatures,
@@ -322,14 +323,15 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             }
         }
 
-        cache.accum.Update(
+        nn::Accumulator::Update(
+            cache.accum,
+            node.accumulatorData[color],
             cache.accum,
             network.accumulatorWeights,
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
 
         node.accumulatorPtr[color] = &node.accumulatorData[color];
-        node.accumulatorData[color] = cache.accum;
     }
 
     // mark accumulator as computed
