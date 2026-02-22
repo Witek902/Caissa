@@ -98,9 +98,8 @@ struct alignas(CACHELINE_SIZE) Accumulator
 #endif
     }
 
-
-    INLINE void Update(
-        const Accumulator& source,
+    template<bool WithExtraTarget>
+    INLINE static void UpdateImpl(Accumulator& target, Accumulator* extraTarget, const Accumulator& source,
         const FirstLayerWeightType* weights,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,
         uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
@@ -114,7 +113,8 @@ struct alignas(CACHELINE_SIZE) Accumulator
         const uint32_t numTiles = numChunks / OptimalRegisterCount;
         ASSERT((size_t)weights % 32 == 0);
         ASSERT((size_t)source.values % 32 == 0);
-        ASSERT((size_t)values % 32 == 0);
+        ASSERT((size_t)target.values % 32 == 0);
+        if constexpr (WithExtraTarget) ASSERT((size_t)extraTarget->values % 32 == 0);
 
         Int16VecType regs[OptimalRegisterCount];
         for (uint32_t tile = 0; tile < numTiles; ++tile)
@@ -150,10 +150,19 @@ struct alignas(CACHELINE_SIZE) Accumulator
             }
 
             {
-                AccumulatorType* valuesStart = values + chunkBase;
+                AccumulatorType* valuesStart = target.values + chunkBase;
                 for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
                 {
                     Int16VecStore(valuesStart + i * registerWidth, regs[i]);
+                }
+            }
+
+            if constexpr (WithExtraTarget)
+            {
+                AccumulatorType* extraValuesStart = extraTarget->values + chunkBase;
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                {
+                    Int16VecStore(extraValuesStart + i * registerWidth, regs[i]);
                 }
             }
         }
@@ -183,9 +192,31 @@ struct alignas(CACHELINE_SIZE) Accumulator
                 values[i] += weights[weightsDataOffset + i];
             }
         }
+        if constexpr (WithExtraTarget)
+        {
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            {
+                extraTarget->values[i] = values[i];
+            }
+        }
 #endif
     }
 
+    INLINE static void Update(Accumulator& target, const Accumulator& source,
+        const FirstLayerWeightType* weights,
+        uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+        uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
+    {
+        UpdateImpl<false>(target, nullptr, source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
+    }
+
+    INLINE static void Update(Accumulator& target, Accumulator& extraTarget, const Accumulator& source,
+        const FirstLayerWeightType* weights,
+        uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+        uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
+    {
+        UpdateImpl<true>(target, &extraTarget, source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
+    }
 };
 
 } // namespace nn
