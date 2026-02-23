@@ -19,7 +19,6 @@ public:
     static constexpr int32_t PromotionValues[]      = { 0, 0, -30000000, -40000000, -40000000, PromotionValue, 0 };
     static constexpr int32_t KillerMoveBonus        = 1000000;
     static constexpr int32_t CounterMoveBonus       = KillerMoveBonus - 1;
-    static constexpr int32_t LosingCaptureValue     = -4000;
 
     using CounterType = int16_t;
     using PieceSquareHistory = CounterType[6][64];

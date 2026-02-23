@@ -359,10 +359,10 @@ void MoveOrderer::ScoreMoves(
             if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)     score = WinningCaptureValue;
             else if (attackingPiece == capturedPiece)                   score = GoodCaptureValue;
             else if (pos.StaticExchangeEvaluation(move))                score = GoodCaptureValue;
-            else                                                        score = LosingCaptureValue;
+            else                                                        score = INT16_MIN;
 
             // most valuable victim first
-            score += 6 * (int32_t)capturedPiece * UINT16_MAX / 128;
+            score += 4096 * (int32_t)capturedPiece;
 
             // capture history
             {
@@ -370,9 +370,7 @@ void MoveOrderer::ScoreMoves(
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                const int32_t historyScore = ((int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN) / 128;
-                ASSERT(historyScore >= 0);
-                score += historyScore;
+                score += (int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
             }
         }
         else if (withQuiets) // non-capture
