@@ -1804,7 +1804,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     return (singularScore * singularDepth + beta) / (singularDepth + 1);
                 // otherwise, reduce the depth
                 else if (ttScore >= beta)
-                    extension = -2 - !isPvNode;
+                    extension = -3 - !isPvNode;
                 else if (node->isCutNode)
                     extension = -2;
                 else if (ttScore <= alpha)
