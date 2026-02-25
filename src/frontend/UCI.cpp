@@ -1169,19 +1169,9 @@ bool UniversalChessInterface::Command_Benchmark()
         "nrbbnqkr/pppppppp/8/8/8/8/PPPPPPPP/NRBBQKNR w HBhb - 0 1",
         "bnqrkbrn/pppppppp/8/8/8/8/PPPPPPPP/RKNRNQBB w DAgd - 0 1",
         "rqbnkrnb/pppppppp/8/8/8/8/PPPPPPPP/BRKBNNRQ w GBfa - 0 1",
-        "brkbnqnr/pppppppp/8/8/8/8/PPPPPPPP/NRNKRQBB w EBhb - 0 1",
-        "nrnbbkqr/pppppppp/8/8/8/8/PPPPPPPP/NRKBBNQR w HBhb - 0 1",
-        "nrbkrnqb/pppppppp/8/8/8/8/PPPPPPPP/QBNRBNKR w HDeb - 0 1",
-        "rknbbqrn/pppppppp/8/8/8/8/PPPPPPPP/NRBKRBNQ w EBga - 0 1",
-        "rnkbnrbq/pppppppp/8/8/8/8/PPPPPPPP/QRNNKBBR w HBfa - 0 1",
-        "nrknrbbq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBQR w HCeb - 0 1",
-        "rbbqkrnn/pppppppp/8/8/8/8/PPPPPPPP/RKNRBQNB w DAfa - 0 1",
-        "nrbbkrqn/pppppppp/8/8/8/8/PPPPPPPP/RBQNKNBR w HAfb - 0 1",
-        "rnkrbqnb/pppppppp/8/8/8/8/PPPPPPPP/RBBNNQKR w HAda - 0 1",
-        "rknnbqrb/pppppppp/8/8/8/8/PPPPPPPP/NQBBRKNR w HEga - 0 1",
     };
 
-    const uint32_t maxDepth = 15;
+    const uint32_t maxDepth = 12;
 
     Search search;
     TranspositionTable tt(8 * 1024 * 1024);
