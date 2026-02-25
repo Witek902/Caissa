@@ -836,6 +836,9 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext.MarkAsDirty();
 
+    const uint32_t stm = param.position.GetSideToMove();
+    thread.optimism[stm] = 8 * param.previousScore / (std::abs(param.previousScore) + 120);
+    thread.optimism[stm ^ 1] = -thread.optimism[stm];
     thread.accumulatorCache.Init(g_mainNeuralNetwork);
 
     for (;;)
@@ -958,12 +961,15 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-ScoreType Search::AdjustEvalScore(const NodeInfo& node, const SearchParam& searchParam) const
+ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
 {
     int32_t adjustedScore = node.staticEval;
     
     // apply eval correction term
     adjustedScore += GetEvalCorrection(node);
+
+    // apply optimism
+    adjustedScore += thread.optimism[node.position.GetSideToMove()];
 
     // scale down when approaching 50-move draw
     adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
@@ -1072,7 +1078,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(*node, ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1422,7 +1428,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(*node, ctx.searchParam);
+        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
