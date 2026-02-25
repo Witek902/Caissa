@@ -304,6 +304,7 @@ private:
 
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
+        int32_t optimism[2];                // optimism values for both sides, used for eval correction
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
@@ -370,7 +371,7 @@ private:
 
     static void WorkerThreadCallback(ThreadData* threadData);
 
-    ScoreType AdjustEvalScore(const NodeInfo& node, const SearchParam& searchParam) const;
+    ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
