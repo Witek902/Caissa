@@ -20,6 +20,7 @@ public:
         Counter,
         GenerateQuiets,
         PickQuiets,
+        BadCaptures,
         End,
     };
 
@@ -47,7 +48,9 @@ public:
         m_generateQuiets = false;
 
         if (m_stage == Stage::PickQuiets)
-            m_stage = Stage::End;
+        {
+            m_stage = Stage::BadCaptures;
+        }
     }
 
 private:
@@ -64,4 +67,5 @@ private:
     PackedMove m_counterMove;
 
     MoveList m_moves;
+    MoveList m_badCaptures;
 };

@@ -42,7 +42,7 @@ public:
         numMoves = 0;
     }
 
-    INLINE void Push(const Move move)
+    INLINE void Push(const Move move, int32_t score = INT32_MIN)
     {
         ASSERT(numMoves < MaxMoves);
 
@@ -54,7 +54,7 @@ public:
 
         uint32_t index = numMoves++;
         entries[index].move = move;
-        entries[index].score = INT32_MIN;
+        entries[index].score = score;
     }
 
     INLINE void RemoveByIndex(uint32_t index)

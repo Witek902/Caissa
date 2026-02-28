@@ -208,9 +208,7 @@ struct SearchStats
     uint64_t totalBetaCutoffs = 0;
     uint64_t betaCutoffHistogram[MoveList::MaxMoves] = { 0 };
     uint64_t ttMoveBetaCutoffs = 0;
-    uint64_t winningCaptureCutoffs = 0;
-    uint64_t goodCaptureCutoffs = 0;
-    uint64_t badCaptureCutoffs = 0;
+    uint64_t captureCutoffs = 0;
     uint64_t killerMoveBetaCutoffs = 0;
     uint64_t counterMoveBetaCutoffs = 0;
     uint64_t quietCutoffs = 0;

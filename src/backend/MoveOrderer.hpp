@@ -13,8 +13,7 @@ public:
     static constexpr int32_t PVMoveValue            = INT32_MAX;
     static constexpr int32_t TTMoveValue            = PVMoveValue - 1;
 
-    static constexpr int32_t WinningCaptureValue    = 20000000;
-    static constexpr int32_t GoodCaptureValue       = 10000000;
+    static constexpr int32_t CaptureValue           = 10000000;
     static constexpr int32_t PromotionValue         = 5000000;
     static constexpr int32_t PromotionValues[]      = { 0, 0, -30000000, -40000000, -40000000, PromotionValue, 0 };
     static constexpr int32_t KillerMoveBonus        = 1000000;
