@@ -356,13 +356,8 @@ void MoveOrderer::ScoreMoves(
             ASSERT(capturedPiece > Piece::None);
             ASSERT(capturedPiece < Piece::King);
 
-            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)     score = WinningCaptureValue;
-            else if (attackingPiece == capturedPiece)                   score = GoodCaptureValue;
-            else if (pos.StaticExchangeEvaluation(move))                score = GoodCaptureValue;
-            else                                                        score = INT16_MIN;
-
             // most valuable victim first
-            score += 4096 * (int32_t)capturedPiece;
+            score = CaptureValue + 4096 * (int32_t)capturedPiece;
 
             // capture history
             {

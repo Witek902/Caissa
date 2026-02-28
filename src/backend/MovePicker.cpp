@@ -38,14 +38,25 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
         case Stage::Captures:
         {
-            if (m_moves.Size() > 0)
+            while (m_moves.Size() > 0)
             {
                 const uint32_t index = m_moves.BestMoveIndex();
-                outMove = m_moves.GetMove(index);
-                outScore = m_moves.GetScore(index);
 
-                ASSERT(outMove.IsValid());
-                ASSERT(outScore > INT32_MIN);
+                const Move move = m_moves.GetMove(index);
+                const int32_t score = m_moves.GetScore(index);
+                ASSERT(move.IsValid());
+                ASSERT(score > INT32_MIN);
+
+                // static exchange evaluation to filter out bad captures
+                if (!m_position.StaticExchangeEvaluation(move))
+                {
+                    m_badCaptures.Push(move, score);
+                    m_moves.RemoveByIndex(index);
+                    continue;
+                }
+
+                outMove = move;
+                outScore = score;
 
                 if (outScore >= MoveOrderer::PromotionValue)
                 {
@@ -56,7 +67,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
             if (!m_generateQuiets)
             {
-                m_stage = Stage::End;
+                m_stage = Stage::BadCaptures;
                 return false;
             }
 
@@ -104,7 +115,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         {
             if (!m_generateQuiets)
             {
-                m_stage = Stage::End;
+                m_stage = Stage::BadCaptures;
                 return false;
             }
 
@@ -133,7 +144,26 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
                 ASSERT(outScore > INT32_MIN);
 
                 m_moves.RemoveByIndex(index);
+                return true;
+            }
 
+            m_stage = Stage::BadCaptures;
+
+            [[fallthrough]];
+        }
+
+        case Stage::BadCaptures:
+        {
+            if (m_badCaptures.Size() > 0)
+            {
+                const uint32_t index = m_badCaptures.BestMoveIndex();
+                outMove = m_badCaptures.GetMove(index);
+                outScore = m_badCaptures.GetScore(index);
+
+                ASSERT(outMove.IsValid());
+                ASSERT(outScore > INT32_MIN);
+
+                m_badCaptures.RemoveByIndex(index);
                 return true;
             }
 
