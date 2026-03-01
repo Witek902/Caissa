@@ -1,7 +1,7 @@
 #pragma once
 
 #include <inttypes.h>
-#include <cstring>
+#include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <atomic>

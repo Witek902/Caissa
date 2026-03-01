@@ -33,6 +33,8 @@ if (NOT DEFINED TARGET_ARCH)
         set(TARGET_ARCH "x64-bmi2")
     elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
         set(TARGET_ARCH "aarch64-neon")
+    elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(TARGET_ARCH "aarch64-neon")
     else()
         message(FATAL_ERROR "Unknown target architecture")
     endif()
@@ -92,6 +94,8 @@ message("* Current architecture: ${TARGET_ARCH}")
 
 # set C/C++ standards
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_C_STANDARD 11)
 
 
@@ -158,8 +162,7 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nested-anon-types")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-four-char-constants")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-const-variable")
-    # workaround for "writing to an object of type ‘class Position’ with no trivial copy-assignment"
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-class-memaccess")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 endif()
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
