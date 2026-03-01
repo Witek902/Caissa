@@ -16,8 +16,13 @@ set_property(TARGET utils PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 add_dependencies(utils backend)
 
-target_link_libraries(utils backend)
+target_link_libraries(utils PRIVATE backend)
 
 if (NOT MSVC)
-	set_target_properties(utils PROPERTIES LINK_FLAGS "-pthread")
+	find_package(Threads REQUIRED)
+	target_link_libraries(utils PRIVATE Threads::Threads)
+
+	if (NUMA_FOUND)
+		target_link_libraries(utils PRIVATE NUMA::numa)
+	endif()
 endif()
