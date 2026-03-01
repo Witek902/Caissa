@@ -1,6 +1,7 @@
 #include "Common.hpp"
 
 #include "Memory.hpp"
+#include "Numa.hpp"
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
 #include "SearchUtils.hpp"
@@ -21,6 +22,7 @@ void InitEngine()
     _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 #endif // USE_SSE
 
+    numa::Init();
     EnableLargePagesSupport();
     Square::Init();
     InitBitboards();
