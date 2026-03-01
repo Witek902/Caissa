@@ -3,6 +3,41 @@ cmake_minimum_required(VERSION 3.15)
 project (caissa)
 
 
+option(USE_NUMA "Enable NUMA support via libnuma" ON)
+
+if (USE_NUMA AND UNIX AND NOT APPLE)
+    # first try to find libnuma via pkg-config
+    find_package(PkgConfig QUIET)
+    if (PkgConfig_FOUND)
+        pkg_check_modules(NUMA QUIET numa)
+    endif()
+  
+    # fall back to manual search
+    if (NOT NUMA_FOUND)
+        find_path(NUMA_INCLUDE_DIR NAMES numa.h)
+        find_library(NUMA_LIBRARY NAMES numa)
+    
+        if (NUMA_INCLUDE_DIR AND NUMA_LIBRARY)
+            set(NUMA_FOUND TRUE)
+            set(NUMA_INCLUDE_DIRS "${NUMA_INCLUDE_DIR}")
+            set(NUMA_LIBRARIES "${NUMA_LIBRARY}")
+        endif()
+    endif()
+  
+    if (NUMA_FOUND)
+		if (NOT TARGET NUMA::numa)
+			add_library(NUMA::numa INTERFACE IMPORTED)
+			target_include_directories(NUMA::numa INTERFACE ${NUMA_INCLUDE_DIRS})
+			target_link_libraries(NUMA::numa INTERFACE ${NUMA_LIBRARIES})
+		endif()
+        message(STATUS "libnuma found: ${NUMA_LIBRARIES} (includes: ${NUMA_INCLUDE_DIRS})")
+        add_definitions(-DUSE_LIBNUMA)
+    else()
+        message(STATUS "libnuma not found - NUMA support disabled")
+    endif()
+endif()
+
+
 # enable IPO (interprocedural optimization) if supported
 include(CheckIPOSupported)
 check_ipo_supported(RESULT supported OUTPUT error)
