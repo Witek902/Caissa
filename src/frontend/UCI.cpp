@@ -6,7 +6,7 @@
 #include "../backend/Tuning.hpp"
 
 #ifndef CAISSA_VERSION
-#define CAISSA_VERSION "1.24.17"
+#define CAISSA_VERSION "1.24.18"
 #endif // CAISSA_VERSION
 
 #if defined(USE_AVX512)
@@ -63,8 +63,6 @@ UniversalChessInterface::UniversalChessInterface()
 
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
-
-    std::cout << c_EngineName << " by " << c_Author << std::endl;
 
     TryLoadingDefaultEvalFile();
 
@@ -645,6 +643,8 @@ void UniversalChessInterface::StopSearchThread()
 
 void UniversalChessInterface::SearchThreadEntryFunc()
 {
+    numa::PinCurrentThreadToNumaNode(0);
+
     for (;;)
     {
         {
@@ -1222,4 +1222,16 @@ bool UniversalChessInterface::Command_Benchmark()
 #endif // NN_ACCUMULATOR_STATS
 
     return true;
+}
+
+int main(int argc, const char* argv[])
+{
+    std::cout << c_EngineName << " by " << c_Author << std::endl;
+
+    InitEngine();
+
+    UniversalChessInterface uci;
+    uci.Loop(argc, argv);
+
+    return 0;
 }

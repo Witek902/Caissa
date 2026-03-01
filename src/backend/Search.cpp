@@ -150,33 +150,52 @@ void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
 Search::Search()
 {
     BuildMoveReductionTable();
-    mThreadData.emplace_back(std::make_unique<ThreadData>());
-    mThreadData.front()->isMainThread = true;
 
-    mCorrectionHistories = std::make_unique<CorrectionHistories>();
-    mCorrectionHistories->Clear();
+    void* threadDataMemory = numa::AllocateOnNode(sizeof(ThreadData), 0);
+    mThreadData.emplace_back(new (threadDataMemory) ThreadData());
+    mThreadData.front()->isMainThread = true;
+    mThreadData.front()->correctionHistories = mCorrectionHistories.Get(0);
+
+    for (uint32_t i = 0; i < numa::GetNumNodes(); ++i)
+    {
+        mCorrectionHistories.Get(i)->Clear();
+    }
 }
 
 Search::~Search()
 {
     StopWorkerThreads();
+
+    ASSERT(mThreadData.size() == 1);
+    mThreadData.front()->~ThreadData();
+    numa::FreeOnNode(mThreadData.front(), sizeof(ThreadData));
 }
 
 void Search::StopWorkerThreads()
 {
     for (size_t i = 1; i < mThreadData.size(); ++i)
     {
-        const ThreadDataPtr& threadData = mThreadData[i];
+        ThreadData* threadData = mThreadData[i];
         std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
         threadData->stopThread = true;
         threadData->newTaskCV.notify_one();
     }
 
+    // stop worker threads
+    for (auto& thread : mWorkerThreads)
+    {
+        if (thread.joinable())
+        {
+            thread.join();
+        }
+    }
+    mWorkerThreads.clear();
+
     for (size_t i = 1; i < mThreadData.size(); ++i)
     {
-        mThreadData[i]->thread.join();
+        mThreadData[i]->~ThreadData();
+        numa::FreeOnNode(mThreadData[i], sizeof(ThreadData));
     }
-
     mThreadData.erase(mThreadData.begin() + 1, mThreadData.end());
 }
 
@@ -210,14 +229,18 @@ void Search::BuildMoveReductionTable()
 
 void Search::Clear()
 {
-    for (const ThreadDataPtr& threadData : mThreadData)
+    for (ThreadData* threadData : mThreadData)
     {
         ASSERT(threadData);
         threadData->moveOrderer.Clear();
         threadData->nodeCache.Reset();
         threadData->stats = SearchThreadStats{};
     }
-    mCorrectionHistories->Clear();
+
+    for (uint32_t i = 0; i < numa::GetNumNodes(); ++i)
+    {
+        mCorrectionHistories.Get(i)->Clear();
+    }
 }
 
 void Search::CorrectionHistories::Clear()
@@ -355,11 +378,16 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         // spawn missing threads
         if (mThreadData.size() < param.numThreads)
         {
-            mThreadData.emplace_back(std::make_unique<ThreadData>());
-            mThreadData.back()->thread = std::thread(Search::WorkerThreadCallback, mThreadData.back().get());
+            const uint32_t numaNode = i % numa::GetNumNodes();
+            void* threadDataMemory = numa::AllocateOnNode(sizeof(ThreadData), numaNode);
+            ThreadData* threadData = new (threadDataMemory) ThreadData();
+            threadData->correctionHistories = mCorrectionHistories.Get(numaNode);
+
+            mThreadData.push_back(threadData);
+            mWorkerThreads.emplace_back(std::thread(Search::WorkerThreadCallback, this, i));
         }
 
-        const ThreadDataPtr& threadData = mThreadData[i];
+        ThreadData* threadData = mThreadData[i];
         {
             std::unique_lock<std::mutex> lock(threadData->newTaskMutex);
             ASSERT(!threadData->callback);
@@ -377,7 +405,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     // wait for worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
-        const ThreadDataPtr& threadData = mThreadData[i];
+        ThreadData* threadData = mThreadData[i];
         std::unique_lock<std::mutex> lock(threadData->taskFinishedMutex);
         threadData->taskFinishedCV.wait(lock, [&threadData]() { return threadData->taskFinished; });
         threadData->taskFinished = false;
@@ -391,7 +419,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
         for (uint32_t i = 0; i < param.numThreads; ++i)
         {
-            const ThreadDataPtr& threadData = mThreadData[i];
+            const ThreadData* threadData = mThreadData[i];
             ASSERT(!threadData->pvLines.empty());
             ASSERT(threadData->pvLines.size() == numPvLines);
 
@@ -421,7 +449,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         {
             for (uint32_t i = 0; i < param.numThreads; ++i)
             {
-                const ThreadDataPtr& threadData = mThreadData[i];
+                const ThreadData* threadData = mThreadData[i];
                 const PvLine& pvLine = threadData->pvLines.front();
                 std::cout << "info string thread " << i
                     << " completed depth " << threadData->depthCompleted
@@ -443,8 +471,14 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     param.stopSearch = false;
 }
 
-void Search::WorkerThreadCallback(ThreadData* threadData)
+void Search::WorkerThreadCallback(Search* search, uint32_t index)
 {
+    const uint32_t numNodes = numa::GetNumNodes();
+    const uint32_t numaNode = index % numNodes; // spread threads across NUMA nodes
+    numa::PinCurrentThreadToNumaNode(numaNode);
+
+    ThreadData* threadData = search->mThreadData[index];
+
     while (!threadData->stopThread)
     {
         {
@@ -936,19 +970,19 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
-ScoreType Search::GetEvalCorrection(const NodeInfo& node) const
+ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const
 {
     const Color stm = node.position.GetSideToMove();
-    
+
     int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * mCorrectionHistories->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * mCorrectionHistories->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
+    corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * mCorrectionHistories->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
     if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
-        corr += ContCorrectionScale * mCorrectionHistories->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
+        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -958,12 +992,12 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / 1024);
 }
 
-ScoreType Search::AdjustEvalScore(const NodeInfo& node, const SearchParam& searchParam) const
+ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
 {
     int32_t adjustedScore = node.staticEval;
     
     // apply eval correction term
-    adjustedScore += GetEvalCorrection(node);
+    adjustedScore += GetEvalCorrection(thread.correctionHistories, node);
 
     // scale down when approaching 50-move draw
     adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
@@ -1072,7 +1106,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(*node, ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         bestValue = adjustedEvalScore;
 
@@ -1422,7 +1456,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(*node, ctx.searchParam);
+        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
@@ -2116,13 +2150,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (bonus != 0)
             {
                 const Color stm = position.GetSideToMove();
-                AddToCorrHist(mCorrectionHistories->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
-                AddToCorrHist(mCorrectionHistories->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
-                AddToCorrHist(mCorrectionHistories->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
+                CorrectionHistories* corrHist = thread.correctionHistories;
+                AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+                AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
+                AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                    AddToCorrHist(mCorrectionHistories->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
                 if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
-                    AddToCorrHist(mCorrectionHistories->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
             }
         }
     }

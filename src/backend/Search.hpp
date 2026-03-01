@@ -9,6 +9,7 @@
 #include "Score.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 #include "NodeCache.hpp"
+#include "Numa.hpp"
 
 #include <atomic>
 #include <memory>
@@ -287,10 +288,31 @@ private:
         uint32_t threadID = 0;
     };
 
+    //
+
+    struct alignas(64) CorrectionHistories
+    {
+        using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
+        PawnCorrTable pawnStructure;
+
+        using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
+        NonPawnCorrTable nonPawnWhite;
+        NonPawnCorrTable nonPawnBlack;
+
+        using ContCorrTable = int16_t[2][6 * 64][6 * 64]; // [stm][piece-to][piece-to]
+        ContCorrTable continuation;
+
+        void Clear();
+    };
+
+    // per-NUMA-node eval correction histories
+    numa::PerNodeAllocation<CorrectionHistories> mCorrectionHistories;
+
+    //
+
     struct alignas(64) ThreadData
     {
         std::atomic<bool> stopThread = false;
-        std::thread thread;
 
         std::condition_variable taskFinishedCV;
         std::mutex taskFinishedMutex;
@@ -312,6 +334,7 @@ private:
         MoveOrderer moveOrderer;
         NodeCache nodeCache;
         AccumulatorCache accumulatorCache;
+        CorrectionHistories* correctionHistories = nullptr;
         NodeInfo searchStack[MaxSearchDepth];
 
         ThreadData();
@@ -322,30 +345,8 @@ private:
         const Move GetPvMove(const NodeInfo& node) const;
     };
 
-    using ThreadDataPtr = std::unique_ptr<ThreadData>;
-    std::vector<ThreadDataPtr> mThreadData;
-
-    //
-
-    struct alignas(64) CorrectionHistories
-    {
-        using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
-        PawnCorrTable pawnStructure;
-
-        using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
-        NonPawnCorrTable nonPawnWhite;
-        NonPawnCorrTable nonPawnBlack;
-
-        using ContCorrTable = int16_t[2][6 * 64][6 * 64]; // [stm][piece-to][piece-to]
-        ContCorrTable continuation;
-
-        void Clear();
-    };
-
-    using CorrectionHistoriesPtr = std::unique_ptr<CorrectionHistories>;
-    CorrectionHistoriesPtr mCorrectionHistories;
-
-    ScoreType GetEvalCorrection(const NodeInfo& node) const;
+    std::vector<ThreadData*> mThreadData;
+    std::vector<std::thread> mWorkerThreads;
 
     //
 
@@ -368,9 +369,11 @@ private:
     void BuildMoveReductionTable();
     void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
 
-    static void WorkerThreadCallback(ThreadData* threadData);
+    static void WorkerThreadCallback(Search* search, uint32_t index);
 
-    ScoreType AdjustEvalScore(const NodeInfo& node, const SearchParam& searchParam) const;
+    ScoreType GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const;
+
+    ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
