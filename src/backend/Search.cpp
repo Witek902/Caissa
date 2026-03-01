@@ -1627,7 +1627,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
-    if (node->ply < 3)
+    if (node->ply < 6)
     {
         nodeCacheEntry = thread.nodeCache.GetEntry(position, node->ply);
     }
