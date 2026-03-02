@@ -234,6 +234,18 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
+void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move move, int32_t delta)
+{
+    const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+    const uint32_t to = move.ToSquare().Index();
+
+    if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
+    if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight1 / 1024);
+    if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight2 / 1024);
+    if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight3 / 1024);
+    if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight5 / 1024);
+}
+
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
 {
     ASSERT(node.depth >= 0);
@@ -270,17 +282,12 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const int32_t histDelta = move == bestMove ? histBonus : histMalus;
         const int32_t contDelta = move == bestMove ? contBonus : contMalus;
 
-        const uint32_t piece = (uint32_t)move.GetPiece() - 1;
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
-        
+
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
 
-        if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], contDelta);
-        if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight1 / 1024);
-        if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight2 / 1024);
-        if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight3 / 1024);
-        if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], contDelta * ContUpdateWeight5 / 1024);
+        UpdateContinuationHistory(node, move, contDelta);
     }
 }
 
