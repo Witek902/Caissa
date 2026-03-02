@@ -2089,6 +2089,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
 
+    // Prior counter-move history update
+    if (!isRootNode && bestValue <= oldAlpha && node->previousMove.IsValid() && node->previousMove.IsQuiet())
+    {
+        const int32_t bonus = std::min(1200, node->depth * 120 - 100);
+        thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bonus);
+    }
+
 #ifdef COLLECT_SEARCH_STATS
     {
         const bool isCutNode = bestValue >= beta;
