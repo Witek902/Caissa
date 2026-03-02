@@ -316,7 +316,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
-        UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+        UpdateHistoryCounter(capturesHistory[color][node.isInCheck][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
     }
 }
 
@@ -356,10 +356,16 @@ void MoveOrderer::ScoreMoves(
             ASSERT(capturedPiece > Piece::None);
             ASSERT(capturedPiece < Piece::King);
 
-            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)     score = WinningCaptureValue;
-            else if (attackingPiece == capturedPiece)                   score = GoodCaptureValue;
-            else if (pos.StaticExchangeEvaluation(move))                score = GoodCaptureValue;
-            else                                                        score = INT16_MIN;
+            if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)
+                score = WinningCaptureValue;
+            else if (attackingPiece == capturedPiece)
+                score = GoodCaptureValue;
+            else if (node.isInCheck) // skip SEE in check
+                score = GoodCaptureValue;
+            else if (pos.StaticExchangeEvaluation(move))
+                score = GoodCaptureValue;
+            else
+                score = INT16_MIN;
 
             // most valuable victim first
             score += 4096 * (int32_t)capturedPiece;
@@ -370,7 +376,7 @@ void MoveOrderer::ScoreMoves(
                 const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
                 ASSERT(capturedIdx < 5);
                 ASSERT(pieceIdx < 6);
-                score += (int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
+                score += (int32_t)capturesHistory[color][node.isInCheck][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
             }
         }
         else if (withQuiets) // non-capture
