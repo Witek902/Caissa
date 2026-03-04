@@ -2149,7 +2149,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // update correction histories
         if (!node->isInCheck &&
-            (!bestMove.IsValid() || bestMove.IsQuiet()) &&
             ((bestValue < unadjustedEval && bestValue < beta) ||
              (bestValue > unadjustedEval && bestMove.IsValid())))
         {
