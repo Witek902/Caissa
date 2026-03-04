@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project (caissa)
+project(caissa LANGUAGES C CXX)
 
 
 option(USE_NUMA "Enable NUMA support via libnuma" ON)
@@ -40,7 +40,12 @@ endif()
 
 # enable IPO (interprocedural optimization) if supported
 include(CheckIPOSupported)
-check_ipo_supported(RESULT supported OUTPUT error)
+check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)
+if (IPO_SUPPORTED)
+    message(STATUS "IPO supported by this toolchain")
+else()
+    message(STATUS "IPO not supported: ${IPO_ERROR}")
+endif()
 
 
 # set supported configurations
@@ -51,7 +56,7 @@ IF(NOT CMAKE_BUILD_TYPE)
        CACHE STRING "Choose one of build types: Debug Release Final."
        FORCE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
-message("* Current build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Current build type: ${CMAKE_BUILD_TYPE}")
 
 # set definitions for each configuration
 set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
@@ -124,7 +129,7 @@ else()
     message(FATAL_ERROR "Unknown target architecture: ${TARGET_ARCH}")
 endif()
 
-message("* Current architecture: ${TARGET_ARCH}")
+message(STATUS "Current architecture: ${TARGET_ARCH}")
 
 
 # set C/C++ standards
@@ -147,12 +152,9 @@ else()
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 endif()
 
-
+# linker flags
 if (MSVC)
-	set(CMAKE_EXE_LINKER_FLAGS "/DEBUG:FULL")
-	set(CMAKE_EXE_LINKER_FLAGS "/OPT:ICF")
-	set(CMAKE_EXE_LINKER_FLAGS "/LTCG")
-	set(CMAKE_SHARED_LINKER_FLAGS "/DEBUG:FULL")
+	add_link_options(/DEBUG:FULL /OPT:ICF /LTCG)
 endif()
 
 
@@ -186,7 +188,8 @@ endif()
 
 # warning exceptions
 if (MSVC)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_compile_options(/W4 /WX /GR- /MP)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-multichar")
