@@ -379,6 +379,12 @@ void MoveOrderer::ScoreMoves(
                 ASSERT(pieceIdx < 6);
                 score += (int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
             }
+
+            // recapture bonus
+            if (move.ToSquare() == node.previousMove.ToSquare())
+            {
+                score += 8192;
+            }
         }
         else if (withQuiets) // non-capture
         {
