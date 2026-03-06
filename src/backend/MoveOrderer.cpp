@@ -412,14 +412,14 @@ void MoveOrderer::ScoreMoves(
                 default:
                     break;
             }
+        }
 
-            // use node cache for scoring moves near the root
-            if (nodeCacheEntry && nodeCacheEntry->nodesSum > 256)
+        // use node cache for scoring moves near the root
+        if (nodeCacheEntry && nodeCacheEntry->nodesSum > 256)
+        {
+            if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
             {
-                if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
-                {
-                    score += static_cast<int32_t>(4096u * moveInfo->nodesSearched / nodeCacheEntry->nodesSum);
-                }
+                score += static_cast<int32_t>(65536u * moveInfo->nodesSearched / nodeCacheEntry->nodesSum);
             }
         }
 
