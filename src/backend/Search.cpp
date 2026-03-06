@@ -912,7 +912,11 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         ASSERT(!pvLine.moves.empty());
         ASSERT(pvLine.moves.front().IsValid());
 
-        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch)
+        if (isMainThread && param.searchParam.debugLog && !param.searchParam.stopSearch
+#ifdef CONFIGURATION_FINAL
+            && boundsType == BoundsType::Exact // don't log out of window scores in final build
+#endif // CONFIGURATION_FINAL
+            )
         {
             const TimePoint searchTime = TimePoint::GetCurrent() - param.searchParam.limits.startTimePoint;
             ReportPV(param, pvLine, boundsType, searchTime);
