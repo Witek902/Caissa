@@ -3,7 +3,7 @@
 #include "Tuning.hpp"
 
 DEFINE_PARAM(QuietMoveHistoryClear, 802, -2000, 2000);
-DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
+DEFINE_PARAM(ContinuationHistoryClear, 1524, -2000, 2000);
 DEFINE_PARAM(CapturesHistoryClear, 346, -2000, 2000);
 
 DEFINE_PARAM(HistBonusOffset, -113, -200, 0);
@@ -171,6 +171,9 @@ void MoveOrderer::NewSearch()
 
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         reinterpret_cast<CounterType*>(quietMoveHistory)[i] /= scaleDownFactor;
+
+    for (uint32_t i = 0; i < sizeof(continuationHistory) / sizeof(CounterType); ++i)
+        reinterpret_cast<CounterType*>(continuationHistory)[i] /= scaleDownFactor;
 
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         reinterpret_cast<CounterType*>(capturesHistory)[i] /= scaleDownFactor;
