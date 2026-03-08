@@ -398,18 +398,16 @@ void MoveOrderer::ScoreMoves(
             {
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
-                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
-                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
+                    if (node.threats.attackedByPawns & move.FromSquare())   score += 8000;
+                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 8000;
                     break;
                 case Piece::Rook:
-                    if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
-                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 8000;
+                    if (node.threats.attackedByMinors & move.FromSquare())  score += 16000;
+                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 16000;
                     break;
                 case Piece::Queen:
-                    if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
-                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
-                    break;
-                default:
+                    if (node.threats.attackedByRooks & move.FromSquare())   score += 24000;
+                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 24000;
                     break;
             }
 
