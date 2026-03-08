@@ -1839,7 +1839,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
                 else if (singularScore >= beta)
+                {
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(singularScore, node->ply), node->staticEval, singularDepth, TTEntry::Bounds::Lower, ttMove);
                     return (singularScore * singularDepth + beta) / (singularDepth + 1);
+                }
                 // otherwise, reduce the depth
                 else if (ttScore >= beta)
                     extension = -2 - !isPvNode;
