@@ -13,25 +13,40 @@ else
 	EXT = 
 endif
 
-WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -s -flto -flto-partition=one -std=c++20 -O3 -funroll-loops
-LIBS =
-
-ifeq ($(EXT), .exe)
-	FLAGS += -static -static-libgcc -static-libstdc++
-	LIBS += -pthread
-else
-	LIBS += -lpthread
+WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-missing-field-initializers -Wno-multichar
+ifneq ($(findstring clang++, $(CC)),)
+    WFLAGS += -Wno-unknown-attributes
+else ifneq ($(findstring g++, $(CC)),)
+    WFLAGS += -Wno-attributes
 endif
 
-ifneq ($(findstring g++, $(CC)),)
-	PGO_DIR = "pgo"
-	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
-	PGO_USE      = -fprofile-use=$(PGO_DIR)
-else ifneq ($(findstring clang++, $(CC)),)
-	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
-	PGO_GENERATE = -fprofile-instr-generate
-	PGO_USE      = -fprofile-instr-use=caissa.profdata
+FLAGS = $(WFLAGS) -s -flto -std=c++20 -O3 -funroll-loops
+ifneq ($(findstring clang++, $(CC)),)
+    # clang-specific: nothing extra needed
+else ifneq ($(findstring g++, $(CC)),)
+    FLAGS += -flto-partition=one
+endif
+
+ifeq ($(EXT), .exe)
+    FLAGS += -static
+    ifneq ($(findstring clang++, $(CC)),)
+        # clang on windows: no -static-libgcc
+    else ifneq ($(findstring g++, $(CC)),)
+        FLAGS += -static-libgcc -static-libstdc++
+    endif
+    LIBS += -pthread
+else
+    LIBS += -lpthread
+endif
+
+ifneq ($(findstring clang++, $(CC)),)
+    PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
+    PGO_GENERATE = -fprofile-instr-generate
+    PGO_USE      = -fprofile-instr-use=caissa.profdata
+else ifneq ($(findstring g++, $(CC)),)
+    PGO_DIR      = "pgo"
+    PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
+    PGO_USE      = -fprofile-use=$(PGO_DIR)
 endif
 
 # Try to detect windows environment by seeing
