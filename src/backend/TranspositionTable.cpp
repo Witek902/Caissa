@@ -203,7 +203,7 @@ bool TranspositionTable::Read(const Position& position, TTEntry& outEntry) const
     return false;
 }
 
-void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, PackedMove move)
+void TranspositionTable::Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, bool isPv, PackedMove move)
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
@@ -212,6 +212,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     entry.staticEval = staticEval;
     entry.depth = (uint8_t)std::min<uint32_t>(depth, UINT8_MAX);
     entry.bounds = bounds;
+    entry.isPv = isPv;
     entry.move = move;
 
     ASSERT(entry.IsValid());
@@ -277,6 +278,12 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
     if (positionKey == prevKey && !entry.move.IsValid())
     {
         entry.move = prevEntry.move;
+    }
+
+    // preserve PV flag from previous entry for the same position
+    if (positionKey == prevKey)
+    {
+        entry.isPv = entry.isPv || prevEntry.isPv;
     }
 
     entry.generation = generation;

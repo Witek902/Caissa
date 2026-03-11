@@ -1099,8 +1099,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             node->staticEval = evalScore;
 
             if (!ttEntry.IsValid())
-                ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower);
-
+                ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower, false);
 #ifdef COLLECT_SEARCH_STATS
             int32_t binIndex = (evalScore + SearchStats::EvalHistogramMaxValue) * SearchStats::EvalHistogramBins / (2 * SearchStats::EvalHistogramMaxValue);
             binIndex = std::clamp<int32_t>(binIndex, 0, SearchStats::EvalHistogramBins - 1);
@@ -1261,7 +1260,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     // store value in transposition table
     const TTEntry::Bounds bounds = bestValue >= beta ? TTEntry::Bounds::Lower : TTEntry::Bounds::Upper;
-    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, bounds, bestMove);
+    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, 0, bounds, isPvNode, bestMove);
 #ifdef COLLECT_SEARCH_STATS
     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1378,6 +1377,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    // track whether this position was historically part of the principal variation
+    const bool ttPv = isPvNode || (ttEntry.IsValid() && ttEntry.isPv);
+
     // try probing Win-Draw-Loose endgame tables
     if constexpr (!isRootNode)
     {
@@ -1422,7 +1424,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 if (!ttEntry.IsValid())
                 {
-                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->ply), node->staticEval, node->depth, bounds);
+                    ctx.searchParam.transpositionTable.Write(position, ScoreToTT(tbValue, node->ply), node->staticEval, node->depth, bounds, false);
 #ifdef COLLECT_SEARCH_STATS
                     ctx.stats.ttWrites++;
 #endif // COLLECT_SEARCH_STATS
@@ -1450,7 +1452,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ASSERT(evalScore < TablebaseWinValue && evalScore > -TablebaseWinValue);
             node->staticEval = evalScore;
 
-            ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower);
+            ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower, false);
         }
         else if (!node->isCutNode)
         {
@@ -1529,6 +1531,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Null Move Pruning
             if (node->isCutNode &&
+                !ttPv &&
                 eval >= beta + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0) &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
@@ -1632,7 +1635,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     // probcut failed
                     if (score >= probBeta)
                     {
-                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, move);
+                        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - 3, TTEntry::Bounds::Lower, false, move);
                         return score;
                     }
                 }
@@ -1877,8 +1880,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 r = GetQuietsDepthReduction(node->depth, moveIndex);
 
-                // reduce non-PV nodes more
-                if constexpr (!isPvNode) r += LmrQuietNonPv;
+                // reduce less on positions that were historically on the PV
+                if (!ttPv) r += LmrQuietNonPv;
 
                 // reduce more if TT move is capture
                 if (ttCapture) r += LmrQuietTTCapture;
@@ -2145,7 +2148,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
 
-        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, bestMove);
+        ctx.searchParam.transpositionTable.Write(position, ScoreToTT(bestValue, node->ply), node->staticEval, node->depth, bounds, isPvNode, bestMove);
 
 #ifdef COLLECT_SEARCH_STATS
         ctx.stats.ttWrites++;
