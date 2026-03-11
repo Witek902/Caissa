@@ -2204,7 +2204,7 @@ static void RunTranspositionTableTests()
         TEST_EXPECT(!tt.Read(pos1, entry));
         TEST_EXPECT(!entry.IsValid());
         
-        tt.Write(pos1, 100, 95, 5, TTEntry::Bounds::Exact, PackedMove(Square_e2, Square_e4));
+        tt.Write(pos1, 100, 95, 5, TTEntry::Bounds::Exact, false, PackedMove(Square_e2, Square_e4));
         
         TEST_EXPECT(tt.Read(pos1, entry));
         TEST_EXPECT(entry.IsValid());
@@ -2217,12 +2217,12 @@ static void RunTranspositionTableTests()
     
     // Different bounds
     {
-        tt.Write(pos2, 200, 190, 3, TTEntry::Bounds::Lower, PackedMove::Invalid());
+        tt.Write(pos2, 200, 190, 3, TTEntry::Bounds::Lower, false, PackedMove::Invalid());
         TTEntry entry;
         TEST_EXPECT(tt.Read(pos2, entry));
         TEST_EXPECT(entry.bounds == TTEntry::Bounds::Lower);
         
-        tt.Write(pos2, 150, 145, 4, TTEntry::Bounds::Upper, PackedMove::Invalid());
+        tt.Write(pos2, 150, 145, 4, TTEntry::Bounds::Upper, false, PackedMove::Invalid());
         TEST_EXPECT(tt.Read(pos2, entry));
         TEST_EXPECT(entry.bounds == TTEntry::Bounds::Upper);
         TEST_EXPECT(entry.depth == 4);
@@ -2236,7 +2236,7 @@ static void RunTranspositionTableTests()
         TEST_EXPECT(entry.IsValid());
         
         // Write new entry with new generation
-        tt.Write(pos1, 110, 105, 6, TTEntry::Bounds::Exact, PackedMove(Square_e2, Square_e4));
+        tt.Write(pos1, 110, 105, 6, TTEntry::Bounds::Exact, false, PackedMove(Square_e2, Square_e4));
         TEST_EXPECT(tt.Read(pos1, entry));
         TEST_EXPECT(entry.depth == 6);
     }
