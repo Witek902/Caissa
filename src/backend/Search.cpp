@@ -1500,6 +1500,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 4)->staticEval;
     }
 
+    const Move pvMove = thread.GetPvMove(*node);
+    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
+    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+    const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
@@ -1516,11 +1521,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 return (ScoreType)((eval * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
             }
 
-            // Razoring
-            // prune if quiescence search on current position can't beat beta
+            // Razoring: prune if quiescence search on current position can't beat beta
             if (node->depth <= RazoringStartDepth &&
                 beta < KnownWinValue &&
-                eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
+                eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta &&
+                !ttCapture)
             {
                 const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
                 if (qScore < beta)
@@ -1639,11 +1644,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
     }
-
-    const Move pvMove = thread.GetPvMove(*node);
-    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
-    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
-    const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
 
     // in-check probcut (idea from Stockfish)
     if constexpr (!isPvNode)
