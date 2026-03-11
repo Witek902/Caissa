@@ -13,6 +13,10 @@ DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
+DEFINE_PARAM(TM_FallingEvalOffset, 660, 400, 900);
+DEFINE_PARAM(TM_FallingEvalScale, 285, 100, 600);
+DEFINE_PARAM(TM_FallingEvalMin, 500, 200, 900);
+DEFINE_PARAM(TM_FallingEvalMax, 1500, 1100, 2000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -102,6 +106,29 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // extend time if score is falling between iterations (position is becoming harder)
+    // guard against mate scores, which would produce meaninglessly large deltas
+    {
+        const ScoreType prevScore = data.prevResult[0].score;
+        const ScoreType currScore = data.currResult[0].score;
+        if (!IsMate(prevScore) && !IsMate(currScore))
+        {
+            // positive delta = score dropped = we need more time
+            const int32_t scoreDelta = static_cast<int32_t>(prevScore) - static_cast<int32_t>(currScore);
+            const double offset = static_cast<double>(TM_FallingEvalOffset) / 1000.0;
+            const double scale  = static_cast<double>(TM_FallingEvalScale) / 100000.0;
+            const double minFactor = static_cast<double>(TM_FallingEvalMin) / 1000.0;
+            const double maxFactor = static_cast<double>(TM_FallingEvalMax) / 1000.0;
+            const double fallingEvalFactor = std::clamp(offset + scale * scoreDelta, minFactor, maxFactor);
+            limits.idealTimeCurrent *= fallingEvalFactor;
+
+#ifndef CONFIGURATION_FINAL
+            if (scoreDelta != 0)
+                std::cout << "info string score delta " << scoreDelta << " cp, falling eval factor " << fallingEvalFactor << std::endl;
+#endif // CONFIGURATION_FINAL
+        }
     }
 
 #ifndef CONFIGURATION_FINAL
