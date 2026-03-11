@@ -8,7 +8,7 @@ class Position;
 
 struct TTEntry
 {
-    static constexpr uint32_t GenerationBits = 6;
+    static constexpr uint32_t GenerationBits = 5;
     static constexpr uint32_t GenerationCycle = 1 << GenerationBits;
 
     enum class Bounds : uint8_t
@@ -24,6 +24,7 @@ struct TTEntry
     PackedMove move;
     uint8_t depth;
     Bounds bounds : 2;
+    uint8_t isPv : 1;
     uint8_t generation : GenerationBits;
 
     INLINE TTEntry()
@@ -32,6 +33,7 @@ struct TTEntry
         , move(PackedMove::Invalid())
         , depth(0)
         , bounds(Bounds::Invalid)
+        , isPv(0)
         , generation(0)
     {}
 
@@ -76,7 +78,7 @@ public:
     void NextGeneration();
 
     bool Read(const Position& position, TTEntry& outEntry) const;
-    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, PackedMove move = PackedMove::Invalid());
+    void Write(const Position& position, ScoreType score, ScoreType staticEval, uint32_t depth, TTEntry::Bounds bounds, bool isPv, PackedMove move = PackedMove::Invalid());
     void Prefetch(const uint64_t hash) const;
 
     // invalidate all entries
