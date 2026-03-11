@@ -952,8 +952,12 @@ void Position::ComputeThreats(Threats& outThreats) const
     Bitboard attackedByRooks = 0;
     Bitboard allThreats = 0;
 
+    const SidePosition& currentSide = GetCurrentSide();
     const SidePosition& opponentSide = GetOpponentSide();
-    const Bitboard occupied = Occupied();
+
+    // do not include our king in occupied squares, so that attacks on our king by sliding pieces are not blocked by our own king
+    // (king cannot move along the attack ray)
+    const Bitboard occupied = opponentSide.Occupied() | currentSide.OccupiedExcludingKing();
 
     attackedByPawns = Bitboard::GetPawnsAttacks(opponentSide.pawns, GetSideToMove());
 
