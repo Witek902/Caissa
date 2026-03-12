@@ -27,6 +27,7 @@ The engine is optimized for:
   - [Linux](#linux)
   - [Windows](#windows)
 - [Architecture Variants](#architecture-variants)
+- [Custom Commands](#custom-commands)
 - [UCI Options](#uci-options)
 - [History & Originality](#history--originality)
 - [Project Structure](#project-structure)
@@ -81,9 +82,14 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 - ✅ **Transposition Table** with large pages support
 - ✅ **Multi-PV Search** - Analyze multiple lines simultaneously
 - ✅ **Multithreaded Search** - Parallel search with shared TT
+- ✅ **Late Move Reductions (LMR)**
+- ✅ **Null-Move Pruning**
+- ✅ **Singular Extensions**
+- ✅ **Correction History** - Pawn and non-pawn correction tables improve static eval accuracy
+- ✅ **Cuckoo Hashing** for fast repetition detection
 
 ### Neural Network Evaluation
-- **Architecture**: (32×768→1024)×2→1
+- **Architecture**: (32×768→1024)×2→1 — dual-perspective (one accumulator per king), 32 king buckets, 768 features per perspective (12 piece types × 64 squares)
 - **Incremental Updates** - Efficiently updated first layer
 - **Vectorized Code** - Manual SIMD optimization for:
   - AVX-512 (fastest)
@@ -106,6 +112,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 - **Large Pages** - Transposition table uses large pages for better performance
 - **Node Caching** - Evaluation result caching
 - **Accumulator Caching** - Neural network accumulator caching
+- **NUMA Support** - Memory allocation and thread pinning respect NUMA topology on multi-socket systems (Linux, requires `libnuma`)
 - **Ultra-Fast** - Outstanding performance at ultra-short time controls (sub-second games)
 
 ## Quick Start
@@ -186,6 +193,22 @@ cmake -DTARGET_ARCH=x64-legacy -DCMAKE_BUILD_TYPE=Final ..
 
 > **Note**: Visual Studio 2022 is the only tested version. CMake directly in Visual Studio has not been tested.
 
+### ARM / AArch64
+
+CMake supports two ARM targets via `TARGET_ARCH`:
+
+```bash
+mkdir build && cd build
+
+# Generic AArch64 (no NEON intrinsics)
+cmake -DTARGET_ARCH=aarch64 -DCMAKE_BUILD_TYPE=Final ..
+
+# AArch64 with NEON SIMD (recommended on modern ARM hardware)
+cmake -DTARGET_ARCH=aarch64-neon -DCMAKE_BUILD_TYPE=Final ..
+
+make -j$(nproc)
+```
+
 ### Post-Compilation
 
 After compilation, copy the appropriate neural network file from `data/neuralNets/` to:
@@ -203,6 +226,24 @@ After compilation, copy the appropriate neural network file from `data/neuralNet
 | **Legacy** | x64 only | Slowest | Very old x64 CPUs |
 
 > **Tip**: If unsure, try BMI2 first. It's supported by most modern CPUs and offers excellent performance.
+
+## Custom Commands
+
+In addition to the standard UCI protocol, the engine supports these non-standard commands useful for development and debugging:
+
+| Command | Description |
+|---------|-------------|
+| `bench [depth]` | Run a benchmark / smoke test |
+| `perft [depth]` | Count legal moves to a given depth (move generation test) |
+| `eval` | Display evaluation of the current position |
+| `print` | Pretty-print the current board |
+| `scoremoves` | Show move ordering scores for the current position |
+| `threats` | Show threat information for the current position |
+| `ttinfo` | Print transposition table statistics |
+| `ttprobe` | Probe the transposition table for the current position |
+| `tbprobe` | Probe tablebases for the current position |
+| `cacheprobe` | Probe the node cache for the current position |
+| `printparams` | Print all tunable search/eval parameters (only with `ENABLE_TUNING` build flag) |
 
 ## UCI Options
 
@@ -270,21 +311,21 @@ The project is organized into three main modules:
 ```
 src/
 ├── backend/     # Core engine library
-│   ├── Search.*           # Search algorithms
-│   ├── Position.*         # Position representation
-│   ├── MoveGen.*          # Move generation
-│   ├── PackedNeuralNetwork.*  # Neural network evaluation
-│   ├── TranspositionTable.*   # Position caching
+│   ├── Search.*            # Search algorithms
+│   ├── Position.*          # Position representation
+│   ├── MoveGen.*           # Move generation
+│   ├── PackedNeuralNetwork.*   # Neural network evaluation
+│   ├── TranspositionTable.*    # Position caching
 │   └── ...
 │
 ├── frontend/    # UCI interface executable
-│   ├── Main.cpp           # Entry point
-│   └── UCI.*              # UCI protocol implementation
+│   ├── Main.cpp            # Entry point
+│   └── UCI.*               # UCI protocol implementation
 │
 └── utils/       # Development and training tools
     ├── NetworkTrainer.*    # Neural network training
     ├── SelfPlay.*          # Self-play game generation
-    ├── Tests.*            # Unit tests
+    ├── Tests.*             # Unit tests
     └── ...
 ```
 
