@@ -82,7 +82,7 @@ DEFINE_PARAM(AspirationWindowMaxSize, 547, 200, 800);
 DEFINE_PARAM(AspirationWindow, 6, 5, 20);
 DEFINE_PARAM(AspirationWindowScoreScale, 17, 8, 32);
 
-DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
+DEFINE_PARAM(SingularExtMinDepth, 4, 3, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
 DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
@@ -1797,10 +1797,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (!node->filteredMove.IsValid() &&
                 move == ttMove &&
-                node->depth >= SingularExtMinDepth &&
+                node->depth >= SingularExtMinDepth + isPvNode &&
                 std::abs(ttScore) < KnownWinValue &&
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
-                ttEntry.depth >= node->depth - 3)
+                ttEntry.depth >= node->depth - 4)
             {
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
                 const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
