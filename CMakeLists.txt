@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.15)
 
 project(caissa LANGUAGES C CXX)
 
+# Single source of truth for the version number
+file(READ "${CMAKE_SOURCE_DIR}/version.txt" CAISSA_VERSION)
+string(STRIP "${CAISSA_VERSION}" CAISSA_VERSION)
+message(STATUS "Caissa version: ${CAISSA_VERSION}")
+add_compile_definitions(CAISSA_VERSION="${CAISSA_VERSION}")
+
 
 option(USE_NUMA "Enable NUMA support via libnuma" ON)
 
