@@ -9,18 +9,25 @@ void PrintMoveList(const Position& pos, const MoveList& moves)
     {
         const Move move = moves.entries[i].move;
 
-        if (!pos.IsMoveLegal(move)) continue;
+        std::cout << std::right << std::setw(3) << (i + 1) << ". ";
 
-        std::cout
-            << std::right << std::setw(3) << (i + 1) << ". "
-            << move.ToString() << "\t("
-            << pos.MoveToString(move, MoveNotation::SAN) << ")\t"
-            << moves.entries[i].score;
-
-        if (!pos.StaticExchangeEvaluation(move))
+        if (!pos.IsMoveLegal(move))
         {
-            std::cout << " [negative SSE]";
+            std::cout << move.ToString() << "\t[illegal move generated]";
         }
+        else
+        {
+            std::cout
+                << move.ToString() << "\t("
+                << pos.MoveToString(move, MoveNotation::SAN) << ")\t"
+                << moves.entries[i].score;
+
+            if (!pos.StaticExchangeEvaluation(move))
+            {
+                std::cout << " [negative SSE]";
+            }
+        }
+
         std::cout << std::endl;
     }
 }
