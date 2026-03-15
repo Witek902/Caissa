@@ -1335,6 +1335,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             return alpha;
     }
 
+    // Prefetch correction history table entries early
+    // These will be needed when AdjustEvalScore calls GetEvalCorrection
+#ifdef USE_SSE
+    if (!node->isInCheck)
+    {
+        const Color stm = position.GetSideToMove();
+        const auto* corrHist = thread.correctionHistories;
+        _mm_prefetch(reinterpret_cast<const char*>(&corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize]), _MM_HINT_T0);
+        _mm_prefetch(reinterpret_cast<const char*>(&corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize]), _MM_HINT_T0);
+        _mm_prefetch(reinterpret_cast<const char*>(&corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize]), _MM_HINT_T0);
+    }
+#endif // USE_SSE
+
     // clear killer moves for next ply
     thread.moveOrderer.ClearKillerMoves(node->ply + 1);
 
