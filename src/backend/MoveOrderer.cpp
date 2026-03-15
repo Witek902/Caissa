@@ -370,6 +370,8 @@ void MoveOrderer::ScoreMoves(
 
             // most valuable victim first
             score += 4096 * (int32_t)capturedPiece;
+            // least valuable attacker
+            score -= 64 * (int32_t)attackingPiece;
 
             // capture history
             {
