@@ -2117,7 +2117,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     // fail-high adjustments
     if (!isRootNode && bestValue >= beta && std::abs(bestValue) < KnownWinValue && std::abs(alpha) < KnownWinValue)
-        bestValue = (bestValue * node->depth + beta) / (node->depth + 1);
+    {
+        const int16_t weight = std::min<int16_t>(8, node->depth);
+        bestValue = (bestValue * weight + beta) / (weight + 1);
+    }
 
     if constexpr (isRootNode)
     {
