@@ -1037,11 +1037,12 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
 template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx)
 {
+    static_assert(nodeType != NodeType::Root, "QuiescenceNegaMax should never be instantiated for root node");
     ASSERT(node->ply < MaxSearchDepth);
     ASSERT(!node->filteredMove.IsValid());
     ASSERT(node->isInCheck == node->position.IsInCheck());
 
-    constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
+    constexpr bool isPvNode = nodeType == NodeType::PV;
 
     if constexpr (!isPvNode)
         ASSERT(node->alpha == node->beta - 1);
@@ -1298,6 +1299,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     constexpr bool isRootNode = nodeType == NodeType::Root;
     constexpr bool isPvNode = nodeType == NodeType::PV || nodeType == NodeType::Root;
+    constexpr NodeType qsNodeType = isPvNode ? NodeType::PV : NodeType::NonPV;
 
     if constexpr (!isPvNode)
         ASSERT(node->alpha == node->beta - 1);
@@ -1307,7 +1309,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // maximum search depth reached, enter quiescence search to find final evaluation
     if (node->depth <= 0)
     {
-        return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+        return QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
     }
 
     // clear PV line
@@ -1544,7 +1546,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 beta < KnownWinValue &&
                 eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
-                const ScoreType qScore = QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                const ScoreType qScore = QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
                 if (qScore < beta)
                     return qScore;
             }
@@ -1595,7 +1597,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                         if (node->depth <= 0)
                         {
-                            return QuiescenceNegaMax<nodeType>(thread, node, ctx);
+                            return QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
                         }
                     }
                 }
