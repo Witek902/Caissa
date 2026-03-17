@@ -30,8 +30,8 @@ DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
 DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
-DEFINE_PARAM(ContWeight3, 555, 1, 2048);
-DEFINE_PARAM(ContWeight5, 582, 1, 2048);
+DEFINE_PARAM(ContWeight3, 555, 1, 1024);
+DEFINE_PARAM(ContWeight5, 582, 1, 1024);
 
 DEFINE_PARAM(CaptureBonusOffset, 27, 0, 100);
 DEFINE_PARAM(CaptureBonusLinear, 72, 20, 120);
@@ -40,6 +40,19 @@ DEFINE_PARAM(CaptureBonusLimit, 2658, 1000, 4000);
 DEFINE_PARAM(CaptureMalusOffset, 28, 0, 100);
 DEFINE_PARAM(CaptureMalusLinear, 44, 20, 120);
 DEFINE_PARAM(CaptureMalusLimit, 1885, 1000, 4000);
+
+DEFINE_PARAM(MVVMultiplier, 4096, 1000, 10000);
+
+DEFINE_PARAM(MinorThreatEscapeBonus, 4000, 2000, 12000);
+DEFINE_PARAM(RookThreatEscapeBonus, 8000, 3000, 16000);
+DEFINE_PARAM(QueenThreatEscapeBonus, 12000, 4000, 20000);
+
+DEFINE_PARAM(MinorThreatEnterMalus, 4000, 2000, 12000);
+DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
+DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
+
+DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 20000);
+
 
 MoveOrderer::MoveOrderer()
 {
@@ -369,7 +382,7 @@ void MoveOrderer::ScoreMoves(
             else                                                        score = INT16_MIN;
 
             // most valuable victim first
-            score += 4096 * (int32_t)capturedPiece;
+            score += MVVMultiplier * (int32_t)capturedPiece;
 
             // capture history
             {
@@ -398,16 +411,16 @@ void MoveOrderer::ScoreMoves(
             {
                 case Piece::Knight: [[fallthrough]];
                 case Piece::Bishop:
-                    if (node.threats.attackedByPawns & move.FromSquare())   score += 4000;
-                    if (node.threats.attackedByPawns & move.ToSquare())     score -= 4000;
+                    if (node.threats.attackedByPawns & move.FromSquare())   score += MinorThreatEscapeBonus;
+                    if (node.threats.attackedByPawns & move.ToSquare())     score -= MinorThreatEnterMalus;
                     break;
                 case Piece::Rook:
-                    if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
-                    if (node.threats.attackedByMinors & move.ToSquare())    score -= 8000;
+                    if (node.threats.attackedByMinors & move.FromSquare())  score += RookThreatEscapeBonus;
+                    if (node.threats.attackedByMinors & move.ToSquare())    score -= RookThreatEnterMalus;
                     break;
                 case Piece::Queen:
-                    if (node.threats.attackedByRooks & move.FromSquare())   score += 12000;
-                    if (node.threats.attackedByRooks & move.ToSquare())     score -= 12000;
+                    if (node.threats.attackedByRooks & move.FromSquare())   score += QueenThreatEscapeBonus;
+                    if (node.threats.attackedByRooks & move.ToSquare())     score -= QueenThreatEnterMalus;
                     break;
                 default:
                     break;
@@ -418,7 +431,7 @@ void MoveOrderer::ScoreMoves(
             {
                 if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(move))
                 {
-                    score += static_cast<int32_t>(4096u * moveInfo->nodesSearched / nodeCacheEntry->nodesSum);
+                    score += static_cast<int32_t>(NodeCacheBonus * moveInfo->nodesSearched / nodeCacheEntry->nodesSum);
                 }
             }
         }
