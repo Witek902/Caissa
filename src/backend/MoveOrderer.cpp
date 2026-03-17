@@ -379,6 +379,23 @@ void MoveOrderer::ScoreMoves(
                 ASSERT(pieceIdx < 6);
                 score += (int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
             }
+
+            // bonus for moving out of danger
+            switch (move.GetPiece())
+            {
+            case Piece::Knight: [[fallthrough]];
+            case Piece::Bishop:
+                if (node.threats.attackedByPawns & move.FromSquare())   score += 6000;
+                break;
+            case Piece::Rook:
+                if (node.threats.attackedByMinors & move.FromSquare())  score += 8000;
+                break;
+            case Piece::Queen:
+                if (node.threats.attackedByRooks & move.FromSquare())   score += 10000;
+                break;
+            default:
+                break;
+            }
         }
         else if (withQuiets) // non-capture
         {
