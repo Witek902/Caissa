@@ -13,6 +13,9 @@ DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
+DEFINE_PARAM(TM_ScoreTrendScale, 50, 10, 100);
+DEFINE_PARAM(TM_ScoreTrendMin, 850, 600, 1000);
+DEFINE_PARAM(TM_ScoreTrendMax, 1450, 1100, 2000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -102,6 +105,20 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // increase time if score is dropping, decrease if improving
+    {
+        const ScoreType currScore = data.currResult[0].score;
+        const ScoreType prevScore = data.prevResult[0].score;
+        if (!IsMate(currScore) && !IsMate(prevScore))
+        {
+            const double scale = static_cast<double>(TM_ScoreTrendScale) / 1000.0;
+            const double scoreTrendMin = static_cast<double>(TM_ScoreTrendMin) / 1000.0;
+            const double scoreTrendMax = static_cast<double>(TM_ScoreTrendMax) / 1000.0;
+            const double scoreTrendFactor = std::clamp(1.0 + scale * static_cast<double>(prevScore - currScore), scoreTrendMin, scoreTrendMax);
+            limits.idealTimeCurrent *= scoreTrendFactor;
+        }
     }
 
 #ifndef CONFIGURATION_FINAL
