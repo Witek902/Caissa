@@ -50,6 +50,7 @@ DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 133, 80, 300);
 DEFINE_PARAM(ProbcutBetaOffsetInCheck, 329, 100, 500);
 DEFINE_PARAM(ProbcutTTDepthMargin, 3, 1, 6);
+DEFINE_PARAM(ProbcutBetaDampenScale, 512, 1, 1024);
 DEFINE_PARAM(InCheckProbcutTTDepthMargin, 4, 2, 8);
 
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
@@ -73,6 +74,7 @@ DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 DEFINE_PARAM(NmpEvalBetaClamp, 3, 1, 6);
+DEFINE_PARAM(NmpBetaDampenScale, 512, 1, 1024);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
@@ -1591,7 +1593,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                             nullMoveScore = beta;
 
                         if (std::abs(beta) < KnownWinValue && node->depth < NmpReSearchMaxDepth)
-                            return nullMoveScore;
+                            return static_cast<ScoreType>((nullMoveScore * (1024 - NmpBetaDampenScale) + beta * NmpBetaDampenScale) / 1024);
 
                         node->depth -= static_cast<uint16_t>(NmpReSearchDepthReduction);
 
@@ -1657,6 +1659,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     if (score >= probBeta)
                     {
                         ctx.searchParam.transpositionTable.Write(position, ScoreToTT(score, node->ply), node->staticEval, node->depth - ProbcutTTDepthMargin, TTEntry::Bounds::Lower, move);
+                        if (std::abs(score) < KnownWinValue)
+                            return static_cast<ScoreType>((score * (1024 - ProbcutBetaDampenScale) + beta * ProbcutBetaDampenScale) / 1024);
                         return score;
                     }
                 }
