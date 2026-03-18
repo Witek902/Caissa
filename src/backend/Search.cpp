@@ -33,12 +33,14 @@ DEFINE_PARAM(LmrQuietTTCapture, 73, -128, 256);
 DEFINE_PARAM(LmrQuietRefutation, 168, -128, 256);
 DEFINE_PARAM(LmrQuietCutNode, 183, -128, 256);
 DEFINE_PARAM(LmrQuietImproving, 38, -128, 256);
+DEFINE_PARAM(LmrQuietImprovingDiv, 128, 32, 512);
 DEFINE_PARAM(LmrQuietInCheck, 71, -128, 256);
 
 DEFINE_PARAM(LmrCaptureWinning, 63, -128, 256);
 DEFINE_PARAM(LmrCaptureBad, -12, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 81, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, -18, -128, 128);
+DEFINE_PARAM(LmrCaptureImprovingDiv, 128, 32, 512);
 DEFINE_PARAM(LmrCaptureInCheck, -4, -128, 256);
 DEFINE_PARAM(LmrTTHighDepth, 13, -128, 256);
 
@@ -73,10 +75,14 @@ DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 DEFINE_PARAM(NmpEvalBetaClamp, 3, 1, 6);
+DEFINE_PARAM(NmpImprovingDiv, 1024, 256, 4096);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
 DEFINE_PARAM(LateMovePruningPVScale, 2, 0, 4);
+DEFINE_PARAM(LmpImprovingDiv, 16, 4, 64);
+DEFINE_PARAM(LmpImprovingClampMin, -100, -300, 0);
+DEFINE_PARAM(LmpImprovingClampMax, 218, 100, 500);
 
 DEFINE_PARAM(HistoryPruningLinearFactor, 234, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 148, 60, 300);
@@ -140,11 +146,11 @@ DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
 
 
-INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
+INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, int32_t improvement)
 {
-    return improving ?
-        LateMovePruningBase + depth * depth :
-        LateMovePruningBase + depth * depth / 2;
+    const int32_t adj = std::clamp(improvement, (int32_t)LmpImprovingClampMin, (int32_t)LmpImprovingClampMax);
+    const int32_t base = LateMovePruningBase + adj / LmpImprovingDiv;
+    return static_cast<uint32_t>(std::max<int32_t>(1, base + static_cast<int32_t>(depth * depth) / (improvement > 0 ? 1 : 2)));
 }
 
 INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
@@ -1515,13 +1521,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
+    int32_t improvement = 0;
     bool isImproving = false;
     if (!node->isInCheck && !node->isNullMove)
     {
         if (node->ply > 1 && (node - 2)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 2)->staticEval;
+            improvement = static_cast<int32_t>(node->staticEval) - static_cast<int32_t>((node - 2)->staticEval);
         else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 4)->staticEval;
+            improvement = static_cast<int32_t>(node->staticEval) - static_cast<int32_t>((node - 4)->staticEval);
+        isImproving = improvement > 0;
     }
 
     if constexpr (!isPvNode)
@@ -1567,7 +1575,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     const int32_t r =
                         NmpNullMoveDepthReduction +
                         node->depth / NmpEvalRedDiv +
-                        std::min<int32_t>(NmpEvalBetaClamp, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
+                        std::min<int32_t>(NmpEvalBetaClamp, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving + improvement / NmpImprovingDiv;
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
@@ -1768,7 +1776,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Late Move Pruning
                 // skip quiet moves that are far in the list
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + LateMovePruningPVScale * isPvNode, isImproving))
+                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + LateMovePruningPVScale * isPvNode, improvement))
                 {
                     // if we're in quiets stage, skip everything
                     if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
@@ -1915,8 +1923,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (node->isCutNode) r += LmrQuietCutNode;
 
-                // reduce more if eval is not improving
-                if (!isImproving) r += LmrQuietImproving;
+                // reduce more if eval is not improving, scale by magnitude
+                if (!isImproving) r += LmrQuietImproving - improvement / LmrQuietImprovingDiv;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
@@ -1933,8 +1941,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (node->isCutNode) r += LmrCaptureCutNode;
 
-                // reduce more if eval is not improving
-                if (!isImproving) r += LmrCaptureImproving;
+                // reduce more if eval is not improving, scale by magnitude
+                if (!isImproving) r += LmrCaptureImproving - improvement / LmrCaptureImprovingDiv;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
