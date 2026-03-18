@@ -279,8 +279,9 @@ public:
 
     // get board hash
     INLINE uint64_t GetHash() const { return mHash; }
-    INLINE uint64_t GetPawnsHash() const { return mPawnsHash; }
+    INLINE uint32_t GetPawnsHash() const { return mPawnsHash; }
     INLINE uint32_t GetNonPawnsHash(Color color) const { return mNonPawnsHash[color]; }
+    INLINE uint32_t GetMinorPiecesHash() const { return mMinorPiecesHash; }
     uint64_t HashAfterMove(const Move move) const;
 
     INLINE Color GetSideToMove() const { return mSideToMove; }
@@ -333,7 +334,8 @@ private:
     // METADATA
 
     uint64_t mHash;
-    uint64_t mPawnsHash;
+    uint32_t mPawnsHash;
+    uint32_t mMinorPiecesHash;
     uint32_t mNonPawnsHash[2];
 };
 

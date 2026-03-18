@@ -123,8 +123,9 @@ DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
 DEFINE_PARAM(ReductionStatOffset, 6877, 5000, 10000);
 DEFINE_PARAM(ReductionStatDiv, 240, 100, 400);
 
-DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
-DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
+DEFINE_PARAM(EvalCorrPawnsScale, 53, 1, 128);
+DEFINE_PARAM(EvalCorrNonPawnsScale, 65, 1, 128);
+DEFINE_PARAM(EvalCorrMinorsScale, 53, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 256, 4096);
@@ -270,6 +271,7 @@ void Search::CorrectionHistories::Clear()
     memset(pawnStructure, 0, sizeof(pawnStructure));
     memset(nonPawnWhite, 0, sizeof(nonPawnWhite));
     memset(nonPawnBlack, 0, sizeof(nonPawnBlack));
+    memset(minorPieces, 0, sizeof(minorPieces));
     memset(continuation, 0, sizeof(continuation));
 }
 
@@ -1001,10 +1003,10 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
     const Color stm = node.position.GetSideToMove();
 
     int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
-
+    corr += EvalCorrPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    corr += EvalCorrMinorsScale * corrHist->minorPieces[stm][node.position.GetMinorPiecesHash() % MinorPieceCorrTableSize];
+    corr += EvalCorrNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+    corr += EvalCorrNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
     if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
@@ -2187,6 +2189,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const Color stm = position.GetSideToMove();
                 CorrectionHistories* corrHist = thread.correctionHistories;
                 AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+                AddToCorrHist(corrHist->minorPieces[stm][position.GetMinorPiecesHash() % MinorPieceCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
