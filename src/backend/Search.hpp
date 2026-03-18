@@ -261,6 +261,7 @@ private:
     static constexpr uint32_t PawnCorrTableSize = 16 * 1024;
     static constexpr int32_t EvalCorrectionScale = 512;
     static constexpr uint32_t NonPawnCorrTableSize = 16 * 1024;
+    static constexpr uint32_t MinorPieceCorrTableSize = 16 * 1024;
 
     enum class BoundsType : uint8_t
     {
@@ -294,6 +295,9 @@ private:
     {
         using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
         PawnCorrTable pawnStructure;
+
+        using MinorPieceCorrTable = int16_t[2][MinorPieceCorrTableSize]; // [stm][hash]
+        MinorPieceCorrTable minorPieces;
 
         using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
         NonPawnCorrTable nonPawnWhite;
