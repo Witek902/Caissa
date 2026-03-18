@@ -137,6 +137,9 @@ struct NodeInfo
     bool isNullMove = false;
     bool isInCheck = false;
 
+    // number of beta cutoffs at child ply (used in LMR/NMP)
+    int16_t cutoffCount = 0;
+
     MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
 
     NNEvaluatorContext nnContext;
@@ -160,6 +163,7 @@ struct NodeInfo
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
+        cutoffCount = 0;
         nnContext.MarkAsDirty();
         continuationHistories[0] = nullptr;
         continuationHistories[1] = nullptr;
@@ -335,7 +339,7 @@ private:
         NodeCache nodeCache;
         AccumulatorCache accumulatorCache;
         CorrectionHistories* correctionHistories = nullptr;
-        NodeInfo searchStack[MaxSearchDepth];
+        NodeInfo searchStack[MaxSearchDepth + 2];
 
         ThreadData();
         ThreadData(const ThreadData&) = delete;
