@@ -74,6 +74,11 @@ DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
 DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 DEFINE_PARAM(NmpEvalBetaClamp, 3, 1, 6);
 
+DEFINE_PARAM(CutoffCountLmrQuiet, 40, 0, 128);
+DEFINE_PARAM(CutoffCountLmrCapture, 20, 0, 128);
+DEFINE_PARAM(CutoffCountMinCutoffs, 3, 2, 6);
+DEFINE_PARAM(CutoffCountNmpScale, 20, 0, 80);
+
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
 DEFINE_PARAM(LateMovePruningPVScale, 2, 0, 4);
@@ -1362,6 +1367,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // clear killer moves for next ply
     thread.moveOrderer.ClearKillerMoves(node->ply + 1);
 
+    // reset cutoff count for grandchild ply
+    (node + 2)->cutoffCount = 0;
+
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue; // fully adjusted eval
@@ -1553,7 +1561,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Null Move Pruning
             if (node->isCutNode &&
-                eval >= beta + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0) &&
+                eval >= beta
+                    + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0)
+                    - CutoffCountNmpScale * ((node + 1)->cutoffCount >= 2) &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -1920,6 +1930,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce more if child ply had many cutoffs
+                if ((node + 1)->cutoffCount >= CutoffCountMinCutoffs) r += CutoffCountLmrQuiet;
             }
             else
             {
@@ -1938,6 +1951,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
+
+                // reduce more if child ply had many cutoffs
+                if ((node + 1)->cutoffCount >= CutoffCountMinCutoffs) r += CutoffCountLmrCapture;
             }
 
             // reduce low-ply moves less
@@ -2064,6 +2080,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
+
+                node->cutoffCount++;
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
