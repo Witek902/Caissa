@@ -85,6 +85,13 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
         {
             std::string cmd = argv[i];
 
+            // combine "bench"/"benchmark" with the next argument (depth) if present
+            if ((cmd == "bench" || cmd == "benchmark") && i + 1 < argc && argv[i + 1])
+            {
+                cmd += " ";
+                cmd += argv[++i];
+            }
+
             std::cout << "CommandLine: " << cmd << std::endl;
 
             if (!ExecuteCommand(cmd))
@@ -93,7 +100,8 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
             }
 
             // "bench" command is used to run benchmark and exit immediately to comply with OpenBench
-            if (cmd == "bench")
+            if (cmd == "bench" || cmd == "benchmark" ||
+                cmd.find("bench ") == 0 || cmd.find("benchmark ") == 0)
             {
                 return;
             }
@@ -291,7 +299,12 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "bench" || command == "benchmark")
     {
-        Command_Benchmark();
+        uint32_t depth = 12;
+        if (args.size() >= 2)
+        {
+            depth = std::max(1u, static_cast<uint32_t>(std::atoi(args[1].c_str())));
+        }
+        Command_Benchmark(depth);
     }
 #ifdef ENABLE_TUNING
     else if (command == "printparams")
@@ -1034,7 +1047,7 @@ bool UniversalChessInterface::Command_ScoreMoves()
     return true;
 }
 
-bool UniversalChessInterface::Command_Benchmark()
+bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
 {
     const char* testPositions[] =
     {
@@ -1171,8 +1184,6 @@ bool UniversalChessInterface::Command_Benchmark()
         "rqbnkrnb/pppppppp/8/8/8/8/PPPPPPPP/BRKBNNRQ w GBfa - 0 1",
     };
 
-    const uint32_t maxDepth = 12;
-
     Search search;
     TranspositionTable tt(8 * 1024 * 1024);
 
@@ -1194,7 +1205,7 @@ bool UniversalChessInterface::Command_Benchmark()
 
         SearchParam searchParam{ tt };
         searchParam.debugLog = false;
-        searchParam.limits.maxDepth = maxDepth;
+        searchParam.limits.maxDepth = static_cast<uint16_t>(depth);
 
         const TimePoint startTimePoint = TimePoint::GetCurrent();
 
