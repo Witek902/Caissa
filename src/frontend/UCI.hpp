@@ -53,7 +53,7 @@ private:
     bool Command_TranspositionTableProbe();
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
-    bool Command_Benchmark();
+    bool Command_Benchmark(uint32_t depth);
 
     void StopSearchThread();
     void DoSearch();
