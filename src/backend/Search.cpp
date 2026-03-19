@@ -139,6 +139,7 @@ DEFINE_PARAM(PriorCMHBonusScale, 120, 20, 240);
 DEFINE_PARAM(PriorCMHBonusBias, 100, 0, 200);
 DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
+DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 2, 0, 6);
 
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
@@ -1456,7 +1457,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         unadjustedEval = eval = node->staticEval = InvalidValue;
 
-        if (!node->isCutNode)
+        if ((isPvNode || !node->isCutNode) && node->depth > EnsureAccumulatorUpdatedDepth)
         {
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
         }
@@ -1471,7 +1472,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             ctx.searchParam.transpositionTable.Write(position, -InfValue, node->staticEval, 0, TTEntry::Bounds::Lower);
         }
-        else if (!node->isCutNode)
+        else if ((isPvNode || !node->isCutNode) && node->depth > EnsureAccumulatorUpdatedDepth)
         {
             EnsureAccumulatorUpdated(*node, thread.accumulatorCache);
         }
