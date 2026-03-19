@@ -100,6 +100,7 @@ DEFINE_PARAM(SingularCutNodeNegExt, 2, 1, 4);
 DEFINE_PARAM(SingularTTAlphaNegExt, 1, 0, 3);
 
 DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
+DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
 
@@ -1187,6 +1188,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     while (movePicker.PickMove(*node, move, moveScore))
     {
+        // Move Count Pruning
+        if (bestValue > -TablebaseWinValue && moveIndex > QSearchMoveCountPruningThreshold)
+            break;
+
         if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
         {
             ASSERT(!node->isInCheck);
@@ -1218,16 +1223,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         if (!childNode.position.DoMove(move, childNode.nnContext))
             continue;
         moveIndex++;
-
-        // Move Count Pruning
-        // skip everything after some sane amount of moves has been tried
-        // there shouldn't be many "good" captures available in a "normal" chess positions
-        if (bestValue > -TablebaseWinValue)
-        {
-                 if (node->depth < -4 && moveIndex > 1) break;
-            else if (node->depth < -2 && moveIndex > 2) break;
-            else if (node->depth <  0 && moveIndex > 3) break;
-        }
 
         childNode.previousMove = move;
         childNode.position.ComputeThreats(childNode.threats);
