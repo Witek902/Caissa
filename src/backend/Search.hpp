@@ -383,6 +383,8 @@ private:
     template<NodeType nodeType>
     ScoreType QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
+    NO_INLINE ScoreType Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta);
+
     template<NodeType nodeType>
     ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
