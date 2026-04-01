@@ -5,12 +5,12 @@
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 35, 30, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 219, 150, 260);
-DEFINE_PARAM(TM_IdealTimeFactor, 823, 700, 1000);
-DEFINE_PARAM(TM_MaxTimeFactor, 450, 100, 1000);
-DEFINE_PARAM(TM_NodesCountScale, 208, 160, 260);
-DEFINE_PARAM(TM_NodesCountOffset, 63, 10, 90);
-DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
-DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
+DEFINE_PARAM(TM_IdealTimeFactor, 837, 700, 1000);
+DEFINE_PARAM(TM_MaxTimeFactor, 464, 100, 1000);
+DEFINE_PARAM(TM_NodesCountScale, 210, 160, 260);
+DEFINE_PARAM(TM_NodesCountOffset, 65, 10, 90);
+DEFINE_PARAM(TM_StabilityScale, 64, 0, 200);
+DEFINE_PARAM(TM_StabilityOffset, 1519, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
 
