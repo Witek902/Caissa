@@ -301,6 +301,9 @@ public:
 
     void ComputeThreats(Threats& outThreats) const;
 
+    template<Color sideToMove>
+    void ComputeThreatsImpl(Threats& outThreats) const;
+
     static Square GetLongCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
     static Square GetShortCastleRookSquare(const Square kingSquare, uint8_t castlingRights);
 

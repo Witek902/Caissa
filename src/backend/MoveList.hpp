@@ -4,6 +4,27 @@
 
 #include <algorithm>
 
+struct MoveListEntry
+{
+    Move move;
+    int32_t score;
+};
+
+// Batches MoveList writes so the count stays in a CPU register,
+// avoiding store-forwarding stalls from aliased entry writes.
+struct MoveListBatchWriter
+{
+    MoveListEntry* entries;
+    uint32_t count;
+
+    INLINE void Push(const Move move)
+    {
+        entries[count].move = move;
+        entries[count].score = INT32_MIN;
+        count++;
+    }
+};
+
 template<uint32_t MaxSize>
 class TMoveList
 {
@@ -13,6 +34,9 @@ class TMoveList
     friend void PrintMoveList(const Position& pos, const MoveList& moves);
 
 public:
+
+    using Entry = MoveListEntry;
+    using BatchWriter = MoveListBatchWriter;
 
     static constexpr uint32_t MaxMoves = MaxSize;
 
@@ -102,13 +126,10 @@ public:
         std::sort(entries, entries + numMoves, [](const Entry& a, const Entry& b) { return a.score > b.score; });
     }
 
-private:
+    INLINE BatchWriter BeginBatch() { return { entries, numMoves }; }
+    INLINE void EndBatch(const BatchWriter& w) { numMoves = w.count; }
 
-    struct Entry
-    {
-        Move move;
-        int32_t score;
-    };
+private:
 
     uint32_t numMoves = 0;
     Entry entries[MaxMoves];
