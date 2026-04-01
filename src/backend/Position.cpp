@@ -945,32 +945,31 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     return result != 0;
 }
 
-void Position::ComputeThreats(Threats& outThreats) const
+template<Color sideToMove>
+void Position::ComputeThreatsImpl(Threats& outThreats) const
 {
-    Bitboard attackedByPawns = 0;
-    Bitboard attackedByMinors = 0;
-    Bitboard attackedByRooks = 0;
-    Bitboard allThreats = 0;
+    constexpr Color opponentColor = (sideToMove == White) ? Black : White;
 
-    const SidePosition& currentSide = GetCurrentSide();
-    const SidePosition& opponentSide = GetOpponentSide();
+    const SidePosition& currentSide = mColors[(int)sideToMove];
+    const SidePosition& opponentSide = mColors[(int)opponentColor];
 
     // do not include our king in occupied squares, so that attacks on our king by sliding pieces are not blocked by our own king
     // (king cannot move along the attack ray)
     const Bitboard occupied = opponentSide.Occupied() | currentSide.OccupiedExcludingKing();
 
-    attackedByPawns = Bitboard::GetPawnsAttacks(opponentSide.pawns, GetSideToMove());
+    Bitboard attackedByPawns = Bitboard::GetPawnsAttacks<opponentColor>(opponentSide.pawns);
 
-    attackedByMinors = attackedByPawns |
-        Bitboard::GetKnightAttacks(opponentSide.knights);
+    Bitboard attackedByMinors = attackedByPawns;
+    opponentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
+        attackedByMinors |= Bitboard::GetKnightAttacks(Square(fromIndex)); });
     opponentSide.bishops.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
         attackedByMinors |= Bitboard::GenerateBishopAttacks(Square(fromIndex), occupied); });
 
-    attackedByRooks = attackedByMinors;
+    Bitboard attackedByRooks = attackedByMinors;
     opponentSide.rooks.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
         attackedByRooks |= Bitboard::GenerateRookAttacks(Square(fromIndex), occupied); });
 
-    allThreats = attackedByRooks;
+    Bitboard allThreats = attackedByRooks;
     opponentSide.queens.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA {
         allThreats |= Bitboard::GenerateQueenAttacks(Square(fromIndex), occupied); });
     allThreats |= Bitboard::GetKingAttacks(opponentSide.GetKingSquare());
@@ -979,6 +978,17 @@ void Position::ComputeThreats(Threats& outThreats) const
     outThreats.attackedByMinors = attackedByMinors;
     outThreats.attackedByRooks = attackedByRooks;
     outThreats.allThreats = allThreats;
+}
+
+template void Position::ComputeThreatsImpl<White>(Threats&) const;
+template void Position::ComputeThreatsImpl<Black>(Threats&) const;
+
+void Position::ComputeThreats(Threats& outThreats) const
+{
+    if (mSideToMove == White)
+        ComputeThreatsImpl<White>(outThreats);
+    else
+        ComputeThreatsImpl<Black>(outThreats);
 }
 
 bool Position::IsQuiet() const

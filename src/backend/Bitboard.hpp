@@ -46,7 +46,7 @@ struct Bitboard
         while (mask)
         {
             const uint32_t index = FirstBitSet(mask);
-            mask &= ~(1ull << index);
+            mask &= mask - 1; // reset least significant bit
             func(index);
         };
     }
@@ -129,7 +129,7 @@ struct Bitboard
         if constexpr (dir == Direction::NorthEast) return North().East();
         if constexpr (dir == Direction::NorthWest) return North().West();
         if constexpr (dir == Direction::SouthEast) return South().East();
-        if constexpr (dir == Direction::SouthWest) return South().East();
+        if constexpr (dir == Direction::SouthWest) return South().West();
     }
 
     INLINE constexpr Bitboard North() const
