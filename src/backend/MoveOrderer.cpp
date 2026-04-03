@@ -261,7 +261,7 @@ void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move mov
 
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
 {
-    ASSERT(node.depth >= 0);
+    ASSERT(node.depth > 0);
     ASSERT(numMoves > 0);
     ASSERT(moves[0].IsQuiet());
 
