@@ -59,6 +59,7 @@ bool LoadMainNeuralNetwork(const char* path)
     if (newNetwork->LoadFromFile(path))
     {
         g_mainNeuralNetwork = newNetwork;
+        g_usingEmbeddedNeuralNetwork = false;
         std::cout << "info string Loaded neural network: " << path << std::endl;
         return true;
     }
