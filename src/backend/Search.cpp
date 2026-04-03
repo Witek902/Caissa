@@ -1070,9 +1070,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             alpha = 0;
             if (alpha >= beta)
             {
-                // update stats
-                thread.stats.OnNodeEnter(node->ply + 1);
-                ctx.stats.Append(thread.stats);
                 return alpha;
             }
         }
@@ -1394,9 +1391,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             alpha = 0;
             if (alpha >= beta)
             {
-                // update stats
-                thread.stats.OnNodeEnter(node->ply + 1);
-                ctx.stats.Append(thread.stats);
                 return alpha;
             }
         }
