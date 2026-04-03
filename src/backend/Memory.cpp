@@ -15,14 +15,15 @@ bool EnableLargePagesSupport()
     TOKEN_PRIVILEGES tp;
 
     // open process token
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+    if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
     {
         return false;
     }
 
     // get the luid
-    if (!LookupPrivilegeValueW(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
+    if (!::LookupPrivilegeValueW(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid))
     {
+        ::CloseHandle(hToken);
         return false;
     }
 
@@ -30,17 +31,18 @@ bool EnableLargePagesSupport()
     tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
 
     // enable or disable privilege
-    BOOL status = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+    BOOL status = ::AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
 
     // It is possible for AdjustTokenPrivileges to return TRUE and still not succeed.
     // So always check for the last error value.
-    DWORD error = GetLastError();
+    DWORD error = ::GetLastError();
     if (!status || (error != ERROR_SUCCESS))
     {
+        ::CloseHandle(hToken);
         return false;
     }
 
-    CloseHandle(hToken);
+    ::CloseHandle(hToken);
 
     std::cout << "info string Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
 
@@ -95,7 +97,10 @@ void* Malloc(size_t size)
     int ret = posix_memalign(&ptr, alignment, size);
 
 #if defined(__linux__) && defined(MADV_HUGEPAGE)
-    madvise(ptr, size, MADV_HUGEPAGE);
+    if (ret == 0)
+    {
+        madvise(ptr, size, MADV_HUGEPAGE);
+    }
 #endif // defined(__linux__)
 
     return ret != 0 ? nullptr : ptr;
