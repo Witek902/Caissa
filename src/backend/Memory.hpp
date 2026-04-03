@@ -57,8 +57,8 @@ public:
 
     ~AlignmentAllocator() throw () { }
 
-    pointer adress(reference r) { return &r; }
-    const_pointer adress(const_reference r) const { return &r; }
+    pointer address(reference r) { return &r; }
+    const_pointer address(const_reference r) const { return &r; }
     pointer allocate(size_type n) { return (pointer)AlignedMalloc(n * sizeof(value_type), N); }
 
     void deallocate(pointer p, size_type) { AlignedFree(p); }
