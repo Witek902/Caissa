@@ -147,13 +147,6 @@ Bitboard Bitboard::GetPawnsAttacks<Black>(const Bitboard pawns)
     return bitboard;
 }
 
-Bitboard Bitboard::GetPawnsAttacks(const Bitboard pawns, const Color color)
-{
-    return color == White ?
-        GetPawnsAttacks<Black>(pawns) :
-        GetPawnsAttacks<White>(pawns);
-}
-
 Bitboard Bitboard::GetPawnAttacks(const Square square, const Color color)
 {
     ASSERT(square.IsValid());
