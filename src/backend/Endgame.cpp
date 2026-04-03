@@ -803,7 +803,7 @@ static bool EvaluateEndgame_KNPvK(const Position& pos, int32_t& outScore)
         {
             ASSERT(pawnSquare.Rank() < 7);
             Square keySquare = Square(pawnSquare.File(), pawnSquare.Rank() + 1);
-            if (pawnSquare.Rank() < 6) keySquare = Square(pawnSquare.Rank() + 2, pawnSquare.File());
+            if (pawnSquare.Rank() < 6) keySquare = Square(pawnSquare.File(), pawnSquare.Rank() + 2);
 
             outScore = KnownWinValue + c_pawnValue.eg + c_knightValue.eg;
             outScore += 8 * pawnSquare.Rank();
