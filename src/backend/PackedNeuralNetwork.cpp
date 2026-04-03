@@ -21,13 +21,25 @@ namespace nn {
 
 static_assert(sizeof(PackedNeuralNetwork::Header) % CACHELINE_SIZE == 0, "Network header size must be multiple of cacheline size");
 
+#ifdef USE_SSE4
+// Horizontal sum of 4 x int32 using shuffle+add (avoids slow phaddd)
+INLINE static int32_t m128_hadd(__m128i a)
+{
+    const __m128i hi64 = _mm_shuffle_epi32(a, _MM_SHUFFLE(1, 0, 3, 2));
+    a = _mm_add_epi32(a, hi64);
+    const __m128i hi32 = _mm_shuffle_epi32(a, _MM_SHUFFLE(2, 3, 0, 1));
+    a = _mm_add_epi32(a, hi32);
+    return _mm_cvtsi128_si32(a);
+}
+#endif // USE_SSE4
+
 #ifdef USE_AVX2
+// Horizontal sum of 8 x int32 using extract+shuffle+add (avoids slow vphaddd)
 INLINE static int32_t m256_hadd(__m256i a)
 {
-    const __m256i sum1 = _mm256_hadd_epi32(a, a);
-    const __m256i sum2 = _mm256_hadd_epi32(sum1, sum1);
-    const __m128i sum3 = _mm256_extracti128_si256(sum2, 1);
-    return _mm_cvtsi128_si32(_mm_add_epi32(_mm256_castsi256_si128(sum2), sum3));
+    const __m128i lo = _mm256_castsi256_si128(a);
+    const __m128i hi = _mm256_extracti128_si256(a, 1);
+    return m128_hadd(_mm_add_epi32(lo, hi));
 }
 #endif // USE_AVX2
 
@@ -40,15 +52,6 @@ INLINE static int32_t m512_hadd(__m512i v)
     return m256_hadd(sum256);
 }
 #endif // USE_AVX512
-
-#ifdef USE_SSE4
-INLINE static int32_t m128_hadd(__m128i a)
-{
-    a = _mm_hadd_epi32(a, a);
-    a = _mm_hadd_epi32(a, a);
-    return _mm_cvtsi128_si32(a);
-}
-#endif // USE_SSE4
 
 INLINE static int32_t LinearLayer_Accum_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
