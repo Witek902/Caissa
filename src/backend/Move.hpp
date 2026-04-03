@@ -90,7 +90,7 @@ struct Move
     //
     uint32_t value;
 
-    static constexpr uint32_t mask = (1 << 23) - 1;
+    static constexpr uint32_t mask = (1 << 24) - 1;
 
     INLINE static constexpr Move Make(
         Square fromSquare, Square toSquare, Piece piece, Piece promoteTo = Piece::None,
