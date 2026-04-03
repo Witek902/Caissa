@@ -170,7 +170,7 @@ struct alignas(CACHELINE_SIZE) Accumulator
 #else // no SIMD support
         for (uint32_t i = 0; i < AccumulatorSize; ++i)
         {
-            values[i] = source.values[i];
+            target.values[i] = source.values[i];
         }
         for (uint32_t j = 0; j < numRemovedFeatures; ++j)
         {
@@ -179,7 +179,7 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
             for (uint32_t i = 0; i < AccumulatorSize; ++i)
             {
-                values[i] -= weights[weightsDataOffset + i];
+                target.values[i] -= weights[weightsDataOffset + i];
             }
         }
         for (uint32_t j = 0; j < numAddedFeatures; ++j)
@@ -189,14 +189,14 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
             for (uint32_t i = 0; i < AccumulatorSize; ++i)
             {
-                values[i] += weights[weightsDataOffset + i];
+                target.values[i] += weights[weightsDataOffset + i];
             }
         }
         if constexpr (WithExtraTarget)
         {
             for (uint32_t i = 0; i < AccumulatorSize; ++i)
             {
-                extraTarget->values[i] = values[i];
+                extraTarget->values[i] = target.values[i];
             }
         }
 #endif
