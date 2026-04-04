@@ -145,7 +145,7 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     if (kingSquare.File() >= 4)
     {
         square = square.FlippedFile();
-        kingSquare = kingSquare.FlippedFile();
+        // Note: no need to flip the file of the king square, because KingBucketIndex is symmetric
     }
 
     const uint32_t kingBucket = nn::KingBucketIndex[kingSquare.Index()];
