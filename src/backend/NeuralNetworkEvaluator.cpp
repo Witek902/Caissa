@@ -199,6 +199,24 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
     {
         ASSERT(!prevAccumNode->nnContext.accumDirty[color]);
 
+        // Add feature to one list, or cancel it against the opposite list if already present.
+        // This keeps both lists bounded by piece count on the board (max 64 squares), regardless of how many plies are walked.
+        const auto addOrCancel = [](uint16_t featureIdx,
+            uint16_t* targetList, uint32_t& targetCount,
+            uint16_t* oppositeList, uint32_t& oppositeCount) INLINE_LAMBDA
+        {
+            for (uint32_t j = 0; j < oppositeCount; ++j)
+            {
+                if (oppositeList[j] == featureIdx)
+                {
+                    oppositeList[j] = oppositeList[--oppositeCount];
+                    return;
+                }
+            }
+            ASSERT(targetCount < maxChangedFeatures);
+            targetList[targetCount++] = featureIdx;
+        };
+
         // build a list of features to be updated
         for (const NodeInfo* nodePtr = &node; nodePtr != prevAccumNode; --nodePtr)
         {
@@ -208,22 +226,15 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             {
                 const DirtyPiece& dirtyPiece = nnContext.dirtyPieces[i];
 
-                if (dirtyPiece.toSquare.IsValid() && dirtyPiece.fromSquare.IsValid())
-                {
-                    // TODO use cached accumulator diff for piece move
-                }
-
                 if (dirtyPiece.toSquare.IsValid())
                 {
-                    ASSERT(numAddedFeatures < maxChangedFeatures);
                     const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex<perspective>(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.toSquare, node.position);
-                    addedFeatures[numAddedFeatures++] = featureIdx;
+                    addOrCancel(featureIdx, addedFeatures, numAddedFeatures, removedFeatures, numRemovedFeatures);
                 }
                 if (dirtyPiece.fromSquare.IsValid())
                 {
-                    ASSERT(numRemovedFeatures < maxChangedFeatures);
                     const uint16_t featureIdx = (uint16_t)DirtyPieceToFeatureIndex<perspective>(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.fromSquare, node.position);
-                    removedFeatures[numRemovedFeatures++] = featureIdx;
+                    addOrCancel(featureIdx, removedFeatures, numRemovedFeatures, addedFeatures, numAddedFeatures);
                 }
             }
 
@@ -231,20 +242,6 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             {
                 // reached end of stack
                 break;
-            }
-        }
-
-        // if same feature is present on both lists, it cancels out
-        for (uint32_t i = 0; i < numAddedFeatures; ++i)
-        {
-            for (uint32_t j = 0; j < numRemovedFeatures; ++j)
-            {
-                if (addedFeatures[i] == removedFeatures[j])
-                {
-                    addedFeatures[i--] = addedFeatures[--numAddedFeatures];
-                    removedFeatures[j--] = removedFeatures[--numRemovedFeatures];
-                    break;
-                }
             }
         }
 
