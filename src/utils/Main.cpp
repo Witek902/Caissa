@@ -16,9 +16,13 @@ extern void DumpGames(const std::vector<std::string>& args);
 extern void GenerateEndgamePositions();
 extern bool TestNetwork();
 extern bool TrainNetwork();
-extern bool TrainCudaNetwork();
 extern void ValidateEndgame();
 extern void AnalyzeGames();
+
+#ifdef USE_CUDA
+extern bool TrainCudaNetwork();
+#endif // USE_CUDA
+
 
 int main(int argc, const char* argv[])
 {
@@ -77,8 +81,10 @@ int main(int argc, const char* argv[])
         AnalyzeGames();
     else if (toolName == "trainNetwork")
         TrainNetwork();
+#ifdef USE_CUDA
     else if (toolName == "trainCudaNetwork")
         TrainCudaNetwork();
+#endif // USE_CUDA
     else if (toolName == "generateEndgamePositions")
         GenerateEndgamePositions();
     else
