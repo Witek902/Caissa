@@ -14,7 +14,7 @@ else
 endif
 
 WFLAGS = -Wall -Wno-unused-function -Wno-switch -Wno-attributes -Wno-missing-field-initializers -Wno-multichar
-FLAGS = $(WFLAGS) -s -flto -flto-partition=one -std=c++20 -O3 -funroll-loops -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-math-errno -fno-trapping-math -fno-stack-protector
+FLAGS = $(WFLAGS) -g1 -flto -flto-partition=one -std=c++20 -O3 -funroll-loops -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-math-errno -fno-trapping-math -fno-stack-protector
 LIBS =
 
 ifeq ($(EXT), .exe)
