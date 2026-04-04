@@ -2,8 +2,8 @@
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
 
-#include "trainer/CudaNetwork.hpp"
-#include "trainer/CudaCommon.hpp"
+#include "cudaTrainer/CudaNetwork.hpp"
+#include "cudaTrainer/CudaCommon.hpp"
 
 #include "../backend/Position.hpp"
 #include "../backend/PositionUtils.hpp"

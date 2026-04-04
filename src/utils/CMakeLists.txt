@@ -1,12 +1,24 @@
-# CUDA toolkit
-find_package(CUDAToolkit REQUIRED)
+# Optional CUDA support
+find_package(CUDAToolkit QUIET)
 
-enable_language(CUDA)
+if (CUDAToolkit_FOUND)
+    enable_language(CUDA)
+    message(STATUS "CUDA found: enabling CUDA trainer")
+else()
+    message(STATUS "CUDA not found: CUDA trainer disabled")
+endif()
 
 file(
     GLOB_RECURSE CAISSA_UTILS_SOURCES
     *.cpp *.hpp *.c *.h *.cu
 )
+
+# Exclude CUDA sources when CUDA is not available
+if (NOT CUDAToolkit_FOUND)
+    list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*\\.cu$")
+    list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*/cudaTrainer/.*")
+    list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*CudaNetworkTrainer\\.cpp$")
+endif()
 
 foreach(_source IN ITEMS ${CAISSA_UTILS_SOURCES})
     get_filename_component(_source_path "${_source}" PATH)
@@ -18,8 +30,6 @@ endforeach()
 add_executable(utils ${CAISSA_UTILS_SOURCES})
 
 set_property(TARGET utils PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-set_property(TARGET utils PROPERTY CUDA_ARCHITECTURES native)
-set_property(TARGET utils PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 add_dependencies(utils backend)
 
@@ -34,12 +44,13 @@ if (NOT MSVC)
 	endif()
 endif()
 
-target_link_libraries(utils PRIVATE backend CUDA::cudart)
-
-# Standards
-set_target_properties(utils PROPERTIES
-    CUDA_STANDARD 20
-    CUDA_STANDARD_REQUIRED ON
-)
-
-set(CMAKE_CUDA_ARCHITECTURES 100)
+if (CUDAToolkit_FOUND)
+    target_compile_definitions(utils PRIVATE USE_CUDA)
+    target_link_libraries(utils PRIVATE CUDA::cudart)
+    set_property(TARGET utils PROPERTY CUDA_ARCHITECTURES native)
+    set_property(TARGET utils PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+    set_target_properties(utils PROPERTIES
+        CUDA_STANDARD 20
+        CUDA_STANDARD_REQUIRED ON
+    )
+endif()
