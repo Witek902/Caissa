@@ -37,11 +37,11 @@ endif
 # Try to detect windows environment by seeing
 # whether the shell filters out " or not.
 ifeq ($(shell echo "test"), "test")
-	BENCH = $(EXE)$(EXT) bench 15 > nul 2>&1
+	BENCH = $(EXE)$(EXT) bench 16 > nul 2>&1
 	CLEAN = rmdir /s /q $(PGO_DIR)
 	CLEAN_OBJS = del /s /q $(subst /,\,$(OBJ))
 else
-	BENCH = ./$(EXE) bench 15 > /dev/null 2>&1
+	BENCH = ./$(EXE) bench 16 > /dev/null 2>&1
 	CLEAN = $(RM) -rf $(PGO_DIR)
 	CLEAN_OBJS = $(RM) -f $(OBJ)
 endif
