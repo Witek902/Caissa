@@ -1007,10 +1007,15 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
-    if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
-    if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
-        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
+    if (node.previousMove.IsValid())
+    {
+        if (node.ply >= 2 && (&node - 1)->previousMove.IsValid())
+            corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+        if (node.ply >= 4 && (&node - 3)->previousMove.IsValid())
+            corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
+        if (node.ply >= 6 && (&node - 5)->previousMove.IsValid())
+            corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 5)->previousMove.PieceTo()];
+    }
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
@@ -2195,10 +2200,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
-                if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
-                if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
-                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+                if (node->previousMove.IsValid())
+                {
+                    if (node->ply >= 2 && (node - 1)->previousMove.IsValid())
+                        AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                    if (node->ply >= 4 && (node - 3)->previousMove.IsValid())
+                        AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+                    if (node->ply >= 6 && (node - 5)->previousMove.IsValid())
+                        AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 5)->previousMove.PieceTo()], bonus);
+                }
             }
         }
     }
