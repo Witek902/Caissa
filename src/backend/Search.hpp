@@ -301,6 +301,7 @@ private:
 
         using ContCorrTable = int16_t[2][6 * 64][6 * 64]; // [stm][piece-to][piece-to]
         ContCorrTable continuation;
+        ContCorrTable continuationOpp;
 
         void Clear();
     };

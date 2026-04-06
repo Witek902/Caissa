@@ -273,6 +273,7 @@ void Search::CorrectionHistories::Clear()
     memset(nonPawnWhite, 0, sizeof(nonPawnWhite));
     memset(nonPawnBlack, 0, sizeof(nonPawnBlack));
     memset(continuation, 0, sizeof(continuation));
+    memset(continuationOpp, 0, sizeof(continuationOpp));
 }
 
 const MoveOrderer& Search::GetMoveOrderer() const
@@ -1009,6 +1010,8 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+    if (node.ply >= 3 && node.previousMove.IsValid() && (&node - 2)->previousMove.IsValid())
+        corr += ContCorrectionScale * corrHist->continuationOpp[stm][node.previousMove.PieceTo()][(&node - 2)->previousMove.PieceTo()];
     if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
@@ -2197,6 +2200,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                     AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+                if (node->ply >= 3 && node->previousMove.IsValid() && (node - 2)->previousMove.IsValid())
+                    AddToCorrHist(corrHist->continuationOpp[stm][node->previousMove.PieceTo()][(node - 2)->previousMove.PieceTo()], bonus);
                 if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
                     AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
             }
