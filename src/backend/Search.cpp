@@ -127,6 +127,7 @@ DEFINE_PARAM(ReductionStatDiv, 240, 100, 400);
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
+DEFINE_PARAM(ContCorrection3Scale, 38, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 256, 4096);
 DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
@@ -1010,7 +1011,7 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
     if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
-        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
+        corr += ContCorrection3Scale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
     return static_cast<ScoreType>(corr / EvalCorrectionScale);
 }
