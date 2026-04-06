@@ -63,6 +63,7 @@ DEFINE_PARAM(SingularitySearchScoreStep, 24, 10, 50);
 
 DEFINE_PARAM(IIRStartDepth, 3, 2, 6);
 DEFINE_PARAM(IIRTTDepthMargin, 4, 2, 8);
+DEFINE_PARAM(IIRCutNoTTDepth, 6, 3, 12);
 
 DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 16, 0, 40);
@@ -1569,7 +1570,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (node->depth >= IIRStartDepth
         && (node->isCutNode || isPvNode)
         && (!ttEntry.move.IsValid() || ttEntry.depth + IIRTTDepthMargin < node->depth))
+    {
         node->depth--;
+        // extra reduction for cut-nodes with no TT info at all
+        if (node->isCutNode && !ttEntry.IsValid() && node->depth >= IIRCutNoTTDepth)
+            node->depth--;
+    }
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
