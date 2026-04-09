@@ -1187,13 +1187,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
     while (movePicker.PickMove(*node, move, moveScore))
     {
         // Move Count Pruning
-        if (bestValue > -TablebaseWinValue && moveIndex > QSearchMoveCountPruningThreshold)
+        if (!node->isInCheck && bestValue > -TablebaseWinValue && moveIndex > QSearchMoveCountPruningThreshold)
             break;
 
-        if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
+        if (!node->isInCheck && bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
         {
-            ASSERT(!node->isInCheck);
-
             // skip underpromotions
             if (move.IsUnderpromotion()) continue;
 
@@ -1261,8 +1259,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                     break;
                 }
             }
-
-            if (node->isInCheck) break; // try only one check evasion
         }
     }
 
