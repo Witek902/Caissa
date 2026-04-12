@@ -29,6 +29,7 @@ DEFINE_PARAM(ContUpdateWeight2, 300, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
+DEFINE_PARAM(ContWeight0, 1536, 1, 2048);
 DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
 DEFINE_PARAM(ContWeight3, 555, 1, 1024);
 DEFINE_PARAM(ContWeight5, 582, 1, 1024);
@@ -402,7 +403,7 @@ void MoveOrderer::ScoreMoves(
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 
             // continuation history
-            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
+            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to] * ContWeight0 / 1024;
             if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to] * ContWeight1 / 1024;
             if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] * ContWeight3 / 1024;
             if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] * ContWeight5 / 1024;
