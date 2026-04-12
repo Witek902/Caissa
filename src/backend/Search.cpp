@@ -1287,14 +1287,31 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
 // NO_INLINE to keep MovePicker (containing MoveList) off NegaMax's stack frame,
 // reducing its size and preventing stack overflow at high search depths.
-NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta)
+NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta, ScoreType eval)
 {
     const Position& position = node->position;
     const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
 
     if (node->depth < ProbcutStartDepth ||
-        abs(beta) >= TablebaseWinValue ||
-        (ttEntry.IsValid() && ttEntry.depth >= node->depth - ProbcutTTDepthMargin && ttEntry.score < probBeta))
+        !node->isCutNode ||
+        abs(beta) >= TablebaseWinValue)
+    {
+        return InvalidValue;
+    }
+
+    // use TT score to validate probcut if available, otherwise fall back to static eval
+    if (ttEntry.IsValid() && ttEntry.depth >= node->depth - ProbcutTTDepthMargin)
+    {
+        if (ttEntry.score < probBeta || abs(ttEntry.score) >= TablebaseWinValue)
+            return InvalidValue;
+    }
+    else if (eval < beta)
+    {
+        return InvalidValue;
+    }
+
+    // TT move should be a capture
+    if (ttEntry.move.IsValid() && !position.IsCapture(ttEntry.move) && ttEntry.move.GetPromoteTo() == Piece::None)
     {
         return InvalidValue;
     }
@@ -1663,7 +1680,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Probcut
             {
-                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta);
+                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta, eval);
                 if (probcutScore != InvalidValue)
                     return probcutScore;
             }
