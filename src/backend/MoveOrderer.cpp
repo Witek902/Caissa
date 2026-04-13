@@ -27,6 +27,7 @@ DEFINE_PARAM(ContMalusLimit, 2065, 1000, 4000);
 DEFINE_PARAM(ContUpdateWeight1, 1014, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight2, 300, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight4, 200, 1, 1024);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
 DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
@@ -252,11 +253,12 @@ void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move mov
     const uint32_t piece = (uint32_t)move.GetPiece() - 1;
     const uint32_t to = move.ToSquare().Index();
 
-    if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-    if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight1 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight2 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight3 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight5 / 1024);
+    if (auto* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
+    if (auto* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight1 / 1024);
+    if (auto* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight2 / 1024);
+    if (auto* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight3 / 1024);
+    if (auto* h = node.continuationHistories[4]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight4 / 1024);
+    if (auto* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight5 / 1024);
 }
 
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
