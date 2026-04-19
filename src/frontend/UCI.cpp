@@ -266,7 +266,13 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "eval")
     {
-        std::cout << Evaluate(mGame.GetPosition()) << std::endl;
+        const ScoreType eval = Evaluate(mGame.GetPosition());
+        std::cout << "Evaluation: " << eval << std::endl;
+        const uint32_t ply = mGame.GetPosition().GetMoveCount();
+        const float w = EvalToWinProbability(eval / 100.0f, ply);
+        const float l = EvalToWinProbability(-eval / 100.0f, ply);
+        const float d = 1.0f - w - l;
+        std::cout<< "W: " << w << ", D: " << d << ", L: " << l << std::endl;
     }
     else if (command == "scoremoves")
     {
