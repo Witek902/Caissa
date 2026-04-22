@@ -991,7 +991,7 @@ void Position::ComputeThreats(Threats& outThreats) const
         ComputeThreatsImpl<Black>(outThreats);
 }
 
-bool Position::IsQuiet() const
+bool Position::IsQuiet(bool allowCaptures) const
 {
     if (IsInCheck(mSideToMove))
     {
@@ -1009,6 +1009,11 @@ bool Position::IsQuiet() const
         if (!posCopy.DoMove(move))
         {
             continue;
+        }
+
+        if (move.IsCapture() && !allowCaptures)
+        {
+            return false;
         }
 
         if (StaticExchangeEvaluation(move, 0))

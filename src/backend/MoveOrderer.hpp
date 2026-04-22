@@ -21,7 +21,7 @@ public:
     static constexpr int32_t CounterMoveBonus       = KillerMoveBonus - 1;
 
     using CounterType = int16_t;
-    using PieceSquareHistory = CounterType[6][64];
+    using PieceSquareHistory = CounterType[6*64];
     using PieceSquareHistoryPtr = PieceSquareHistory*;
 
     MoveOrderer();

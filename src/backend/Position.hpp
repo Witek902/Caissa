@@ -202,7 +202,7 @@ public:
     bool IsFiftyMoveRuleDraw() const;
 
     // check if position is relatively quiet (no immediate winning captures and promotions)
-    bool IsQuiet() const;
+    bool IsQuiet(bool allowCaptures = true) const;
     
     // Check if a move is valid pseudomove. This is a partial test, it does not include checks/checkmates.
     bool IsMoveValid(const Move& move) const;

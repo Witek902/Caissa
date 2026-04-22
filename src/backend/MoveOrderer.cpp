@@ -94,7 +94,7 @@ void MoveOrderer::DebugPrint() const
                 for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
                 {
                     // TODO color
-                    const CounterType count = continuationHistory[0][0][0][prevPiece][prevToIndex][piece][toIndex];
+                    const CounterType count = continuationHistory[0][0][0][prevPiece][prevToIndex][piece * 64 + toIndex];
 
                     if (count)
                     {
@@ -249,14 +249,13 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
 
 void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move move, int32_t delta)
 {
-    const uint32_t piece = (uint32_t)move.GetPiece() - 1;
-    const uint32_t to = move.ToSquare().Index();
+    const uint32_t pieceTo = move.PieceTo();
 
-    if (PieceSquareHistory* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[piece][to], delta);
-    if (PieceSquareHistory* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight1 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight2 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight3 / 1024);
-    if (PieceSquareHistory* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[piece][to], delta * ContUpdateWeight5 / 1024);
+    if (auto* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[pieceTo], delta);
+    if (auto* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight1 / 1024);
+    if (auto* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight2 / 1024);
+    if (auto* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight3 / 1024);
+    if (auto* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight5 / 1024);
 }
 
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
@@ -356,11 +355,11 @@ void MoveOrderer::ScoreMoves(
         const Move move = moves.GetMove(i);
         ASSERT(move.IsValid());
 
-        const uint32_t piece = (uint32_t)move.GetPiece() - 1;
+        const uint32_t pieceTo = move.PieceTo();
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
-        ASSERT(piece < 6);
+        ASSERT(pieceTo < 6 * 64);
         ASSERT(from < 64);
         ASSERT(to < 64);
 
@@ -402,10 +401,10 @@ void MoveOrderer::ScoreMoves(
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 
             // continuation history
-            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[piece][to];
-            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[piece][to] * ContWeight1 / 1024;
-            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[piece][to] * ContWeight3 / 1024;
-            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[piece][to] * ContWeight5 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[pieceTo];
+            if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[pieceTo] * ContWeight1 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[pieceTo] * ContWeight3 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[pieceTo] * ContWeight5 / 1024;
 
             switch (move.GetPiece())
             {

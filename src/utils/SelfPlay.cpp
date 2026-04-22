@@ -22,17 +22,16 @@
 #include <string>
 #include <limits.h>
 
-static const bool randomizeOrder = true;
 static const uint32_t c_printPgnFrequency = 1;
 
 static const uint32_t c_minNodes = 25'000;
-static const uint32_t c_maxNodes = 30'000;
+static const uint32_t c_maxNodes = 25'000;
 static const uint32_t c_maxDepth = 40;
 
-static const int32_t c_maxEval = 2000;
-static const int32_t c_openingMaxEval = 300;
+static const int32_t c_maxEval = 4000;
+static const int32_t c_openingMaxEval = 1000;
 
-static const uint32_t c_minRandomMoves = 6;
+static const uint32_t c_minRandomMoves = 8;
 static const uint32_t c_maxRandomMoves = 10;
 
 bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosition>& outPositions)
@@ -103,6 +102,7 @@ static bool SelfPlayThreadFunc(
     uint32_t nameSeed,
     uint32_t threadIndex,
     const std::vector<PackedPosition>& openingPositions,
+    std::atomic<uint32_t>& openingCounter,
     SelfPlayStats& stats)
 {
     const size_t c_transpositionTableSize = 4ull * 1024ull * 1024ull;
@@ -139,12 +139,7 @@ static bool SelfPlayThreadFunc(
 
         if (!openingPositions.empty())
         {
-            uint32_t openingIndex = index;
-            if (randomizeOrder)
-            {
-                std::uniform_int_distribution<size_t> distrib(0, openingPositions.size() - 1);
-                openingIndex = uint32_t(distrib(gen));
-            }
+            const uint32_t openingIndex = openingCounter.fetch_add(1, std::memory_order_relaxed) % (uint32_t)openingPositions.size();
             UnpackPosition(openingPositions[openingIndex], openingPos);
         }
 
@@ -214,19 +209,17 @@ static bool SelfPlayThreadFunc(
                 eval = -eval;
             }
 
-            const bool isCheck = game.GetPosition().IsInCheck();
-
             const bool moveSuccess = game.DoMove(move, moveScore);
             ASSERT(moveSuccess);
             (void)moveSuccess;
 
-            if (std::abs(moveScore) < 4)
+            if (std::abs(moveScore) < 2)
                 drawScoreCounter++;
             else
                 drawScoreCounter = 0;
 
             // adjudicate draw if eval is zero
-            if (drawScoreCounter > 8 && halfMoveNumber >= 60)
+            if (drawScoreCounter > 10 && halfMoveNumber >= 60)
             {
                 game.SetScore(Game::Score::Draw);
             }
@@ -254,6 +247,8 @@ static bool SelfPlayThreadFunc(
                     blackWinsCounter = 0;
                 }
             }
+
+            const bool isCheck = game.GetPosition().IsInCheck();
 
             // tablebase adjudication
             int32_t wdlScore = 0;
@@ -312,7 +307,7 @@ static bool SelfPlayThreadFunc(
 
 void SelfPlay(const std::vector<std::string>& args)
 {
-    g_syzygyProbeLimit = 7;
+    g_syzygyProbeLimit = 5;
 
     uint32_t nameSeed = 0;
     {
@@ -330,6 +325,21 @@ void SelfPlay(const std::vector<std::string>& args)
     }
     std::cout << "Loaded " << openingPositions.size() << " opening positions" << std::endl;
 
+    if (openingPositions.empty())
+    {
+        std::cout << "No opening positions loaded!" << std::endl;
+        return;
+    }
+
+    // Start at a random offset so every run covers a different segment first, but from there pick sequentially
+    std::atomic<uint32_t> openingCounter;
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> distrib(0u, (uint32_t)openingPositions.size() - 1u);
+        openingCounter = distrib(gen);
+    }
+
     alignas(CACHELINE_SIZE) SelfPlayStats stats;
 
     std::cout << "Starting games..." << std::endl;
@@ -339,9 +349,9 @@ void SelfPlay(const std::vector<std::string>& args)
     std::vector<std::thread> threads;
     for (uint32_t i = 0; i < numThreads; ++i)
     {
-        threads.emplace_back([i, nameSeed, &openingPositions, &stats]()
+        threads.emplace_back([i, nameSeed, &openingPositions, &openingCounter, &stats]()
         {
-            SelfPlayThreadFunc(nameSeed, i, openingPositions, stats);
+            SelfPlayThreadFunc(nameSeed, i, openingPositions, openingCounter, stats);
         });
     }
 

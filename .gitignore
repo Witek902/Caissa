@@ -13,3 +13,5 @@ src/*.o
 src/caissa
 src/pgo/
 CMakeSettings.json
+selfplayGames/
+trainingData/

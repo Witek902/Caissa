@@ -1755,12 +1755,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (move.IsQuiet())
         {
             // compute move stat score using some of history counters
-            const uint32_t piece = (uint32_t)move.GetPiece() - 1;
-            const uint32_t to = move.ToSquare().Index();
+            const uint32_t pieceTo = move.PieceTo();
             moveStatScore = (int32_t)thread.moveOrderer.GetHistoryScore(*node, move);
-            if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[piece][to];
-            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[piece][to];
+            if (const auto* h = node->continuationHistories[0]) moveStatScore += (*h)[pieceTo];
+            if (const auto* h = node->continuationHistories[1]) moveStatScore += (*h)[pieceTo];
+            if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[pieceTo];
 
             quietMoveIndex++;
         }

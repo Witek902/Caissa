@@ -365,10 +365,8 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
                 "r1bq1rk1/1pp2ppp/8/4pn2/B6b/1PN2P2/PBPP1P2/RQ2R1K1 w - - 1 12",
                 "8/1kN5/8/2B5/4K1bN/8/8/8 w - - 0 1", // should be 1
                 "k7/ppp5/8/8/8/8/P7/K7 w - - 0 1",  // should be at least -200
-                "7k/ppp5/8/8/8/8/P7/7K w - - 0 1",  // should be at least -200
                 "7k/pp6/8/8/8/8/PP6/7K w - - 0 1",   // should be 0
                 "k7/pp6/8/8/8/8/P7/K7 w - - 0 1",   // should be 0
-                "r6k/7p/8/8/8/8/7P/1R5K w - - 0 1", // should be 0
                 "8/7p/8/6k1/3q3p/4R3/5PK1/8 w - - 0 1", // should be 0
                 "8/1k6/1p6/1R6/2P5/1P6/1K6/4q3 w - - 0 1", // should be 0
                 "8/8/5k2/6p1/8/1P2R3/2q2P2/6K1 w - - 0 1", // should be 0
@@ -376,6 +374,11 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
                 "8/8/8/5B1p/5p1r/4kP2/6K1/8 w - - 0 1", // should be 0
                 "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
                 "8/8/2k3N1/8/Nn2N3/4K3/8/7n w - - 0 1", // should be 1
+                "8/8/8/8/3r4/6p1/1RP2k2/1K6 w - - 0 1", // should be 1
+                "8/8/8/8/3r4/6p1/1RP2k2/1K6 w - - 0 1", // should be 1
+                "8/2p5/pp6/4P1p1/8/2k5/2P5/3K4 w - - 0 1", // should be 1
+                "1Q6/5p2/4k3/6p1/1K6/8/4q3/8 w - - 0 1", // should be 1
+                "8/8/k1K5/3Q4/8/8/4q2q/8 w - - 0 1", // should be 1
                 "rnbqk1nr/3p1pbp/p1pPp1p1/PpP5/1P6/8/4PPPP/1NBQKBNR w kq - 1 9", // should be 1?
                 "rn1qkbnr/pbp1p3/1p1pPp1p/5PpP/6P1/8/PPPP4/RNBQKBN1 w Qkq - 1 9", // should be 1?
             };
