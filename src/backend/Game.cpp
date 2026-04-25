@@ -159,18 +159,30 @@ std::string Game::ToPGNMoveList(bool includeScores) const
 
     for (size_t i = 0; i < mMoves.size(); ++i)
     {
-        if (i % 2 == 0)
+        const bool isWhiteMove = pos.GetSideToMove() == White;
+
+        if (isWhiteMove)
         {
+            // White moves always get a move number indication: "N. "
             str << pos.GetMoveCount() << ". ";
+        }
+        else if (i == 0 || includeScores)
+        {
+            // Black move number indication required when:
+            // - game starts with black to move (i == 0, no preceding white move)
+            // - commentary preceded this black move (every white move has {score})
+            str << pos.GetMoveCount() << "... ";
         }
 
         str << pos.MoveToString(mMoves[i]) << ' ';
 
         if (includeScores && i < mMoveScores.size())
         {
-            str << '{';
-            str << ScoreToStr(mMoveScores[i]);
-            str << "} ";
+            // Scores are stored from white's perspective; negate for black's moves
+            // so the comment reflects the side-to-move's perspective.
+            // Format: {score/0} — fishtest/scoreWDLstat-compatible
+            const ScoreType score = isWhiteMove ? mMoveScores[i] : ScoreType(-mMoveScores[i]);
+            str << '{' << ScoreToStr(score) << "/0} ";
         }
 
         const bool moveResult = pos.DoMove(mMoves[i]);
@@ -215,12 +227,22 @@ std::string Game::ToPGN(bool includeScores) const
         terminationStr = "adjudication";
     }
 
-    str << "[Round \"1." << mMetadata.roundNumber << "\"]" << std::endl;
+    const bool isNonStandardStart = mInitPosition.ToFEN() != Position::InitPositionFEN;
+
+    str << "[Event \"?\"]" << std::endl;
+    str << "[Site \"?\"]" << std::endl;
+    str << "[Date \"????.??.??\"]" << std::endl;
+    str << "[Round \"" << mMetadata.roundNumber << "\"]" << std::endl;
     str << "[White \"Caissa\"]" << std::endl;
     str << "[Black \"Caissa\"]" << std::endl;
     str << "[Result \"" << resultStr << "\"]" << std::endl;
+    // Supplemental tags in ASCII order (§8.1.1): FEN(F=70) < SetUp(S=83) < Termination(T=84)
+    if (isNonStandardStart)
+    {
+        str << "[FEN \"" << mInitPosition.ToFEN() << "\"]" << std::endl;
+        str << "[SetUp \"1\"]" << std::endl;
+    }
     str << "[Termination \"" << terminationStr << "\"]" << std::endl;
-    str << "[FEN \"" << mInitPosition.ToFEN() << "\"]" << std::endl;
     str << std::endl;
     str << ToPGNMoveList(includeScores) << resultStr;
 
