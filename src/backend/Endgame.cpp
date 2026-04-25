@@ -730,6 +730,34 @@ static bool EvaluateEndgame_KBPvK(const Position& pos, int32_t& outScore)
         }
     }
 
+    // With bishops on both square colors, the right bishop is always available for any promotion square
+    {
+        const uint32_t numLightSquareBishops = (pos.Whites().bishops & Bitboard::LightSquares()).Count();
+        const uint32_t numDarkSquareBishops = (pos.Whites().bishops & Bitboard::DarkSquares()).Count();
+
+        if (numLightSquareBishops >= 1 && numDarkSquareBishops >= 1)
+        {
+            const int32_t numBishops = pos.Whites().bishops.Count();
+            const int32_t numPawns = pos.Whites().pawns.Count();
+
+            outScore = KnownWinValue;
+            outScore += (numBishops - 2) * c_bishopValue.eg;  // bonus for extra bishops beyond the pair
+            outScore += (numPawns - 1) * c_pawnValue.eg;      // bonus for extra pawns beyond one
+            outScore += 8 * (3 - weakKing.AnyCornerDistance()); // push weak king to corner
+            outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
+
+            Bitboard pawns = pos.Whites().pawns;
+            while (pawns)
+            {
+                const Square pawnSq(FirstBitSet(pawns));
+                outScore += 2 * pawnSq.Rank(); // bonus for advanced pawns
+                pawns &= pawns - 1;
+            }
+
+            return true;
+        }
+    }
+
     if (pos.Whites().pawns.Count() == 1)
     {
         const Square pawnSquare(FirstBitSet(pos.Whites().pawns));

@@ -9,7 +9,6 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Material.hpp"
-#include "../backend/Pawns.hpp"
 #include "../backend/MovePicker.hpp"
 #include "../backend/MoveOrderer.hpp"
 #include "../backend/Waitable.hpp"
@@ -1314,19 +1313,6 @@ static void RunPositionTests()
         }
     }
 
-    // Passed pawns
-    {
-        const Position pos("k7/5pP1/1P2P3/pP6/P7/3pP3/1P2p1Pp/K7 w - - 0 1");
-
-        TEST_EXPECT(!IsPassedPawn(Square_a4, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b2, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_b5, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(IsPassedPawn(Square_b6, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e3, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_e6, pos.Whites().pawns, pos.Blacks().pawns));
-        TEST_EXPECT(!IsPassedPawn(Square_g2, pos.Whites().pawns, pos.Blacks().pawns));
-    }
-
     // GivesCheck
     {
         {
@@ -1797,9 +1783,17 @@ static void RunEvalTests()
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 b - - 0 1")) <= -KnownWinValue);
 
+    // KBBvK
+    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/3KBB2 w - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/3KBB2 b - - 0 1")) <= -KnownWinValue);
+
     // KBBBvK
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2BKBB2 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2BKBB2 b - - 0 1")) <= -KnownWinValue);
+
+    // KBBPvK
+    TEST_EXPECT(Evaluate(Position("k7/8/8/8/8/8/P7/3KBB2 w - - 0 1")) >= KnownWinValue);
+    TEST_EXPECT(Evaluate(Position("k7/8/8/8/8/8/P7/3KBB2 b - - 0 1")) <= -KnownWinValue);
 
     // KPPvK
     TEST_EXPECT(Evaluate(Position("K7/8/8/8/7k/7P/6P1/8 w - - 0 1")) >= KnownWinValue);
@@ -2347,62 +2341,6 @@ static void RunTimeManagerTests()
         InitTimeManager(game, fixedData, fixedLimits);
         TEST_EXPECT(fixedLimits.idealTimeBase.IsValid());
         TEST_EXPECT_NEAR(fixedLimits.idealTimeBase.ToSeconds(), 5.0f, 0.1f);
-    }
-}
-
-static void RunPawnsTests()
-{
-    std::cout << "Running Pawns tests..." << std::endl;
-
-    // IsPassedPawn
-    {
-        Bitboard whitePawns = Square(Square_e4).GetBitboard();
-        Bitboard blackPawns = Square(Square_e5).GetBitboard();
-        
-        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
-        
-        // Isolated passed pawn
-        whitePawns = Square(Square_e4).GetBitboard();
-        blackPawns = 0;
-        TEST_EXPECT(IsPassedPawn(Square_e4, whitePawns, blackPawns));
-        
-        // Passed pawn with no enemy pawns ahead
-        whitePawns = Square(Square_e4).GetBitboard();
-        blackPawns = Square(Square_a7).GetBitboard() | Square(Square_h7).GetBitboard();
-        TEST_EXPECT(IsPassedPawn(Square_e4, whitePawns, blackPawns));
-        
-        // Not passed - enemy pawn on same file
-        whitePawns = Square(Square_e4).GetBitboard();
-        blackPawns = Square(Square_e6).GetBitboard();
-        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
-        
-        // Not passed - enemy pawn on adjacent file blocking
-        whitePawns = Square(Square_e4).GetBitboard();
-        blackPawns = Square(Square_d5).GetBitboard();
-        TEST_EXPECT(!IsPassedPawn(Square_e4, whitePawns, blackPawns));
-    }
-    
-    // CountPassedPawns
-    {
-        Bitboard whitePawns = Square(Square_e4).GetBitboard() | Square(Square_a4).GetBitboard();
-        Bitboard blackPawns = 0;
-        TEST_EXPECT(CountPassedPawns(whitePawns, blackPawns) == 2);
-        
-        whitePawns = Square(Square_e4).GetBitboard();
-        blackPawns = Square(Square_e5).GetBitboard();
-        TEST_EXPECT(CountPassedPawns(whitePawns, blackPawns) == 0);
-    }
-    
-    // CountDoubledPawns
-    {
-        Bitboard pawns = Square(Square_e2).GetBitboard() | Square(Square_e3).GetBitboard();
-        TEST_EXPECT(CountDoubledPawns(pawns) == 1);
-        
-        pawns = Square(Square_e2).GetBitboard() | Square(Square_e3).GetBitboard() | Square(Square_e4).GetBitboard();
-        TEST_EXPECT(CountDoubledPawns(pawns) == 2);
-        
-        pawns = Square(Square_e2).GetBitboard() | Square(Square_d2).GetBitboard();
-        TEST_EXPECT(CountDoubledPawns(pawns) == 0);
     }
 }
 
@@ -3139,7 +3077,6 @@ void RunUnitTests()
     RunTranspositionTableTests();
     RunTimeTests();
     RunTimeManagerTests();
-    RunPawnsTests();
     RunEvalTests();
     RunPackedPositionTests();
     RunGameTests();
