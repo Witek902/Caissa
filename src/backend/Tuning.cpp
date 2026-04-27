@@ -14,7 +14,7 @@ void PrintParametersForTuning()
             << ", " << double(param.m_value)
             << ", " << double(param.m_min)
             << ", " << double(param.m_max)
-            << ", " << std::max(0.5, double(param.m_max - param.m_min) / 20.0)
+            << ", " << std::max(0.5, double(param.m_max - param.m_min) / 25.0)
             << ", " << 0.002
             << "\n";
     }

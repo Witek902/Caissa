@@ -30,7 +30,7 @@ DEFINE_PARAM(LmrBias_Captures, 67, 20, 80);
 
 DEFINE_PARAM(LmrQuietNonPv, 26, -128, 256);
 DEFINE_PARAM(LmrQuietTTCapture, 24, -128, 256);
-DEFINE_PARAM(LmrQuietRefutation, 237, -128, 256);
+DEFINE_PARAM(LmrQuietRefutation, 237, -128, 384);
 DEFINE_PARAM(LmrQuietCutNode, 89, -128, 256);
 DEFINE_PARAM(LmrQuietImproving, -17, -128, 256);
 DEFINE_PARAM(LmrQuietInCheck, 58, -128, 256);
@@ -40,7 +40,7 @@ DEFINE_PARAM(LmrCaptureBad, 79, -128, 256);
 DEFINE_PARAM(LmrCaptureCutNode, 85, -128, 256);
 DEFINE_PARAM(LmrCaptureImproving, -8, -128, 128);
 DEFINE_PARAM(LmrCaptureInCheck, 21, -128, 256);
-DEFINE_PARAM(LmrTTHighDepth, -114, -128, 256);
+DEFINE_PARAM(LmrTTHighDepth, -114, -384, 128);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
