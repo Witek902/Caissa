@@ -23,24 +23,24 @@ static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 64;
 
-DEFINE_PARAM(LmrScale_Quiets, 43, 20, 70);
-DEFINE_PARAM(LmrBias_Quiets, 56, 20, 80);
-DEFINE_PARAM(LmrScale_Captures, 42, 20, 70);
-DEFINE_PARAM(LmrBias_Captures, 68, 20, 80);
+DEFINE_PARAM(LmrScale_Quiets, 42, 20, 70);
+DEFINE_PARAM(LmrBias_Quiets, 47, 20, 80);
+DEFINE_PARAM(LmrScale_Captures, 48, 20, 70);
+DEFINE_PARAM(LmrBias_Captures, 67, 20, 80);
 
-DEFINE_PARAM(LmrQuietNonPv, 15, -128, 256);
-DEFINE_PARAM(LmrQuietTTCapture, 73, -128, 256);
-DEFINE_PARAM(LmrQuietRefutation, 168, -128, 256);
-DEFINE_PARAM(LmrQuietCutNode, 183, -128, 256);
-DEFINE_PARAM(LmrQuietImproving, 38, -128, 256);
-DEFINE_PARAM(LmrQuietInCheck, 71, -128, 256);
+DEFINE_PARAM(LmrQuietNonPv, 26, -128, 256);
+DEFINE_PARAM(LmrQuietTTCapture, 24, -128, 256);
+DEFINE_PARAM(LmrQuietRefutation, 237, -128, 256);
+DEFINE_PARAM(LmrQuietCutNode, 89, -128, 256);
+DEFINE_PARAM(LmrQuietImproving, -17, -128, 256);
+DEFINE_PARAM(LmrQuietInCheck, 58, -128, 256);
 
-DEFINE_PARAM(LmrCaptureWinning, 63, -128, 256);
-DEFINE_PARAM(LmrCaptureBad, -12, -128, 256);
-DEFINE_PARAM(LmrCaptureCutNode, 81, -128, 256);
-DEFINE_PARAM(LmrCaptureImproving, -18, -128, 128);
-DEFINE_PARAM(LmrCaptureInCheck, -4, -128, 256);
-DEFINE_PARAM(LmrTTHighDepth, 13, -128, 256);
+DEFINE_PARAM(LmrCaptureWinning, 43, -128, 256);
+DEFINE_PARAM(LmrCaptureBad, 79, -128, 256);
+DEFINE_PARAM(LmrCaptureCutNode, 85, -128, 256);
+DEFINE_PARAM(LmrCaptureImproving, -8, -128, 128);
+DEFINE_PARAM(LmrCaptureInCheck, 21, -128, 256);
+DEFINE_PARAM(LmrTTHighDepth, -114, -128, 256);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
