@@ -2,56 +2,56 @@
 #include "Search.hpp"
 #include "Tuning.hpp"
 
-DEFINE_PARAM(QuietMoveHistoryClear, 802, -2000, 2000);
-DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
-DEFINE_PARAM(CapturesHistoryClear, 346, -2000, 2000);
+DEFINE_PARAM(QuietMoveHistoryClear, 688, -2000, 2000);
+DEFINE_PARAM(ContinuationHistoryClear, 810, -2000, 2000);
+DEFINE_PARAM(CapturesHistoryClear, 629, -2000, 2000);
 
-DEFINE_PARAM(HistBonusOffset, -113, -200, 0);
-DEFINE_PARAM(HistBonusLinear, 164, 100, 250);
-DEFINE_PARAM(HistBonusScoreDiff, 148, 0, 400);
-DEFINE_PARAM(HistBonusLimit, 2178, 1000, 4000);
-DEFINE_PARAM(HistMalusOffset, -51, -200, 50);
-DEFINE_PARAM(HistMalusLinear, 160, 75, 200);
-DEFINE_PARAM(HistMalusScoreDiff, 155, 0, 400);
-DEFINE_PARAM(HistMalusLimit, 1844, 1000, 4000);
+DEFINE_PARAM(HistBonusOffset, -126, -200, 0);
+DEFINE_PARAM(HistBonusLinear, 180, 100, 250);
+DEFINE_PARAM(HistBonusScoreDiff, 195, 0, 400);
+DEFINE_PARAM(HistBonusLimit, 1991, 1000, 4000);
+DEFINE_PARAM(HistMalusOffset, -10, -200, 50);
+DEFINE_PARAM(HistMalusLinear, 172, 75, 200);
+DEFINE_PARAM(HistMalusScoreDiff, 143, 0, 400);
+DEFINE_PARAM(HistMalusLimit, 1652, 1000, 4000);
 
-DEFINE_PARAM(ContBonusOffset, -105, -200, 0);
-DEFINE_PARAM(ContBonusLinear, 166, 100, 250);
-DEFINE_PARAM(ContBonusScoreDiff, 162, 0, 400);
-DEFINE_PARAM(ContBonusLimit, 2065, 1000, 4000);
-DEFINE_PARAM(ContMalusOffset, -50, -200, 50);
-DEFINE_PARAM(ContMalusLinear, 162, 75, 200);
-DEFINE_PARAM(ContMalusScoreDiff, 174, 0, 400);
-DEFINE_PARAM(ContMalusLimit, 2065, 1000, 4000);
+DEFINE_PARAM(ContBonusOffset, -140, -200, 0);
+DEFINE_PARAM(ContBonusLinear, 174, 100, 250);
+DEFINE_PARAM(ContBonusScoreDiff, 189, 0, 400);
+DEFINE_PARAM(ContBonusLimit, 2017, 1000, 4000);
+DEFINE_PARAM(ContMalusOffset, -41, -200, 50);
+DEFINE_PARAM(ContMalusLinear, 186, 75, 200);
+DEFINE_PARAM(ContMalusScoreDiff, 184, 0, 400);
+DEFINE_PARAM(ContMalusLimit, 2494, 1000, 4000);
 
-DEFINE_PARAM(ContUpdateWeight1, 1014, 1, 2048);
-DEFINE_PARAM(ContUpdateWeight2, 300, 1, 2048);
-DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
-DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight1, 1409, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight2, 417, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight3, 1062, 1, 2048);
+DEFINE_PARAM(ContUpdateWeight5, 1132, 1, 2048);
 
-DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
-DEFINE_PARAM(ContWeight3, 555, 1, 1024);
-DEFINE_PARAM(ContWeight5, 582, 1, 1024);
+DEFINE_PARAM(ContWeight1, 891, 1, 2048);
+DEFINE_PARAM(ContWeight3, 552, 1, 1024);
+DEFINE_PARAM(ContWeight5, 713, 1, 1024);
 
-DEFINE_PARAM(CaptureBonusOffset, 27, 0, 100);
-DEFINE_PARAM(CaptureBonusLinear, 72, 20, 120);
-DEFINE_PARAM(CaptureBonusLimit, 2658, 1000, 4000);
+DEFINE_PARAM(CaptureBonusOffset, 30, 0, 100);
+DEFINE_PARAM(CaptureBonusLinear, 76, 20, 120);
+DEFINE_PARAM(CaptureBonusLimit, 2591, 1000, 4000);
 
-DEFINE_PARAM(CaptureMalusOffset, 28, 0, 100);
-DEFINE_PARAM(CaptureMalusLinear, 44, 20, 120);
-DEFINE_PARAM(CaptureMalusLimit, 1885, 1000, 4000);
+DEFINE_PARAM(CaptureMalusOffset, 33, 0, 100);
+DEFINE_PARAM(CaptureMalusLinear, 49, 20, 120);
+DEFINE_PARAM(CaptureMalusLimit, 1773, 1000, 4000);
 
-DEFINE_PARAM(MVVMultiplier, 4096, 1000, 10000);
+DEFINE_PARAM(MVVMultiplier, 3179, 1000, 10000);
 
-DEFINE_PARAM(MinorThreatEscapeBonus, 4000, 2000, 12000);
-DEFINE_PARAM(RookThreatEscapeBonus, 8000, 3000, 16000);
-DEFINE_PARAM(QueenThreatEscapeBonus, 12000, 4000, 20000);
+DEFINE_PARAM(MinorThreatEscapeBonus, 3454, 2000, 12000);
+DEFINE_PARAM(RookThreatEscapeBonus, 8906, 3000, 16000);
+DEFINE_PARAM(QueenThreatEscapeBonus, 12108, 4000, 20000);
 
-DEFINE_PARAM(MinorThreatEnterMalus, 4000, 2000, 12000);
-DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
-DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
+DEFINE_PARAM(MinorThreatEnterMalus, 4274, 2000, 12000);
+DEFINE_PARAM(RookThreatEnterMalus, 10200, 3000, 16000);
+DEFINE_PARAM(QueenThreatEnterMalus, 12684, 4000, 20000);
 
-DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 20000);
+DEFINE_PARAM(NodeCacheBonus, 5964, 1000, 20000);
 
 
 MoveOrderer::MoveOrderer()
