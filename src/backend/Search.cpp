@@ -8,7 +8,6 @@
 #include "TimeManager.hpp"
 #include "Tuning.hpp"
 
-
 // silent warning C4127: conditional expression is constant
 #ifdef _MSC_VER
 #pragma warning(disable: 4127)
@@ -21,26 +20,26 @@ static const uint32_t DefaultMaxPvLineLength = 20;
 static const uint32_t MateCountStopCondition = 7;
 static const int32_t WdlTablebaseProbeDepth = 5;
 
-static const int32_t LmrScale = 64;
+static const int32_t LmrScale = 1024;
 
-DEFINE_PARAM(LmrScale_Quiets, 43, 20, 70);
-DEFINE_PARAM(LmrBias_Quiets, 56, 20, 80);
-DEFINE_PARAM(LmrScale_Captures, 42, 20, 70);
-DEFINE_PARAM(LmrBias_Captures, 68, 20, 80);
+DEFINE_PARAM(LmrScale_Quiets, 430, 200, 700);
+DEFINE_PARAM(LmrBias_Quiets, 553, 200, 800);
+DEFINE_PARAM(LmrScale_Captures, 420, 200, 700);
+DEFINE_PARAM(LmrBias_Captures, 673, 200, 800);
 
-DEFINE_PARAM(LmrQuietNonPv, 15, -128, 256);
-DEFINE_PARAM(LmrQuietTTCapture, 73, -128, 256);
-DEFINE_PARAM(LmrQuietRefutation, 168, -128, 256);
-DEFINE_PARAM(LmrQuietCutNode, 183, -128, 256);
-DEFINE_PARAM(LmrQuietImproving, 38, -128, 256);
-DEFINE_PARAM(LmrQuietInCheck, 71, -128, 256);
+DEFINE_PARAM(LmrQuietNonPv, 240, -2048, 4096);
+DEFINE_PARAM(LmrQuietTTCapture, 1168, -2048, 4096);
+DEFINE_PARAM(LmrQuietRefutation, 2688, -2048, 4096);
+DEFINE_PARAM(LmrQuietCutNode, 2928, -2048, 4096);
+DEFINE_PARAM(LmrQuietImproving, 608, -2048, 4096);
+DEFINE_PARAM(LmrQuietInCheck, 1136, -2048, 4096);
 
-DEFINE_PARAM(LmrCaptureWinning, 63, -128, 256);
-DEFINE_PARAM(LmrCaptureBad, -12, -128, 256);
-DEFINE_PARAM(LmrCaptureCutNode, 81, -128, 256);
-DEFINE_PARAM(LmrCaptureImproving, -18, -128, 128);
-DEFINE_PARAM(LmrCaptureInCheck, -4, -128, 256);
-DEFINE_PARAM(LmrTTHighDepth, 13, -128, 256);
+DEFINE_PARAM(LmrCaptureWinning, 1008, -2048, 4096);
+DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
+DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
+DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
+DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
+DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
@@ -122,7 +121,7 @@ DEFINE_PARAM(RazoringMarginMultiplier, 158, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
 
 DEFINE_PARAM(ReductionStatOffset, 6877, 5000, 10000);
-DEFINE_PARAM(ReductionStatDiv, 240, 100, 400);
+DEFINE_PARAM(ReductionStatDiv, 15, 5, 30);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
@@ -235,7 +234,9 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
     {
         for (uint32_t moveIndex = 1; moveIndex < LMRTableSize; ++moveIndex)
         {
-            table[depth][moveIndex] = int16_t(LmrScale * (bias + scale * Log(float(depth)) * Log(float(moveIndex))));
+            const uint32_t reduction = static_cast<uint32_t>(LmrScale * (bias + scale * Log(float(depth)) * Log(float(moveIndex))));
+            ASSERT(reduction <= UINT16_MAX);
+            table[depth][moveIndex] = static_cast<uint16_t>(reduction);
         }
     }
 }
@@ -243,12 +244,12 @@ void Search::BuildMoveReductionTable(LMRTableType& table, float scale, float bia
 void Search::BuildMoveReductionTable()
 {
     BuildMoveReductionTable(mMoveReductionTable_Quiets,
-        static_cast<float>(LmrScale_Quiets) / 100.0f,
-        static_cast<float>(LmrBias_Quiets) / 100.0f);
+        static_cast<float>(LmrScale_Quiets) / 1000.0f,
+        static_cast<float>(LmrBias_Quiets) / 1000.0f);
 
     BuildMoveReductionTable(mMoveReductionTable_Captures,
-        static_cast<float>(LmrScale_Captures) / 100.0f,
-        static_cast<float>(LmrBias_Captures) / 100.0f);
+        static_cast<float>(LmrScale_Captures) / 1000.0f,
+        static_cast<float>(LmrBias_Captures) / 1000.0f);
 }
 
 void Search::Clear()
