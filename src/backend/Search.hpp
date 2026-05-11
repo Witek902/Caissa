@@ -322,7 +322,7 @@ private:
         std::mutex newTaskMutex;
         std::function<void()> callback;
 
-        bool isMainThread = false;
+        int32_t threadId = 0;              // unique thread ID
 
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth

@@ -176,7 +176,7 @@ Search::Search()
 
     void* threadDataMemory = numa::AllocateOnNode(sizeof(ThreadData), 0);
     mThreadData.emplace_back(new (threadDataMemory) ThreadData());
-    mThreadData.front()->isMainThread = true;
+    mThreadData.front()->threadId = 0;
     mThreadData.front()->correctionHistories = mCorrectionHistories.Get(0);
 
     for (uint32_t i = 0; i < numa::GetNumNodes(); ++i)
@@ -295,7 +295,7 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         return true;
     }
 
-    if (thread.isMainThread && !param.isPonder.load(std::memory_order_acquire))
+    if ((thread.threadId == 0) && !param.isPonder.load(std::memory_order_acquire))
     {
         if (param.limits.maxNodes < UINT64_MAX &&
             ctx.stats.nodes > param.limits.maxNodes) [[unlikely]]
@@ -407,6 +407,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             void* threadDataMemory = numa::AllocateOnNode(sizeof(ThreadData), numaNode);
             ThreadData* threadData = new (threadDataMemory) ThreadData();
             threadData->correctionHistories = mCorrectionHistories.Get(numaNode);
+            threadData->threadId = i;
 
             mThreadData.push_back(threadData);
             mWorkerThreads.emplace_back(std::thread(Search::WorkerThreadCallback, this, i));
@@ -1952,6 +1953,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
+
+            // randomize across threads
+            r += ((thread.threadId * 1021 + (int32_t)thread.stats.nodesTotal) % 128) - 64;
 
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
