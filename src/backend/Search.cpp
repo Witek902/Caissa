@@ -77,9 +77,8 @@ DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
 DEFINE_PARAM(LateMovePruningPVScale, 2, 0, 4);
 
-DEFINE_PARAM(HistoryPruningLinearFactor, 234, 100, 400);
-DEFINE_PARAM(HistoryPruningQuadraticFactor, 148, 60, 300);
-DEFINE_PARAM(HistoryPruningMaxDepth, 9, 4, 12);
+DEFINE_PARAM(HistoryPruningLinearFactor, 1024, 100, 2048);
+DEFINE_PARAM(HistoryPruningMaxDepth, 6, 4, 12);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 547, 200, 800);
 DEFINE_PARAM(AspirationWindow, 6, 5, 20);
@@ -146,11 +145,6 @@ INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving
     return improving ?
         LateMovePruningBase + depth * depth :
         LateMovePruningBase + depth * depth / 2;
-}
-
-INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
-{
-    return 0 - HistoryPruningLinearFactor * depth - HistoryPruningQuadraticFactor * depth * depth;
 }
 
 void SearchStats::Append(SearchThreadStats& threadStats, bool flush)
@@ -1784,9 +1778,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
+                if (!node->isInCheck &&
                     node->depth < HistoryPruningMaxDepth &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
+                    moveStatScore < -HistoryPruningLinearFactor * node->depth)
                 {
                     continue;
                 }
