@@ -1859,13 +1859,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (singularScore < singularBeta)
                 {
-                    if (node->ply < 2 * thread.rootDepth)
-                    {
-                        extension = 1;
-                        // multiple extensions if singular score is way below beta
-                        extension += (singularScore < singularBeta - SingularDoubleExtensionMarigin - SingularExtPVBonus * isPvNode);
-                        extension += (singularScore < singularBeta - SingularTripleExtensionMarigin - SingularExtPVBonus * isPvNode);
-                    }
+                    extension = 1;
+                    // multiple extensions if singular score is way below beta
+                    extension += (singularScore < singularBeta - SingularDoubleExtensionMarigin - SingularExtPVBonus * isPvNode);
+                    extension += (singularScore < singularBeta - SingularTripleExtensionMarigin - SingularExtPVBonus * isPvNode);
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
                 else if (singularScore >= beta)
