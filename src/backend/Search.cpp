@@ -891,7 +891,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
     rootNode.position.ComputeThreats(rootNode.threats);
-    rootNode.isPvNodeFromPrevIteration = true;
     rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
     rootNode.nnContext.MarkAsDirty();
 
@@ -969,26 +968,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
 Search::ThreadData::ThreadData()
 {
-}
-
-const Move Search::ThreadData::GetPvMove(const NodeInfo& node) const
-{
-    if (!node.isPvNodeFromPrevIteration || pvLines.empty() || node.filteredMove.IsValid())
-    {
-        return Move::Invalid();
-    }
-
-    const std::vector<Move>& pvLine = pvLines[node.pvIndex].moves;
-    if (node.ply >= pvLine.size())
-    {
-        return Move::Invalid();
-    }
-
-    const Move pvMove = pvLine[node.ply];
-    ASSERT(pvMove.IsValid());
-    ASSERT(node.position.IsMoveLegal(pvMove));
-
-    return pvMove;
 }
 
 INLINE static bool OppCanWinMaterial(const Position& position, const Threats& threats)
@@ -1671,8 +1650,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
-    const Move pvMove = thread.GetPvMove(*node);
-    const PackedMove ttMove = ttEntry.move.IsValid() ? ttEntry.move : pvMove;
+    const PackedMove ttMove = ttEntry.move;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
     const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
 
@@ -1835,13 +1813,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
                 const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
-                const bool originalIsPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration;
                 const bool originalIsCutNode = node->isCutNode;
                 const int16_t originalDepth = node->depth;
                 const ScoreType originalAlpha = node->alpha;
                 const ScoreType originalBeta = node->beta;
 
-                node->isPvNodeFromPrevIteration = false;
                 node->depth = singularDepth;
                 node->alpha = singularBeta - 1;
                 node->beta = singularBeta;
@@ -1850,7 +1826,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 const ScoreType singularScore = NegaMax<NodeType::NonPV>(thread, node, ctx);
 
                 // restore node state
-                node->isPvNodeFromPrevIteration = originalIsPvNodeFromPrevIteration;
                 node->depth = originalDepth;
                 node->alpha = originalAlpha;
                 node->beta = originalBeta;
@@ -1893,7 +1868,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
-        childNode.isPvNodeFromPrevIteration = node->isPvNodeFromPrevIteration && (move == pvMove);
 
         const uint64_t nodesSearchedBefore = thread.stats.nodesTotal;
 

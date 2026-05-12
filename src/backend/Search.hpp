@@ -132,7 +132,6 @@ struct NodeInfo
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
 
-    bool isPvNodeFromPrevIteration = false;
     bool isCutNode = false;
     bool isNullMove = false;
     bool isInCheck = false;
@@ -156,7 +155,6 @@ struct NodeInfo
         staticEval = InvalidValue;
         previousMove = Move::Invalid();
         moveStatScore = 0;
-        isPvNodeFromPrevIteration = false;
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
@@ -340,9 +338,6 @@ private:
         ThreadData();
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
-
-        // get PV move from previous depth iteration
-        const Move GetPvMove(const NodeInfo& node) const;
     };
 
     std::vector<ThreadData*> mThreadData;
