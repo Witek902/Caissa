@@ -1663,6 +1663,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Probcut
+            if (node->isCutNode)
             {
                 const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta);
                 if (probcutScore != InvalidValue)
