@@ -1021,12 +1021,14 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
+ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam, ScoreType& outCorrection) const
 {
     int32_t adjustedScore = node.staticEval;
     
     // apply eval correction term
-    adjustedScore += GetEvalCorrection(thread.correctionHistories, node);
+    const ScoreType correction = GetEvalCorrection(thread.correctionHistories, node);
+    outCorrection = correction;
+    adjustedScore += correction;
 
     // scale down when approaching 50-move draw
     adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
@@ -1108,6 +1110,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
     }
 
+    ScoreType evalCorrection = 0;
+
     // do not consider stand pat if in check
     if (node->isInCheck)
     {
@@ -1133,7 +1137,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam, evalCorrection);
 
         bestValue = adjustedEvalScore;
 
@@ -1515,6 +1519,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    ScoreType evalCorrection = 0;
+
     // evaluate position
     if (node->isInCheck)
     {
@@ -1543,7 +1549,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam, evalCorrection);
 
         if (!node->filteredMove.IsValid())
         {
@@ -1591,6 +1597,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const int32_t rfpMargin =
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
+                + 512 * std::abs(evalCorrection) / 1024
                 - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&

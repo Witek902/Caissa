@@ -373,7 +373,7 @@ private:
 
     ScoreType GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const;
 
-    ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
+    ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam, ScoreType& outCorrection) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
