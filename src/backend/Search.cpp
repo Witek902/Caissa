@@ -1574,14 +1574,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
-    bool isImproving = false;
+    int32_t improvement = 0;
     if (!node->isInCheck && !node->isNullMove)
     {
         if (node->ply > 1 && (node - 2)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 2)->staticEval;
+            improvement = node->staticEval - (node - 2)->staticEval;
         else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 4)->staticEval;
+            improvement = node->staticEval - (node - 4)->staticEval;
     }
+    const bool isImproving = improvement > 0;
 
     if constexpr (!isPvNode)
     {
@@ -1591,7 +1592,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const int32_t rfpMargin =
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
-                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
+                + RfpImprovingScale * improvement / 1024
+                - 100 * (!OppCanWinMaterial(position, node->threats));
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
