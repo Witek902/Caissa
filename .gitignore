@@ -15,3 +15,4 @@ src/pgo/
 CMakeSettings.json
 selfplayGames/
 trainingData/
+data/neuralNets/*.pnn
