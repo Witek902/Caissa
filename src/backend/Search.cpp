@@ -1687,6 +1687,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             return probCutBeta;
     }
 
+    const int32_t numAttackedPieces = (node->threats.allThreats & position.GetCurrentSide().Occupied()).Count();
+
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.ply = node->ply + 1;
@@ -1945,6 +1947,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
+
+            // reduce less in positions with many attacked pieces (tactical complexity)
+            if (numAttackedPieces >= 3)
+                r -= (numAttackedPieces - 3) * 256;
 
             // reduce low-ply moves less
             if constexpr (isPvNode)
