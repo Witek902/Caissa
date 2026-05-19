@@ -32,13 +32,15 @@ DEFINE_PARAM(LmrQuietTTCapture, 1168, -2048, 4096);
 DEFINE_PARAM(LmrQuietRefutation, 2688, -2048, 4096);
 DEFINE_PARAM(LmrQuietCutNode, 2928, -2048, 4096);
 DEFINE_PARAM(LmrQuietImproving, 608, -2048, 4096);
-DEFINE_PARAM(LmrQuietInCheck, 1136, -2048, 4096);
+DEFINE_PARAM(LmrQuietInCheck, 512, -2048, 4096);
+DEFINE_PARAM(LmrQuietGivesCheck, 1136, -2048, 4096);
 
 DEFINE_PARAM(LmrCaptureWinning, 1008, -2048, 4096);
 DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
 DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
 DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
-DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
+DEFINE_PARAM(LmrCaptureInCheck, 512, -2048, 4096);
+DEFINE_PARAM(LmrCaptureGivesCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
@@ -1924,8 +1926,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrQuietImproving;
 
-                // reduce less if move is a check
-                if (childNode.isInCheck) r -= LmrQuietInCheck;
+                // reduce less if we are in check
+                if (node->isInCheck) r -= LmrQuietInCheck;
+
+                // reduce less if move gives check
+                if (childNode.isInCheck) r -= LmrQuietGivesCheck;
             }
             else
             {
@@ -1942,8 +1947,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrCaptureImproving;
 
-                // reduce less if move is a check
-                if (childNode.isInCheck) r -= LmrCaptureInCheck;
+                // reduce less if we are in check
+                if (node->isInCheck) r -= LmrCaptureInCheck;
+
+                // reduce less if move gives check
+                if (childNode.isInCheck) r -= LmrCaptureGivesCheck;
             }
 
             // reduce low-ply moves less
