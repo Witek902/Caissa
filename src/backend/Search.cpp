@@ -1769,6 +1769,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             bestValue > -KnownWinValue &&
             position.HasNonPawnMaterial(position.GetSideToMove()))
         {
+            // Estimate the depth this move would be searched at after LMR.
+            // Used in pruning thresholds so that late moves (which would be reduced anyway)
+            // are pruned more aggressively than early moves.
+            int32_t lmrDepth = (int32_t)node->depth;
+            if (move.IsQuiet() && node->depth >= LateMoveReductionStartDepth && moveIndex >= 1)
+                lmrDepth = std::max(1, (int32_t)node->depth - (int32_t)(GetQuietsDepthReduction(node->depth, moveIndex + 1) + LmrScale / 2) / LmrScale);
+
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
                 // Late Move Pruning
@@ -1786,7 +1793,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
                     node->depth < HistoryPruningMaxDepth &&
-                    moveStatScore < GetHistoryPruningTreshold(node->depth))
+                    moveStatScore < GetHistoryPruningTreshold(lmrDepth))
                 {
                     continue;
                 }
@@ -1795,7 +1802,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * node->depth * node->depth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    node->staticEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
@@ -1815,7 +1822,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else
                 {
                     if (node->depth <= SSEPruningDepth_NonCaptures &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * node->depth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * lmrDepth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
                 }
             }
         }
