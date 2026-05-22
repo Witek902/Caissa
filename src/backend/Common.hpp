@@ -435,6 +435,18 @@ INLINE void AlignedMemcpy64(T* dst, const T* src)
 #endif
 }
 
+INLINE void Prefetch(const void* ptr)
+{
+    ASSERT(ptr != nullptr);
+#ifdef USE_SSE
+    _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0);
+#elif defined(USE_ARM_NEON)
+    __builtin_prefetch(reinterpret_cast<const char*>(ptr), 0, 0);
+#else
+    (void)ptr;
+#endif // USE_SSE
+}
+
 
 union MaterialKey;
 class Position;
