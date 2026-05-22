@@ -1895,6 +1895,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             continue;
         moveIndex++;
 
+        // prefetch correction histories for child node
+        if constexpr (!isRootNode)
+        {
+            const Color stm = childNode.position.GetSideToMove();
+            CorrectionHistories* corrHist = thread.correctionHistories;
+            Prefetch(&corrHist->pawnStructure[stm][childNode.position.GetPawnsHash() % PawnCorrTableSize]);
+            Prefetch(&corrHist->nonPawnWhite[stm][childNode.position.GetNonPawnsHash(White) % NonPawnCorrTableSize]);
+            Prefetch(&corrHist->nonPawnBlack[stm][childNode.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize]);
+            Prefetch(&corrHist->continuation[stm][move.PieceTo()][node->previousMove.PieceTo()]);
+        }
+
         childNode.staticEval = InvalidValue;
         childNode.position.ComputeThreats(childNode.threats);
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
