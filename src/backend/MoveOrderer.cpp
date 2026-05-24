@@ -53,6 +53,8 @@ DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
 DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 20000);
 
+DEFINE_PARAM(PrevPrevMovePenalty, 0, 0, 10000);
+
 
 MoveOrderer::MoveOrderer()
 {
@@ -350,6 +352,8 @@ void MoveOrderer::ScoreMoves(
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
+    const Move prevPrevMove = (node.ply >= 1) ? (&node - 1)->previousMove : Move::Invalid();
+
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.GetMove(i);
@@ -423,6 +427,14 @@ void MoveOrderer::ScoreMoves(
                     break;
                 default:
                     break;
+            }
+
+            // penalty for moving the same piece back to the same square
+            if (move.GetPiece() == prevPrevMove.GetPiece() &&
+                move.ToSquare() == prevPrevMove.FromSquare() &&
+                move.FromSquare() == prevPrevMove.ToSquare())
+            {
+                score -= PrevPrevMovePenalty;
             }
 
             // use node cache for scoring moves near the root
