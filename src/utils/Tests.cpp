@@ -1877,10 +1877,21 @@ void RunSearchTests()
 
     // stalemate (no legal move)
     {
-        param.limits.maxDepth = 1;
+        param.limits.maxDepth = 10;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("k7/2Q5/1K6/8/8/8/8/8 b - - 0 1"));
+        search.DoSearch(game, param, result);
+
+        TEST_EXPECT(result.size() == 0);
+    }
+
+    // checkmate (no legal move)
+    {
+        param.limits.maxDepth = 10;
+        param.numPvLines = UINT32_MAX;
+
+        game.Reset(Position("5k2/5Q2/1p4Bp/2b4P/5P2/5K2/P5P1/8 b - - 0 54"));
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 0);

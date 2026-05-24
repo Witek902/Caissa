@@ -750,7 +750,10 @@ void UniversalChessInterface::DoSearch()
 
     // remember search result
     mPrevSearchPosition = mGame.GetPosition();
-    mPrevSearchPvLine = std::move(mSearchCtx->searchResult[0].moves);
+    if (!mSearchCtx->searchResult.empty())
+        mPrevSearchPvLine = std::move(mSearchCtx->searchResult[0].moves);
+    else
+        mPrevSearchPvLine.clear();
     
     mSearchCtx->waitable.OnFinished();
 }
