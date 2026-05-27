@@ -79,7 +79,7 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 12;
+static constexpr uint32_t CurrentVersion = 13;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 32;
@@ -100,8 +100,8 @@ static constexpr uint8_t KingBucketIndex[64] =
     28,29,30,31, 31,30,29,28,
 };
 
-// by this value neuron inputs are scaled
-static constexpr int16_t ActivationRangeScaling = 256;
+// FT CReLU output scale: QA=255 so that clamp to [0,255] fits exactly in uint8
+static constexpr int16_t ActivationRangeScaling = 255;
 
 static constexpr int32_t WeightScaleShift = 8;
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
@@ -109,10 +109,27 @@ static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 static constexpr int32_t OutputScaleShift = 10;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
+// Hidden layer sizes
+static constexpr uint32_t L1Size = 16;
+static constexpr uint32_t L2Size = 32;
+
+// QB=64: hidden-layer weight quantization scale (int8 weight = round(w_float * 64))
+static constexpr int32_t HiddenWeightScaleShift = 6;
+static constexpr int32_t HiddenWeightScale = 1 << HiddenWeightScaleShift; // 64
+
+// The L1 SIMD inference accumulates uint8 input (<=255) * int8 weight via _mm256_maddubs_epi16,
+// which adds adjacent pairs of products with int16 saturation. To guarantee no saturation
+// (so quantized inference matches the float trainer) the int8 weight magnitude must satisfy
+// 2 * 255 * |w| <= INT16_MAX (32767), i.e. |w| <= 64. The trainer clamps L1/L2 weights to this.
+static constexpr int32_t MaddubsSafeWeight = 64;
+
 static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
 static constexpr float InputLayerBiasQuantizationScale = ActivationRangeScaling;
-static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
-static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * ActivationRangeScaling;
+// Weight scale QB=64, bias scale QA*QB = 255*64 = 16320
+static constexpr float HiddenLayerWeightQuantizationScale = HiddenWeightScale;
+static constexpr float HiddenLayerBiasQuantizationScale = HiddenWeightScale * ActivationRangeScaling;
+// QB3 = WeightScale*OutputScale/QA ≈ 1028.235f (non-integer is OK for rounding)
+// Evaluator divisor = WeightScale*OutputScale = 262144 (unchanged)
 static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
@@ -125,30 +142,48 @@ using HiddenLayerBiasType = int32_t;
 using LastLayerWeightType = int16_t;
 using LastLayerBiasType = int32_t;
 
-using IntermediateType = int8_t;
+// CReLU output of the FT is unsigned [0,255], stored as uint8
+using IntermediateType = uint8_t;
 
 struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
 {
     struct Header
     {
-        uint32_t magic = 0;
+        uint32_t magic   = 0;
         uint32_t version = 0;
-        uint32_t layerSizes[4] = { 0, 0, 0, 0 };
-        uint32_t layerVariants[4] = { 0, 0, 0, 0 };
-        uint32_t padding[6];
+        // padding preserves 64-byte (1 cacheline) struct size;
+        // old layerSizes[4] and layerVariants[4] fields removed in version 13
+        uint32_t padding[14];
     };
 
-    struct alignas(CACHELINE_SIZE) LastLayerVariant
+    // Per-bucket subnet: L1(16) + L2(32) + L3(32->1), one per output bucket (variant)
+    struct alignas(CACHELINE_SIZE) OutputSubnetVariant
     {
-        LastLayerWeightType weights[2 * AccumulatorSize];
-        LastLayerBiasType bias;
-        int32_t padding[15];
+        // L1: FT_CReLU[2*AccumulatorSize] → L1[L1Size]
+        // Layout: weights[output * 2*AccumulatorSize + input]  (row-major output-first)
+        HiddenLayerWeightType l1Weights[2 * AccumulatorSize * L1Size]; // int8[32768]
+        HiddenLayerBiasType   l1Biases[L1Size];                        // int32[16]
+
+        // L2: L1[L1Size] → L2[L2Size]
+        HiddenLayerWeightType l2Weights[L1Size * L2Size];              // int8[512]
+        HiddenLayerBiasType   l2Biases[L2Size];                        // int32[32]
+
+        // L3: L2[L2Size] → scalar output
+        LastLayerWeightType   l3Weights[L2Size];                       // int16[32]
+        LastLayerBiasType     l3Bias;                                   // int32
+
+        int32_t padding[15]; // pad to 525*64 = 33600 bytes
     };
+
+    // Compile-time size checks
+    static_assert(sizeof(Header) == 64,                         "Header must be 64 bytes");
+    static_assert(sizeof(OutputSubnetVariant) == 33600,         "OutputSubnetVariant unexpected size");
+    static_assert(sizeof(OutputSubnetVariant) % CACHELINE_SIZE == 0, "OutputSubnetVariant must be cacheline-aligned");
 
     Header header;
     FirstLayerWeightType accumulatorWeights[NumNetworkInputs * AccumulatorSize];
-    FirstLayerBiasType accumulatorBiases[AccumulatorSize];
-    LastLayerVariant lastLayerVariants[NumVariants];
+    FirstLayerBiasType   accumulatorBiases[AccumulatorSize];
+    OutputSubnetVariant  outputSubnetVariants[NumVariants];
 
     PackedNeuralNetwork();
 

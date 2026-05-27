@@ -542,34 +542,24 @@ bool NetworkTrainer::PackNetwork()
             true);
     }
 
-    // last layer
-    for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
-    {
-        PackWeights(
-            m_lastLayerWeights->m_variants[variantIdx].m_weights,
-            m_lastLayerWeights->m_inputSize,
-            1u,
-            const_cast<nn::LastLayerWeightType*>(m_packedNet.lastLayerVariants[variantIdx].weights),
-            const_cast<nn::LastLayerBiasType*>(&m_packedNet.lastLayerVariants[variantIdx].bias),
-            nn::OutputLayerWeightQuantizationScale,
-            nn::OutputLayerBiasQuantizationScale,
-            false);
-    }
+    // TODO: last layer (L3) is now only 32 weights (L2Size→1) in v13 format.
+    // NetworkTrainer still uses a 2048→1 last layer internally and cannot pack/unpack
+    // the new OutputSubnetVariant (L1/L2/L3). Skip last-layer pack/unpack here.
+    // Use CudaNetworkTrainer for training with the new architecture.
 
     return true;
 }
 
 bool NetworkTrainer::UnpackNetwork()
 {
+    // NOTE: NetworkTrainer uses the old 2048→1 single-layer architecture internally.
+    // It cannot unpack v13 OutputSubnetVariant (L1/L2/L3) correctly.
+    // Only the FT is unpacked here; last-layer weights stay at random init.
+    // Use CudaNetworkTrainer for training with the new L1/L2/L3 architecture.
+
     constexpr float OldActivationRangeScaling = 256;
-    constexpr int32_t OldWeightScaleShift = 8; // TODO should be 6 if we clamp weights to [-2,2] range
-    constexpr int32_t OldWeightScale = 1 << OldWeightScaleShift;
-    constexpr int32_t OldOutputScaleShift = 10;
-    constexpr int32_t OldOutputScale = 1 << OldOutputScaleShift;
     constexpr float OldInputLayerWeightQuantizationScale = OldActivationRangeScaling;
     constexpr float OldInputLayerBiasQuantizationScale = OldActivationRangeScaling;
-    constexpr float OldOutputLayerWeightQuantizationScale = OldWeightScale * OldOutputScale / OldActivationRangeScaling;
-    constexpr float OldOutputLayerBiasQuantizationScale = OldWeightScale * OldOutputScale;
 
     // feature transformer
     {
@@ -584,19 +574,7 @@ bool NetworkTrainer::UnpackNetwork()
             true);
     }
 
-    // last layer
-    for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
-    {
-        UnpackWeights(
-            m_lastLayerWeights->m_variants[variantIdx].m_weights,
-            m_lastLayerWeights->m_inputSize,
-            1u,
-            m_packedNet.lastLayerVariants[variantIdx].weights,
-            &m_packedNet.lastLayerVariants[variantIdx].bias,
-            OldOutputLayerWeightQuantizationScale,
-            OldOutputLayerBiasQuantizationScale,
-            false);
-    }
+    // last layer: skipped — v13 OutputSubnetVariant is not compatible with NetworkTrainer's 2048→1 layout.
 
     return true;
 }

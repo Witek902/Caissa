@@ -77,6 +77,11 @@ void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
     }
 
     m_weights.CopyFromHost(hostWeightsData.data(), hostWeightsData.size());
+
+    // propagate settings
+    m_updateWeights = hostWeights.m_updateWeights;
+    m_weightsRange = hostWeights.m_weightsRange;
+    m_biasRange = hostWeights.m_biasRange;
 }
 
 void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
@@ -105,8 +110,12 @@ __global__ void AdamUpdateKernel(
     float* moment1,
     float* moment2,
     const float* gradients,
+    uint32_t inputSize,
+    uint32_t outputSize,
     uint32_t numWeights,
     float learningRate,
+    float maxWeightRange,
+    float maxBiasRange,
     size_t iteration
 )
 {
@@ -135,8 +144,14 @@ __global__ void AdamUpdateKernel(
     // Compute weight delta
     const float delta = learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
 
-    // Update weights
-    weights[idx] -= delta;
+    // Per-variant layout is [weights: inputSize*outputSize][biases: outputSize]; the last
+    // outputSize entries of each variant block are biases. Clamp weights and biases to their
+    // respective ranges (the weight range enforces the maddubs-safe int8 bound for L1/L2).
+    const uint32_t variantStride = inputSize * outputSize + outputSize;
+    const bool isBias = (idx % variantStride) >= inputSize * outputSize;
+    const float range = isBias ? maxBiasRange : maxWeightRange;
+
+    weights[idx] = fminf(fmaxf(weights[idx] - delta, -range), range);
 }
 
 void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, size_t iteration, cudaStream_t stream)
@@ -151,8 +166,12 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
         m_moment1.Get(),
         m_moment2.Get(),
         gradients,
+        m_inputSize,
+        m_outputSize,
         m_totalWeights,
         learningRate,
+        m_weightsRange,
+        m_biasRange,
         iteration
     );
     CUDA_CHECK(cudaGetLastError());

@@ -41,6 +41,29 @@ INLINE static int32_t m256_hadd(__m256i a)
     const __m128i hi = _mm256_extracti128_si256(a, 1);
     return m128_hadd(_mm_add_epi32(lo, hi));
 }
+
+// Accumulate uint8 x int8 products into int32 (32 elements per call)
+INLINE static void m256_add_dpbusd_epi32(__m256i& acc, __m256i a, __m256i b)
+{
+#ifdef NN_USE_VNNI
+    acc = _mm256_dpbusd_epi32(acc, a, b);
+#else
+    __m256i product = _mm256_maddubs_epi16(a, b);             // uint8*int8 → int16
+    product = _mm256_madd_epi16(product, _mm256_set1_epi16(1)); // int16 → int32
+    acc = _mm256_add_epi32(acc, product);
+#endif
+}
+
+// Reduce 4 independent int32 AVX2 sums → one __m128i of 4 int32 values, adding bias
+INLINE static __m128i m256_haddx4(__m256i s0, __m256i s1, __m256i s2, __m256i s3, __m128i bias)
+{
+    s0 = _mm256_hadd_epi32(s0, s1);
+    s2 = _mm256_hadd_epi32(s2, s3);
+    s0 = _mm256_hadd_epi32(s0, s2);
+    const __m128i lo = _mm256_castsi256_si128(s0);
+    const __m128i hi = _mm256_extracti128_si256(s0, 1);
+    return _mm_add_epi32(_mm_add_epi32(lo, hi), bias);
+}
 #endif // USE_AVX2
 
 #ifdef USE_AVX512
@@ -51,168 +74,227 @@ INLINE static int32_t m512_hadd(__m512i v)
         _mm512_extracti64x4_epi64(v, 1));
     return m256_hadd(sum256);
 }
+
+// Accumulate uint8 x int8 products into int32 (64 elements per call)
+INLINE static void m512_add_dpbusd_epi32(__m512i& acc, __m512i a, __m512i b)
+{
+#ifdef NN_USE_VNNI
+    acc = _mm512_dpbusd_epi32(acc, a, b);
+#else
+    __m512i product = _mm512_maddubs_epi16(a, b);
+    product = _mm512_madd_epi16(product, _mm512_set1_epi16(1));
+    acc = _mm512_add_epi32(acc, product);
+#endif
+}
 #endif // USE_AVX512
 
-INLINE static int32_t LinearLayer_Accum_SingleOutput(
-    const LastLayerWeightType* weights, const LastLayerBiasType* biases,
-    const AccumulatorType* inputA, const AccumulatorType* inputB)
+// Pack both FT accumulators (int16, pre-CReLU) into a single uint8 buffer
+// Output layout: [stm[0..AccumulatorSize-1] || nstm[0..AccumulatorSize-1]]
+// CReLU clamp: max(0, min(255, x)) via unsigned saturation
+INLINE static void FT_CReLU_Pack(
+    uint8_t* output,
+    const AccumulatorType* stm,
+    const AccumulatorType* nstm)
 {
-    int32_t val = biases[0];
-
 #if defined(NN_USE_AVX512)
-    constexpr uint32_t registerWidth = 32;
-    ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
-
-    // unroll 2x so two sums can be calculated independently
-    __m512i sumA = _mm512_setzero_si512();
-    __m512i sumB = _mm512_setzero_si512();
-    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    constexpr uint32_t regW = 32; // int16 per 512-bit register
+    const __m512i zero = _mm512_setzero_si512();
+    const __m512i max255 = _mm512_set1_epi16(255);
+    for (uint32_t j = 0; j < AccumulatorSize; j += regW)
     {
-        __m512i inA = Int16VecLoad(inputA + j);
-        __m512i inB = Int16VecLoad(inputB + j);
-
-        // apply clipped-ReLU
-        inA = _mm512_min_epi16(_mm512_max_epi16(inA, _mm512_setzero_si512()), _mm512_set1_epi16(ActivationRangeScaling));
-        inB = _mm512_min_epi16(_mm512_max_epi16(inB, _mm512_setzero_si512()), _mm512_set1_epi16(ActivationRangeScaling));
-
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m512i wA = Int16VecLoad(weights + j);
-        const __m512i wB = Int16VecLoad(weights + j + AccumulatorSize);
-        sumA = _mm512_add_epi32(sumA, _mm512_madd_epi16(inA, wA));
-        sumB = _mm512_add_epi32(sumB, _mm512_madd_epi16(inB, wB));
+        __m512i a = Int16VecLoad(stm + j);
+        a = _mm512_min_epi16(_mm512_max_epi16(a, zero), max255);
+        _mm512_storeu_si512(reinterpret_cast<__m512i*>(output + j),
+            _mm512_cvtepi16_epi8(a));
     }
-
-    // add 16 int32s horizontally
-    val += m512_hadd(_mm512_add_epi32(sumA, sumB));
-
+    for (uint32_t j = 0; j < AccumulatorSize; j += regW)
+    {
+        __m512i b = Int16VecLoad(nstm + j);
+        b = _mm512_min_epi16(_mm512_max_epi16(b, zero), max255);
+        _mm512_storeu_si512(reinterpret_cast<__m512i*>(output + AccumulatorSize + j),
+            _mm512_cvtepi16_epi8(b));
+    }
 #elif defined(NN_USE_AVX2)
-    constexpr uint32_t registerWidth = 16;
-    ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
-
-    // unroll 2x so two sums can be calculated independently
-    __m256i sumA = _mm256_setzero_si256();
-    __m256i sumB = _mm256_setzero_si256();
-    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    constexpr uint32_t regW = 16; // int16 per 256-bit register
+    const __m256i zero = _mm256_setzero_si256();
+    constexpr int perm = 0b11011000; // fix AVX2 lane order after packus
+    for (uint32_t j = 0; j < AccumulatorSize; j += regW * 2)
     {
-        __m256i inA = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputA + j));
-        __m256i inB = _mm256_load_si256(reinterpret_cast<const __m256i*>(inputB + j));
-
-        // apply clipped-ReLU
-        inA = _mm256_min_epi16(_mm256_max_epi16(inA, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
-        inB = _mm256_min_epi16(_mm256_max_epi16(inB, _mm256_setzero_si256()), _mm256_set1_epi16(ActivationRangeScaling));
-
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
-        const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize));
-#ifdef NN_USE_VNNI
-        sumA = _mm256_dpwssd_epi32(sumA, inA, wA);
-        sumB = _mm256_dpwssd_epi32(sumB, inB, wB);
-#else
-        sumA = _mm256_add_epi32(sumA, _mm256_madd_epi16(inA, wA));
-        sumB = _mm256_add_epi32(sumB, _mm256_madd_epi16(inB, wB));
-#endif // NN_USE_VNNI
+        // Process 32 elements at once (two 16-element registers)
+        __m256i a0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(stm + j));
+        __m256i a1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(stm + j + regW));
+        a0 = _mm256_max_epi16(a0, zero);
+        a1 = _mm256_max_epi16(a1, zero);
+        // packus_epi16: unsigned saturation clips >255→255, negative→0 already clamped
+        __m256i packed = _mm256_permute4x64_epi64(_mm256_packus_epi16(a0, a1), perm);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(output + j), packed);
     }
-
-    // add 8 int32s horizontally
-    val += m256_hadd(_mm256_add_epi32(sumA, sumB));
-
+    for (uint32_t j = 0; j < AccumulatorSize; j += regW * 2)
+    {
+        __m256i b0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(nstm + j));
+        __m256i b1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(nstm + j + regW));
+        b0 = _mm256_max_epi16(b0, zero);
+        b1 = _mm256_max_epi16(b1, zero);
+        __m256i packed = _mm256_permute4x64_epi64(_mm256_packus_epi16(b0, b1), perm);
+        _mm256_store_si256(reinterpret_cast<__m256i*>(output + AccumulatorSize + j), packed);
+    }
 #elif defined(NN_USE_SSE4)
-    constexpr uint32_t registerWidth = 8;
-    static_assert(AccumulatorSize % registerWidth == 0, "");
-    ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
-
-    // unroll 2x so two sums can be calculated independently
-    __m128i sumA = _mm_setzero_si128();
-    __m128i sumB = _mm_setzero_si128();
-    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
+    const __m128i zero = _mm_setzero_si128();
+    for (uint32_t j = 0; j < AccumulatorSize; j += 8)
     {
-        __m128i inA = _mm_load_si128(reinterpret_cast<const __m128i*>(inputA + j));
-        __m128i inB = _mm_load_si128(reinterpret_cast<const __m128i*>(inputB + j));
-
-        // apply clipped-ReLU
-        inA = _mm_min_epi16(_mm_max_epi16(inA, _mm_setzero_si128()), _mm_set1_epi16(ActivationRangeScaling));
-        inB = _mm_min_epi16(_mm_max_epi16(inB, _mm_setzero_si128()), _mm_set1_epi16(ActivationRangeScaling));
-
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        const __m128i wA = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j));
-        const __m128i wB = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j + AccumulatorSize));
-        sumA = _mm_add_epi32(sumA, _mm_madd_epi16(inA, wA));
-        sumB = _mm_add_epi32(sumB, _mm_madd_epi16(inB, wB));
+        __m128i a = _mm_load_si128(reinterpret_cast<const __m128i*>(stm + j));
+        a = _mm_max_epi16(a, zero);
+        // packus_epi16 with zero: produces [a[0..7], 0..0]
+        __m128i packed = _mm_packus_epi16(a, _mm_setzero_si128());
+        _mm_storel_epi64(reinterpret_cast<__m128i*>(output + j), packed);
     }
-
-    // add 8 int32s horizontally
-    val += m128_hadd(_mm_add_epi32(sumA, sumB));
-
+    for (uint32_t j = 0; j < AccumulatorSize; j += 8)
+    {
+        __m128i b = _mm_load_si128(reinterpret_cast<const __m128i*>(nstm + j));
+        b = _mm_max_epi16(b, zero);
+        __m128i packed = _mm_packus_epi16(b, _mm_setzero_si128());
+        _mm_storel_epi64(reinterpret_cast<__m128i*>(output + AccumulatorSize + j), packed);
+    }
 #elif defined(NN_USE_ARM_NEON)
-
-    constexpr uint32_t registerWidth = 8;
-    static_assert(AccumulatorSize % registerWidth == 0, "");
-    ASSERT((size_t)weights % (2 * registerWidth) == 0);
-    ASSERT((size_t)biases % (2 * registerWidth) == 0);
-
-    int32x4_t sumA = vdupq_n_s32(0);
-    int32x4_t sumB = vdupq_n_s32(0);
-    int32x4_t sumC = vdupq_n_s32(0);
-    int32x4_t sumD = vdupq_n_s32(0);
-    for (uint32_t j = 0; j < AccumulatorSize; j += registerWidth)
-    {
-        // load 8 16bit inputs
-        int16x8_t inA = vld1q_s16(inputA + j);
-        int16x8_t inB = vld1q_s16(inputB + j);
-
-        // apply clipped-ReLU
-        inA = vminq_s16(vmaxq_s16(inA, vdupq_n_s16(0)), vdupq_n_s16(ActivationRangeScaling));
-        inB = vminq_s16(vmaxq_s16(inB, vdupq_n_s16(0)), vdupq_n_s16(ActivationRangeScaling));
-
-        // load 8 16bit weights
-        const int16x8_t wA = vld1q_s16(weights + j);
-        const int16x8_t wB = vld1q_s16(weights + j + AccumulatorSize);
-
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(wA), vget_low_s16(inA)));
-        sumB = vaddq_s32(sumB, vmull_high_s16(wA, inA));
-        sumC = vaddq_s32(sumC, vmull_s16(vget_low_s16(wB), vget_low_s16(inB)));
-        sumD = vaddq_s32(sumD, vmull_high_s16(wB, inB));
-    }
-
-    // add int32s horizontally
-    val += vaddvq_s32(vaddq_s32(vaddq_s32(sumA, sumB), vaddq_s32(sumC, sumD)));
-
+    for (uint32_t j = 0; j < AccumulatorSize; j += 8)
+        vst1_u8(output + j, vqmovun_s16(vld1q_s16(stm + j)));
+    for (uint32_t j = 0; j < AccumulatorSize; j += 8)
+        vst1_u8(output + AccumulatorSize + j, vqmovun_s16(vld1q_s16(nstm + j)));
 #else
-    for (uint32_t i = 0; i < AccumulatorSize; ++i)
+    for (uint32_t j = 0; j < AccumulatorSize; ++j)
+        output[j]                   = (uint8_t)std::clamp<int16_t>(stm[j],  0, 255);
+    for (uint32_t j = 0; j < AccumulatorSize; ++j)
+        output[j + AccumulatorSize] = (uint8_t)std::clamp<int16_t>(nstm[j], 0, 255);
+#endif
+}
+
+// L1: uint8[2*AccumulatorSize] × int8[L1Size × 2*AccumulatorSize] → uint8[L1Size]
+// Weights layout: row-major output-first: weights[out * 2*AccumulatorSize + in]
+// Bias scale = QA*QB = 16320; after shift >>QB: output = clamp(sum>>6, 0, 255)
+INLINE static void LinearLayer_L1(
+    uint8_t* output,
+    const uint8_t* input,
+    const HiddenLayerWeightType* weights,
+    const HiddenLayerBiasType* biases)
+{
+    static_assert(L1Size % 4 == 0, "L1Size must be divisible by 4 for SIMD");
+    constexpr uint32_t InputSize = 2 * AccumulatorSize; // 2048
+
+#if defined(NN_USE_AVX2)
+    constexpr uint32_t RegW = 32;
+    constexpr uint32_t NumChunks = InputSize / RegW; // 64
+
+    alignas(16) int32_t int32_buf[L1Size];
+    for (uint32_t i = 0; i < L1Size; i += 4)
     {
-        const AccumulatorType in = std::clamp<AccumulatorType>(inputA[i], 0, ActivationRangeScaling);
-        val += (int32_t)in * (int32_t)weights[i];
+        __m256i sum0 = _mm256_setzero_si256();
+        __m256i sum1 = _mm256_setzero_si256();
+        __m256i sum2 = _mm256_setzero_si256();
+        __m256i sum3 = _mm256_setzero_si256();
+
+        const HiddenLayerWeightType* w0 = weights + (i + 0) * InputSize;
+        const HiddenLayerWeightType* w1 = weights + (i + 1) * InputSize;
+        const HiddenLayerWeightType* w2 = weights + (i + 2) * InputSize;
+        const HiddenLayerWeightType* w3 = weights + (i + 3) * InputSize;
+
+        for (uint32_t j = 0; j < NumChunks; ++j)
+        {
+            const __m256i in = _mm256_load_si256(reinterpret_cast<const __m256i*>(input + j * RegW));
+            m256_add_dpbusd_epi32(sum0, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(w0 + j * RegW)));
+            m256_add_dpbusd_epi32(sum1, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(w1 + j * RegW)));
+            m256_add_dpbusd_epi32(sum2, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(w2 + j * RegW)));
+            m256_add_dpbusd_epi32(sum3, in, _mm256_load_si256(reinterpret_cast<const __m256i*>(w3 + j * RegW)));
+        }
+
+        const __m128i bias = _mm_load_si128(reinterpret_cast<const __m128i*>(biases + i));
+        __m128i outval = m256_haddx4(sum0, sum1, sum2, sum3, bias);
+        outval = _mm_srai_epi32(outval, HiddenWeightScaleShift); // >>6
+        _mm_store_si128(reinterpret_cast<__m128i*>(int32_buf + i), outval);
     }
-    for (uint32_t i = 0; i < AccumulatorSize; ++i)
+    // Pack int32 → uint8 with CReLU clamp [0,255]
+    for (uint32_t k = 0; k < L1Size; ++k)
+        output[k] = (uint8_t)std::clamp(int32_buf[k], 0, 255);
+
+#elif defined(NN_USE_AVX512)
+    constexpr uint32_t RegW = 64;
+    constexpr uint32_t NumChunks = InputSize / RegW; // 32
+
+    alignas(16) int32_t int32_buf[L1Size];
+    for (uint32_t i = 0; i < L1Size; i += 4)
     {
-        const AccumulatorType in = std::clamp<AccumulatorType>(inputB[i], 0, ActivationRangeScaling);
-        val += (int32_t)in * (int32_t)weights[i + AccumulatorSize];
+        __m512i sum0 = _mm512_setzero_si512();
+        __m512i sum1 = _mm512_setzero_si512();
+        __m512i sum2 = _mm512_setzero_si512();
+        __m512i sum3 = _mm512_setzero_si512();
+
+        const HiddenLayerWeightType* w0 = weights + (i + 0) * InputSize;
+        const HiddenLayerWeightType* w1 = weights + (i + 1) * InputSize;
+        const HiddenLayerWeightType* w2 = weights + (i + 2) * InputSize;
+        const HiddenLayerWeightType* w3 = weights + (i + 3) * InputSize;
+
+        for (uint32_t j = 0; j < NumChunks; ++j)
+        {
+            const __m512i in = _mm512_load_si512(reinterpret_cast<const __m512i*>(input + j * RegW));
+            m512_add_dpbusd_epi32(sum0, in, _mm512_load_si512(reinterpret_cast<const __m512i*>(w0 + j * RegW)));
+            m512_add_dpbusd_epi32(sum1, in, _mm512_load_si512(reinterpret_cast<const __m512i*>(w1 + j * RegW)));
+            m512_add_dpbusd_epi32(sum2, in, _mm512_load_si512(reinterpret_cast<const __m512i*>(w2 + j * RegW)));
+            m512_add_dpbusd_epi32(sum3, in, _mm512_load_si512(reinterpret_cast<const __m512i*>(w3 + j * RegW)));
+        }
+
+        int32_buf[i + 0] = std::clamp(m512_hadd(sum0) + biases[i + 0], 0, 65536) >> HiddenWeightScaleShift;
+        int32_buf[i + 1] = std::clamp(m512_hadd(sum1) + biases[i + 1], 0, 65536) >> HiddenWeightScaleShift;
+        int32_buf[i + 2] = std::clamp(m512_hadd(sum2) + biases[i + 2], 0, 65536) >> HiddenWeightScaleShift;
+        int32_buf[i + 3] = std::clamp(m512_hadd(sum3) + biases[i + 3], 0, 65536) >> HiddenWeightScaleShift;
+    }
+    for (uint32_t k = 0; k < L1Size; ++k)
+        output[k] = (uint8_t)std::clamp(int32_buf[k], 0, 255);
+
+#else // scalar / SSE4 / NEON
+    for (uint32_t i = 0; i < L1Size; ++i)
+    {
+        int32_t sum = biases[i];
+        for (uint32_t j = 0; j < InputSize; ++j)
+            sum += (int32_t)input[j] * (int32_t)weights[i * InputSize + j];
+        output[i] = (uint8_t)std::clamp(sum >> HiddenWeightScaleShift, 0, 255);
     }
 #endif
+}
 
-    return val;
+// L2: uint8[L1Size] × int8[L2Size × L1Size] → uint8[L2Size]
+// Same quantization as L1 (QA*QB bias, >>QB shift, clamp to uint8)
+INLINE static void LinearLayer_L2(
+    uint8_t* output,
+    const uint8_t* input,
+    const HiddenLayerWeightType* weights,
+    const HiddenLayerBiasType* biases)
+{
+    for (uint32_t i = 0; i < L2Size; ++i)
+    {
+        int32_t sum = biases[i];
+        for (uint32_t j = 0; j < L1Size; ++j)
+            sum += (int32_t)input[j] * (int32_t)weights[i * L1Size + j];
+        output[i] = (uint8_t)std::clamp(sum >> HiddenWeightScaleShift, 0, 255);
+    }
+}
+
+// L3: uint8[L2Size] × int16[L2Size] → int32 (no activation; divided by evaluator later)
+INLINE static int32_t LinearLayer_L3(
+    const uint8_t* input,
+    const LastLayerWeightType* weights,
+    const LastLayerBiasType* bias)
+{
+    int32_t sum = *bias;
+    for (uint32_t j = 0; j < L2Size; ++j)
+        sum += (int32_t)input[j] * (int32_t)weights[j];
+    return sum;
 }
 
 ///
 
 PackedNeuralNetwork::PackedNeuralNetwork()
 {
-    header.magic = MagicNumber;
+    header.magic   = MagicNumber;
     header.version = CurrentVersion;
-
-    header.layerSizes[0] = NumNetworkInputs;
-    header.layerSizes[1] = 2u * AccumulatorSize;
-    header.layerSizes[2] = 0;
-    header.layerSizes[3] = 0;
-
-    header.layerVariants[0] = 1;
-    header.layerVariants[1] = 8;
-    header.layerVariants[2] = 0;
-    header.layerVariants[3] = 0;
 }
 
 bool PackedNeuralNetwork::SaveToFile(const char* filePath) const
@@ -257,11 +339,23 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
 
 int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const
 {
-    return LinearLayer_Accum_SingleOutput(
-        lastLayerVariants[variant].weights,
-        &lastLayerVariants[variant].bias,
-        stmAccum.values,
-        nstmAccum.values);
+    ASSERT(variant < NumVariants);
+    const OutputSubnetVariant& subnet = outputSubnetVariants[variant];
+
+    // Stage 1: FT CReLU → uint8[2*AccumulatorSize]
+    alignas(CACHELINE_SIZE) uint8_t l1Input[2 * AccumulatorSize];
+    FT_CReLU_Pack(l1Input, stmAccum.values, nstmAccum.values);
+
+    // Stage 2: L1
+    alignas(16) uint8_t l2Input[L1Size];
+    LinearLayer_L1(l2Input, l1Input, subnet.l1Weights, subnet.l1Biases);
+
+    // Stage 3: L2
+    alignas(16) uint8_t l3Input[L2Size];
+    LinearLayer_L2(l3Input, l2Input, subnet.l2Weights, subnet.l2Biases);
+
+    // Stage 4: L3 (no activation; output scaled by QA*QB3 = 262144)
+    return LinearLayer_L3(l3Input, subnet.l3Weights, &subnet.l3Bias);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const
