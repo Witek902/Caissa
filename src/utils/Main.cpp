@@ -18,6 +18,7 @@ extern bool TestNetwork();
 extern bool TrainNetwork();
 extern void ValidateEndgame();
 extern void AnalyzeGames();
+extern void FindMagics();
 
 #ifdef USE_CUDA
 extern bool TrainCudaNetwork();
@@ -81,6 +82,8 @@ int main(int argc, const char* argv[])
         AnalyzeGames();
     else if (toolName == "trainNetwork")
         TrainNetwork();
+    else if (toolName == "findMagics")
+        FindMagics();
 #ifdef USE_CUDA
     else if (toolName == "trainCudaNetwork")
         TrainCudaNetwork();

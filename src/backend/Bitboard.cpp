@@ -4,14 +4,17 @@
 static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
-static Bitboard gRookAttacksMasks[Square::NumSquares];
-static Bitboard gBishopAttacksMasks[Square::NumSquares];
 static Bitboard gRookAttacksBitboard[Square::NumSquares];
 static Bitboard gBishopAttacksBitboard[Square::NumSquares];
 static Bitboard gRaysBitboard[Square::NumSquares][8];
 static Bitboard gBetweenBitboards[Square::NumSquares][Square::NumSquares];
 
 #ifdef USE_BMI2
+#define USE_PEXT_ATTACKS
+#endif // USE_BMI2
+
+
+#ifdef USE_PEXT_ATTACKS
 
 struct AttackData
 {
@@ -29,71 +32,171 @@ static Bitboard gBishopAttackTable[cBishopAttackTableSize];
 
 #else
 
-static const uint64_t cRookMagics[Square::NumSquares] =
+struct MagicData
 {
-    0xa8002c000108020ULL, 0x6c00049b0002001ULL, 0x100200010090040ULL, 0x2480041000800801ULL, 0x280028004000800ULL,
-    0x900410008040022ULL, 0x280020001001080ULL, 0x2880002041000080ULL, 0xa000800080400034ULL, 0x4808020004000ULL,
-    0x2290802004801000ULL, 0x411000d00100020ULL, 0x402800800040080ULL, 0xb000401004208ULL, 0x2409000100040200ULL,
-    0x1002100004082ULL, 0x22878001e24000ULL, 0x1090810021004010ULL, 0x801030040200012ULL, 0x500808008001000ULL,
-    0xa08018014000880ULL, 0x8000808004000200ULL, 0x201008080010200ULL, 0x801020000441091ULL, 0x800080204005ULL,
-    0x1040200040100048ULL, 0x120200402082ULL, 0xd14880480100080ULL, 0x12040280080080ULL, 0x100040080020080ULL,
-    0x9020010080800200ULL, 0x813241200148449ULL, 0x491604001800080ULL, 0x100401000402001ULL, 0x4820010021001040ULL,
-    0x400402202000812ULL, 0x209009005000802ULL, 0x810800601800400ULL, 0x4301083214000150ULL, 0x204026458e001401ULL,
-    0x40204000808000ULL, 0x8001008040010020ULL, 0x8410820820420010ULL, 0x1003001000090020ULL, 0x804040008008080ULL,
-    0x12000810020004ULL, 0x1000100200040208ULL, 0x430000a044020001ULL, 0x280009023410300ULL, 0xe0100040002240ULL,
-    0x200100401700ULL, 0x2244100408008080ULL, 0x8000400801980ULL, 0x2000810040200ULL, 0x8010100228810400ULL,
-    0x2000009044210200ULL, 0x4080008040102101ULL, 0x40002080411d01ULL, 0x2005524060000901ULL, 0x502001008400422ULL,
-    0x489a000810200402ULL, 0x1004400080a13ULL, 0x4000011008020084ULL, 0x26002114058042ULL
+    uint64_t mask;   // magic mask (relevant occupancy bits)
+    uint64_t magic;  // magic 64-bit multiplier
+    uint32_t shift;  // shift right value (= 64 - index bits)
+    uint32_t offset; // offset into the flat attack table
 };
 
-static const uint8_t cRookMagicOffsets[Square::NumSquares] =
+static MagicData gRookMagicData[Square::NumSquares] =
 {
-    52, 53, 53, 53, 53, 53, 53, 52,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    53, 54, 54, 54, 54, 54, 54, 53,
-    52, 53, 53, 53, 53, 53, 53, 52,
+    { 0, 0xf898020605feffffULL, 52, 0 }, // 0 - a1
+    { 0, 0xe72003d4544dffffULL, 53, 0 }, // 1 - b1
+    { 0, 0x860010a3231dfffeULL, 53, 0 }, // 2 - c1, 11 bits
+    { 0, 0xc6000b13534dffffULL, 54, 0 }, // 3 - d1, 11 bits -> 10 bits optimized
+    { 0, 0xea0002f2f15fffe8ULL, 53, 0 }, // 4 - e1, 11 bits
+    { 0, 0x8a0001797777ffa4ULL, 53, 0 }, // 5 - f1, 11 bits
+    { 0, 0x1c00169a9b2fffd8ULL, 54, 0 }, // 6 - g1, 11 bits -> 10 bits optimized
+    { 0, 0x4600009494a9fffbULL, 52, 0 }, // 7 - h1
+
+    { 0, 0x8099e00807fbfffcULL, 53, 0 }, // 8 - a2, 11 bits
+    { 0, 0x000ef0131327fffaULL, 54, 0 }, // 9 - b2, 10 bits
+    { 0, 0xcae2002cac99fffaULL, 55, 0 }, // 10 - c2, 10 bits -> 9 bits optimized
+    { 0, 0x003e0017574dfffdULL, 55, 0 }, // 11 - d2, 10 bits -> 9 bits optimized
+    { 0, 0x0472000b2b25ffffULL, 55, 0 }, // 12 - e2, 10 bits -> 9 bits optimized
+    { 0, 0xddb42003ef33dfffULL, 54, 0 }, // 13 - f2, 10 bits
+    { 0, 0xa0f92001617bfff3ULL, 54, 0 }, // 14 - g2, 10 bits
+    { 0, 0xf3a61000505bfff0ULL, 53, 0 }, // 15 - h2, 11 bits
+
+    { 0, 0x0022878001e24000ULL, 53, 0 }, // 16
+    { 0, 0x1090810021004010ULL, 54, 0 }, // 17
+    { 0, 0x0801030040200012ULL, 54, 0 }, // 18
+    { 0, 0x0500808008001000ULL, 54, 0 }, // 19
+    { 0, 0x0a08018014000880ULL, 54, 0 }, // 20
+    { 0, 0x8000808004000200ULL, 54, 0 }, // 21
+    { 0, 0x0201008080010200ULL, 54, 0 }, // 22
+    { 0, 0x0801020000441091ULL, 53, 0 }, // 23
+
+    { 0, 0x0000800080204005ULL, 53, 0 }, // 24
+    { 0, 0x1040200040100048ULL, 54, 0 }, // 25
+    { 0, 0x0000120200402082ULL, 54, 0 }, // 26
+    { 0, 0x0d14880480100080ULL, 54, 0 }, // 27
+    { 0, 0x0012040280080080ULL, 54, 0 }, // 28
+    { 0, 0x0100040080020080ULL, 54, 0 }, // 29
+    { 0, 0x9020010080800200ULL, 54, 0 }, // 30
+    { 0, 0x0813241200148449ULL, 53, 0 }, // 31
+
+    { 0, 0x0491604001800080ULL, 53, 0 }, // 32
+    { 0, 0x0100401000402001ULL, 54, 0 }, // 33
+    { 0, 0x4820010021001040ULL, 54, 0 }, // 34
+    { 0, 0x0400402202000812ULL, 54, 0 }, // 35
+    { 0, 0x0209009005000802ULL, 54, 0 }, // 36
+    { 0, 0x0810800601800400ULL, 54, 0 }, // 37
+    { 0, 0x4301083214000150ULL, 54, 0 }, // 38
+    { 0, 0x204026458e001401ULL, 53, 0 }, // 39
+
+    { 0, 0x0040204000808000ULL, 53, 0 }, // 40
+    { 0, 0x8001008040010020ULL, 54, 0 }, // 41
+    { 0, 0x8410820820420010ULL, 54, 0 }, // 42
+    { 0, 0x1003001000090020ULL, 54, 0 }, // 43
+    { 0, 0x0804040008008080ULL, 54, 0 }, // 44
+    { 0, 0x0012000810020004ULL, 54, 0 }, // 45
+    { 0, 0x1000100200040208ULL, 54, 0 }, // 46
+    { 0, 0x430000a044020001ULL, 53, 0 }, // 47
+
+    { 0, 0x05fffcfd0baee5a0ULL, 54, 0 }, // 48 - a7, 11 bits -> 10 bits optimized
+    { 0, 0xaafff77791519200ULL, 55, 0 }, // 49 - b7, 10 bits -> 9 bits optimized
+    { 0, 0x4fbffe95fead3200ULL, 55, 0 }, // 50 - c7, 10 bits -> 9 bits optimized
+    { 0, 0x1afffed5fece1a00ULL, 55, 0 }, // 51 - d7, 10 bits -> 9 bits optimized
+    { 0, 0xcd0fffe9ffe6ce00ULL, 55, 0 }, // 52 - f7, 10 bits -> 9 bits optimized
+    { 0, 0xca7fff75ff734600ULL, 55, 0 }, // 53 - f7, 10 bits -> 9 bits optimized
+    { 0, 0xee07ffd7d87058c0ULL, 55, 0 }, // 54 - g7, 10 bits -> 9 bits optimized
+    { 0, 0xfa23fff5f63c96a0ULL, 54, 0 }, // 55 - h7, 11 bits -> 10 bits optimized
+
+    { 0, 0x58ffff49ff3dc666ULL, 53, 0 }, // 56 - a8, 12 bits -> 11 bits optimized
+    { 0, 0x50fffe7e842f84c6ULL, 54, 0 }, // 57 - b8, 11 bits -> 10 bits optimized
+    { 0, 0xf9bfffb1ffaddce6ULL, 54, 0 }, // 58 - c8, 11 bits -> 10 bits optimized
+    { 0, 0x8d5fff31ff2fdbeaULL, 54, 0 }, // 59 - d8, 11 bits -> 10 bits optimized
+    { 0, 0x2d5ffff9fff6a9aeULL, 54, 0 }, // 60 - e8, 11 bits -> 10 bits optimized
+    { 0, 0x2007fffdfffe5b8aULL, 53, 0 }, // 61 - f8, 11 bits
+    { 0, 0x3793fff4b7f56564ULL, 54, 0 }, // 62 - g8, 11 bits -> 10 bits optimized
+    { 0, 0x0ef3fffd3bfd525aULL, 53, 0 }, // 63 - h8, 12 bits -> 11 bits optimized
 };
 
-const uint64_t cBishopMagics[Square::NumSquares] =
+static MagicData gBishopMagicData[Square::NumSquares] =
 {
-    0x89a1121896040240ULL, 0x2004844802002010ULL, 0x2068080051921000ULL, 0x62880a0220200808ULL, 0x4042004000000ULL,
-    0x100822020200011ULL, 0xc00444222012000aULL, 0x28808801216001ULL, 0x400492088408100ULL, 0x201c401040c0084ULL,
-    0x840800910a0010ULL, 0x82080240060ULL, 0x2000840504006000ULL, 0x30010c4108405004ULL, 0x1008005410080802ULL,
-    0x8144042209100900ULL, 0x208081020014400ULL, 0x4800201208ca00ULL, 0xf18140408012008ULL, 0x1004002802102001ULL,
-    0x841000820080811ULL, 0x40200200a42008ULL, 0x800054042000ULL, 0x88010400410c9000ULL, 0x520040470104290ULL,
-    0x1004040051500081ULL, 0x2002081833080021ULL, 0x400c00c010142ULL, 0x941408200c002000ULL, 0x658810000806011ULL,
-    0x188071040440a00ULL, 0x4800404002011c00ULL, 0x104442040404200ULL, 0x511080202091021ULL, 0x4022401120400ULL,
-    0x80c0040400080120ULL, 0x8040010040820802ULL, 0x480810700020090ULL, 0x102008e00040242ULL, 0x809005202050100ULL,
-    0x8002024220104080ULL, 0x431008804142000ULL, 0x19001802081400ULL, 0x200014208040080ULL, 0x3308082008200100ULL,
-    0x41010500040c020ULL, 0x4012020c04210308ULL, 0x208220a202004080ULL, 0x111040120082000ULL, 0x6803040141280a00ULL,
-    0x2101004202410000ULL, 0x8200000041108022ULL, 0x21082088000ULL, 0x2410204010040ULL, 0x40100400809000ULL,
-    0x822088220820214ULL, 0x40808090012004ULL, 0x910224040218c9ULL, 0x402814422015008ULL, 0x90014004842410ULL,
-    0x1000042304105ULL, 0x10008830412a00ULL, 0x2520081090008908ULL, 0x40102000a0a60140ULL,
+    { 0, 0x09d64908cc8407ffULL, 59, 0 }, // 0 - a1, 6 bits -> 5 bits optimized
+    { 0, 0x021b2781e917fd11ULL, 60, 0 }, // 1 - b1, 5 bits -> 4 bits optimized
+    { 0, 0x3ce8453a77fcb215ULL, 59, 0 }, // 2 - c1, 5 bits
+    { 0, 0xba482053fab49c54ULL, 59, 0 }, // 3 - d1, 5 bits
+    { 0, 0x00038ee0c0110280ULL, 59, 0 }, // 4 - e1
+    { 0, 0x0100822020200011ULL, 59, 0 }, // 5 - f1
+    { 0, 0x2444112a53ff0218ULL, 60, 0 }, // 6 - g1, 5 bits -> 4 bits optimized
+    { 0, 0x641100580589ff04ULL, 59, 0 }, // 7 - h1, 6 bits -> 5 bits optimized
+
+    { 0, 0x080c3406a662c7f3ULL, 60, 0 }, // 8 - a2, 5 bits -> 4 bits optimized
+    { 0, 0x1288ea531218c3fcULL, 60, 0 }, // 9 - b2, 5 bits -> 4 bits optimized
+    { 0, 0xb651e45b3573fbe4ULL, 59, 0 }, // 10
+    { 0, 0x0000082080240060ULL, 59, 0 }, // 11
+    { 0, 0x2000840504006000ULL, 59, 0 }, // 12
+    { 0, 0x30010c4108405004ULL, 59, 0 }, // 13
+    { 0, 0x03107352a620ff8cULL, 60, 0 }, // 14 - g2, 5 bits -> 4 bits optimized
+    { 0, 0x0c2022232b157fc0ULL, 60, 0 }, // 15 - h2, 5 bits -> 4 bits optimized
+
+    { 0, 0x0240080b96096fe2ULL, 60, 0 }, // 16 - a3, 5 bits -> 4 bits optimized
+    { 0, 0x0020028619dd67e0ULL, 60, 0 }, // 17 - b3, 5 bits -> 4 bits optimized
+    { 0, 0x34700187143a27ffULL, 57, 0 }, // 18 - c3
+    { 0, 0x1004002802102001ULL, 57, 0 }, // 19
+    { 0, 0x0841000820080811ULL, 57, 0 }, // 20
+    { 0, 0x0040200200a42008ULL, 57, 0 }, // 21
+    { 0, 0x00740400a589bfa1ULL, 60, 0 }, // 22 - g3, 5 bits -> 4 bits optimized
+    { 0, 0x8a2a012662753fd0ULL, 60, 0 }, // 23 - h3, 5 bits -> 4 bits optimized
+
+    { 0, 0x0520040470104290ULL, 59, 0 }, // 24
+    { 0, 0x1004040051500081ULL, 59, 0 }, // 25
+    { 0, 0x2002081833080021ULL, 57, 0 }, // 26
+    { 0, 0x100300c10400c200ULL, 55, 0 }, // 27
+    { 0, 0x0009040086006104ULL, 55, 0 }, // 28
+    { 0, 0x0658810000806011ULL, 57, 0 }, // 29
+    { 0, 0x0188071040440a00ULL, 59, 0 }, // 30
+    { 0, 0x4800404002011c00ULL, 59, 0 }, // 31
+
+    { 0, 0x0104442040404200ULL, 59, 0 }, // 32
+    { 0, 0x0511080202091021ULL, 59, 0 }, // 33
+    { 0, 0x0004022401120400ULL, 57, 0 }, // 34
+    { 0, 0x80c0040400080120ULL, 55, 0 }, // 35
+    { 0, 0x8040010040820802ULL, 55, 0 }, // 36
+    { 0, 0x0480810700020090ULL, 57, 0 }, // 37
+    { 0, 0x0102008e00040242ULL, 59, 0 }, // 38
+    { 0, 0x0809005202050100ULL, 59, 0 }, // 39
+
+    { 0, 0x100fe54d35204045ULL, 60, 0 }, // 40 - a6, 5 bits -> 4 bits optimized
+    { 0, 0x4a67f3255a18e020ULL, 60, 0 }, // 41 - b6, 5 bits -> 4 bits optimized
+    { 0, 0x0019001802081400ULL, 57, 0 }, // 42
+    { 0, 0x0200014208040080ULL, 57, 0 }, // 43
+    { 0, 0x3308082008200100ULL, 57, 0 }, // 44
+    { 0, 0x041010500040c020ULL, 57, 0 }, // 45
+    { 0, 0x0a3fa632476a8407ULL, 60, 0 }, // 46 - g6, 5 bits -> 4 bits optimized
+    { 0, 0x021fb54274512202ULL, 60, 0 }, // 47 - h6, 5 bits -> 4 bits optimized
+
+    { 0, 0x981ff28c8c8c8055ULL, 60, 0 }, // 48 - a7, 5 bits -> 4 bits optimized
+    { 0, 0x8b0ffe8c94868049ULL, 60, 0 }, // 49 - b7, 5 bits -> 4 bits optimized
+    { 0, 0x2101004202410000ULL, 59, 0 }, // 50
+    { 0, 0x8200000041108022ULL, 59, 0 }, // 51
+    { 0, 0x0000021082088000ULL, 59, 0 }, // 52
+    { 0, 0x0002410204010040ULL, 59, 0 }, // 53
+    { 0, 0xa37f23f28450a84bULL, 60, 0 }, // 54 - g7, 5 bits -> 4 bits optimized
+    { 0, 0x00ff86a2e2e06100ULL, 60, 0 }, // 55 - h7, 5 bits -> 4 bits optimized
+
+    { 0, 0x1613ff34100b0540ULL, 59, 0 }, // 56 - a8, 6 bits -> 5 bits optimized
+    { 0, 0x68190bfe9809c511ULL, 60, 0 }, // 57 - b8, 5 bits -> 4 bits optimized
+    { 0, 0x0402814422015008ULL, 59, 0 }, // 58
+    { 0, 0x0090014004842410ULL, 59, 0 }, // 59
+    { 0, 0x0001000042304105ULL, 59, 0 }, // 60
+    { 0, 0x0010008830412a00ULL, 59, 0 }, // 61
+    { 0, 0x9072ffa33264c2c4ULL, 60, 0 }, // 62 - g8, 5 bits -> 4 bits optimized
+    { 0, 0x10ffa630030ca639ULL, 59, 0 }, // 63 - h8, 6 bits -> 5 bits optimized
 };
 
-const uint8_t cBishopMagicOffsets[Square::NumSquares] =
-{
-    58, 59, 59, 59, 59, 59, 59, 58,
-    59, 59, 59, 59, 59, 59, 59, 59,
-    59, 59, 57, 57, 57, 57, 59, 59,
-    59, 59, 57, 55, 55, 57, 59, 59,
-    59, 59, 57, 55, 55, 57, 59, 59,
-    59, 59, 57, 57, 57, 57, 59, 59,
-    59, 59, 59, 59, 59, 59, 59, 59,
-    58, 59, 59, 59, 59, 59, 59, 58,
-};
+static constexpr uint32_t cRookAttackTableSize = 84480;
+static constexpr uint32_t cBishopAttackTableSize = 4800;
 
-static const uint32_t RookAttackTableSize = 4096;
-static uint64_t gRookAttackTable[Square::NumSquares][RookAttackTableSize];
+static Bitboard gRookAttackTable[cRookAttackTableSize];
+static Bitboard gBishopAttackTable[cBishopAttackTableSize];
 
-static const uint32_t BishopAttackTableSize = 512;
-static uint64_t gBishopAttackTable[Square::NumSquares][BishopAttackTableSize];
-
-#endif // USE_BMI2
+#endif // USE_PEXT_ATTACKS
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -201,34 +304,28 @@ Bitboard Bitboard::GetQueenAttacks(const Square square)
 
 Bitboard Bitboard::GenerateRookAttacks(const Square square, const Bitboard blockers)
 {
-#ifdef USE_BMI2
+#ifdef USE_PEXT_ATTACKS
     const AttackData& data = gRookAttacksData[square.Index()];
     const uint32_t index = static_cast<uint32_t>(ParallelBitsExtract(blockers, data.mask));
     return gRookAttackTable[data.offset + index];
-    //return ParallelBitsDeposit(gRookAttackTable[data.offset + index], data.dstMask);
 #else
-    uint64_t b = blockers;
-    b &= gRookAttacksMasks[square.Index()];
-    b *= cRookMagics[square.Index()];
-    b >>= cRookMagicOffsets[square.Index()];
-    return gRookAttackTable[square.Index()][b];
-#endif // USE_BMI2
+    const MagicData& md = gRookMagicData[square.Index()];
+    const uint32_t index = static_cast<uint32_t>(((blockers.value & md.mask) * md.magic) >> md.shift);
+    return gRookAttackTable[md.offset + index];
+#endif // USE_PEXT_ATTACKS
 }
 
 Bitboard Bitboard::GenerateBishopAttacks(const Square square, const Bitboard blockers)
 {
-#ifdef USE_BMI2
+#ifdef USE_PEXT_ATTACKS
     const AttackData& data = gBishopAttacksData[square.Index()];
     const uint32_t index = static_cast<uint32_t>(ParallelBitsExtract(blockers, data.mask));
     return gBishopAttackTable[data.offset + index];
-    //return ParallelBitsDeposit(gBishopAttackTable[data.offset + index], data.dstMask);
 #else
-    uint64_t b = blockers;
-    b &= gBishopAttacksMasks[square.Index()];
-    b *= cBishopMagics[square.Index()];
-    b >>= cBishopMagicOffsets[square.Index()];
-    return gBishopAttackTable[square.Index()][b];
-#endif // USE_BMI2
+    const MagicData& md = gBishopMagicData[square.Index()];
+    const uint32_t index = static_cast<uint32_t>(((blockers.value & md.mask) * md.magic) >> md.shift);
+    return gBishopAttackTable[md.offset + index];
+#endif // USE_PEXT_ATTACKS
 }
 
 Bitboard Bitboard::GenerateQueenAttacks(const Square square, const Bitboard blockers)
@@ -459,9 +556,7 @@ static Bitboard GetBishopAttackMask(const Square square)
 
 static void InitRookAttacks()
 {
-#ifdef USE_BMI2
     uint32_t tableSize = 0;
-#endif // USE_BMI2
 
     for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
     {
@@ -473,13 +568,12 @@ static void InitRookAttacks()
 
         const Bitboard attackMask = GetRookAttackMask(square);
 
-        gRookAttacksMasks[squareIndex] = attackMask;
-
         // compute number of possible occluder layouts
         const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
 
-#ifdef USE_BMI2
+#ifdef USE_PEXT_ATTACKS
+
         gRookAttacksData[squareIndex].mask = attackMask;
         gRookAttacksData[squareIndex].offset = tableSize;
 
@@ -492,9 +586,13 @@ static void InitRookAttacks()
 
         tableSize += numBlockerSets;
 
-#else // !USE_BMI2
-        const uint64_t magic = cRookMagics[squareIndex];
-        const uint64_t shift = cRookMagicOffsets[squareIndex];
+#else // !USE_PEXT_ATTACKS
+
+        gRookMagicData[squareIndex].mask   = attackMask;
+        gRookMagicData[squareIndex].offset = tableSize;
+        const uint64_t magic = gRookMagicData[squareIndex].magic;
+        const uint32_t shift = gRookMagicData[squareIndex].shift;
+        const uint32_t squareTableSize = 1u << (64u - shift);
 
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
@@ -502,35 +600,37 @@ static void InitRookAttacks()
             const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
-            ASSERT(tableIndex < RookAttackTableSize);
-            gRookAttackTable[squareIndex][tableIndex] = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
+            ASSERT(tableIndex < squareTableSize);
+            gRookAttackTable[tableSize + tableIndex] = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
         }
 
 #ifndef CONFIGURATION_FINAL
-        // validate
+        // validate (there must be no collisions)
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
             const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             const Bitboard expected = Bitboard::GenerateRookAttacks_Slow(square, blockerBitboard);
-            ASSERT(gRookAttackTable[squareIndex][tableIndex] == expected);
+            ASSERT(gRookAttackTable[tableSize + tableIndex] == expected);
             ASSERT(Bitboard::GenerateRookAttacks(square, blockerBitboard) == expected);
         }
 #endif // CONFIGURATION_FINAL
 
-#endif // USE_BMI2
+        tableSize += squareTableSize;
+
+#endif // USE_PEXT_ATTACKS
     }
 
-#ifdef USE_BMI2
+#ifndef CONFIGURATION_FINAL
+    std::cout << "Rook attack table size: " << tableSize << " entries (" << (tableSize * sizeof(Bitboard)) / 1024 << " KB)" << std::endl;
+#endif // CONFIGURATION_FINAL
+
     ASSERT(tableSize == cRookAttackTableSize);
-#endif // USE_BMI2
 }
 
 static void InitBishopAttacks()
 {
-#ifdef USE_BMI2
     uint32_t tableSize = 0;
-#endif // USE_BMI2
 
     for (uint32_t squareIndex = 0; squareIndex < Square::NumSquares; ++squareIndex)
     {
@@ -543,13 +643,13 @@ static void InitBishopAttacks()
             Bitboard::GetRay(square, Direction::SouthWest);
 
         const Bitboard attackMask = GetBishopAttackMask(square);
-        gBishopAttacksMasks[squareIndex] = attackMask;
 
         // compute number of possible occluder layouts
         const uint32_t attackMaskBits = PopCount(attackMask);
         const uint32_t numBlockerSets = 1 << attackMaskBits;
 
-#ifdef USE_BMI2
+#ifdef USE_PEXT_ATTACKS
+
         gBishopAttacksData[squareIndex].mask = attackMask;
         gBishopAttacksData[squareIndex].offset = tableSize;
 
@@ -562,9 +662,13 @@ static void InitBishopAttacks()
 
         tableSize += numBlockerSets;
 
-#else // !USE_BMI2
-        const uint64_t magic = cBishopMagics[squareIndex];
-        const uint64_t shift = cBishopMagicOffsets[squareIndex];
+#else // !USE_PEXT_ATTACKS
+
+        gBishopMagicData[squareIndex].mask   = attackMask;
+        gBishopMagicData[squareIndex].offset = tableSize;
+        const uint64_t magic = gBishopMagicData[squareIndex].magic;
+        const uint32_t shift = gBishopMagicData[squareIndex].shift;
+        const uint32_t squareTableSize = 1u << (64u - shift);
 
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
@@ -572,28 +676,32 @@ static void InitBishopAttacks()
             const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
 
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
-            ASSERT(tableIndex < BishopAttackTableSize);
-            gBishopAttackTable[squareIndex][tableIndex] = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
+            ASSERT(tableIndex < squareTableSize);
+            gBishopAttackTable[tableSize + tableIndex] = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
         }
 
 #ifndef CONFIGURATION_FINAL
-        // validate
+        // validate (there must be no collisions)
         for (uint32_t blockersIndex = 0; blockersIndex < numBlockerSets; ++blockersIndex)
         {
             const Bitboard blockerBitboard = ParallelBitsDeposit(static_cast<uint64_t>(blockersIndex + 1u), attackMask);
             const uint32_t tableIndex = static_cast<uint32_t>((blockerBitboard * magic) >> shift);
             const Bitboard expected = Bitboard::GenerateBishopAttacks_Slow(square, blockerBitboard);
-            ASSERT(gBishopAttackTable[squareIndex][tableIndex] == expected);
+            ASSERT(gBishopAttackTable[tableSize + tableIndex] == expected);
             ASSERT(Bitboard::GenerateBishopAttacks(square, blockerBitboard) == expected);
         }
 #endif // CONFIGURATION_FINAL
 
-#endif // USE_BMI2
+        tableSize += squareTableSize;
+
+#endif // USE_PEXT_ATTACKS
     }
 
-#ifdef USE_BMI2
+#ifndef CONFIGURATION_FINAL
+    std::cout << "Bishop attack table size: " << tableSize << " entries (" << (tableSize * sizeof(Bitboard)) / 1024 << " KB)" << std::endl;
+#endif // CONFIGURATION_FINAL
+
     ASSERT(tableSize == cBishopAttackTableSize);
-#endif // USE_BMI2
 }
 
 static void InitBetweenBitboards()
