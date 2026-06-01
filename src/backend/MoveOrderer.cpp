@@ -288,11 +288,25 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const Bitboard threats = node.threats.allThreats;
 
+    int32_t nonBestMoveIndex = 0;
     for (uint32_t i = 0; i < numMoves; ++i)
     {
         const Move move = moves[i];
-        const int32_t histDelta = move == bestMove ? histBonus : histMalus;
-        const int32_t contDelta = move == bestMove ? contBonus : contMalus;
+
+        int32_t histDelta, contDelta;
+        if (move == bestMove)
+        {
+            histDelta = histBonus;
+            contDelta = contBonus;
+        }
+        else
+        {
+            // First failed move gets full penalty, later ones get progressively less (idea from Reckless)
+            const int32_t denom = 1024 + 64 * nonBestMoveIndex++;
+            const int32_t scale = 1024 * 1024 / (denom * denom / 1024);
+            histDelta = histMalus * scale / 1024;
+            contDelta = contMalus * scale / 1024;
+        }
 
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
