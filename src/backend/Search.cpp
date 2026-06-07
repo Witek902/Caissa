@@ -1567,15 +1567,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
-            const int32_t rfpMargin =
+            const int32_t rfpMargin = std::max<int32_t>(RfpTreshold,
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
-                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
-            if (node->depth <= RfpDepth &&
-                eval <= KnownWinValue &&
-                eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
+                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats)));
+            if (node->depth <= RfpDepth && eval <= KnownWinValue && eval >= beta + rfpMargin)
             {
-                return (ScoreType)((eval * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
+                return (ScoreType)(((eval - rfpMargin) * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
             }
 
             // Razoring
