@@ -94,9 +94,7 @@ DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 51, 15, 100);
 DEFINE_PARAM(SingularExtTTDepthMargin, 3, 1, 6);
 DEFINE_PARAM(SingularExtPVBonus, 256, 64, 512);
-DEFINE_PARAM(SingularFailHighNegExt, 2, 1, 4);
-DEFINE_PARAM(SingularCutNodeNegExt, 2, 1, 4);
-DEFINE_PARAM(SingularTTAlphaNegExt, 1, 0, 3);
+DEFINE_PARAM(SingularNegExt, 3, 1, 4);
 
 DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
 DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
@@ -1852,13 +1850,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
                 else if (singularScore >= beta)
                     return (singularScore * singularDepth + beta) / (singularDepth + 1);
-                // otherwise, reduce the depth
-                else if (ttScore >= beta)
-                    extension = -SingularFailHighNegExt - !isPvNode;
-                else if (node->isCutNode)
-                    extension = -(int32_t)SingularCutNodeNegExt;
-                else if (ttScore <= alpha)
-                    extension = -(int32_t)SingularTTAlphaNegExt;
+                // negative extensions
+                else if (ttScore >= beta || node->isCutNode)
+                    extension = -(int32_t)SingularNegExt;
             }
             else if (isPvNode && move == ttMove && ttRecapture)
                 extension = 1; // recapture extension
