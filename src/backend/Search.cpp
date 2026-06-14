@@ -1743,9 +1743,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             quietMoveIndex++;
         }
 
-        if (!isRootNode &&
-            bestValue > -KnownWinValue &&
-            position.HasNonPawnMaterial(position.GetSideToMove()))
+        if (!isRootNode && bestValue > -KnownWinValue)
         {
             // Estimate the depth this move would be searched at after LMR.
             // Used in pruning thresholds so that late moves (which would be reduced anyway)

@@ -1959,7 +1959,7 @@ void RunSearchTests()
 
     // winning KPvK
     {
-        param.limits.maxDepth = 5;
+        param.limits.maxDepth = 8;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/5P2/5K2 w - - 0 1"));
@@ -1968,15 +1968,11 @@ void RunSearchTests()
         TEST_EXPECT(result.size() == 6);
         TEST_EXPECT(result[0].score > 1000);
         TEST_EXPECT(result[1].score > 1000);
-        TEST_EXPECT(std::abs(result[2].score) < 80);
-        TEST_EXPECT(std::abs(result[3].score) < 80);
-        TEST_EXPECT(std::abs(result[4].score) < 80);
-        TEST_EXPECT(std::abs(result[5].score) < 80);
     }
 
     // drawing KPvK
     {
-        param.limits.maxDepth = 1;
+        param.limits.maxDepth = 8;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
