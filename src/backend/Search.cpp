@@ -63,8 +63,9 @@ DEFINE_PARAM(SingularitySearchScoreStep, 24, 10, 50);
 DEFINE_PARAM(IIRStartDepth, 3, 2, 6);
 DEFINE_PARAM(IIRTTDepthMargin, 4, 2, 8);
 
-DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
-DEFINE_PARAM(NmpEvalTreshold, 16, 0, 40);
+DEFINE_PARAM(NmpEvalTresholdMax, 120, 0, 400);
+DEFINE_PARAM(NmpEvalTresholdMin, 2, 1, 10);
+DEFINE_PARAM(NmpDepthMul, 8, 1, 20);
 DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
 DEFINE_PARAM(NmpEvalRedDiv, 3, 2, 5);
 DEFINE_PARAM(NmpEvalDiffDiv, 85, 16, 512);
@@ -1591,9 +1592,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Null Move Pruning
             if (node->isCutNode &&
-                eval >= beta + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0) &&
-                node->staticEval >= beta &&
-                node->depth >= NmpStartDepth &&
+                eval >= beta + std::max<ScoreType>(NmpEvalTresholdMax - NmpDepthMul * node->depth, NmpEvalTresholdMin) &&
+                beta > -KnownWinValue &&
+                eval < KnownWinValue &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
             {
                 // don't allow null move if parent or grandparent node was null move
