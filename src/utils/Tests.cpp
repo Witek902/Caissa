@@ -40,6 +40,7 @@ using namespace threadpool;
 
 extern void RunGameTests();
 extern void RunPackedPositionTests();
+extern void RunPgnParserTests();
 
 static void RunBitboardTests()
 {
@@ -3087,6 +3088,7 @@ void RunUnitTests()
     RunEvalTests();
     RunPackedPositionTests();
     RunGameTests();
+    RunPgnParserTests();
     RunPerftTests();
     RunSearchTests();
 }
