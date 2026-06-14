@@ -40,27 +40,26 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 ### CCRL (Computer Chess Rating Lists)
 | List | Rating | Rank | Version | Notes |
 |------|--------|------|---------|-------|
-| [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) | **4022** | #6 | 1.23 | Fischer Random Chess |
+| [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) | **4027** | #8 | 1.24 | Fischer Random Chess |
 | [CCRL Chess324](https://www.computerchess.org.uk/ccrl/Chess324/rating_list_all.html) | **3770** | #6 | 1.23 | Chess324 variant |
-| [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | **3622** | #9 | 1.23 | 4 CPU |
-| [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) | **3755** | #10 | 1.22 | 8 CPU |
+| [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | **3623** | #13 | 1.23 | 4 CPU |
+| [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) | **3752** | #10 | 1.22 | 8 CPU |
 
-### SPCC (Schachprogramm-Computer-Chess)
+### SPCC (Stefan Pohl Computer Chess)
 | List | Rating | Rank | Version |
 |------|--------|------|---------|
-| [SPCC UHO-Top15](https://www.sp-cc.de) | **3697** | #10 | Caissa 1.24 avx512 |
+| [SPCC UHO-Top15](https://www.sp-cc.de) | **3700** | #13 | Caissa 1.25 avx512 |
 
 ### IpMan Chess
 | List | Rating | Rank | Version | Architecture |
 |------|--------|------|---------|--------------|
-| [10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) | **3542** | #16 | 1.24 | AVX-512 |
-| [10+1 (i9-7980XE)](https://ipmanchess.yolasite.com/i9-7980xe.php) | **3526** | #14 | 1.21 | AVX-512 |
-| [10+1 (i9-13700H)](https://ipmanchess.yolasite.com/i7-13700h.php) | **3544** | #17 | 1.22 | AVX2-BMI2 |
+| [10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) | **3532** | #18 | 1.25 | AVX-512 |
+| [10+1 (i9-13700H)](https://ipmanchess.yolasite.com/i7-13700h.php) | **3546** | #16 | 1.25 | AVX-512 |
 
 ### CEGT (Chess Engine Grand Tournament)
 | List | Rating | Rank | Version |
 |------|--------|------|---------|
-| [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) | **3576** | #8 | 1.24 |
+| [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) | **3570** | #12 | 1.25 |
 | [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) | **3614** | #8 | 1.22 |
 | [CEGT 5+3](http://www.cegt.net/5Plus3Rating/BestVersionsNEW/rangliste.html) | **3618** | #5 | 1.22 |
 
@@ -104,7 +103,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 ### Neural Network Trainer
 - **Custom CPU-based Trainer** using Adam algorithm
 - **Highly Optimized** - Exploits AVX instructions, multithreading, and network sparsity
-- **Self-Play Training** - Trained on 17+ billion positions from self-generated games
+- **Self-Play Training** - Trained on 20+ billion positions from self-generated games
 - **Progressive Training** - Older games purged, networks trained on latest engine versions
 
 ### Performance Optimizations
@@ -285,7 +284,7 @@ Caissa has been written **from the ground up** since early 2021. The development
 
 The engine's neural network has evolved significantly:
 - **Initial Network**: Based on Stockfish's architecture, trained on a few million positions
-- **Current Network** (v1.24+): Trained on **17+ billion positions** from self-play
+- **Current Network** (v1.25+): Trained on **20+ billion positions** from self-play
 - **Progressive Training**: Older games are purged, ensuring networks are trained only on the latest engine versions
 
 ### Key Components
