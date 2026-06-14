@@ -51,6 +51,8 @@ DEFINE_PARAM(MinorThreatEnterMalus, 4000, 2000, 12000);
 DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
 DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
+DEFINE_PARAM(GivesCheckBonus, 6000, 2000, 10000);
+
 DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 20000);
 
 
@@ -439,6 +441,12 @@ void MoveOrderer::ScoreMoves(
         {
             ASSERT((uint32_t)move.GetPromoteTo() >= (uint32_t)Piece::Knight && (uint32_t)move.GetPromoteTo() <= (uint32_t)Piece::Queen);
             score += PromotionValues[uint32_t(move.GetPromoteTo())];
+        }
+
+        // bonus for moves giving check
+        if (pos.GivesCheck_Approx(move))
+        {
+            score += GivesCheckBonus;
         }
 
         moves.entries[i].score = score;
