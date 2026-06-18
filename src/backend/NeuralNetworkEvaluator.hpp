@@ -96,8 +96,28 @@ INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bu
 
 INLINE uint8_t GetNetworkVariant(const Position& pos)
 {
-    const uint32_t numPieces = pos.GetNumPiecesExcludingKing();
-    return static_cast<uint8_t>(std::min(numPieces / 4u, nn::NumVariants - 1u));
+    // Non-linear bucket mapping (numPieces excluding kings):
+    // B0: 2-3,  B1: 4-5,  B2: 6-8,  B3: 9-11,  B4: 12-15,  B5: 16-20,  B6: 21-25,  B7: 26+
+    constexpr const uint8_t variantTable[63] =
+    {
+        0, 0,               // 0 and 1 are never used in neural network evaluation
+        0, 0,               // B0: 2-3
+        1, 1,               // B1: 4-5
+        2, 2, 2,            // B2: 6-8
+        3, 3, 3,            // B3: 9-11
+        4, 4, 4, 4,         // B4: 12-15
+        5, 5, 5, 5, 5,      // B5: 16-20
+        6, 6, 6, 6, 6,      // B6: 21-25
+        7, 7, 7, 7, 7,      // B7: 26+
+        7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7,
+        7, 7,
+    };
+    return variantTable[pos.GetNumPiecesExcludingKing()];
 }
 
 template<bool IncludePieceFeatures = false>
