@@ -110,27 +110,6 @@ void MoveOrderer::DebugPrint() const
     }
 
     std::cout << std::endl;
-    std::cout << "=== KILLER MOVE HEURISTICS ===" << std::endl;
-    {
-        uint32_t lastValidDepth = 0;
-        for (uint32_t d = 0; d < MaxSearchDepth; ++d)
-        {
-            if (killerMoves[d].IsValid())
-            {
-                lastValidDepth = std::max(lastValidDepth, d);
-            }
-        }
-
-        for (uint32_t d = 0; d < lastValidDepth; ++d)
-        {
-            std::cout << d;
-            std::cout << "\t" << killerMoves[d].ToString() << " ";
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
-
-    std::cout << std::endl;
     std::cout << "=== CAPTURE HISTORY ===" << std::endl;
 
     for (uint32_t piece = 0; piece < 6; ++piece)
@@ -187,8 +166,6 @@ void MoveOrderer::NewSearch()
 
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         reinterpret_cast<CounterType*>(capturesHistory)[i] /= scaleDownFactor;
-
-    memset(killerMoves, 0, sizeof(killerMoves));
 }
 
 static void ClearHistoryTable(MoveOrderer::CounterType* table, MoveOrderer::CounterType value, size_t size)
@@ -210,7 +187,6 @@ void MoveOrderer::Clear()
         static_cast<CounterType>(CapturesHistoryClear), sizeof(capturesHistory) / sizeof(CounterType));
 
     memset(counterMoves, 0, sizeof(counterMoves));
-    memset(killerMoves, 0, sizeof(killerMoves));
 }
 
 MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
@@ -394,9 +370,6 @@ void MoveOrderer::ScoreMoves(
         }
         else if (withQuiets) // non-capture
         {
-            // killer moves should be filtered by move picker
-            ASSERT(killerMoves[node.ply] != move);
-
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 

@@ -16,7 +16,6 @@ public:
         TTMove = 0,
         GenerateCaptures,
         Captures,
-        Killer,
         Counter,
         GenerateQuiets,
         PickQuiets,
@@ -60,7 +59,6 @@ private:
     const MoveOrderer& m_moveOrderer;
     uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
-    PackedMove m_killerMove;
     PackedMove m_counterMove;
 
     MoveList m_moves;

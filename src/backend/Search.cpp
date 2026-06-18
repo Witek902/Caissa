@@ -624,7 +624,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             printf("TT-move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.ttMoveBetaCutoffs, 100.0f * float(stats.ttMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Winning capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.winningCaptureCutoffs, 100.0f * float(stats.winningCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
-            printf("Killer move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.killerMoveBetaCutoffs, 100.0f * float(stats.killerMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Counter move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.counterMoveBetaCutoffs, 100.0f * float(stats.counterMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
             printf("Bad capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.badCaptureCutoffs, 100.0f * float(stats.badCaptureCutoffs) / float(stats.totalBetaCutoffs));
@@ -1397,9 +1396,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             return alpha;
     }
 
-    // clear killer moves for next ply
-    thread.moveOrderer.ClearKillerMoves(node->ply + 1);
-
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue; // fully adjusted eval
@@ -2065,7 +2061,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ctx.stats.totalBetaCutoffs++;
                 ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
                 if (moveScore == MoveOrderer::TTMoveValue) ctx.stats.ttMoveBetaCutoffs++;
-                else if (moveScore == MoveOrderer::KillerMoveBonus) ctx.stats.killerMoveBetaCutoffs++;
                 else if (moveScore == MoveOrderer::CounterMoveBonus) ctx.stats.counterMoveBetaCutoffs++;
                 else if (move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
                 else if (move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
@@ -2108,7 +2103,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (bestMove.IsQuiet())
         {
             thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, std::min(bestValue - beta, (int)QuietHistMaxScoreDiff));
-            thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
         }
         thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
