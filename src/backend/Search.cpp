@@ -141,7 +141,7 @@ DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
 DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 2, 0, 6);
 
 
-INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
+INLINE static int32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {
     return improving ?
         LateMovePruningBase + depth * depth :
@@ -1687,7 +1687,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     Move bestMove = Move::Invalid();
 
     uint32_t moveIndex = 0;
-    uint32_t quietMoveIndex = 0;
+    int32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
@@ -1757,7 +1757,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Late Move Pruning
                 // skip quiet moves that are far in the list
                 // the higher depth is, the less aggressive pruning is
-                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + LateMovePruningPVScale * isPvNode, isImproving))
+                if (quietMoveIndex >= GetLateMovePruningTreshold(node->depth + LateMovePruningPVScale * isPvNode, isImproving) + moveStatScore / 8192)
                 {
                     // if we're in quiets stage, skip everything
                     if (movePicker.GetStage() == MovePicker::Stage::PickQuiets) break;
