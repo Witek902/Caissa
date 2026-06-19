@@ -77,6 +77,9 @@ void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
     }
 
     m_weights.CopyFromHost(hostWeightsData.data(), hostWeightsData.size());
+
+    m_weightsRange = hostWeights.m_weightsRange;
+    m_biasRange = hostWeights.m_biasRange;
 }
 
 void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
@@ -99,14 +102,22 @@ void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
     }
 }
 
+inline __device__ __host__ float clamp(float f, float a, float b)
+{
+    return fmaxf(a, fminf(f, b));
+}
+
 // CUDA kernel for Adam weight updates
 __global__ void AdamUpdateKernel(
     float* weights,
     float* moment1,
     float* moment2,
     const float* gradients,
+    uint32_t inputSize,
     uint32_t numWeights,
     float learningRate,
+    float maxWeightRange,
+    float maxBiasRange,
     size_t iteration
 )
 {
@@ -117,6 +128,9 @@ __global__ void AdamUpdateKernel(
 
     const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numWeights) return;
+
+    // Last row is bias
+    const float maxWeightValue = (idx % (inputSize + 1) == inputSize) ? maxBiasRange : maxWeightRange;
 
     const float grad = static_cast<float>(gradients[idx]);
 
@@ -135,8 +149,8 @@ __global__ void AdamUpdateKernel(
     // Compute weight delta
     const float delta = learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
 
-    // Update weights
-    weights[idx] -= delta;
+    // Update weights with clamping
+    weights[idx] = clamp(weights[idx] - delta, -maxWeightValue, maxWeightValue);
 }
 
 void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, size_t iteration, cudaStream_t stream)
@@ -151,8 +165,11 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
         m_moment1.Get(),
         m_moment2.Get(),
         gradients,
+        m_inputSize,
         m_totalWeights,
         learningRate,
+        m_weightsRange,
+        m_biasRange,
         iteration
     );
     CUDA_CHECK(cudaGetLastError());

@@ -20,14 +20,15 @@ __device__ __forceinline__ float Sigmoid(float x)
     }
 }
 
-__device__ __forceinline__ float CReLU(float x)
+__device__ __forceinline__ float SCReLU(float x)
 {
-    return fminf(1.0f, fmaxf(0.0f, x));
+    const float y = fminf(1.0f, fmaxf(0.0f, x));
+    return y * y;
 }
 
-__device__ __forceinline__ float CReLUDerivative(float x)
+__device__ __forceinline__ float SCReLUDerivative(float x)
 {
-    return (x > 0.0f && x < 1.0f) ? 1.0f : 0.0f;
+    return (x > 0.0f && x < 1.0f) ? (2.0f * x) : 0.0f;
 }
 
 CudaNeuralNetwork::CudaNeuralNetwork() = default;
@@ -138,7 +139,7 @@ __global__ void FullyConnectedKernel(
     float sum = weights[weightsOffset + inputSize];
     for (uint32_t i = 0; i < inputSize; ++i)
     {
-        sum += CReLU(inputs[batchIdx * inputSize + i]) * weights[weightsOffset + i];
+        sum += SCReLU(inputs[batchIdx * inputSize + i]) * weights[weightsOffset + i];
     }
 
     outputs[batchIdx] = sum;
@@ -266,7 +267,7 @@ __global__ void LastLayerGradientsKernel(
         {
             const TrainingEntry* trainingVector = trainingVectors + batchIdx;
             if (trainingVector->variant != variantIdx) continue;
-            gradient += CReLU(accumulatorBuffer[batchIdx * inputSize + inputIdx]) * outputErrors[batchIdx];
+            gradient += SCReLU(accumulatorBuffer[batchIdx * inputSize + inputIdx]) * outputErrors[batchIdx];
         }
         weightGradients[weightsOffset + inputIdx] = gradient;
     }
@@ -304,7 +305,7 @@ __global__ void BackpropToCReLUKernel(
     const float w = weights[weightsOffset + inputIdx];
     const float x = creluInputs[batchIdx * inputSize + inputIdx];
 
-    creluErrors[batchIdx * inputSize + inputIdx] = error * w * CReLUDerivative(x);
+    creluErrors[batchIdx * inputSize + inputIdx] = error * w * SCReLUDerivative(x);
 }
 
 __global__ void FeatureTransformerGradientsKernel(

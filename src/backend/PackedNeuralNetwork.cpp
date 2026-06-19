@@ -57,7 +57,7 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
     const LastLayerWeightType* weights, const LastLayerBiasType* biases,
     const AccumulatorType* inputA, const AccumulatorType* inputB)
 {
-    int32_t val = biases[0];
+    int32_t val = 0;
 
 #if defined(NN_USE_AVX512)
     constexpr uint32_t registerWidth = 32;
@@ -79,8 +79,12 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m512i wA = Int16VecLoad(weights + j);
         const __m512i wB = Int16VecLoad(weights + j + AccumulatorSize);
-        sumA = _mm512_add_epi32(sumA, _mm512_madd_epi16(inA, wA));
-        sumB = _mm512_add_epi32(sumB, _mm512_madd_epi16(inB, wB));
+
+        // apply SCReLU: in * in * w
+        const __m512i resultA = _mm512_madd_epi16(_mm512_mullo_epi16(wA, inA), inA);
+        const __m512i resultB = _mm512_madd_epi16(_mm512_mullo_epi16(wB, inB), inB);
+        sumA = _mm512_add_epi32(sumA, resultA);
+        sumB = _mm512_add_epi32(sumB, resultB);
     }
 
     // add 16 int32s horizontally
@@ -106,13 +110,13 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m256i wA = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j));
         const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize));
-#ifdef NN_USE_VNNI
-        sumA = _mm256_dpwssd_epi32(sumA, inA, wA);
-        sumB = _mm256_dpwssd_epi32(sumB, inB, wB);
-#else
-        sumA = _mm256_add_epi32(sumA, _mm256_madd_epi16(inA, wA));
-        sumB = _mm256_add_epi32(sumB, _mm256_madd_epi16(inB, wB));
-#endif // NN_USE_VNNI
+
+        // apply SCReLU: in * in * w
+        const __m256i resultA = _mm256_madd_epi16(_mm256_mullo_epi16(wA, inA), inA);
+        const __m256i resultB = _mm256_madd_epi16(_mm256_mullo_epi16(wB, inB), inB);
+
+        sumA = _mm256_add_epi32(sumA, resultA);
+        sumB = _mm256_add_epi32(sumB, resultB);
     }
 
     // add 8 int32s horizontally
@@ -139,8 +143,11 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         // perform 16bit x 16bit multiplication and accumulate to 32bit registers
         const __m128i wA = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j));
         const __m128i wB = _mm_load_si128(reinterpret_cast<const __m128i*>(weights + j + AccumulatorSize));
-        sumA = _mm_add_epi32(sumA, _mm_madd_epi16(inA, wA));
-        sumB = _mm_add_epi32(sumB, _mm_madd_epi16(inB, wB));
+        // apply SCReLU: in * in * w
+        const __m128i resultA = _mm_madd_epi16(_mm_mullo_epi16(wA, inA), inA);
+        const __m128i resultB = _mm_madd_epi16(_mm_mullo_epi16(wB, inB), inB);
+        sumA = _mm_add_epi32(sumA, resultA);
+        sumB = _mm_add_epi32(sumB, resultB);
     }
 
     // add 8 int32s horizontally
@@ -171,30 +178,41 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         const int16x8_t wA = vld1q_s16(weights + j);
         const int16x8_t wB = vld1q_s16(weights + j + AccumulatorSize);
 
-        // perform 16bit x 16bit multiplication and accumulate to 32bit registers
-        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(wA), vget_low_s16(inA)));
-        sumB = vaddq_s32(sumB, vmull_high_s16(wA, inA));
-        sumC = vaddq_s32(sumC, vmull_s16(vget_low_s16(wB), vget_low_s16(inB)));
-        sumD = vaddq_s32(sumD, vmull_high_s16(wB, inB));
+        // apply SCReLU: in * in * w
+        // w*in fits in int16 (|w| <= 127, in [0,255], max product = 32385 < INT16_MAX)
+        const int16x8_t wInA = vmulq_s16(wA, inA);
+        const int16x8_t wInB = vmulq_s16(wB, inB);
+        sumA = vaddq_s32(sumA, vmull_s16(vget_low_s16(wInA), vget_low_s16(inA)));
+        sumB = vaddq_s32(sumB, vmull_high_s16(wInA, inA));
+        sumC = vaddq_s32(sumC, vmull_s16(vget_low_s16(wInB), vget_low_s16(inB)));
+        sumD = vaddq_s32(sumD, vmull_high_s16(wInB, inB));
     }
 
     // add int32s horizontally
     val += vaddvq_s32(vaddq_s32(vaddq_s32(sumA, sumB), vaddq_s32(sumC, sumD)));
 
 #else
+
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
-        const AccumulatorType in = std::clamp<AccumulatorType>(inputA[i], 0, ActivationRangeScaling);
-        val += (int32_t)in * (int32_t)weights[i];
+        const int32_t in = std::clamp<AccumulatorType>(inputA[i], 0, ActivationRangeScaling);
+        ASSERT(weights[i] < 128 && weights[i] > -128);
+        ASSERT((int64_t)val + in * in * (int64_t)weights[i] <= INT32_MAX);
+        ASSERT((int64_t)val + in * in * (int64_t)weights[i] >= INT32_MIN);
+        val += in * in * (int32_t)weights[i];
     }
     for (uint32_t i = 0; i < AccumulatorSize; ++i)
     {
         const AccumulatorType in = std::clamp<AccumulatorType>(inputB[i], 0, ActivationRangeScaling);
-        val += (int32_t)in * (int32_t)weights[i + AccumulatorSize];
+        ASSERT(weights[i] < 128 && weights[i] > -128);
+        ASSERT((int64_t)val + in * in * (int64_t)weights[i] <= INT32_MAX);
+        ASSERT((int64_t)val + in * in * (int64_t)weights[i] >= INT32_MIN);
+        val += in * in * (int32_t)weights[i + AccumulatorSize];
     }
+
 #endif
 
-    return val;
+    return biases[0] + val / ActivationRangeScaling;
 }
 
 ///

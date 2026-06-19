@@ -28,6 +28,9 @@ public:
     uint32_t m_numVariants = 0;
     uint32_t m_totalWeights = 0;
 
+    float m_weightsRange = 10.0f;
+    float m_biasRange = 10.0f;
+
     bool m_updateWeights = true;
 
     // Device buffers

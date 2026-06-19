@@ -138,6 +138,12 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         if (outEntry.score >= CheckmateValue || outEntry.score <= -CheckmateValue)
             continue;
 
+        // skip positions with very high score and matching WDL score
+        const int32_t WdlSkippingThreshold = 1000;
+        if ((outEntry.score > WdlSkippingThreshold && outEntry.wdlScore == 1) ||
+            (outEntry.score < -WdlSkippingThreshold && outEntry.wdlScore == 2))
+            continue;
+
         // constant skipping
         {
             std::bernoulli_distribution skippingDistr(skippingProbability);

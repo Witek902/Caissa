@@ -101,19 +101,19 @@ static constexpr uint8_t KingBucketIndex[64] =
 };
 
 // by this value neuron inputs are scaled
-static constexpr int16_t ActivationRangeScaling = 256;
+static constexpr int16_t ActivationRangeScaling = 255;
 
 static constexpr int32_t WeightScaleShift = 8;
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 
-static constexpr int32_t OutputScaleShift = 10;
+static constexpr int32_t OutputScaleShift = 6;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
 
 static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
 static constexpr float InputLayerBiasQuantizationScale = ActivationRangeScaling;
 static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
 static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * ActivationRangeScaling;
-static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / ActivationRangeScaling;
+static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / (float)ActivationRangeScaling;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
 using FirstLayerWeightType = int16_t;
