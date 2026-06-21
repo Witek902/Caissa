@@ -53,6 +53,11 @@ public:
     void Forward(CudaBatchData& batch);
     void Backward(CudaBatchData& batch, float learningRate, size_t iteration);
 
+    // Asynchronously copy a batch's training vectors on a dedicated copy stream. The copy waits
+    // for the previous batch's last reader (FeatureTransformerGradientsKernel) so it overlaps the
+    // previous batch's Adam updates; Forward waits on it before reading the buffer.
+    void CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* hostSrc, uint32_t count);
+
     // Weight management
     void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
     void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights) const;
@@ -71,11 +76,16 @@ private:
 
     // CUDA streams for overlapping operations
     CudaStream m_stream;
-    CudaStream m_auxStream; // runs the FT gradient clear concurrently with the forward pass
+    CudaStream m_auxStream;  // runs the FT gradient clear concurrently with the forward pass
+    CudaStream m_copyStream; // prefetches the next batch's training vectors during weights update
 
     // Events synchronizing the FT gradient buffer clear (m_auxStream) with its use (m_stream).
     cudaEvent_t m_ftGradConsumedEvent = nullptr; // recorded on m_stream after FT Adam reads the buffer
     cudaEvent_t m_ftGradClearedEvent = nullptr;  // recorded on m_auxStream after the clear completes
+
+    // Events synchronizing the training-vectors copy (m_copyStream) with its use (m_stream).
+    cudaEvent_t m_trainConsumedEvent = nullptr; // recorded on m_stream after the last reader (FT gradients)
+    cudaEvent_t m_copyDoneEvent = nullptr;      // recorded on m_copyStream after the batch copy completes
 };
 
 } // namespace cuda
