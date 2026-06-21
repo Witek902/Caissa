@@ -66,22 +66,6 @@ void CudaNeuralNetwork::CopyWeightsToHost(const nn::WeightsStoragePtr& featureTr
     m_lastLayerWeights->CopyToHost(*lastLayerWeights);
 }
 
-// CUDA kernel for bias addition
-__global__ void CopyBiasesKernel(
-    float* __restrict__ accumulators,
-    const float* __restrict__ biases,
-    uint32_t batchSize,
-    uint32_t accumulatorSize
-)
-{
-    const uint32_t accumulatorIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    const uint32_t batchIdx = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (batchIdx >= batchSize || accumulatorIdx >= accumulatorSize) return;
-
-    accumulators[batchIdx * accumulatorSize + accumulatorIdx] = biases[accumulatorIdx];
-}
-
 // CUDA kernel for sparse binary input accumulation
 __global__ void SparseBinaryInputKernel(
     const TrainingEntry* __restrict__ trainingVectors,
@@ -98,25 +82,30 @@ __global__ void SparseBinaryInputKernel(
 
     const TrainingEntry* trainingVector = trainingVectors + batchIdx;
 
+    // biases are stored right after the weight matrix
+    const float bias = weights[inputSize * accumulatorSize + accumulatorIdx];
+
     // Process white features
+    float whiteSum = bias;
     for (uint32_t i = 0; i < trainingVector->numWhiteFeatures; ++i)
     {
         const uint16_t feature = trainingVector->whiteFeatures[i];
         if (feature >= inputSize) continue;
 
-        const float weight = weights[feature * accumulatorSize + accumulatorIdx];
-        accumulators[2 * batchIdx * accumulatorSize + accumulatorIdx] += weight;
+        whiteSum += weights[feature * accumulatorSize + accumulatorIdx];
     }
+    accumulators[2 * batchIdx * accumulatorSize + accumulatorIdx] = whiteSum;
 
     // Process black features
+    float blackSum = bias;
     for (uint32_t i = 0; i < trainingVector->numBlackFeatures; ++i)
     {
         const uint16_t feature = trainingVector->blackFeatures[i];
         if (feature >= inputSize) continue;
 
-        const float weight = weights[feature * accumulatorSize + accumulatorIdx];
-        accumulators[2 * batchIdx * accumulatorSize + accumulatorSize + accumulatorIdx] += weight;
+        blackSum += weights[feature * accumulatorSize + accumulatorIdx];
     }
+    accumulators[2 * batchIdx * accumulatorSize + accumulatorSize + accumulatorIdx] = blackSum;
 }
 
 // CUDA kernel for fully connected layer (last layer)
@@ -162,26 +151,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 {
     const uint32_t batchSize = batch.batchSize;
 
-    // TODO merge with kernel below
-    // Copy biases to accumulators
-    {
-        const dim3 blockSize(32, 16);
-        const dim3 gridSize(
-            (c_accumulatorSize + blockSize.x - 1) / blockSize.x,
-            (batchSize * 2 + blockSize.y - 1) / blockSize.y);
-
-        const float* biases = m_featureTransformerWeights->m_weights.Get() + c_numNetworkInputs * c_accumulatorSize;
-
-        CopyBiasesKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
-            batch.accumulatorBuffer.Get(),
-            biases,
-            batchSize * 2,
-            c_accumulatorSize
-            );
-        CUDA_CHECK(cudaGetLastError());
-    }
-
-    // Sparse binary input accumulation
+    // Sparse binary input accumulation (also initializes accumulators from biases)
     {
         const dim3 blockSize(32, 16);
         const dim3 gridSize(
