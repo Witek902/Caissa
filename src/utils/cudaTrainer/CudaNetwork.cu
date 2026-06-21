@@ -31,6 +31,14 @@ __device__ __forceinline__ float SCReLUDerivative(float x)
     return (x > 0.0f && x < 1.0f) ? (2.0f * x) : 0.0f;
 }
 
+// Quantization-aware training: fake-quantize a weight/bias on read, matching the round-to-grid
+// done at pack time. The float master is left untouched; the straight-through estimator means the
+// gradient flows back to the float master as if no rounding happened. A scale of 0 disables it.
+__device__ __forceinline__ float FakeQuantize(float w, float scale, float invScale)
+{
+    return (scale > 0.0f) ? (roundf(w * scale) * invScale) : w;
+}
+
 CudaNeuralNetwork::CudaNeuralNetwork()
 {
     CUDA_CHECK(cudaEventCreateWithFlags(&m_ftGradConsumedEvent, cudaEventDisableTiming));
@@ -71,6 +79,19 @@ void CudaNeuralNetwork::Init(const nn::WeightsStoragePtr& featureTransformerWeig
     m_lastLayerWeights->CopyFromHost(*lastLayerWeights);
 
     CopyWeightsFromHost(featureTransformerWeights, lastLayerWeights);
+
+    // Quantization-aware training: weights/biases are fake-quantized on read in the forward/backward
+    // kernels using the same scales as the final pack step.
+    m_featureTransformerWeights->m_weightQuantScale = nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasQuantScale = nn::InputLayerBiasQuantizationScale;
+    m_lastLayerWeights->m_weightQuantScale = nn::OutputLayerWeightQuantizationScale;
+    m_lastLayerWeights->m_biasQuantScale = nn::OutputLayerBiasQuantizationScale;
+}
+
+void CudaNeuralNetwork::SetWeightDecay(float featureTransformerDecay, float lastLayerDecay)
+{
+    m_featureTransformerWeights->m_weightDecay = featureTransformerDecay;
+    m_lastLayerWeights->m_weightDecay = lastLayerDecay;
 }
 
 void CudaNeuralNetwork::CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights)
@@ -92,7 +113,8 @@ __global__ void SparseBinaryInputKernel(
     float* __restrict__ accumulators,
     uint32_t batchSize,
     uint32_t inputSize,
-    uint32_t accumulatorSize
+    uint32_t accumulatorSize,
+    float weightScale, float biasScale, float invWeightScale, float invBiasScale
 )
 {
     const uint32_t accumulatorIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -102,7 +124,7 @@ __global__ void SparseBinaryInputKernel(
     const TrainingEntry* trainingVector = trainingVectors + batchIdx;
 
     // biases are stored right after the weight matrix
-    const float bias = weights[inputSize * accumulatorSize + accumulatorIdx];
+    const float bias = FakeQuantize(weights[inputSize * accumulatorSize + accumulatorIdx], biasScale, invBiasScale);
 
     // Process white features
     float whiteSum = bias;
@@ -111,7 +133,7 @@ __global__ void SparseBinaryInputKernel(
         const uint16_t feature = trainingVector->whiteFeatures[i];
         if (feature >= inputSize) continue;
 
-        whiteSum += weights[feature * accumulatorSize + accumulatorIdx];
+        whiteSum += FakeQuantize(weights[feature * accumulatorSize + accumulatorIdx], weightScale, invWeightScale);
     }
     accumulators[2 * batchIdx * accumulatorSize + accumulatorIdx] = whiteSum;
 
@@ -122,7 +144,7 @@ __global__ void SparseBinaryInputKernel(
         const uint16_t feature = trainingVector->blackFeatures[i];
         if (feature >= inputSize) continue;
 
-        blackSum += weights[feature * accumulatorSize + accumulatorIdx];
+        blackSum += FakeQuantize(weights[feature * accumulatorSize + accumulatorIdx], weightScale, invWeightScale);
     }
     accumulators[2 * batchIdx * accumulatorSize + accumulatorSize + accumulatorIdx] = blackSum;
 }
@@ -134,7 +156,8 @@ __global__ void FullyConnectedKernel(
     const float* __restrict__ weights,
     float* __restrict__ outputs,
     uint32_t batchSize,
-    uint32_t inputSize
+    uint32_t inputSize,
+    float weightScale, float biasScale, float invWeightScale, float invBiasScale
 )
 {
     // One warp per batch element: lanes stride the input dimension (coalesced reads),
@@ -150,7 +173,7 @@ __global__ void FullyConnectedKernel(
     float sum = 0.0f;
     for (uint32_t i = lane; i < inputSize; i += 32u)
     {
-        sum += SCReLU(in[i]) * w[i];
+        sum += SCReLU(in[i]) * FakeQuantize(w[i], weightScale, invWeightScale);
     }
 
     // Warp reduction
@@ -162,7 +185,7 @@ __global__ void FullyConnectedKernel(
 
     if (lane == 0u)
     {
-        outputs[batchIdx] = sum + w[inputSize]; // add bias
+        outputs[batchIdx] = sum + FakeQuantize(w[inputSize], biasScale, invBiasScale); // add bias
     }
 }
 
@@ -206,7 +229,11 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
             batch.accumulatorBuffer.Get(),
             batchSize,
             c_numNetworkInputs,
-            c_accumulatorSize
+            c_accumulatorSize,
+            m_featureTransformerWeights->m_weightQuantScale,
+            m_featureTransformerWeights->m_biasQuantScale,
+            1.0f / m_featureTransformerWeights->m_weightQuantScale,
+            1.0f / m_featureTransformerWeights->m_biasQuantScale
         );
         CUDA_CHECK(cudaGetLastError());
     }
@@ -222,7 +249,11 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
             m_lastLayerWeights->m_weights.Get(),
             batch.hiddenBuffer.Get(),
             batchSize,
-            2 * c_accumulatorSize
+            2 * c_accumulatorSize,
+            m_lastLayerWeights->m_weightQuantScale,
+            m_lastLayerWeights->m_biasQuantScale,
+            1.0f / m_lastLayerWeights->m_weightQuantScale,
+            1.0f / m_lastLayerWeights->m_biasQuantScale
         );
         CUDA_CHECK(cudaGetLastError());
     }
@@ -326,9 +357,10 @@ __global__ void BackpropToCReLUKernel(
     float* __restrict__ creluErrors,
     const float* __restrict__ weights,
     uint32_t batchSize,
-    uint32_t inputSize
+    uint32_t inputSize,
+    float weightScale, float invWeightScale
 )
-{ 
+{
     const uint32_t inputIdx = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t batchIdx = blockIdx.y;
     if (batchIdx >= batchSize || inputIdx >= inputSize) return;
@@ -337,7 +369,8 @@ __global__ void BackpropToCReLUKernel(
     const uint32_t weightsOffset = v * (inputSize + 1);
 
     const float error = outputErrors[batchIdx];
-    const float w = weights[weightsOffset + inputIdx];
+    // Use the same fake-quantized weight as the forward pass (straight-through estimator).
+    const float w = FakeQuantize(weights[weightsOffset + inputIdx], weightScale, invWeightScale);
     const float x = creluInputs[batchIdx * inputSize + inputIdx];
 
     creluErrors[batchIdx * inputSize + inputIdx] = error * w * SCReLUDerivative(x);
@@ -436,7 +469,9 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
             batch.creluErrors.Get(),
             m_lastLayerWeights->m_weights.Get(),
             batchSize,
-            2 * c_accumulatorSize
+            2 * c_accumulatorSize,
+            m_lastLayerWeights->m_weightQuantScale,
+            1.0f / m_lastLayerWeights->m_weightQuantScale
         );
         CUDA_CHECK(cudaGetLastError());
     }
@@ -470,7 +505,6 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
     m_lastLayerWeights->UpdateAdam(
         batch.lastLayerGradients.Get(),
         learningRate,
-        iteration,
         m_stream.Get()
     );
 
@@ -478,7 +512,6 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
     m_featureTransformerWeights->UpdateAdam(
         batch.featureTransformerGradients.Get(),
         learningRate,
-        iteration,
         m_stream.Get()
     );
 

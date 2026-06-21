@@ -139,7 +139,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             continue;
 
         // skip positions with very high score and matching WDL score
-        const int32_t WdlSkippingThreshold = 1000;
+        const int32_t WdlSkippingThreshold = 2000;
         if ((outEntry.score > WdlSkippingThreshold && outEntry.wdlScore == 1) ||
             (outEntry.score < -WdlSkippingThreshold && outEntry.wdlScore == 2))
             continue;

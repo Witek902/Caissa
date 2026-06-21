@@ -53,6 +53,9 @@ public:
     void Forward(CudaBatchData& batch);
     void Backward(CudaBatchData& batch, float learningRate, size_t iteration);
 
+    // Set per-layer AdamW weight decay (applied to weights only, not biases).
+    void SetWeightDecay(float featureTransformerDecay, float lastLayerDecay);
+
     // Asynchronously copy a batch's training vectors on a dedicated copy stream. The copy waits
     // for the previous batch's last reader (FeatureTransformerGradientsKernel) so it overlaps the
     // previous batch's Adam updates; Forward waits on it before reading the buffer.
