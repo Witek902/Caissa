@@ -67,6 +67,17 @@ public:
         cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, 0);
         printf("Device name: %s\n", prop.name);
+
+        // Pin the training set buffers so per-batch host->device copies are truly asynchronous.
+        // Both are registered: they are only ever std::swap'd, never reallocated after this point.
+        CUDA_CHECK(cudaHostRegister(m_trainingSet_Read.data(), m_trainingSet_Read.size() * sizeof(TrainingEntry), cudaHostRegisterDefault));
+        CUDA_CHECK(cudaHostRegister(m_trainingSet_Write.data(), m_trainingSet_Write.size() * sizeof(TrainingEntry), cudaHostRegisterDefault));
+    }
+
+    ~CudaNetworkTrainer()
+    {
+        cudaHostUnregister(m_trainingSet_Read.data());
+        cudaHostUnregister(m_trainingSet_Write.data());
     }
 
     void InitNetwork();
@@ -238,22 +249,30 @@ void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilde
 
 void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t iteration)
 {
-    // Process training set in batches
-    for (uint32_t batchStart = 0; batchStart < cNumTrainingVectorsPerIteration; batchStart += cBatchSize)
+    const uint32_t numBatches = cNumTrainingVectorsPerIteration / cBatchSize;
+    m_cudaBatchData.batchSize = cBatchSize;
+
+    // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
+    // stall). Subsequent batches are prefetched while the previous batch's Adam updates run.
+    m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), cBatchSize);
+
+    for (uint32_t b = 0; b < numBatches; ++b)
     {
-        // Copy batch data to CUDA
-        m_cudaBatchData.trainingVectors.CopyFromHost(
-            m_trainingSet_Read.data() + batchStart, cBatchSize,
-            m_cudaNetwork.GetStream().Get());
-
-        // Update batch size in CUDA structure
-        m_cudaBatchData.batchSize = cBatchSize;
-
-        // Forward pass
+        // Forward pass (waits for this batch's copy to complete)
         m_cudaNetwork.Forward(m_cudaBatchData);
 
         // Backward pass
         m_cudaNetwork.Backward(m_cudaBatchData, learningRate, iteration);
+
+        // Prefetch the next batch's training vectors on the copy stream. It overlaps this batch's
+        // Adam updates, which no longer read the training-vectors buffer.
+        if (b + 1 < numBatches)
+        {
+            m_cudaNetwork.CopyTrainingBatchAsync(
+                m_cudaBatchData,
+                m_trainingSet_Read.data() + (b + 1) * cBatchSize,
+                cBatchSize);
+        }
     }
 
     m_cudaNetwork.GetStream().Synchronize();
@@ -630,7 +649,7 @@ bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!UnpackNetwork("eval-77-196B.pnn"))
+    if (!UnpackNetwork("eval-80-167B.pnn"))
         return false;
 
     // Copy unpacked weights to CUDA
