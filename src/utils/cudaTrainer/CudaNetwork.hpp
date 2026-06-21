@@ -71,6 +71,11 @@ private:
 
     // CUDA streams for overlapping operations
     CudaStream m_stream;
+    CudaStream m_auxStream; // runs the FT gradient clear concurrently with the forward pass
+
+    // Events synchronizing the FT gradient buffer clear (m_auxStream) with its use (m_stream).
+    cudaEvent_t m_ftGradConsumedEvent = nullptr; // recorded on m_stream after FT Adam reads the buffer
+    cudaEvent_t m_ftGradClearedEvent = nullptr;  // recorded on m_auxStream after the clear completes
 };
 
 } // namespace cuda

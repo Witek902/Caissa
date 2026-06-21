@@ -31,8 +31,21 @@ __device__ __forceinline__ float SCReLUDerivative(float x)
     return (x > 0.0f && x < 1.0f) ? (2.0f * x) : 0.0f;
 }
 
-CudaNeuralNetwork::CudaNeuralNetwork() = default;
-CudaNeuralNetwork::~CudaNeuralNetwork() = default;
+CudaNeuralNetwork::CudaNeuralNetwork()
+{
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_ftGradConsumedEvent, cudaEventDisableTiming));
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_ftGradClearedEvent, cudaEventDisableTiming));
+
+    // Pre-record so the first iteration's cross-stream waits are already satisfied.
+    CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, m_stream.Get()));
+    CUDA_CHECK(cudaEventRecord(m_ftGradClearedEvent, m_auxStream.Get()));
+}
+
+CudaNeuralNetwork::~CudaNeuralNetwork()
+{
+    cudaEventDestroy(m_ftGradConsumedEvent);
+    cudaEventDestroy(m_ftGradClearedEvent);
+}
 
 void CudaNeuralNetwork::Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights)
 {
@@ -163,6 +176,13 @@ __global__ void SigmoidActivationKernel(
 void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 {
     const uint32_t batchSize = batch.batchSize;
+
+    // Clear the FT gradient buffer on a separate stream so it overlaps the forward pass.
+    // Wait until the previous iteration's FT Adam finished reading the buffer, clear it, then
+    // signal completion for the backward FT-gradient accumulation to wait on.
+    CUDA_CHECK(cudaStreamWaitEvent(m_auxStream.Get(), m_ftGradConsumedEvent, 0));
+    batch.featureTransformerGradients.ClearAsync(m_auxStream.Get());
+    CUDA_CHECK(cudaEventRecord(m_ftGradClearedEvent, m_auxStream.Get()));
 
     // Sparse binary input accumulation (also initializes accumulators from biases)
     {
@@ -412,11 +432,11 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // Compute feature transformer gradients
+    // Compute feature transformer gradients. The buffer was cleared on the aux stream
+    // (overlapping the forward pass); wait for that clear to complete before accumulating.
     {
-        // clear gradients buffer
-        batch.featureTransformerGradients.ClearAsync(m_stream.Get());
-        
+        CUDA_CHECK(cudaStreamWaitEvent(m_stream.Get(), m_ftGradClearedEvent, 0));
+
         const dim3 blockSize(32, 16);
         const dim3 gridSize(
             (c_accumulatorSize + blockSize.x - 1) / blockSize.x,
@@ -448,6 +468,10 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
         iteration,
         m_stream.Get()
     );
+
+    // Signal that the FT gradient buffer is no longer needed on the main stream, so the next
+    // iteration's overlapped clear (on the aux stream) may proceed.
+    CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, m_stream.Get()));
 }
 
 } // namespace cuda
