@@ -118,20 +118,33 @@ __global__ void FullyConnectedKernel(
     uint32_t inputSize
 )
 {
-    const uint32_t batchIdx = blockIdx.x * blockDim.x + threadIdx.x;
+    // One warp per batch element: lanes stride the input dimension (coalesced reads),
+    // then a warp reduction combines the partial dot products.
+    const uint32_t batchIdx = (blockIdx.x * blockDim.x + threadIdx.x) / 32u;
+    const uint32_t lane = threadIdx.x & 31u;
     if (batchIdx >= batchSize) return;
 
     const uint32_t variant = trainingVectors[batchIdx].variant;
-    const uint32_t weightsOffset = variant * (inputSize + 1);
+    const float* __restrict__ in = inputs + batchIdx * inputSize;
+    const float* __restrict__ w = weights + variant * (inputSize + 1);
 
-    // Single output per batch
-    float sum = weights[weightsOffset + inputSize];
-    for (uint32_t i = 0; i < inputSize; ++i)
+    float sum = 0.0f;
+    for (uint32_t i = lane; i < inputSize; i += 32u)
     {
-        sum += SCReLU(inputs[batchIdx * inputSize + i]) * weights[weightsOffset + i];
+        sum += SCReLU(in[i]) * w[i];
     }
 
-    outputs[batchIdx] = sum;
+    // Warp reduction
+    #pragma unroll
+    for (uint32_t offset = 16u; offset > 0u; offset >>= 1)
+    {
+        sum += __shfl_down_sync(0xFFFFFFFFu, sum, offset);
+    }
+
+    if (lane == 0u)
+    {
+        outputs[batchIdx] = sum + w[inputSize]; // add bias
+    }
 }
 
 // CUDA kernel for sigmoid activation
@@ -172,7 +185,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
     // Fully connected layer (last layer)
     {
         const dim3 blockSize(256);
-        const dim3 gridSize((batchSize + blockSize.x - 1) / blockSize.x);
+        const dim3 gridSize((batchSize * 32 + blockSize.x - 1) / blockSize.x); // one warp per batch element
 
         FullyConnectedKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
             batch.trainingVectors.Get(),
@@ -225,32 +238,55 @@ __global__ void LastLayerGradientsKernel(
     uint32_t inputSize
 )
 {
+    // threadIdx.x selects the input (inputSize is the bias slot); threadIdx.y splits the
+    // batch reduction so we read each accumulator value once across all variants instead of
+    // re-scanning the whole batch per variant. Per-variant partials are kept in registers and
+    // combined across threadIdx.y via shared memory.
     const uint32_t inputIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    const uint32_t variantIdx = threadIdx.y;
+    const uint32_t numSplits = blockDim.y;
+    const bool active = (inputIdx <= inputSize);
+    const bool isBias = (inputIdx == inputSize);
 
-    const uint32_t weightsOffset = variantIdx * (inputSize + 1);
+    float gradients[nn::NumVariants];
+    #pragma unroll
+    for (uint32_t v = 0; v < nn::NumVariants; ++v) gradients[v] = 0.0f;
 
-    if (inputIdx < inputSize) // Weights gradients
+    if (active)
     {
-        float gradient = 0.0f;
-        for (uint32_t batchIdx = 0; batchIdx < batchSize; ++batchIdx)
+        for (uint32_t batchIdx = threadIdx.y; batchIdx < batchSize; batchIdx += numSplits)
         {
-            const TrainingEntry* trainingVector = trainingVectors + batchIdx;
-            if (trainingVector->variant != variantIdx) continue;
-            gradient += SCReLU(accumulatorBuffer[batchIdx * inputSize + inputIdx]) * outputErrors[batchIdx];
+            const uint32_t variant = trainingVectors[batchIdx].variant;
+            const float error = outputErrors[batchIdx];
+            const float contribution = isBias ? error
+                : SCReLU(accumulatorBuffer[batchIdx * inputSize + inputIdx]) * error;
+
+            #pragma unroll
+            for (uint32_t v = 0; v < nn::NumVariants; ++v)
+            {
+                if (variant == v) gradients[v] += contribution;
+            }
         }
-        weightGradients[weightsOffset + inputIdx] = gradient;
     }
-    else if (inputIdx == inputSize) // Bias gradient
+
+    // Reduce per-variant partials across threadIdx.y. Layout: [blockDim.y][blockDim.x][NumVariants].
+    extern __shared__ float shared[];
+    const uint32_t slot = (threadIdx.y * blockDim.x + threadIdx.x) * nn::NumVariants;
+    #pragma unroll
+    for (uint32_t v = 0; v < nn::NumVariants; ++v) shared[slot + v] = gradients[v];
+    __syncthreads();
+
+    if (threadIdx.y == 0 && active)
     {
-        float gradient = 0.0f;
-        for (uint32_t batchIdx = 0; batchIdx < batchSize; ++batchIdx)
+        #pragma unroll
+        for (uint32_t v = 0; v < nn::NumVariants; ++v)
         {
-            const TrainingEntry* trainingVector = trainingVectors + batchIdx;
-            if (trainingVector->variant != variantIdx) continue;
-            gradient += outputErrors[batchIdx];
+            float sum = 0.0f;
+            for (uint32_t s = 0; s < numSplits; ++s)
+            {
+                sum += shared[(s * blockDim.x + threadIdx.x) * nn::NumVariants + v];
+            }
+            weightGradients[v * (inputSize + 1) + inputIdx] = sum;
         }
-        weightGradients[weightsOffset + inputSize] = gradient;
     }
 }
 
@@ -347,9 +383,10 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
 
     // Compute last layer weight gradients
     {
-        const dim3 blockSize(32, c_numVariants);
+        const dim3 blockSize(32, 8); // x: input index, y: batch-split for the reduction
         const dim3 gridSize(((2 * c_accumulatorSize + 1) + blockSize.x - 1) / blockSize.x);
-        LastLayerGradientsKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
+        const uint32_t sharedBytes = blockSize.x * blockSize.y * c_numVariants * sizeof(float);
+        LastLayerGradientsKernel<<<gridSize, blockSize, sharedBytes, m_stream.Get()>>>(
             batch.trainingVectors.Get(),
             batch.accumulatorBuffer.Get(),
             batch.outputErrors.Get(),
