@@ -102,35 +102,46 @@ void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
     }
 }
 
+// Adam parameters
+constexpr float c_beta1 = 0.9f;
+constexpr float c_beta2 = 0.999f;
+constexpr float c_epsilon = 1.0e-8f;
+
 inline __device__ __host__ float clamp(float f, float a, float b)
 {
     return fmaxf(a, fminf(f, b));
 }
 
-// CUDA kernel for Adam weight updates
+// Per-variant layout is [inputSize*outputSize weights][outputSize biases]; the last outputSize
+// entries of each variant block are biases.
+__device__ __host__ __forceinline__ bool IsBiasIndex(uint32_t idx, uint32_t inputSize, uint32_t outputSize)
+{
+    const uint32_t perVariant = (inputSize + 1) * outputSize;
+    return (idx % perVariant) >= inputSize * outputSize;
+}
+
+// CUDA kernel for AdamW weight updates (Adam with decoupled weight decay)
 __global__ void AdamUpdateKernel(
     float* weights,
     float* moment1,
     float* moment2,
     const float* gradients,
     uint32_t inputSize,
+    uint32_t outputSize,
     uint32_t numWeights,
     float learningRate,
+    float weightDecay,
     float maxWeightRange,
     float maxBiasRange,
-    size_t iteration
+    float biasCorrection1, // 1 / (1 - beta1^t), precomputed on the host
+    float biasCorrection2  // 1 / (1 - beta2^t), precomputed on the host
 )
 {
-    // Adam parameters
-    const float c_beta1 = 0.9f;
-    const float c_beta2 = 0.999f;
-    const float c_epsilon = 1.0e-8f;
-
     const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numWeights) return;
 
-    // Last row is bias
-    const float maxWeightValue = (idx % (inputSize + 1) == inputSize) ? maxBiasRange : maxWeightRange;
+    const bool isBias = IsBiasIndex(idx, inputSize, outputSize);
+    const float maxWeightValue = isBias ? maxBiasRange : maxWeightRange;
 
     const float grad = static_cast<float>(gradients[idx]);
 
@@ -140,22 +151,35 @@ __global__ void AdamUpdateKernel(
     // Update biased second raw moment estimate
     const float m2 = moment2[idx] = c_beta2 * moment2[idx] + (1.0f - c_beta2) * grad * grad;
 
-    // Compute bias-corrected first moment estimate
-    const float m_hat = m1 / (1.0f - powf(c_beta1, iteration + 1));
+    // Bias-corrected moment estimates (the correction factors are step-only, precomputed host-side)
+    const float m_hat = m1 * biasCorrection1;
+    const float v_hat = m2 * biasCorrection2;
 
-    // Compute bias-corrected second raw moment estimate
-    const float v_hat = m2 / (1.0f - powf(c_beta2, iteration + 1));
+    const float oldWeight = weights[idx];
 
-    // Compute weight delta
-    const float delta = learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
+    // Compute the update step
+    float delta = learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
 
-    // Update weights with clamping
-    weights[idx] = clamp(weights[idx] - delta, -maxWeightValue, maxWeightValue);
+    // Apply decoupled weight decay only to weights
+    if (!isBias)
+    {
+        delta += learningRate * weightDecay * oldWeight;
+    }
+
+    weights[idx] = clamp(oldWeight - delta, -maxWeightValue, maxWeightValue);
 }
 
-void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, size_t iteration, cudaStream_t stream)
+void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, cudaStream_t stream)
 {
-    if (!m_updateWeights) return;
+    if (!m_updateWeights)
+        return;
+
+    const size_t step = m_adamStep++;
+
+    // Bias-correction factors depend only on the step, so compute them once here (in double
+    // precision) instead of calling powf for every weight inside the kernel.
+    const float biasCorrection1 = (float)(1.0 / (1.0 - std::pow(c_beta1, (double)(step + 1))));
+    const float biasCorrection2 = (float)(1.0 / (1.0 - std::pow(c_beta2, (double)(step + 1))));
 
     const dim3 blockSize(256);
     const dim3 gridSize((m_totalWeights + blockSize.x - 1) / blockSize.x);
@@ -166,11 +190,14 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
         m_moment2.Get(),
         gradients,
         m_inputSize,
+        m_outputSize,
         m_totalWeights,
         learningRate,
+        m_weightDecay,
         m_weightsRange,
         m_biasRange,
-        iteration
+        biasCorrection1,
+        biasCorrection2
     );
     CUDA_CHECK(cudaGetLastError());
 }

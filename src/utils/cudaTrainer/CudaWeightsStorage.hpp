@@ -21,7 +21,7 @@ public:
     void CopyToHost(nn::WeightsStorage& hostWeights) const;
 
     // Update weights using gradients
-    void UpdateAdam(const float* gradients, float learningRate, size_t iteration, cudaStream_t stream);
+    void UpdateAdam(const float* gradients, float learningRate, cudaStream_t stream);
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;
@@ -30,6 +30,18 @@ public:
 
     float m_weightsRange = 10.0f;
     float m_biasRange = 10.0f;
+
+    // AdamW decoupled weight decay (applied to weights only, never biases).
+    float m_weightDecay = 0.0f;
+
+    // Number of Adam steps performed so far. Used for bias correction; must count actual update
+    // steps (one per batch), NOT outer training iterations, or the beta2 correction never saturates.
+    size_t m_adamStep = 0;
+
+    // Quantization-aware training: scales used to fake-quantize weights/biases on read in the
+    // forward/backward kernels (straight-through estimator; the float master is left untouched).
+    float m_weightQuantScale = 0.0f;
+    float m_biasQuantScale = 0.0f;
 
     bool m_updateWeights = true;
 
