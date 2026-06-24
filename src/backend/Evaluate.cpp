@@ -180,13 +180,14 @@ ScoreType Evaluate(const Position& pos)
 {
     NodeInfo dummyNode = { pos };
 
-    AccumulatorCache dummyCache;
+    // heap-allocated: AccumulatorCache is large (multi-way), avoid blowing the thread stack
+    auto dummyCache = std::make_unique<AccumulatorCache>();
     if (g_mainNeuralNetwork)
     {
-        dummyCache.Init(g_mainNeuralNetwork);
+        dummyCache->Init(g_mainNeuralNetwork);
     }
 
-    return Evaluate(dummyNode, dummyCache);
+    return Evaluate(dummyNode, *dummyCache);
 }
 
 ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)

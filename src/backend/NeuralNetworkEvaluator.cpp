@@ -8,16 +8,19 @@
 
 static std::atomic<uint64_t> s_NumAccumulatorUpdates = 0;
 static std::atomic<uint64_t> s_NumAccumulatorRefreshes = 0;
+static std::atomic<uint64_t> s_NumAccumulatorRefreshFeatures = 0;
 
-void NNEvaluator::GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes)
+void NNEvaluator::GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes, uint64_t& outNumRefreshFeatures)
 {
     outNumUpdates = s_NumAccumulatorUpdates;
     outNumRefreshes = s_NumAccumulatorRefreshes;
+    outNumRefreshFeatures = s_NumAccumulatorRefreshFeatures;
 }
 void NNEvaluator::ResetStats()
 {
     s_NumAccumulatorUpdates = 0;
     s_NumAccumulatorRefreshes = 0;
+    s_NumAccumulatorRefreshFeatures = 0;
 }
 
 #endif // NN_ACCUMULATOR_STATS
@@ -30,8 +33,14 @@ void AccumulatorCache::Init(const nn::PackedNeuralNetwork* net)
         {
             for (uint32_t b = 0; b < 2 * nn::NumKingBuckets; ++b)
             {
-                memcpy(kingBuckets[c][b].accum.values, net->accumulatorBiases, sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
-                memset(kingBuckets[c][b].pieces, 0, sizeof(kingBuckets[c][b].pieces));
+                KingBucket& kingBucket = kingBuckets[c][b];
+                for (uint32_t w = 0; w < NumCacheWays; ++w)
+                {
+                    memcpy(kingBucket.accum[w].values, net->accumulatorBiases, sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
+                    kingBucket.lastUsed[w] = 0;
+                }
+                memset(kingBucket.pieces, 0, sizeof(kingBucket.pieces));
+                kingBucket.clock = 0;
             }
         }
         currentNet = net;
@@ -181,6 +190,30 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
 }
 
+#if defined(NN_USE_AVX2) || defined(NN_USE_AVX512)
+// bytewise population count of a 256-bit vector (Mula's nibble-LUT via pshufb)
+INLINE static __m256i Avx2PopcountBytes(const __m256i v)
+{
+    const __m256i lookup = _mm256_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+    const __m256i lowMask = _mm256_set1_epi8(0x0f);
+    const __m256i lo = _mm256_and_si256(v, lowMask);
+    const __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), lowMask);
+    return _mm256_add_epi8(_mm256_shuffle_epi8(lookup, lo), _mm256_shuffle_epi8(lookup, hi));
+}
+// bytewise population count of a 128-bit vector (Mula's nibble-LUT via pshufb; SSSE3)
+INLINE static __m128i Sse3PopcountBytes(const __m128i v)
+{
+    const __m128i lookup = _mm_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+    const __m128i lowMask = _mm_set1_epi8(0x0f);
+    const __m128i lo = _mm_and_si128(v, lowMask);
+    const __m128i hi = _mm_and_si128(_mm_srli_epi16(v, 4), lowMask);
+    return _mm_add_epi8(_mm_shuffle_epi8(lookup, lo), _mm_shuffle_epi8(lookup, hi));
+}
+#endif // NN_USE_AVX2 || NN_USE_AVX512
+
 template<Color perspective>
 INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, const NodeInfo* prevAccumNode, NodeInfo& node, AccumulatorCache::KingBucket& cache)
 {
@@ -292,41 +325,137 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
     }
     else // refresh accumulator
     {
+        const Position& pos = node.position;
+
+        // gather current piece bitboards [color][piece type]
+        Bitboard curr[2][6];
         for (Color c = 0; c < 2; ++c)
         {
-            const Position& pos = node.position;
             const Bitboard* bitboards = &pos.GetSide(c).pawns;
             for (uint32_t p = 0; p < 6; ++p)
+                curr[c][p] = bitboards[p];
+        }
+
+        // scan all cache ways for the closest one (fewest differing piece bits)
+        uint64_t diff[NumCacheWays];
+#if defined(NN_USE_AVX2) || defined(NN_USE_AVX512)
+        // 4 ways map exactly onto one 256-bit register (4 x uint64)
+        if constexpr (NumCacheWays == 4)
+        {
+            const __m256i zero = _mm256_setzero_si256();
+            // accumulate bytewise popcounts, then do a single horizontal sum after the loop
+            __m256i byteAcc = zero;
+            for (Color c = 0; c < 2; ++c)
             {
-                const Bitboard prev = cache.pieces[c][p];
-                const Bitboard curr = bitboards[p];
+                for (uint32_t p = 0; p < 6; ++p)
+                {
+                    const __m256i ways = _mm256_load_si256(reinterpret_cast<const __m256i*>(&cache.pieces[c][p][0]));
+                    const __m256i cur = _mm256_set1_epi64x((long long)curr[c][p].value);
+                    byteAcc = _mm256_add_epi8(byteAcc, Avx2PopcountBytes(_mm256_xor_si256(ways, cur)));
+                }
+            }
+            // _mm256_sad_epu8 sums the 8 bytes within each 64-bit lane -> popcount per way
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(diff), _mm256_sad_epu8(byteAcc, zero));
+        }
+        else if constexpr (NumCacheWays == 2)
+        {
+            // 2 ways map exactly onto one 128-bit register (2 x uint64)
+            const __m128i zero = _mm_setzero_si128();
+            __m128i byteAcc = zero;
+            for (Color c = 0; c < 2; ++c)
+            {
+                for (uint32_t p = 0; p < 6; ++p)
+                {
+                    const __m128i ways = _mm_load_si128(reinterpret_cast<const __m128i*>(&cache.pieces[c][p][0]));
+                    const __m128i cur = _mm_set1_epi64x((long long)curr[c][p].value);
+                    byteAcc = _mm_add_epi8(byteAcc, Sse3PopcountBytes(_mm_xor_si128(ways, cur)));
+                }
+            }
+            // _mm_sad_epu8 sums the 8 bytes within each 64-bit lane -> popcount per way
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(diff), _mm_sad_epu8(byteAcc, zero));
+        }
+        else
+        // TODO SSE and NEON implementations
+#endif // NN_USE_AVX2 || NN_USE_AVX512
+        {
+            // scalar fallback
+            for (uint32_t w = 0; w < NumCacheWays; ++w)
+                diff[w] = 0;
+            for (Color c = 0; c < 2; ++c)
+                for (uint32_t p = 0; p < 6; ++p)
+                    for (uint32_t w = 0; w < NumCacheWays; ++w)
+                        diff[w] += PopCount(cache.pieces[c][p][w].value ^ curr[c][p].value);
+        }
+
+        // find the way with the fewest differing bits
+        uint32_t baseWay = 0;
+        for (uint32_t w = 1; w < NumCacheWays; ++w)
+            if (diff[w] < diff[baseWay])
+                baseWay = w;
+
+#ifdef NN_ACCUMULATOR_STATS
+        s_NumAccumulatorRefreshes++;
+#endif // NN_ACCUMULATOR_STATS
+
+        if (diff[baseWay] == 0)
+        {
+            // exact hit: the cached accumulator already matches the position
+            memcpy(node.accumulatorData[color].values, cache.accum[baseWay].values, sizeof(nn::AccumulatorType) * nn::AccumulatorSize);
+            cache.lastUsed[baseWay] = ++cache.clock;
+            node.accumulatorPtr[color] = &node.accumulatorData[color];
+            node.nnContext.accumDirty[color] = false;
+            return;
+        }
+
+        // build the feature delta against the closest way
+        for (Color c = 0; c < 2; ++c)
+        {
+            for (uint32_t p = 0; p < 6; ++p)
+            {
+                const Bitboard prev = cache.pieces[c][p][baseWay];
+                const Bitboard cur = curr[c][p];
                 const Piece piece = (Piece)(p + (uint32_t)Piece::Pawn);
 
                 // additions
-                (curr & ~prev).Iterate([&](const Square sq) INLINE_LAMBDA
+                (cur & ~prev).Iterate([&](const Square sq) INLINE_LAMBDA
                 {
                     ASSERT(numAddedFeatures < maxChangedFeatures);
                     addedFeatures[numAddedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, c, sq, pos);
                 });
 
                 // removals
-                (prev & ~curr).Iterate([&](const Square sq) INLINE_LAMBDA
+                (prev & ~cur).Iterate([&](const Square sq) INLINE_LAMBDA
                 {
                     ASSERT(numRemovedFeatures < maxChangedFeatures);
                     removedFeatures[numRemovedFeatures++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(piece, c, sq, pos);
                 });
-
-                cache.pieces[c][p] = curr;
             }
         }
 
+        ASSERT(numAddedFeatures > 0 || numRemovedFeatures > 0);
+
+#ifdef NN_ACCUMULATOR_STATS
+        s_NumAccumulatorRefreshFeatures += numAddedFeatures + numRemovedFeatures;
+#endif // NN_ACCUMULATOR_STATS
+
+        // evict the least-recently-used way and write the freshly computed state into it
+        uint32_t lruWay = 0;
+        for (uint32_t w = 1; w < NumCacheWays; ++w)
+            if (cache.lastUsed[w] < cache.lastUsed[lruWay])
+                lruWay = w;
+
         nn::Accumulator::Update(
-            cache.accum,
+            cache.accum[lruWay],
             node.accumulatorData[color],
-            cache.accum,
+            cache.accum[baseWay],
             network.accumulatorWeights,
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
+
+        for (Color c = 0; c < 2; ++c)
+            for (uint32_t p = 0; p < 6; ++p)
+                cache.pieces[c][p][lruWay] = curr[c][p];
+        cache.lastUsed[lruWay] = ++cache.clock;
 
         node.accumulatorPtr[color] = &node.accumulatorData[color];
     }

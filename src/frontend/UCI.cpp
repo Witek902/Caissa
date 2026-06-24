@@ -688,10 +688,14 @@ void UniversalChessInterface::SearchThreadEntryFunc()
 #ifdef NN_ACCUMULATOR_STATS
 static void PrintNNEvaluatorStats()
 {
-    uint64_t numUpdates = 0, numRefreshes = 0;
-    NNEvaluator::GetStats(numUpdates, numRefreshes);
+    uint64_t numUpdates = 0, numRefreshes = 0, numRefreshFeatures = 0;
+    NNEvaluator::GetStats(numUpdates, numRefreshes, numRefreshFeatures);
     std::cout << "NN accumulator updates: " << numUpdates << std::endl;
     std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
+    std::cout << "NN accumulator refresh features: " << numRefreshFeatures;
+    if (numRefreshes > 0)
+        std::cout << " (avg " << (double)numRefreshFeatures / (double)numRefreshes << " per refresh)";
+    std::cout << std::endl;
 }
 #endif // NN_ACCUMULATOR_STATS
 
