@@ -53,6 +53,7 @@ private:
     bool Command_TranspositionTableProbe();
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
+    bool Command_EvalDetailed(const std::vector<std::string>& args);
     bool Command_Benchmark(uint32_t depth);
 
     void StopSearchThread();

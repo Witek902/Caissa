@@ -1,6 +1,7 @@
 #include "UCI.hpp"
 #include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
+#include "../backend/NeuralNetworkEvaluator.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
 #include "../backend/Tuning.hpp"
@@ -266,13 +267,20 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "eval")
     {
-        const ScoreType eval = Evaluate(mGame.GetPosition());
-        std::cout << "Evaluation: " << eval << std::endl;
-        const uint32_t ply = mGame.GetPosition().GetMoveCount();
-        const float w = EvalToWinProbability(eval / 100.0f, ply);
-        const float l = EvalToWinProbability(-eval / 100.0f, ply);
-        const float d = 1.0f - w - l;
-        std::cout<< "W: " << w << ", D: " << d << ", L: " << l << std::endl;
+        if (args.size() >= 2 && (args[1] == "detail" || args[1] == "detailed"))
+        {
+            Command_EvalDetailed(args);
+        }
+        else
+        {
+            const ScoreType eval = Evaluate(mGame.GetPosition());
+            std::cout << "Evaluation: " << eval << std::endl;
+            const uint32_t ply = mGame.GetPosition().GetMoveCount();
+            const float w = EvalToWinProbability(eval / 100.0f, ply);
+            const float l = EvalToWinProbability(-eval / 100.0f, ply);
+            const float d = 1.0f - w - l;
+            std::cout<< "W: " << w << ", D: " << d << ", L: " << l << std::endl;
+        }
     }
     else if (command == "scoremoves")
     {
@@ -345,7 +353,9 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << " * quit|exit - quit the engine" << std::endl;
         std::cout << " * perft <depth> - run perft test on current position" << std::endl;
         std::cout << " * print - print current position" << std::endl;
-        std::cout << " * eval - evaluate current position" << std::endl;
+        std::cout << " * eval [detailed [start|stop|reset]] - evaluate current position;" << std::endl;
+        std::cout << "       'detailed' prints NNUE accumulator stats for the current position," << std::endl;
+        std::cout << "       'detailed start' begins gathering stats over a search ('go'); then 'eval detailed' prints aggregated stats" << std::endl;
         std::cout << " * scoremoves - print all legal moves with their move orderer scores" << std::endl;
         std::cout << " * ttinfo - print transposition table info" << std::endl;
         std::cout << " * ttprobe - probe transposition table with current position" << std::endl;
@@ -1052,6 +1062,334 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     moves.Sort();
     PrintMoveList(mGame.GetPosition(), moves);
+
+    return true;
+}
+
+// print the full detailed NNUE evaluation for a single position
+static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
+{
+    NNEvaluationTrace trace;
+    NNEvaluator::Trace(*g_mainNeuralNetwork, pos, trace);
+
+    const char* satOn = color ? "\033[91m" : "";   // bright red
+    const char* satOff = color ? "\033[0m" : "";
+
+    constexpr uint32_t columns = 16;
+    constexpr uint32_t rows = nn::AccumulatorSize / columns;
+    const char* perspectiveName[2] = { "side to move", "opponent" };
+
+    // raw pre-activation accumulator values
+    for (uint32_t p = 0; p < 2; ++p)
+    {
+        std::cout << "\nRaw accumulator values (pre-activation) - perspective " << p
+                  << " (" << perspectiveName[p] << "):\n";
+        const int16_t* vals = trace.rawAccumulator[p];
+        for (uint32_t r = 0; r < rows; ++r)
+        {
+            char line[512];
+            int off = snprintf(line, sizeof(line), "[%4u] ", r * columns);
+            for (uint32_t c = 0; c < columns; ++c)
+                off += snprintf(line + off, sizeof(line) - off, "%6d ", (int)vals[r * columns + c]);
+            std::cout << line << "\n";
+        }
+    }
+
+    // post-activation values (clamped to [0,255]); zeros blanked, saturated highlighted
+    for (uint32_t p = 0; p < 2; ++p)
+    {
+        std::cout << "\nPost-activation values (clamp[0,255]; '.' = 0, "
+                  << satOn << "red" << satOff << " = saturated 255) - perspective " << p
+                  << " (" << perspectiveName[p] << "):\n";
+        const int16_t* vals = trace.rawAccumulator[p];
+        for (uint32_t r = 0; r < rows; ++r)
+        {
+            std::string line;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[%4u] ", r * columns);
+            line += buf;
+            for (uint32_t c = 0; c < columns; ++c)
+            {
+                const int act = std::clamp<int>(vals[r * columns + c], 0, nn::ActivationRangeScaling);
+                if (act == 0)
+                {
+                    line += "     . ";
+                }
+                else
+                {
+                    snprintf(buf, sizeof(buf), "%6d ", act);
+                    if (act >= nn::ActivationRangeScaling) { line += satOn; line += buf; line += satOff; }
+                    else { line += buf; }
+                }
+            }
+            std::cout << line << "\n";
+        }
+    }
+
+    // statistics
+    std::cout << "\nStatistics:\n";
+    double totalActSum = 0.0;
+    uint32_t totalNonAct = 0, totalSat = 0;
+    for (uint32_t p = 0; p < 2; ++p)
+    {
+        const int16_t* vals = trace.rawAccumulator[p];
+        uint32_t nonAct = 0, sat = 0;
+        double sum = 0.0;
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        {
+            sum += std::clamp<int>(vals[i], 0, nn::ActivationRangeScaling);
+            if (vals[i] <= 0) nonAct++;
+            if (vals[i] >= nn::ActivationRangeScaling) sat++;
+        }
+        totalNonAct += nonAct; totalSat += sat; totalActSum += sum;
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+            "  perspective %u: non-activated (<=0): %4u (%5.1f%%), saturated (>=255): %4u (%5.1f%%), mean activation: %6.2f\n",
+            p, nonAct, 100.0 * nonAct / nn::AccumulatorSize, sat, 100.0 * sat / nn::AccumulatorSize, sum / nn::AccumulatorSize);
+        std::cout << buf;
+    }
+    {
+        const uint32_t total = 2 * nn::AccumulatorSize;
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+            "  combined:      non-activated (<=0): %4u (%5.1f%%), saturated (>=255): %4u (%5.1f%%), mean activation: %6.2f\n",
+            totalNonAct, 100.0 * totalNonAct / total, totalSat, 100.0 * totalSat / total, totalActSum / total);
+        std::cout << buf;
+    }
+
+    // output buckets (last layer evaluated for every variant)
+    const int32_t cpDivisor = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
+    std::cout << "\nOutput buckets (last layer evaluated for every variant):\n";
+    for (uint32_t v = 0; v < nn::NumVariants; ++v)
+    {
+        const int32_t internal = trace.bucketOutput[v];
+        char buf[160];
+        snprintf(buf, sizeof(buf), "  bucket %u: internal = %9d, eval = %+5d cp%s\n",
+            v, internal, internal / cpDivisor, v == trace.selectedVariant ? "   <-- selected" : "");
+        std::cout << buf;
+    }
+    std::cout << "  (eval is side-to-move relative, raw NN output before game-phase scaling)\n";
+
+    // per-piece saliency map (NNUE derived piece values)
+    std::cout << "\nNNUE derived piece values (eval delta in pawns when each piece is removed, White's perspective):\n";
+    const ScoreType baseEvalStm = Evaluate(pos);
+    const int32_t baseEvalWhite = (pos.GetSideToMove() == White) ? baseEvalStm : -baseEvalStm;
+
+    const char* border = "  +-------+-------+-------+-------+-------+-------+-------+-------+\n";
+    for (int rank = 7; rank >= 0; --rank)
+    {
+        std::cout << border;
+        char l1[128], l2[128];
+        int o1 = snprintf(l1, sizeof(l1), "%d |", rank + 1); // piece line carries the rank label
+        int o2 = snprintf(l2, sizeof(l2), "  |");            // value line
+        for (int file = 0; file < 8; ++file)
+        {
+            const Square sq(static_cast<uint8_t>(file), static_cast<uint8_t>(rank));
+            Piece piece = pos.Whites().GetPieceAtSquare(sq);
+            Color pieceColor = White;
+            if (piece == Piece::None) { piece = pos.Blacks().GetPieceAtSquare(sq); pieceColor = Black; }
+
+            if (piece == Piece::None)
+            {
+                o1 += snprintf(l1 + o1, sizeof(l1) - o1, "       |");
+                o2 += snprintf(l2 + o2, sizeof(l2) - o2, "       |");
+            }
+            else
+            {
+                o1 += snprintf(l1 + o1, sizeof(l1) - o1, "   %c   |", PieceToChar(piece, pieceColor == White));
+                if (piece == Piece::King)
+                {
+                    o2 += snprintf(l2 + o2, sizeof(l2) - o2, "       |"); // king can't be removed
+                }
+                else
+                {
+                    Position modified = pos;
+                    modified.RemovePiece(sq, piece, pieceColor);
+                    const ScoreType e = Evaluate(modified);
+                    const int32_t eWhite = (pos.GetSideToMove() == White) ? e : -e;
+                    o2 += snprintf(l2 + o2, sizeof(l2) - o2, "%+6.2f |", (baseEvalWhite - eWhite) / 100.0);
+                }
+            }
+        }
+        std::cout << l1 << "\n" << l2 << "\n";
+    }
+    std::cout << border;
+    {
+        std::string header = "  ";
+        for (int file = 0; file < 8; ++file) { char b[16]; snprintf(b, sizeof(b), "    %c   ", 'a' + file); header += b; }
+        std::cout << header << "\n";
+    }
+    std::cout << "  base eval (White's perspective): " << baseEvalWhite << " cp\n";
+    std::cout << "  (positive value = the piece favors White; removing it lowers White's eval)\n";
+}
+
+// print aggregated NNUE accumulator statistics collected over a search
+static void PrintAggregatedNNStats(bool color)
+{
+    NNAccumulatorStats stats;
+    std::vector<uint64_t> perThreadPositions;
+    NNEvaluator::GetMergedStats(stats, &perThreadPositions);
+
+    if (stats.numPositions == 0)
+    {
+        std::cout << "No positions collected yet. Use 'eval detailed start', run 'go', then 'eval detailed'." << std::endl;
+        return;
+    }
+
+    const char* satOn = color ? "\033[91m" : "";   // bright red
+    const char* satOff = color ? "\033[0m" : "";
+    const double N = (double)stats.numPositions;
+
+    constexpr uint32_t columns = 16;
+    constexpr uint32_t rows = nn::AccumulatorSize / columns;
+    const char* perspectiveName[2] = { "side to move", "opponent" };
+
+    std::cout << "\nAggregated NNUE accumulator statistics over " << stats.numPositions << " evaluated positions.\n";
+
+    // per-neuron activation frequency grid
+    for (uint32_t p = 0; p < 2; ++p)
+    {
+        std::cout << "\nActivation frequency % (value > 0; '.' = never, " << satOn << "red" << satOff
+                  << " = saturated in >=50% of positions) - perspective " << p << " (" << perspectiveName[p] << "):\n";
+        for (uint32_t r = 0; r < rows; ++r)
+        {
+            std::string line;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[%4u] ", r * columns);
+            line += buf;
+            for (uint32_t c = 0; c < columns; ++c)
+            {
+                const uint32_t i = r * columns + c;
+                if (stats.activationCount[p][i] == 0)
+                {
+                    line += "     . ";
+                }
+                else
+                {
+                    snprintf(buf, sizeof(buf), "%6.1f ", 100.0 * stats.activationCount[p][i] / N);
+                    if (100.0 * stats.saturationCount[p][i] / N >= 50.0) { line += satOn; line += buf; line += satOff; }
+                    else { line += buf; }
+                }
+            }
+            std::cout << line << "\n";
+        }
+    }
+
+    // collect per-neuron references for ranking / outliers
+    struct NeuronRef { uint32_t p, i; uint64_t act, sat; };
+    std::vector<NeuronRef> neurons;
+    neurons.reserve(2 * nn::AccumulatorSize);
+    uint64_t totalAct = 0, totalSat = 0;
+    double totalSum = 0.0;
+    uint32_t deadCount = 0, alwaysSatCount = 0;
+    for (uint32_t p = 0; p < 2; ++p)
+    {
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        {
+            const uint64_t a = stats.activationCount[p][i];
+            const uint64_t s = stats.saturationCount[p][i];
+            neurons.push_back({ p, i, a, s });
+            totalAct += a;
+            totalSat += s;
+            totalSum += (double)stats.sumActivation[p][i];
+            if (a == 0) deadCount++;
+            if (s == stats.numPositions) alwaysSatCount++;
+        }
+    }
+
+    // global summary
+    const double totalObs = N * 2.0 * nn::AccumulatorSize;
+    std::cout << "\nGlobal summary:\n";
+    {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "  positions evaluated: %llu\n", (unsigned long long)stats.numPositions);
+        std::cout << buf;
+        snprintf(buf, sizeof(buf), "  mean non-activated (<=0): %5.1f%%, mean saturated (>=255): %5.1f%%, mean activation: %6.2f\n",
+            100.0 * (1.0 - (double)totalAct / totalObs), 100.0 * (double)totalSat / totalObs, totalSum / totalObs);
+        std::cout << buf;
+        snprintf(buf, sizeof(buf), "  dead neurons (never activated): %u / %u, always-saturated neurons: %u / %u\n",
+            deadCount, 2 * nn::AccumulatorSize, alwaysSatCount, 2 * nn::AccumulatorSize);
+        std::cout << buf;
+    }
+    if (perThreadPositions.size() > 1)
+    {
+        std::cout << "  per-thread positions:";
+        for (size_t t = 0; t < perThreadPositions.size(); ++t)
+        {
+            char buf[48];
+            snprintf(buf, sizeof(buf), " [%zu]=%llu", t, (unsigned long long)perThreadPositions[t]);
+            std::cout << buf;
+        }
+        std::cout << "\n";
+    }
+
+    // top-N and outliers
+    const uint32_t topN = 16;
+    const auto neuronLine = [&](const NeuronRef& n)
+    {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "    p%u[%4u]: activated %6.2f%%, saturated %6.2f%%, mean act %6.1f\n",
+            n.p, n.i, 100.0 * n.act / N, 100.0 * n.sat / N, (double)stats.sumActivation[n.p][n.i] / N);
+        std::cout << buf;
+    };
+
+    std::sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.act > b.act; });
+    std::cout << "\nMost frequently activated neurons:\n";
+    for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[k]);
+    std::cout << "Least frequently activated neurons:\n";
+    for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[neurons.size() - 1 - k]);
+
+    std::sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.sat > b.sat; });
+    std::cout << "Most frequently saturated neurons:\n";
+    for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[k]);
+
+    // output bucket usage
+    std::cout << "\nOutput bucket usage:\n";
+    for (uint32_t v = 0; v < nn::NumVariants; ++v)
+    {
+        char buf[96];
+        snprintf(buf, sizeof(buf), "  bucket %u: %12llu  (%5.1f%%)\n",
+            v, (unsigned long long)stats.bucketUsage[v], 100.0 * stats.bucketUsage[v] / N);
+        std::cout << buf;
+    }
+}
+
+bool UniversalChessInterface::Command_EvalDetailed(const std::vector<std::string>& args)
+{
+    const std::string sub = args.size() >= 3 ? ToLower(args[2]) : std::string();
+
+    if (sub == "start")
+    {
+        NNEvaluator::ResetStatsCollection();
+        NNEvaluator::SetStatsCollectionEnabled(true);
+        std::cout << "NNUE accumulator statistics collection started. Run 'go', then 'eval detailed' to print aggregated stats." << std::endl;
+        return true;
+    }
+    if (sub == "stop")
+    {
+        NNEvaluator::SetStatsCollectionEnabled(false);
+        NNEvaluator::ResetStatsCollection();
+        std::cout << "NNUE accumulator statistics collection stopped and cleared." << std::endl;
+        return true;
+    }
+    if (sub == "reset")
+    {
+        NNEvaluator::ResetStatsCollection();
+        std::cout << "NNUE accumulator statistics cleared." << std::endl;
+        return true;
+    }
+
+    if (!g_mainNeuralNetwork)
+    {
+        std::cout << "No neural network loaded" << std::endl;
+        return true;
+    }
+
+    // while collection is enabled, print aggregated search stats; otherwise the single-position detail
+    if (NNEvaluator::IsStatsCollectionEnabled())
+        PrintAggregatedNNStats(mOptions.colorConsoleOutput);
+    else
+        PrintSinglePositionDetailedEval(mGame.GetPosition(), mOptions.colorConsoleOutput);
 
     return true;
 }

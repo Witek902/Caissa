@@ -1,8 +1,163 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
 
+#include <atomic>
+#include <mutex>
+#include <vector>
+#include <cstring>
+
 // enable validation of NN output (check if incremental updates work correctly)
 //#define VALIDATE_NETWORK_OUTPUT
+
+// search-time accumulator statistics collection
+
+static std::atomic<bool> s_collectAccumulatorStats{ false };
+static std::mutex s_statsRegistryMutex;
+// per-thread statistics buffers, owned here for the lifetime of the process.
+// each buffer is tied to an OS thread (which outlives any individual Search), so collected
+// data persists across transient Search instances (e.g. 'bench') without any retire logic.
+static std::vector<NNAccumulatorStats*> s_statsRegistry;
+static thread_local NNAccumulatorStats* t_statsBuffer = nullptr;
+
+void NNAccumulatorStats::Reset()
+{
+    numPositions = 0;
+    memset(bucketUsage, 0, sizeof(bucketUsage));
+    memset(activationCount, 0, sizeof(activationCount));
+    memset(saturationCount, 0, sizeof(saturationCount));
+    memset(sumActivation, 0, sizeof(sumActivation));
+    memset(workActivation, 0, sizeof(workActivation));
+    memset(workSaturation, 0, sizeof(workSaturation));
+    memset(workSum, 0, sizeof(workSum));
+    workCount = 0;
+}
+
+void NNAccumulatorStats::Flush()
+{
+    for (uint32_t p = 0; p < NumPerspectives; ++p)
+    {
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        {
+            activationCount[p][i] += workActivation[p][i];
+            saturationCount[p][i] += workSaturation[p][i];
+            sumActivation[p][i] += workSum[p][i];
+        }
+    }
+    memset(workActivation, 0, sizeof(workActivation));
+    memset(workSaturation, 0, sizeof(workSaturation));
+    memset(workSum, 0, sizeof(workSum));
+    workCount = 0;
+}
+
+void NNAccumulatorStats::Accumulate(const NNAccumulatorStats& other)
+{
+    numPositions += other.numPositions;
+    for (uint32_t v = 0; v < nn::NumVariants; ++v)
+        bucketUsage[v] += other.bucketUsage[v];
+    for (uint32_t p = 0; p < NumPerspectives; ++p)
+    {
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        {
+            activationCount[p][i] += other.activationCount[p][i];
+            saturationCount[p][i] += other.saturationCount[p][i];
+            sumActivation[p][i] += other.sumActivation[p][i];
+        }
+    }
+}
+
+void NNEvaluator::SetStatsCollectionEnabled(bool enabled)
+{
+    s_collectAccumulatorStats.store(enabled, std::memory_order_relaxed);
+}
+
+bool NNEvaluator::IsStatsCollectionEnabled()
+{
+    return s_collectAccumulatorStats.load(std::memory_order_relaxed);
+}
+
+void NNEvaluator::ResetStatsCollection()
+{
+    std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+    for (NNAccumulatorStats* buffer : s_statsRegistry)
+        buffer->Reset();
+}
+
+void NNEvaluator::GetMergedStats(NNAccumulatorStats& outMerged, std::vector<uint64_t>* outPerThreadPositions)
+{
+    outMerged.Reset();
+    if (outPerThreadPositions)
+        outPerThreadPositions->clear();
+
+    std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+    for (NNAccumulatorStats* buffer : s_statsRegistry)
+    {
+        buffer->Flush(); // fold pending working counters into the masters (safe: called when no search is running)
+        outMerged.Accumulate(*buffer);
+        if (outPerThreadPositions)
+            outPerThreadPositions->push_back(buffer->numPositions);
+    }
+}
+
+// get (lazily allocating) the calling thread's statistics buffer
+static NNAccumulatorStats* AcquireThreadStatsBuffer()
+{
+    if (!t_statsBuffer)
+    {
+        t_statsBuffer = new NNAccumulatorStats();
+        std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+        s_statsRegistry.push_back(t_statsBuffer);
+    }
+    return t_statsBuffer;
+}
+
+// fold working counters into the masters before they could overflow uint32:
+// the largest working value is workSum (<= 255 per position), so flush well below 2^32/255
+static constexpr uint32_t c_statsFlushInterval = 16000000u;
+
+// collect per-neuron statistics from a single evaluated position (accumulates into the uint32 working
+// counters; these are half the width of the masters and folded in periodically by Flush())
+static void CollectAccumulatorStats(NNAccumulatorStats& stats, const nn::Accumulator& stmAccum, const nn::Accumulator& nstmAccum, uint32_t variant)
+{
+    stats.numPositions++;
+    stats.bucketUsage[variant]++;
+
+    const nn::Accumulator* accums[2] = { &stmAccum, &nstmAccum };
+    for (uint32_t p = 0; p < NNAccumulatorStats::NumPerspectives; ++p)
+    {
+        const int16_t* values = accums[p]->values;
+        uint32_t* wAct = stats.workActivation[p];
+        uint32_t* wSat = stats.workSaturation[p];
+        uint32_t* wSum = stats.workSum[p];
+
+#if defined(USE_AVX2) || defined(USE_AVX512)
+        const __m256i zero = _mm256_setzero_si256();
+        const __m256i c254 = _mm256_set1_epi32(nn::ActivationRangeScaling - 1);
+        const __m256i c255 = _mm256_set1_epi32(nn::ActivationRangeScaling);
+        for (uint32_t i = 0; i < nn::AccumulatorSize; i += 8)
+        {
+            const __m256i x = _mm256_cvtepi16_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(values + i)));
+            const __m256i maskPos = _mm256_cmpgt_epi32(x, zero);  // 0xFFFFFFFF where value > 0
+            const __m256i maskSat = _mm256_cmpgt_epi32(x, c254);  // 0xFFFFFFFF where value >= 255
+            const __m256i clamped = _mm256_min_epi32(_mm256_max_epi32(x, zero), c255);
+            // mask is -1 where true, so subtracting it adds 1
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(wAct + i), _mm256_sub_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(wAct + i)), maskPos));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(wSat + i), _mm256_sub_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(wSat + i)), maskSat));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(wSum + i), _mm256_add_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(wSum + i)), clamped));
+        }
+#else
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        {
+            const int32_t x = values[i];
+            wAct[i] += (x > 0) ? 1u : 0u;
+            wSat[i] += (x >= nn::ActivationRangeScaling) ? 1u : 0u;
+            wSum[i] += (uint32_t)(x < 0 ? 0 : (x > nn::ActivationRangeScaling ? nn::ActivationRangeScaling : x));
+        }
+#endif
+    }
+
+    if (++stats.workCount >= c_statsFlushInterval) [[unlikely]]
+        stats.Flush();
+}
 
 #ifdef NN_ACCUMULATOR_STATS
 
@@ -179,6 +334,35 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     ASSERT(numTheirFeatures <= maxFeatures);
 
     return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
+}
+
+void NNEvaluator::Trace(const nn::PackedNeuralNetwork& network, const Position& pos, NNEvaluationTrace& outTrace)
+{
+    constexpr uint32_t maxFeatures = 64;
+
+    uint16_t stmFeatures[maxFeatures];
+    const uint32_t numStmFeatures = PositionToFeaturesVector(pos, stmFeatures, pos.GetSideToMove());
+    ASSERT(numStmFeatures <= maxFeatures);
+
+    uint16_t nstmFeatures[maxFeatures];
+    const uint32_t numNstmFeatures = PositionToFeaturesVector(pos, nstmFeatures, pos.GetSideToMove() ^ 1);
+    ASSERT(numNstmFeatures <= maxFeatures);
+
+    nn::Accumulator stmAccum;
+    stmAccum.Refresh(network.accumulatorWeights, network.accumulatorBiases, numStmFeatures, stmFeatures);
+
+    nn::Accumulator nstmAccum;
+    nstmAccum.Refresh(network.accumulatorWeights, network.accumulatorBiases, numNstmFeatures, nstmFeatures);
+
+    static_assert(sizeof(outTrace.rawAccumulator[0]) == sizeof(stmAccum.values), "accumulator size mismatch");
+    memcpy(outTrace.rawAccumulator[0], stmAccum.values, sizeof(stmAccum.values));
+    memcpy(outTrace.rawAccumulator[1], nstmAccum.values, sizeof(nstmAccum.values));
+
+    // run the last layer for every output bucket variant
+    for (uint32_t v = 0; v < nn::NumVariants; ++v)
+        outTrace.bucketOutput[v] = network.Run(stmAccum, nstmAccum, v);
+
+    outTrace.selectedVariant = GetNetworkVariant(pos);
 }
 
 template<Color perspective>
@@ -430,6 +614,12 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
     // cache NN output
     node.nnContext.nnScore = nnOutput;
+
+    // search-time statistics collection (disabled by default: single relaxed load + predicted-not-taken branch)
+    if (s_collectAccumulatorStats.load(std::memory_order_relaxed)) [[unlikely]]
+    {
+        CollectAccumulatorStats(*AcquireThreadStatsBuffer(), ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+    }
 
     return nnOutput;
 }
