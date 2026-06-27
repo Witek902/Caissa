@@ -1767,8 +1767,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // History Pruning
                 // if a move score is really bad, do not consider this move at low depth
-                if (quietMoveIndex > 1 &&
-                    node->depth < HistoryPruningMaxDepth &&
+                if (node->depth < HistoryPruningMaxDepth &&
                     moveStatScore < GetHistoryPruningTreshold(lmrDepth))
                 {
                     continue;
