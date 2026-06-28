@@ -1943,6 +1943,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
+            // reduce more if TT entry is exact
+            if (ttEntry.bounds == TTEntry::Bounds::Exact) r += 1024;
+
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
         }
