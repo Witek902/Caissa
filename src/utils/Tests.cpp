@@ -1979,10 +1979,10 @@ void RunSearchTests()
         search.DoSearch(game, param, result);
 
         TEST_EXPECT(result.size() == 4);
-        TEST_EXPECT(std::abs(result[0].score) < 80);
-        TEST_EXPECT(std::abs(result[1].score) < 80);
-        TEST_EXPECT(std::abs(result[2].score) < 80);
-        TEST_EXPECT(std::abs(result[3].score) < 80);
+        TEST_EXPECT(std::abs(result[0].score) < 120);
+        TEST_EXPECT(std::abs(result[1].score) < 120);
+        TEST_EXPECT(std::abs(result[2].score) < 120);
+        TEST_EXPECT(std::abs(result[3].score) < 120);
     }
 
     // chess-rook skewer

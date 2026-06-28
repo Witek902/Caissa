@@ -747,7 +747,12 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             searchContext.excludedRootMoves.push_back(pvLine.moves.front());
 
             tempResult[pvIndex] = std::move(pvLine);
-            thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
+
+            // seed the running average with the first completed score, then blend on later iterations
+            if (depth <= 1)
+                thread.avgScores[pvIndex] = tempResult[pvIndex].score;
+            else
+                thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
         }
 
         if (abortSearch)
