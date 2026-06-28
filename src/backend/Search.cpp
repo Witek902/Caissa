@@ -1685,6 +1685,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     Move move;
 
     Move bestMove = Move::Invalid();
+    TTEntry::Bounds bounds = TTEntry::Bounds::Upper;
 
     uint32_t moveIndex = 0;
     uint32_t quietMoveIndex = 0;
@@ -1943,6 +1944,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
+            // reduce more if we have found a move with exact score (within alpha-beta window)
+            if (bounds == TTEntry::Bounds::Exact) r += 1024;
+
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
         }
@@ -2055,11 +2059,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             alpha = score;
             bestMove = move;
+            bounds = TTEntry::Bounds::Exact;
 
             if (score >= beta)
             {
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
+                bounds = TTEntry::Bounds::Lower;
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
@@ -2156,11 +2162,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // - some move was skipped due to filtering, because 'bestMove' may not be "the best" for the current position
     if (!filteredSomeMove && !CheckStopCondition(thread, ctx, false))
     {
-        const TTEntry::Bounds bounds =
-            bestValue >= beta ? TTEntry::Bounds::Lower :
-            bestValue > oldAlpha ? TTEntry::Bounds::Exact :
-            TTEntry::Bounds::Upper;
-
         // only PV nodes can have exact score
         if constexpr (!isPvNode)
             ASSERT(bounds != TTEntry::Bounds::Exact);
