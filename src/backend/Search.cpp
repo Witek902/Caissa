@@ -1272,7 +1272,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
 // NO_INLINE to keep MovePicker (containing MoveList) off NegaMax's stack frame,
 // reducing its size and preventing stack overflow at high search depths.
-NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta)
+NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta, bool improving)
 {
     const Position& position = node->position;
     const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
@@ -1324,7 +1324,7 @@ NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchCo
         // verification search
         if (score >= probBeta)
         {
-            childNode.depth = static_cast<int16_t>(node->depth - ProbcutStartDepth + 1);
+            childNode.depth = static_cast<int16_t>(node->depth - ProbcutStartDepth - improving + 1);
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
         }
 
@@ -1648,7 +1648,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Probcut
             {
-                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta);
+                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta, isImproving);
                 if (probcutScore != InvalidValue)
                     return probcutScore;
             }
