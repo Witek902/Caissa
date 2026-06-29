@@ -1802,7 +1802,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 }
                 else
                 {
-                    if (node->depth <= SSEPruningDepth_NonCaptures &&
+                    if (!node->isInCheck &&
+                        node->depth <= SSEPruningDepth_NonCaptures &&
                         !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * lmrDepth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
                 }
             }
