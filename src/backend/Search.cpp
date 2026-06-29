@@ -752,7 +752,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             if (depth <= 1)
                 thread.avgScores[pvIndex] = tempResult[pvIndex].score;
             else
-                thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + (int32_t)tempResult[pvIndex].score) / 2);
+                thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + 3 * (int32_t)tempResult[pvIndex].score) / 4);
         }
 
         if (abortSearch)
