@@ -282,7 +282,8 @@ private:
         uint32_t depth;
         uint32_t pvIndex;
         SearchContext& searchContext;
-        ScoreType previousScore = 0;                  // score in previous ID iteration
+        ScoreType previousScore = 0;                  // score in previous ID iteration (window center)
+        ScoreType scoreTrend = 0;                     // smoothed prediction error of the center (window width)
         uint32_t threadID = 0;
     };
 
@@ -325,7 +326,8 @@ private:
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
-        std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
+        std::vector<ScoreType> avgScores;   // average scores for each PV line (aspiration window center)
+        std::vector<ScoreType> scoreTrend;  // smoothed per-PV prediction error (aspiration window width)
         SearchThreadStats stats;            // per-thread search stats
 
         // per-thread move orderer

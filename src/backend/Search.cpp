@@ -86,6 +86,7 @@ DEFINE_PARAM(AspirationWindow, 6, 5, 20);
 DEFINE_PARAM(AspirationWindowScoreScale, 17, 8, 32);
 DEFINE_PARAM(AspirationDepthMargin, 5, 2, 10);
 DEFINE_PARAM(AspirationWindowGrowthDiv, 3, 2, 6);
+DEFINE_PARAM(AspirationWindowTrendScale, 128, 0, 512);
 
 DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
@@ -665,6 +666,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     thread.pvLines.resize(numPvLines);
     thread.avgScores.clear();
     thread.avgScores.resize(numPvLines, 0);
+    thread.scoreTrend.clear();
+    thread.scoreTrend.resize(numPvLines, 0);
     thread.moveOrderer.NewSearch();
     thread.nodeCache.OnNewSearch();
 
@@ -709,6 +712,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 pvIndex,
                 searchContext,
                 prevScore,
+                thread.scoreTrend[pvIndex],
                 threadID,
             };
 
@@ -748,11 +752,22 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
             tempResult[pvIndex] = std::move(pvLine);
 
-            // seed the running average with the first completed score, then blend on later iterations
+            // Update per-PV aspiration statistics:
+            //  - avgScores: EMA of the score, used as the next window's center
+            //  - scoreTrend: smoothed |score - center| (how far the realized score landed from the
+            //    predicted center), used to widen the next window so volatile lines re-search less.
+            const ScoreType newScore = tempResult[pvIndex].score;
             if (depth <= 1)
-                thread.avgScores[pvIndex] = tempResult[pvIndex].score;
+            {
+                thread.avgScores[pvIndex] = newScore;
+                thread.scoreTrend[pvIndex] = 0;
+            }
             else
-                thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + 3 * (int32_t)tempResult[pvIndex].score) / 4);
+            {
+                const int32_t predictionError = std::abs((int32_t)newScore - (int32_t)thread.avgScores[pvIndex]);
+                thread.scoreTrend[pvIndex] = (depth <= 2) ? (ScoreType)predictionError : ScoreType(((int32_t)thread.scoreTrend[pvIndex] + predictionError) / 2);
+                thread.avgScores[pvIndex] = ScoreType(((int32_t)thread.avgScores[pvIndex] + 3 * (int32_t)newScore) / 4);
+            }
         }
 
         if (abortSearch)
@@ -875,6 +890,9 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 
     // increase window based on score
     window += std::abs(param.previousScore) / AspirationWindowScoreScale;
+
+    // widen the window for volatile lines (recent prediction error of the center)
+    window += param.scoreTrend * AspirationWindowTrendScale / 256;
 
     // start applying aspiration window at given depth
     if (param.previousScore != InvalidValue &&
