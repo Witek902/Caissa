@@ -63,6 +63,8 @@ DEFINE_PARAM(SingularitySearchScoreStep, 24, 10, 50);
 DEFINE_PARAM(IIRStartDepth, 3, 2, 6);
 DEFINE_PARAM(IIRTTDepthMargin, 4, 2, 8);
 
+DEFINE_PARAM(IIDMinDepth, 6, 4, 12);
+
 DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 16, 0, 40);
 DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
@@ -1652,6 +1654,26 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (probcutScore != InvalidValue)
                     return probcutScore;
             }
+        }
+    }
+
+    // Internal Iterative Deepening (IID)
+    // In PV nodes with no TT move, move ordering would be poor. Do a reduced-depth
+    // search of this position first to populate the transposition table with a good
+    // move, then read it back to use as the TT move for the full-depth search.
+    if constexpr (isPvNode && !isRootNode)
+    {
+        if (node->depth >= IIDMinDepth && !node->isInCheck && !node->filteredMove.IsValid() && !ttEntry.move.IsValid())
+        {
+            const int16_t originalDepth = node->depth;
+            node->depth = originalDepth / 2;
+            (void)NegaMax<NodeType::PV>(thread, node, ctx);
+            node->depth = originalDepth;
+
+            // re-read the TT to pick up the move found by the reduced search
+            TTEntry iidEntry;
+            if (ctx.searchParam.transpositionTable.Read(position, iidEntry))
+                ttEntry.move = iidEntry.move;
         }
     }
 
