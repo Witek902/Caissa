@@ -136,6 +136,8 @@ struct NodeInfo
     bool isNullMove = false;
     bool isInCheck = false;
 
+    uint32_t cutoffCount = 0;
+
     MoveOrderer::PieceSquareHistory* continuationHistories[6] = { };
 
     NNEvaluatorContext nnContext;

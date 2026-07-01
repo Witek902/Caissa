@@ -40,6 +40,7 @@ DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
 DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
 DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
+DEFINE_PARAM(LmrCutoffCount, 1024, 0, 3072);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
@@ -1361,6 +1362,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // clear PV line
     node->pvLength = 0;
 
+    // reset child's cutoff count (accumulates across sibling searches at ply+1)
+    (node + 1)->cutoffCount = 0;
+
     // update stats
     thread.stats.OnNodeEnter(node->ply + 1);
     ctx.stats.Append(thread.stats);
@@ -1948,6 +1952,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // reduce less if TT entry has high depth
             if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
+            // reduce more if child position previously had many cutoffs (easy node)
+            if ((node + 1)->cutoffCount > 2) r += LmrCutoffCount;
+
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
         }
@@ -2078,6 +2085,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (move.IsQuiet()) ctx.stats.quietCutoffs++;
 #endif // COLLECT_SEARCH_STATS
 
+                node->cutoffCount++;
                 break;
             }
 
