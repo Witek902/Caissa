@@ -1259,9 +1259,10 @@ bool Position::IsMoveValid_Fast(const PackedMove& move) const
 
 bool Position::IsCapture(const PackedMove& move) const
 {
+    // a capture needs our piece on the from-square and an enemy piece on the to-square
     return
-        (GetCurrentSide().Occupied() & move.FromSquare().GetBitboard()) &&
-        (GetOpponentSide().Occupied() & move.ToSquare().GetBitboard());
+        (GetCurrentSide().pieces[move.FromSquare().Index()] != Piece::None) &&
+        (GetOpponentSide().pieces[move.ToSquare().Index()] != Piece::None);
 }
 
 uint64_t Position::Perft(uint32_t depth, bool print) const
