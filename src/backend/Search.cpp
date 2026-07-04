@@ -122,6 +122,8 @@ DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
 
 DEFINE_PARAM(ReductionStatOffset, 6877, 5000, 10000);
 DEFINE_PARAM(ReductionStatDiv, 15, 5, 30);
+DEFINE_PARAM(ReductionCaptureStatOffset, 2022, 1000, 3000);
+DEFINE_PARAM(ReductionCaptureStatDiv, 15, 4, 32);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
@@ -1931,6 +1933,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce bad captures more
                 if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad;
+
+                // reduce less based on capture history score
+                if (move.IsCapture())
+                    r -= (thread.moveOrderer.GetCaptureHistoryScore(*node, move) + ReductionCaptureStatOffset) / ReductionCaptureStatDiv;
 
                 if (node->isCutNode) r += LmrCaptureCutNode;
 
