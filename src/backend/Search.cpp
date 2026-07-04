@@ -1584,9 +1584,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Razoring
-            // prune if quiescence search on current position can't beat beta
+            // prune if quiescence search on current position can't beat beta, don't razor when the TT move is quiet
             if (node->depth <= RazoringStartDepth &&
                 beta < KnownWinValue &&
+                !(ttEntry.move.IsValid() && !position.IsCapture(ttEntry.move) && ttEntry.move.GetPromoteTo() == Piece::None) &&
                 eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
                 const ScoreType qScore = QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
