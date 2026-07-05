@@ -109,6 +109,7 @@ DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 DEFINE_PARAM(RfpAdjBetaScale, 525, 1, 1024);
+DEFINE_PARAM(RfpTTCaptureScale, 60, 0, 150);
 
 DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
 DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
@@ -1568,6 +1569,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 4)->staticEval;
     }
 
+    const PackedMove ttMove = ttEntry.move;
+    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
+    const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
@@ -1576,7 +1581,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const int32_t rfpMargin =
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
-                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
+                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats))
+                + RfpTTCaptureScale * ttCapture;
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
@@ -1656,10 +1662,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
         }
     }
-
-    const PackedMove ttMove = ttEntry.move;
-    const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
-    const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
 
     // in-check probcut (idea from Stockfish)
     if constexpr (!isPvNode)
