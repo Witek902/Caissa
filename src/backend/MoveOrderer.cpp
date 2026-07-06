@@ -180,7 +180,7 @@ void MoveOrderer::InitContinuationHistoryPointers(NodeInfo& node)
 
 INLINE static void ScaleDownHistoryCounter(MoveOrderer::CounterType& counter)
 {
-    counter = static_cast<MoveOrderer::CounterType>(counter * 3 / 4);
+    counter = static_cast<MoveOrderer::CounterType>(counter * 7 / 8);
 }
 
 void MoveOrderer::NewSearch()
