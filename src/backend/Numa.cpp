@@ -47,9 +47,25 @@ bool PinCurrentThreadToNumaNode(uint32_t node)
 
 void* AllocateOnNode(size_t size, uint32_t node)
 {
-    void* ptr = ::VirtualAllocExNuma(GetCurrentProcess(), nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE, node);
+    void* ptr = nullptr;
+
+    // try NUMA-local large pages first
+    const size_t largePageMin = ::GetLargePageMinimum(); // 0 if large pages are unsupported
+    if (largePageMin != 0)
+    {
+        const size_t roundedSize = ((size + largePageMin - 1) / largePageMin) * largePageMin;
+        ptr = ::VirtualAllocExNuma(GetCurrentProcess(), nullptr, roundedSize,
+                                   MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE, node);
+    }
+
+    // fallback: regular pages on the node
+    if (!ptr)
+        ptr = ::VirtualAllocExNuma(GetCurrentProcess(), nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE, node);
+
+    // final fallback: any node
     if (!ptr)
         ptr = ::VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
     return ptr;
 }
 
@@ -66,7 +82,18 @@ void FreeOnNode(void* ptr, size_t size)
 
 #include <numa.h> // libnuma
 
+#if defined(__linux__)
+#include <sys/mman.h> // madvise, MADV_HUGEPAGE
+#endif
+
 namespace numa {
+
+constexpr size_t HugePageSize = 2 * 1024 * 1024;
+
+static INLINE size_t RoundUpToHugePage(size_t size)
+{
+    return (size + HugePageSize - 1) & ~(HugePageSize - 1);
+}
 
 static bool g_numaAvailable = false;
 static std::vector<cpu_set_t> s_sets;
@@ -127,18 +154,25 @@ bool PinCurrentThreadToNumaNode(uint32_t node)
 void* AllocateOnNode(size_t size, uint32_t node)
 {
     if (!g_numaAvailable)
-        return AlignedMalloc(size, CACHELINE_SIZE);
-    return numa_alloc_onnode(size, (int)node);
+        return Malloc(size); // already madvises MADV_HUGEPAGE on Linux
+
+    const size_t rounded = RoundUpToHugePage(size);
+    void* ptr = numa_alloc_onnode(rounded, (int)node);
+#if defined(MADV_HUGEPAGE)
+    if (ptr)
+        madvise(ptr, rounded, MADV_HUGEPAGE);
+#endif
+    return ptr;
 }
 
 void FreeOnNode(void* ptr, size_t size)
 {
     if (!g_numaAvailable)
     {
-        AlignedFree(ptr);
+        Free(ptr);
         return;
     }
-    numa_free(ptr, size);
+    numa_free(ptr, RoundUpToHugePage(size));
 }
 
 } // namespace numa
@@ -164,13 +198,13 @@ bool PinCurrentThreadToNumaNode(uint32_t node)
 void* AllocateOnNode(size_t size, uint32_t node)
 {
     UNUSED(node);
-    return AlignedMalloc(size, CACHELINE_SIZE);
+    return Malloc(size); // already madvises MADV_HUGEPAGE on Linux
 }
 
 void FreeOnNode(void* ptr, size_t size)
 {
     UNUSED(size);
-    AlignedFree(ptr);
+    Free(ptr);
 }
 
 } // namespace numa
