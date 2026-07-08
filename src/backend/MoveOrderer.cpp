@@ -41,7 +41,7 @@ DEFINE_PARAM(CaptureMalusOffset, 28, 0, 100);
 DEFINE_PARAM(CaptureMalusLinear, 44, 20, 120);
 DEFINE_PARAM(CaptureMalusLimit, 1885, 1000, 4000);
 
-DEFINE_PARAM(MVVMultiplier, 4096, 1000, 10000);
+DEFINE_PARAM(MVVMultiplier, 4096, 2000, 6000);
 
 DEFINE_PARAM(MinorThreatEscapeBonus, 4000, 2000, 12000);
 DEFINE_PARAM(RookThreatEscapeBonus, 8000, 3000, 16000);
@@ -51,7 +51,7 @@ DEFINE_PARAM(MinorThreatEnterMalus, 4000, 2000, 12000);
 DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
 DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
-DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 20000);
+DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 8000);
 
 
 MoveOrderer::MoveOrderer()

@@ -25,7 +25,7 @@ static const int32_t LmrScale = 1024;
 DEFINE_PARAM(LmrScale_Quiets, 430, 200, 700);
 DEFINE_PARAM(LmrBias_Quiets, 553, 200, 800);
 DEFINE_PARAM(LmrScale_Captures, 420, 200, 700);
-DEFINE_PARAM(LmrBias_Captures, 673, 200, 800);
+DEFINE_PARAM(LmrBias_Captures, 673, 200, 900);
 
 DEFINE_PARAM(LmrQuietNonPv, 240, -2048, 4096);
 DEFINE_PARAM(LmrQuietTTCapture, 1168, -2048, 4096);
@@ -69,7 +69,7 @@ DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
 DEFINE_PARAM(NmpEvalRedDiv, 3, 2, 5);
 DEFINE_PARAM(NmpEvalDiffDiv, 85, 16, 512);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
-DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 5);
+DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 8);
 DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 DEFINE_PARAM(NmpEvalBetaClamp, 3, 1, 6);
 
@@ -87,7 +87,7 @@ DEFINE_PARAM(AspirationWindowScoreScale, 17, 8, 32);
 DEFINE_PARAM(AspirationDepthMargin, 5, 2, 10);
 DEFINE_PARAM(AspirationWindowGrowthDiv, 3, 2, 6);
 
-DEFINE_PARAM(SingularExtMinDepth, 3, 3, 10);
+DEFINE_PARAM(SingularExtMinDepth, 3, 2, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
 DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
@@ -104,7 +104,7 @@ DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
-DEFINE_PARAM(RfpDepthScaleLinear, 83, 80, 180);
+DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
@@ -119,7 +119,7 @@ DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 134, 64, 256);
 DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 158, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
-DEFINE_PARAM(RazoringWinGuard, 1200, 1000, 20000);
+DEFINE_PARAM(RazoringWinGuard, 1200, 1000, 3000);
 
 DEFINE_PARAM(ReductionStatOffset, 6877, 5000, 10000);
 DEFINE_PARAM(ReductionStatDiv, 15, 5, 30);
@@ -128,7 +128,7 @@ DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
-DEFINE_PARAM(CorrHistGravity, 1024, 256, 4096);
+DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
 DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);

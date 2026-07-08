@@ -3,7 +3,7 @@
 #include "Tuning.hpp"
 
 
-DEFINE_PARAM(TM_MovesLeftMidpoint, 35, 30, 60);
+DEFINE_PARAM(TM_MovesLeftMidpoint, 35, 25, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 219, 150, 260);
 DEFINE_PARAM(TM_IdealTimeFactor, 823, 700, 1000);
 DEFINE_PARAM(TM_MaxTimeFactor, 450, 100, 1000);
