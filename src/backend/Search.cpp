@@ -104,7 +104,7 @@ DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
-DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
+DEFINE_PARAM(RfpDepthScaleLinear, 70, 40, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
