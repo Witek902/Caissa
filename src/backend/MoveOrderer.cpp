@@ -187,7 +187,8 @@ void MoveOrderer::NewSearch()
 {
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(quietMoveHistory)[i]);
-
+    for (uint32_t i = 0; i < sizeof(continuationHistory) / sizeof(CounterType); ++i)
+        ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(continuationHistory)[i]);
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(capturesHistory)[i]);
 
