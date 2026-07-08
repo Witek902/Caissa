@@ -41,6 +41,12 @@ DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
 DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
+// depth-shaping slopes: nudge += Slope * ln(depth)
+DEFINE_PARAM(LmrQuietNonPvSlope, 0, -1024, 1024);
+DEFINE_PARAM(LmrQuietCutNodeSlope, 0, -1024, 1024);
+DEFINE_PARAM(LmrQuietImprovingSlope, 0, -1024, 1024);
+DEFINE_PARAM(LmrCaptureBadSlope, 0, -1024, 1024);
+
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
 DEFINE_PARAM(LmrDeeperTreshold, 85, 20, 200);
@@ -251,6 +257,13 @@ void Search::BuildMoveReductionTable()
     BuildMoveReductionTable(mMoveReductionTable_Captures,
         static_cast<float>(LmrScale_Captures) / 1000.0f,
         static_cast<float>(LmrBias_Captures) / 1000.0f);
+
+    // fixed-point LmrScale*ln(depth) used to depth-shape LMR nudges; ln(1)=0 so depth 1 contributes nothing
+    for (uint32_t d = 0; d < LMRTableSize; ++d)
+    {
+        const float v = LmrScale * Log(float(std::max(1u, d)));
+        mLmrLogDepth[d] = static_cast<int32_t>(v >= 0.0f ? v + 0.5f : v - 0.5f);
+    }
 }
 
 void Search::Clear()
@@ -1900,12 +1913,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             moveIndex > 1 &&
             (!isPvNode || move.IsQuiet()))
         {
+            // ln(depth) in fixed-point (x LmrScale); Slope*lnDepth/LmrScale adds Slope*ln(depth) to a nudge
+            const int32_t lnDepth = mLmrLogDepth[std::min<uint32_t>(node->depth, LMRTableSize - 1)];
+
             if (move.IsQuiet())
             {
                 r = GetQuietsDepthReduction(node->depth, moveIndex);
 
                 // reduce non-PV nodes more
-                if constexpr (!isPvNode) r += LmrQuietNonPv;
+                if constexpr (!isPvNode) r += LmrQuietNonPv + LmrQuietNonPvSlope * lnDepth / LmrScale;
 
                 // reduce more if TT move is capture
                 if (ttCapture) r += LmrQuietTTCapture;
@@ -1916,10 +1932,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less based on move stat score
                 r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
 
-                if (node->isCutNode) r += LmrQuietCutNode;
+                if (node->isCutNode) r += LmrQuietCutNode + LmrQuietCutNodeSlope * lnDepth / LmrScale;
 
                 // reduce more if eval is not improving
-                if (!isImproving) r += LmrQuietImproving;
+                if (!isImproving) r += LmrQuietImproving + LmrQuietImprovingSlope * lnDepth / LmrScale;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
@@ -1932,7 +1948,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
 
                 // reduce bad captures more
-                if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad;
+                if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad + LmrCaptureBadSlope * lnDepth / LmrScale;
 
                 if (node->isCutNode) r += LmrCaptureCutNode;
 

@@ -350,6 +350,9 @@ private:
     LMRTableType mMoveReductionTable_Quiets;
     LMRTableType mMoveReductionTable_Captures;
 
+    // fixed-point LmrScale*ln(depth), indexed by remaining depth; used to depth-shape LMR nudges
+    int32_t mLmrLogDepth[LMRTableSize];
+
     INLINE uint16_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
         return mMoveReductionTable_Quiets[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];

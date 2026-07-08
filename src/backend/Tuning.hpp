@@ -4,7 +4,7 @@
 
 // enable search parameter tuning
 // will expose all parameters defined with DEFINE_PARAM to UCI
-//#define ENABLE_TUNING
+#define ENABLE_TUNING
 
 
 #ifdef ENABLE_TUNING
