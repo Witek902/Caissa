@@ -22,28 +22,32 @@ static const int32_t WdlTablebaseProbeDepth = 5;
 
 static const int32_t LmrScale = 1024;
 
-DEFINE_PARAM(LmrScale_Quiets, 430, 200, 700);
-DEFINE_PARAM(LmrBias_Quiets, 553, 200, 800);
-DEFINE_PARAM(LmrScale_Captures, 420, 200, 700);
-DEFINE_PARAM(LmrBias_Captures, 673, 200, 900);
+DEFINE_PARAM(LmrScale_Quiets, 440, 200, 700);
+DEFINE_PARAM(LmrBias_Quiets, 526, 200, 800);
+DEFINE_PARAM(LmrScale_Captures, 402, 200, 700);
+DEFINE_PARAM(LmrBias_Captures, 674, 200, 900);
 
-DEFINE_PARAM(LmrQuietNonPv, 240, -2048, 4096);
-DEFINE_PARAM(LmrQuietTTCapture, 1168, -2048, 4096);
-DEFINE_PARAM(LmrQuietRefutation, 2688, -2048, 4096);
-DEFINE_PARAM(LmrQuietCutNode, 2928, -2048, 4096);
-DEFINE_PARAM(LmrQuietImproving, 608, -2048, 4096);
-DEFINE_PARAM(LmrQuietInCheck, 1136, -2048, 4096);
+DEFINE_PARAM(LmrQuietNonPv, 419, -2048, 4096);
+DEFINE_PARAM(LmrQuietTTCapture, 1231, -2048, 4096);
+DEFINE_PARAM(LmrQuietRefutation, 2880, -2048, 4096);
+DEFINE_PARAM(LmrQuietCutNode, 2825, -2048, 4096);
+DEFINE_PARAM(LmrQuietImproving, 787, -2048, 4096);
+DEFINE_PARAM(LmrQuietInCheck, 977, -2048, 4096);
 
-DEFINE_PARAM(LmrCaptureWinning, 1008, -2048, 4096);
-DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
-DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
-DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
-DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
-DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
+DEFINE_PARAM(LmrCaptureWinning, 864, -2048, 4096);
+DEFINE_PARAM(LmrCaptureBad, -536, -2048, 4096);
+DEFINE_PARAM(LmrCaptureCutNode, 1457, -2048, 4096);
+DEFINE_PARAM(LmrCaptureImproving, -257, -2048, 2048);
+DEFINE_PARAM(LmrCaptureInCheck, 151, -2048, 4096);
+DEFINE_PARAM(LmrTTHighDepth, 196, -2048, 4096);
+
+// depth-shaping slopes: nudge += Slope * ln(depth)
+DEFINE_PARAM(LmrQuietNonPvSlope, -77, -1024, 1024);
+DEFINE_PARAM(LmrQuietImprovingSlope, 99, -1024, 1024);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
-DEFINE_PARAM(LmrDeeperTreshold, 85, 20, 200);
+DEFINE_PARAM(LmrDeeperTreshold, 83, 20, 200);
 
 DEFINE_PARAM(ProbcutStartDepth, 5, 3, 8);
 DEFINE_PARAM(ProbcutBetaOffset, 133, 80, 300);
@@ -121,8 +125,8 @@ DEFINE_PARAM(RazoringMarginMultiplier, 158, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
 DEFINE_PARAM(RazoringWinGuard, 1200, 1000, 3000);
 
-DEFINE_PARAM(ReductionStatOffset, 6877, 5000, 10000);
-DEFINE_PARAM(ReductionStatDiv, 15, 5, 30);
+DEFINE_PARAM(ReductionStatOffset, 6819, 5000, 10000);
+DEFINE_PARAM(ReductionStatDiv, 14, 5, 30);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
@@ -251,6 +255,14 @@ void Search::BuildMoveReductionTable()
     BuildMoveReductionTable(mMoveReductionTable_Captures,
         static_cast<float>(LmrScale_Captures) / 1000.0f,
         static_cast<float>(LmrBias_Captures) / 1000.0f);
+
+    // fixed-point LmrScale*ln(depth) used to depth-shape LMR nudges; ln(1)=0 so depth 1 contributes nothing
+    for (uint32_t d = 0; d < LMRTableSize; ++d)
+    {
+        const float v = LmrScale * Log(float(std::max(1u, d)));
+        ASSERT(v < INT16_MAX && v > INT16_MIN);
+        mLmrLogDepth[d] = static_cast<int16_t>(v >= 0.0f ? v + 0.5f : v - 0.5f);
+    }
 }
 
 void Search::Clear()
@@ -1902,10 +1914,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (move.IsQuiet())
             {
+                // ln(depth) in fixed-point (x LmrScale); Slope*lnDepth/LmrScale adds Slope*ln(depth) to a nudge
+                const int32_t lnDepth = mLmrLogDepth[std::min<uint32_t>(node->depth, LMRTableSize - 1)];
+
                 r = GetQuietsDepthReduction(node->depth, moveIndex);
 
                 // reduce non-PV nodes more
-                if constexpr (!isPvNode) r += LmrQuietNonPv;
+                if constexpr (!isPvNode) r += LmrQuietNonPv + LmrQuietNonPvSlope * lnDepth / LmrScale;
 
                 // reduce more if TT move is capture
                 if (ttCapture) r += LmrQuietTTCapture;
@@ -1919,7 +1934,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r += LmrQuietCutNode;
 
                 // reduce more if eval is not improving
-                if (!isImproving) r += LmrQuietImproving;
+                if (!isImproving) r += LmrQuietImproving + LmrQuietImprovingSlope * lnDepth / LmrScale;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
