@@ -86,6 +86,8 @@ DEFINE_PARAM(AspirationWindow, 6, 5, 20);
 DEFINE_PARAM(AspirationWindowScoreScale, 17, 8, 32);
 DEFINE_PARAM(AspirationDepthMargin, 5, 2, 10);
 DEFINE_PARAM(AspirationWindowGrowthDiv, 3, 2, 6);
+DEFINE_PARAM(AspirationWindowStabilityMax, 2, 0, 4);
+DEFINE_PARAM(AspirationStabilityScoreTol, 8, 4, 32);
 
 DEFINE_PARAM(SingularExtMinDepth, 3, 2, 10);
 DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
@@ -672,6 +674,11 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     uint32_t mateCounter = 0;
     TimeManagerState timeManagerState;
 
+    // search-stability tracking; a stable score and best move shrink the next iteration's aspiration window
+    uint32_t evalStability = 0;
+    uint32_t pvStability = 0;
+    Move prevBestMove = Move::Invalid();
+
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
 
@@ -711,6 +718,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
                 searchContext,
                 prevScore,
                 threadID,
+                std::min(std::min(evalStability, pvStability), (uint32_t)AspirationWindowStabilityMax),
             };
 
             PvLine pvLine = AspirationWindowSearch(thread, aspirationWindowSearchParam);
@@ -768,6 +776,18 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
         const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
+
+        // track stability of the primary line to shrink the next iteration's initial aspiration window
+        if (std::abs((int32_t)primaryMoveScore - (int32_t)thread.avgScores[0]) < AspirationStabilityScoreTol)
+            evalStability++;
+        else
+            evalStability = 0;
+
+        if (prevBestMove.IsValid() && prevBestMove == primaryMove)
+            pvStability++;
+        else
+            pvStability = 0;
+        prevBestMove = primaryMove;
 
         // update time manager
         if (isMainThread && !param.limits.analysisMode)
@@ -872,7 +892,9 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     int32_t alpha = -InfValue;
     int32_t beta = InfValue;
     uint32_t depth = param.depth;
-    int32_t window = AspirationWindow;
+
+    // shrink the initial window when recent iterations have been stable
+    int32_t window = std::max<int32_t>(1, AspirationWindow - (int32_t)param.stability);
 
     // increase window based on score
     window += std::abs(param.previousScore) / AspirationWindowScoreScale;

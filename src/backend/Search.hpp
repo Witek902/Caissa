@@ -284,6 +284,7 @@ private:
         SearchContext& searchContext;
         ScoreType previousScore = 0;                  // score in previous ID iteration
         uint32_t threadID = 0;
+        uint32_t stability = 0;                       // consecutive stable iterations; shrinks the initial aspiration window
     };
 
     //
