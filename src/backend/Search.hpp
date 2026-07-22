@@ -129,6 +129,9 @@ struct NodeInfo
 
     ScoreType staticEval = InvalidValue;
 
+    // eval correction applied to staticEval (centipawns); |value| is a local eval-reliability signal
+    ScoreType evalCorrection = 0;
+
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
 
@@ -153,6 +156,7 @@ struct NodeInfo
         pvIndex = 0;
         filteredMove = PackedMove::Invalid();
         staticEval = InvalidValue;
+        evalCorrection = 0;
         previousMove = Move::Invalid();
         moveStatScore = 0;
         isInCheck = false;
@@ -368,7 +372,7 @@ private:
 
     ScoreType GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const;
 
-    ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
+    ScoreType AdjustEvalScore(const ThreadData& thread, NodeInfo& node, const SearchParam& searchParam) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 

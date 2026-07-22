@@ -40,6 +40,7 @@ DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
 DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
 DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
+DEFINE_PARAM(LmrCorrScale, 256, 0, 512);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
 
@@ -1006,12 +1007,14 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
+ScoreType Search::AdjustEvalScore(const ThreadData& thread, NodeInfo& node, const SearchParam& searchParam) const
 {
     int32_t adjustedScore = node.staticEval;
-    
-    // apply eval correction term
-    adjustedScore += GetEvalCorrection(thread.correctionHistories, node);
+
+    // apply eval correction term; retain it for reliability-based reduction scaling
+    const ScoreType correction = GetEvalCorrection(thread.correctionHistories, node);
+    node.evalCorrection = correction;
+    adjustedScore += correction;
 
     // scale down when approaching 50-move draw
     adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
@@ -1942,6 +1945,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
+
+            // reduce less when static eval has been historically unreliable in this position
+            r -= LmrCorrScale * std::abs((int32_t)node->evalCorrection) / 128;
 
             // reduce low-ply moves less
             if constexpr (isPvNode)
