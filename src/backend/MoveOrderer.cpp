@@ -7,6 +7,7 @@
 DEFINE_PARAM(QuietMoveHistoryClear, 802, -2000, 2000);
 DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
 DEFINE_PARAM(CapturesHistoryClear, 346, -2000, 2000);
+DEFINE_PARAM(PawnHistoryClear, 0, -2000, 2000);
 
 DEFINE_PARAM(HistBonusOffset, -113, -200, 0);
 DEFINE_PARAM(HistBonusLinear, 164, 100, 250);
@@ -34,6 +35,8 @@ DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
 DEFINE_PARAM(ContWeight3, 555, 1, 1024);
 DEFINE_PARAM(ContWeight5, 582, 1, 1024);
+
+DEFINE_PARAM(PawnHistWeight, 1024, 0, 2048);
 
 DEFINE_PARAM(CaptureBonusOffset, 27, 0, 100);
 DEFINE_PARAM(CaptureBonusLinear, 72, 20, 120);
@@ -192,6 +195,9 @@ void MoveOrderer::NewSearch()
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(capturesHistory)[i]);
 
+    for (uint32_t i = 0; i < sizeof(pawnHistory) / sizeof(CounterType); ++i)
+        ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(pawnHistory)[i]);
+
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
@@ -212,6 +218,8 @@ void MoveOrderer::Clear()
         static_cast<CounterType>(ContinuationHistoryClear), sizeof(continuationHistory) / sizeof(CounterType));
     ClearHistoryTable(reinterpret_cast<CounterType*>(capturesHistory),
         static_cast<CounterType>(CapturesHistoryClear), sizeof(capturesHistory) / sizeof(CounterType));
+    ClearHistoryTable(reinterpret_cast<CounterType*>(pawnHistory),
+        static_cast<CounterType>(PawnHistoryClear), sizeof(pawnHistory) / sizeof(CounterType));
 
     memset(counterMoves, 0, sizeof(counterMoves));
     memset(killerMoves, 0, sizeof(killerMoves));
@@ -291,6 +299,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     const int32_t contMalus = -std::min<int32_t>(ContMalusOffset + ContMalusLinear * node.depth + ContMalusScoreDiff * scoreDiff / 64, ContMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
+    PieceSquareHistory& pawnHist = pawnHistory[color][node.position.GetPawnsHash() % PawnHistorySize];
 
     const auto updateQuietMove = [&](const Move move, const int32_t histDelta, const int32_t contDelta) INLINE_LAMBDA
     {
@@ -298,6 +307,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t to = move.ToSquare().Index();
 
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
+        UpdateHistoryCounter(pawnHist[move.PieceTo()], histDelta);
 
         UpdateContinuationHistory(node, move, contDelta);
     };
@@ -369,6 +379,9 @@ void MoveOrderer::ScoreMoves(
     const uint32_t color = (uint32_t)pos.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
 
+    // pawn structure bucket is constant for the whole move list
+    const PieceSquareHistory* pawnHist = withQuiets ? &pawnHistory[color][pos.GetPawnsHash() % PawnHistorySize] : nullptr;
+
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.GetMove(i);
@@ -418,6 +431,9 @@ void MoveOrderer::ScoreMoves(
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+
+            // pawn structure history
+            score += (*pawnHist)[pieceTo] * PawnHistWeight / 1024;
 
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[pieceTo];
