@@ -2180,6 +2180,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // update correction histories
         if (!node->isInCheck &&
+            std::abs(bestValue) < KnownWinValue &&
+            std::abs(unadjustedEval) < KnownWinValue &&
             (!bestMove.IsValid() || bestMove.IsQuiet() || !position.StaticExchangeEvaluation(bestMove)) &&
             ((bestValue < unadjustedEval && bestValue < beta) ||
              (bestValue > unadjustedEval && bestMove.IsValid())))
