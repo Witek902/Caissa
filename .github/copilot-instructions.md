@@ -83,7 +83,7 @@ The project has three CMake targets:
 Architecture: `(32×768 → 1024) × 2 → 1` (dual-perspective, one accumulator per king side, 32 king buckets, 768 = 12 piece types × 64 squares). The last layer has 8 variants selected by piece count. Network files use the `.pnn` extension.
 
 ### utils – subcommands (invoked as `bin/utils <command>`)
-`unittest`, `perftest`, `selfplay`, `prepareTrainingData`, `plainTextToTrainingData`, `dumpGames`, `testNetwork`, `trainNetwork`, `trainCudaNetwork` (CUDA only), `validateEndgame`, `generateEndgamePositions`, `analyzeGames`
+`unittest`, `perftest`, `selfplay`, `prepareTrainingData`, `plainTextToTrainingData`, `dumpGames`, `testNetwork`, `trainNetwork`, `trainCudaNetwork` (CUDA only), `validateEndgame`, `generateEndgamePositions`, `generateRandomPositions`, `analyzeGames`
 
 CUDA trainer is optional: auto-detected by CMake; compiled only when CUDA Toolkit is found (`USE_CUDA` define).
 

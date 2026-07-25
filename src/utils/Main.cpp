@@ -15,6 +15,7 @@ extern void PlainTextToTrainingData(const std::vector<std::string>& args);
 extern void DumpGames(const std::vector<std::string>& args);
 extern void PgnToTrainingData(const std::vector<std::string>& args);
 extern void GenerateEndgamePositions();
+extern void GenerateRandomPositions(const std::vector<std::string>& args);
 extern bool TestNetwork();
 extern bool TrainNetwork();
 extern void ValidateEndgame();
@@ -93,6 +94,8 @@ int main(int argc, const char* argv[])
 #endif // USE_CUDA
     else if (toolName == "generateEndgamePositions")
         GenerateEndgamePositions();
+    else if (toolName == "generateRandomPositions")
+        GenerateRandomPositions(args);
     else
     {
         std::cerr << "Unknown option: " << args[0] << std::endl;
