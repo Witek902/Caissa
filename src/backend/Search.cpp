@@ -128,6 +128,7 @@ DEFINE_PARAM(ReductionStatDiv, 15, 5, 30);
 
 DEFINE_PARAM(EvalCorrectionPawnsScale, 53, 1, 128);
 DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
+DEFINE_PARAM(EvalCorrectionThreatsScale, 64, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
@@ -277,6 +278,7 @@ void Search::CorrectionHistories::Clear()
     memset(pawnStructure, 0, sizeof(pawnStructure));
     memset(nonPawnWhite, 0, sizeof(nonPawnWhite));
     memset(nonPawnBlack, 0, sizeof(nonPawnBlack));
+    memset(threats, 0, sizeof(threats));
     memset(continuation, 0, sizeof(continuation));
 }
 
@@ -1079,6 +1081,7 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
     corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
+    corr += EvalCorrectionThreatsScale * corrHist->threats[stm][ThreatsCorrIndex(node.threats.allThreats)];
 
     if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
@@ -1962,6 +1965,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             continue;
         moveIndex++;
 
+        childNode.position.ComputeThreats(childNode.threats);
+
         // prefetch correction histories for child node
         if constexpr (!isRootNode)
         {
@@ -1970,11 +1975,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             Prefetch(&corrHist->pawnStructure[stm][childNode.position.GetPawnsHash() % PawnCorrTableSize]);
             Prefetch(&corrHist->nonPawnWhite[stm][childNode.position.GetNonPawnsHash(White) % NonPawnCorrTableSize]);
             Prefetch(&corrHist->nonPawnBlack[stm][childNode.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize]);
+            Prefetch(&corrHist->threats[stm][ThreatsCorrIndex(childNode.threats.allThreats)]);
             Prefetch(&corrHist->continuation[stm][move.PieceTo()][node->previousMove.PieceTo()]);
         }
 
         childNode.staticEval = InvalidValue;
-        childNode.position.ComputeThreats(childNode.threats);
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
         childNode.moveStatScore = moveStatScore;
@@ -2279,6 +2284,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
+                AddToCorrHist(corrHist->threats[stm][ThreatsCorrIndex(node->threats.allThreats)], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                     AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
                 if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())

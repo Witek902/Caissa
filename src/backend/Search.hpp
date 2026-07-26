@@ -259,6 +259,14 @@ private:
     static constexpr uint32_t PawnCorrTableSize = 16 * 1024;
     static constexpr int32_t EvalCorrectionScale = 512;
     static constexpr uint32_t NonPawnCorrTableSize = 16 * 1024;
+    static constexpr uint32_t ThreatsCorrTableSizeLog2 = 15;
+    static constexpr uint32_t ThreatsCorrTableSize = 1u << ThreatsCorrTableSizeLog2;
+
+    // multiplicative hash of the threats bitboard (no incremental hash is maintained for it)
+    INLINE static uint32_t ThreatsCorrIndex(const Bitboard threats)
+    {
+        return static_cast<uint32_t>((threats * 0x9E3779B97F4A7C15ull) >> (64 - ThreatsCorrTableSizeLog2));
+    }
 
     enum class BoundsType : uint8_t
     {
@@ -296,6 +304,9 @@ private:
         using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
         NonPawnCorrTable nonPawnWhite;
         NonPawnCorrTable nonPawnBlack;
+
+        using ThreatsCorrTable = int16_t[2][ThreatsCorrTableSize]; // [stm][hash]
+        ThreatsCorrTable threats;
 
         using ContCorrTable = int16_t[2][6 * 64][6 * 64]; // [stm][piece-to][piece-to]
         ContCorrTable continuation;
