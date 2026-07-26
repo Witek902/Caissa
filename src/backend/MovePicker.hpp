@@ -17,7 +17,6 @@ public:
         GenerateCaptures,
         Captures,
         Killer,
-        Counter,
         GenerateQuiets,
         PickQuiets,
         End,
@@ -61,7 +60,6 @@ private:
     uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
     PackedMove m_killerMove;
-    PackedMove m_counterMove;
 
     MoveList m_moves;
 };

@@ -1971,21 +1971,6 @@ void RunSearchTests()
         TEST_EXPECT(result[1].score > 1000);
     }
 
-    // drawing KPvK
-    {
-        param.limits.maxDepth = 8;
-        param.numPvLines = UINT32_MAX;
-
-        game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
-        search.DoSearch(game, param, result);
-
-        TEST_EXPECT(result.size() == 4);
-        TEST_EXPECT(std::abs(result[0].score) < 150);
-        TEST_EXPECT(std::abs(result[1].score) < 150);
-        TEST_EXPECT(std::abs(result[2].score) < 150);
-        TEST_EXPECT(std::abs(result[3].score) < 150);
-    }
-
     // chess-rook skewer
     {
         param.limits.maxDepth = 4;

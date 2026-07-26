@@ -713,7 +713,6 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
             printf("Winning capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.winningCaptureCutoffs, 100.0f * float(stats.winningCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Good capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.goodCaptureCutoffs, 100.0f * float(stats.goodCaptureCutoffs) / float(stats.totalBetaCutoffs));
             printf("Killer move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.killerMoveBetaCutoffs, 100.0f * float(stats.killerMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
-            printf("Counter move beta cutoffs : %" PRIu64 " (%.2f%%)\n", stats.counterMoveBetaCutoffs, 100.0f * float(stats.counterMoveBetaCutoffs) / float(stats.totalBetaCutoffs));
             printf("Quiet cutoffs : %" PRIu64 " (%.2f%%)\n", stats.quietCutoffs, 100.0f * float(stats.quietCutoffs) / float(stats.totalBetaCutoffs));
             printf("Bad capture cutoffs : %" PRIu64 " (%.2f%%)\n", stats.badCaptureCutoffs, 100.0f * float(stats.badCaptureCutoffs) / float(stats.totalBetaCutoffs));
 
@@ -1998,7 +1997,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (ttCapture) r += LmrQuietTTCapture;
 
                 // reduce good moves less
-                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= LmrQuietRefutation;
+                if (moveScore >= MoveOrderer::KillerMoveBonus) r -= LmrQuietRefutation;
 
                 // reduce less based on move stat score
                 r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
@@ -2160,7 +2159,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ctx.stats.betaCutoffHistogram[moveIndex - 1]++;
                 if (moveScore == MoveOrderer::TTMoveValue) ctx.stats.ttMoveBetaCutoffs++;
                 else if (moveScore == MoveOrderer::KillerMoveBonus) ctx.stats.killerMoveBetaCutoffs++;
-                else if (moveScore == MoveOrderer::CounterMoveBonus) ctx.stats.counterMoveBetaCutoffs++;
                 else if (move.IsCapture() && moveScore >= MoveOrderer::WinningCaptureValue) ctx.stats.winningCaptureCutoffs++;
                 else if (move.IsCapture() && moveScore >= MoveOrderer::GoodCaptureValue) ctx.stats.goodCaptureCutoffs++;
                 else if (move.IsCapture() && moveScore < MoveOrderer::GoodCaptureValue) ctx.stats.badCaptureCutoffs++;
