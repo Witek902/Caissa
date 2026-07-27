@@ -1360,8 +1360,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
 // NO_INLINE to keep MovePicker (containing MoveList) off NegaMax's stack frame,
 // reducing its size and preventing stack overflow at high search depths.
-NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta)
+NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchContext& ctx, const TTEntry& ttEntry, ScoreType beta, ScoreType eval)
 {
+    ASSERT(eval != InvalidValue);
+
     const Position& position = node->position;
     const ScoreType probBeta = ScoreType(beta + ProbcutBetaOffset);
 
@@ -1381,7 +1383,9 @@ NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchCo
     childNode.beta = -probBeta + 1;
     childNode.isCutNode = !node->isCutNode;
 
-    const ScoreType seeThreshold = probBeta - node->staticEval;
+    // how much material a capture must win to plausibly reach probBeta;
+    // uses the corrhist-adjusted, TT-refined eval rather than the raw network output
+    const ScoreType seeThreshold = probBeta - eval;
     MovePicker movePicker(position, thread.moveOrderer, nullptr,
         (ttEntry.move.IsValid() && position.IsCapture(ttEntry.move)) ? ttEntry.move : PackedMove::Invalid(), false);
 
@@ -1737,7 +1741,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             // Probcut
             {
-                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta);
+                const ScoreType probcutScore = Probcut(thread, node, ctx, ttEntry, beta, eval);
                 if (probcutScore != InvalidValue)
                     return probcutScore;
             }
