@@ -1,6 +1,7 @@
 #include "Evaluate.hpp"
 #include "Endgame.hpp"
 #include "Search.hpp"
+#include "Tuning.hpp"
 
 #include <fstream>
 
@@ -27,6 +28,13 @@ static constexpr int32_t c_evalSaturationTreshold   = 8000;
 static constexpr ScoreType c_castlingRightsBonus = 5;
 
 } // namespace
+
+DEFINE_PARAM(MatScaleBase, 26624, 20000, 32768);
+DEFINE_PARAM(MatScalePawn, 99, 0, 300);
+DEFINE_PARAM(MatScaleKnight, 518, 200, 900);
+DEFINE_PARAM(MatScaleBishop, 518, 200, 900);
+DEFINE_PARAM(MatScaleRook, 900, 400, 1600);
+DEFINE_PARAM(MatScaleQueen, 1480, 700, 2600);
 
 const nn::PackedNeuralNetwork* g_mainNeuralNetwork = nullptr;
 static bool g_usingEmbeddedNeuralNetwork = false;
@@ -195,10 +203,11 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 
     const int32_t queens = (pos.Whites().queens | pos.Blacks().queens).Count();
     const int32_t rooks = (pos.Whites().rooks | pos.Blacks().rooks).Count();
-    const int32_t bishopsAndKnights = (pos.Whites().bishops | pos.Blacks().bishops | pos.Whites().knights | pos.Blacks().knights).Count();
+    const int32_t bishops = (pos.Whites().bishops | pos.Blacks().bishops).Count();
+    const int32_t knights = (pos.Whites().knights | pos.Blacks().knights).Count();
     const int32_t pawns = (pos.Whites().pawns | pos.Blacks().pawns).Count();
 
-    const int32_t pieceCount = queens + rooks + bishopsAndKnights + pawns;
+    const int32_t pieceCount = queens + rooks + bishops + knights + pawns;
 
     // check endgame evaluation first
     if (pieceCount <= 6) [[unlikely]]
@@ -217,9 +226,15 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     // convert to centipawn range
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
 
-    // apply scaling based on game phase (0 - endgame, 24 - opening)
-    const int32_t gamePhase = bishopsAndKnights + 2 * rooks + 4 * queens;
-    value = value * (52 + gamePhase) / 64;
+    // scale down the eval as material comes off the board
+    const int32_t materialScale =
+        MatScaleBase +
+        MatScalePawn * pawns +
+        MatScaleKnight * knights +
+        MatScaleBishop * bishops +
+        MatScaleRook * rooks +
+        MatScaleQueen * queens;
+    value = value * materialScale / 32768;
 
     // apply castling rights bonus
     {
