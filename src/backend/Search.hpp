@@ -327,6 +327,7 @@ private:
 
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
+        int32_t optimism[2] = { 0, 0 };     // per-side score-trend bias, applied to pruning thresholds only
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats

@@ -107,6 +107,9 @@ DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
 
+DEFINE_PARAM(OptimismScale, 32, 0, 96);
+DEFINE_PARAM(OptimismStretch, 120, 32, 400);
+
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
@@ -996,6 +999,15 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         beta = std::min<int32_t>(param.previousScore + window, InfValue);
     }
 
+    // Optimism: bias pruning thresholds by how the score has been trending. Derived from the running
+    // average of completed iteration scores, so it is only meaningful once that average exists.
+    {
+        const int32_t prevScore = IsMate(param.previousScore) ? 0 : param.previousScore;
+        const uint32_t stm = param.position.GetSideToMove();
+        thread.optimism[stm] = OptimismScale * prevScore / (std::abs(prevScore) + OptimismStretch);
+        thread.optimism[stm ^ 1] = -thread.optimism[stm];
+    }
+
     PvLine pvLine; // working copy
     PvLine finalPvLine;
 
@@ -1675,6 +1687,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
+            // Score estimate used to decide whether to prune
+            const int32_t estimatedEval = eval + thread.optimism[position.GetSideToMove()];
+
             // Reverse Futility Pruning
             const int32_t rfpMargin =
                 RfpDepthScaleLinear * node->depth
@@ -1683,9 +1698,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 - RfpOppWorseningScale * isOppWorsening;
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
-                eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
+                estimatedEval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
             {
-                return (ScoreType)((eval * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
+                // blend the same estimate that triggered the cutoff, so the reported bound stays above beta
+                return (ScoreType)((estimatedEval * (1024 - RfpAdjBetaScale) + beta * RfpAdjBetaScale) / 1024);
             }
 
             // Razoring: prune if quiescence search on current position can't beat beta.
@@ -1693,7 +1709,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // clearly winning can throw away a findable forced mate.
             if (node->depth <= RazoringStartDepth &&
                 beta < RazoringWinGuard &&
-                eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
+                estimatedEval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
                 const ScoreType qScore = QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
                 if (qScore < beta)
@@ -1707,7 +1723,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 - ((node + 1)->cutoffCount < NmpCutoffCountMin ? NmpCutoffCountBonus : 0);
 
             if (node->isCutNode &&
-                eval >= beta + nmpEvalMargin &&
+                estimatedEval >= beta + nmpEvalMargin &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
