@@ -13,6 +13,9 @@ DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
+DEFINE_PARAM(TM_EvalDropScale, 14, 0, 50);
+DEFINE_PARAM(TM_EvalDropMin, 800, 500, 1000);
+DEFINE_PARAM(TM_EvalDropMax, 1550, 1000, 2000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -103,6 +106,28 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
     }
+
+    // increase time if the score dropped since the previous iteration, decrease if it rose
+    {
+        const ScoreType currScore = data.currResult[0].score;
+        const ScoreType prevScore = data.prevResult[0].score;
+
+        // decisive scores would pin the factor at a clamp bound; note tablebase scores
+        // sit below the mate band, so IsMate() alone is not a sufficient guard here
+        if (std::abs(currScore) < KnownWinValue && std::abs(prevScore) < KnownWinValue)
+        {
+            const int32_t drop = prevScore - currScore;
+            const double evalDropFactor = std::clamp(
+                1.0 + static_cast<double>(TM_EvalDropScale) * drop / 10000.0,
+                static_cast<double>(TM_EvalDropMin) / 1000.0,
+                static_cast<double>(TM_EvalDropMax) / 1000.0);
+            limits.idealTimeCurrent *= evalDropFactor;
+        }
+    }
+
+    // keep the soft limit below the hard limit, otherwise it can never fire
+    if (limits.maxTime.IsValid() && limits.idealTimeCurrent >= limits.maxTime)
+        limits.idealTimeCurrent = limits.maxTime;
 
 #ifndef CONFIGURATION_FINAL
     std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
