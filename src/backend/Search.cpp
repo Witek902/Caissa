@@ -2170,8 +2170,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 break;
             }
 
-            // reduce remaining moves more if we managed to find new best move
-            if (node->depth > AlphaImprovementMinDepth) node->depth--;
+            if constexpr (!isPvNode)
+            {
+                // reduce remaining moves more if we managed to find new best move
+                if (node->depth > AlphaImprovementMinDepth) node->depth--;
+            }
         }
 
         if constexpr (!isRootNode)
