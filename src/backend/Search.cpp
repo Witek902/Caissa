@@ -35,6 +35,9 @@ DEFINE_PARAM(LmrQuietRefutation, 2688, -2048, 4096);
 DEFINE_PARAM(LmrQuietCutNode, 2928, -2048, 4096);
 DEFINE_PARAM(LmrQuietImproving, 608, -2048, 4096);
 DEFINE_PARAM(LmrQuietInCheck, 1136, -2048, 4096);
+DEFINE_PARAM(LmrEvalGap, 337, 0, 700);
+DEFINE_PARAM(LmrEvalGapClampLow, 65, 0, 200);
+DEFINE_PARAM(LmrEvalGapClampHigh, 91, 0, 250);
 
 DEFINE_PARAM(LmrCaptureWinning, 1008, -2048, 4096);
 DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
@@ -2010,6 +2013,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce more when eval is far below alpha, less when it is above
+                // (eval is invalid in check, so the term must be skipped there)
+                if (!node->isInCheck)
+                    r += LmrEvalGap * std::clamp<int32_t>(alpha - eval, -LmrEvalGapClampLow, LmrEvalGapClampHigh) / 128;
             }
             else
             {
