@@ -1499,7 +1499,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     const ScoreType oldAlpha = node->alpha;
     ScoreType bestValue = -InfValue;
     ScoreType eval = InvalidValue; // fully adjusted eval
-    ScoreType unadjustedEval = InvalidValue; // eval before TT adjustment
+    ScoreType correctedEval = InvalidValue; // eval after correction but before TT adjustment
     ScoreType tbMinValue = -InfValue; // min value according to tablebases
     ScoreType tbMaxValue = InfValue; // max value according to tablebases
 
@@ -1593,7 +1593,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // evaluate position
     if (node->isInCheck)
     {
-        unadjustedEval = eval = node->staticEval = InvalidValue;
+        correctedEval = eval = node->staticEval = InvalidValue;
 
         if ((isPvNode || !node->isCutNode) && node->depth > EnsureAccumulatorUpdatedDepth)
         {
@@ -1618,7 +1618,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        unadjustedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        correctedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
@@ -1875,7 +1875,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < FutilityPruningDepth &&
-                    node->staticEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    correctedEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
@@ -2271,10 +2271,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // update correction histories
         if (!node->isInCheck &&
             (!bestMove.IsValid() || bestMove.IsQuiet() || !position.StaticExchangeEvaluation(bestMove)) &&
-            ((bestValue < unadjustedEval && bestValue < beta) ||
-             (bestValue > unadjustedEval && bestMove.IsValid())))
+            ((bestValue < correctedEval && bestValue < beta) ||
+             (bestValue > correctedEval && bestMove.IsValid())))
         {
-            const int32_t bonus = std::clamp<int32_t>((bestValue - unadjustedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
+            const int32_t bonus = std::clamp<int32_t>((bestValue - correctedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
             if (bonus != 0)
             {
                 const Color stm = position.GetSideToMove();
