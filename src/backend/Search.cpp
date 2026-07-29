@@ -310,7 +310,7 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         }
 
         // check inner nodes periodically
-        if (isRootNode || (thread.stats.nodesTotal % 512 == 0)) [[unlikely]]
+        if (isRootNode || (thread.stats.nodesTotal % 2048 == 0)) [[unlikely]]
         {
             if (param.limits.maxTime.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
