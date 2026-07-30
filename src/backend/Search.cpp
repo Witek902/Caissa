@@ -1656,6 +1656,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 2)->staticEval;
         else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
             isImproving = node->staticEval > (node - 4)->staticEval;
+        else
+            isImproving = true; // no earlier eval to compare against - assume improving, as that's the common case
     }
 
     if constexpr (!isPvNode)
