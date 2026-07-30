@@ -290,7 +290,10 @@ const NodeCache& Search::GetNodeCache() const
     return mThreadData.front()->nodeCache;
 }
 
-bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode)
+// number of nodes to search between consecutive clock reads
+static constexpr uint64_t TimeCheckNodeInterval = 512;
+
+bool Search::CheckStopCondition(ThreadData& thread, const SearchContext& ctx, bool isRootNode)
 {
     SearchParam& param = ctx.searchParam;
 
@@ -310,8 +313,12 @@ bool Search::CheckStopCondition(const ThreadData& thread, const SearchContext& c
         }
 
         // check inner nodes periodically
-        if (isRootNode || (thread.stats.nodesTotal % 512 == 0)) [[unlikely]]
+        // compare against a threshold rather than testing for an exact multiple, because this
+        // function is not called at every node (qsearch nodes and early cutoffs skip it)
+        if (isRootNode || thread.stats.nodesTotal >= thread.nextTimeCheckNode) [[unlikely]]
         {
+            thread.nextTimeCheckNode = thread.stats.nodesTotal + TimeCheckNodeInterval;
+
             if (param.limits.maxTime.IsValid() &&
                 param.limits.startTimePoint.IsValid() &&
                 TimePoint::GetCurrent() >= param.limits.startTimePoint + param.limits.maxTime) [[unlikely]]
@@ -748,6 +755,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     // clear per-thread data for new search
     thread.stats = SearchThreadStats{};
+    thread.nextTimeCheckNode = 0;
     thread.depthCompleted = 0;
     thread.pvLines.clear();
     thread.pvLines.resize(numPvLines);

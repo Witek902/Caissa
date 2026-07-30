@@ -327,6 +327,7 @@ private:
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
+        uint64_t nextTimeCheckNode = 0;     // check the clock once 'stats.nodesTotal' reaches this value
 
         // per-thread move orderer
         MoveOrderer moveOrderer;
@@ -384,5 +385,5 @@ private:
     ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
     // returns true if the search needs to be aborted immediately
-    static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);
+    static bool CheckStopCondition(ThreadData& thread, const SearchContext& ctx, bool isRootNode);
 };
