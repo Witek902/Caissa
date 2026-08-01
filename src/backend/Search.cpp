@@ -94,6 +94,9 @@ DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
 DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 51, 15, 100);
+DEFINE_PARAM(SingularDoubleExtensionDepthMul, 45, 0, 160);
+DEFINE_PARAM(SingularTripleExtensionDepthMul, 70, 0, 250);
+DEFINE_PARAM(SingularExtMarginDepthSub, 320, 0, 900);
 DEFINE_PARAM(SingularExtTTDepthMargin, 3, 1, 6);
 DEFINE_PARAM(SingularExtPVBonus, 256, 64, 512);
 DEFINE_PARAM(SingularFailHighNegExt, 2, 1, 4);
@@ -1938,10 +1941,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->ply < 2 * thread.rootDepth)
                     {
+                        const int32_t doubleMargin = std::max<int32_t>(SingularDoubleExtensionMarigin, SingularDoubleExtensionDepthMul * node->depth - SingularExtMarginDepthSub);
+                        const int32_t tripleMargin = std::max<int32_t>(SingularTripleExtensionMarigin, SingularTripleExtensionDepthMul * node->depth - SingularExtMarginDepthSub);
+
                         extension = 1;
                         // multiple extensions if singular score is way below beta
-                        extension += (singularScore < singularBeta - SingularDoubleExtensionMarigin - SingularExtPVBonus * isPvNode);
-                        extension += (singularScore < singularBeta - SingularTripleExtensionMarigin - SingularExtPVBonus * isPvNode);
+                        extension += (singularScore < singularBeta - doubleMargin - SingularExtPVBonus * isPvNode);
+                        extension += (singularScore < singularBeta - tripleMargin - SingularExtPVBonus * isPvNode);
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
