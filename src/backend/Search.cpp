@@ -133,6 +133,10 @@ DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
 DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
+DEFINE_PARAM(PawnScaleBonusDiv, 256, 64, 2048);
+DEFINE_PARAM(PawnScaleMaxBonus, 256, 32, 1024);
+DEFINE_PARAM(PawnScaleGravity, 4096, 1024, 8192);
+
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
 DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
@@ -1075,8 +1079,10 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
 {
     const Color stm = node.position.GetSideToMove();
 
+    const auto& pawnEntry = corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+
     int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+    corr += EvalCorrectionPawnsScale * pawnEntry.offset;
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
     corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
 
@@ -1085,12 +1091,24 @@ ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const N
     if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
         corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
-    return static_cast<ScoreType>(corr / EvalCorrectionScale);
+    // per-pawn-structure affine scale: trust the eval more/less per pawn bucket.
+    // Only reshape genuine NN evals; leave known/decisive evals (endgame tables, near-mate)
+    // untouched - a multiplicative term on those would overflow the score bounds.
+    const int32_t pawnScale = std::abs((int32_t)node.staticEval) < KnownWinValue
+        ? (int32_t)node.staticEval * pawnEntry.scale / PawnScaleDiv
+        : 0;
+
+    return static_cast<ScoreType>(corr / EvalCorrectionScale + pawnScale);
 }
 
 INLINE static void AddToCorrHist(int16_t& history, int32_t value)
 {
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
+}
+
+INLINE static void AddToScaleCorrHist(int16_t& history, int32_t value)
+{
+    history = static_cast<int16_t>(history + value - history * std::abs(value) / PawnScaleGravity);
 }
 
 ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
@@ -2274,18 +2292,32 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ((bestValue < correctedEval && bestValue < beta) ||
              (bestValue > correctedEval && bestMove.IsValid())))
         {
+            const Color stm = position.GetSideToMove();
+            CorrectionHistories* corrHist = thread.correctionHistories;
+            auto& pawnEntry = corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize];
+
+            // eval offset update
             const int32_t bonus = std::clamp<int32_t>((bestValue - correctedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
             if (bonus != 0)
             {
-                const Color stm = position.GetSideToMove();
-                CorrectionHistories* corrHist = thread.correctionHistories;
-                AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+                AddToCorrHist(pawnEntry.offset, bonus);
                 AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
                 AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
                 if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
                     AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
                 if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
                     AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+            }
+
+            // pawn-structure eval scale update (gradient of squared error w.r.t. scale ~ residual * staticEval).
+            // only learn from genuine NN evals, matching the application guard
+            if (std::abs((int32_t)node->staticEval) < KnownWinValue)
+            {
+                const int64_t scaleGrad = (int64_t)(bestValue - correctedEval) * node->staticEval * node->depth;
+                const int32_t scaleBonus = (int32_t)std::clamp<int64_t>(scaleGrad / PawnScaleBonusDiv, -(int64_t)PawnScaleMaxBonus, (int64_t)PawnScaleMaxBonus);
+
+                if (scaleBonus != 0)
+                    AddToScaleCorrHist(pawnEntry.scale, scaleBonus);
             }
         }
     }

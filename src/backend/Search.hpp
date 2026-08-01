@@ -258,6 +258,7 @@ private:
 
     static constexpr uint32_t PawnCorrTableSize = 16 * 1024;
     static constexpr int32_t EvalCorrectionScale = 512;
+    static constexpr int32_t PawnScaleDiv = 8192; // fixed-point divisor for the affine scale term
     static constexpr uint32_t NonPawnCorrTableSize = 16 * 1024;
 
     enum class BoundsType : uint8_t
@@ -290,7 +291,10 @@ private:
 
     struct alignas(64) CorrectionHistories
     {
-        using PawnCorrTable = int16_t[2][PawnCorrTableSize]; // [stm][hash]
+        // affine pawn-structure correction: offset + per-entry eval scale delta (0 = neutral),
+        // interleaved so both live on the same cache line
+        struct PawnCorrEntry { int16_t offset; int16_t scale; };
+        using PawnCorrTable = PawnCorrEntry[2][PawnCorrTableSize]; // [stm][hash]
         PawnCorrTable pawnStructure;
 
         using NonPawnCorrTable = int16_t[2][NonPawnCorrTableSize]; // [stm][hash]
