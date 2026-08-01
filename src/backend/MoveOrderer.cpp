@@ -309,13 +309,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
 {
     // depth can be negative in QSearch
-    int32_t depth = std::max<int32_t>(0, node.depth);
-
-    // don't update uncertain moves
-    if (numMoves <= 1)
-    {
-        return;
-    }
+    const int32_t depth = std::max<int32_t>(0, node.depth);
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
