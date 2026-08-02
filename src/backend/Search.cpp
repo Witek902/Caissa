@@ -1912,7 +1912,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - SingularExtTTDepthMargin)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - 3 * node->depth / 2);
                 const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
                 const bool originalIsCutNode = node->isCutNode;
