@@ -104,6 +104,7 @@ DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
 DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
+DEFINE_PARAM(QSearchSeeThreshold, -120, -300, 0);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
@@ -1284,10 +1285,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 continue;
             }
 
-            // skip very bad captures
+            // skip captures losing more material than the threshold allows
             if (moveScore < MoveOrderer::GoodCaptureValue &&
-                !position.StaticExchangeEvaluation(move))
-                break;
+                !position.StaticExchangeEvaluation(move, QSearchSeeThreshold))
+                continue;
         }
 
         // start prefetching child node's TT entry

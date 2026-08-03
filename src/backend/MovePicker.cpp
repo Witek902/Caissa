@@ -47,7 +47,8 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
                 ASSERT(outMove.IsValid());
                 ASSERT(outScore > INT32_MIN);
 
-                if (outScore >= MoveOrderer::PromotionValue)
+                // quiescence search has no later stage to defer losing captures to, so it gets them here
+                if (outScore >= MoveOrderer::PromotionValue || !m_generateQuiets)
                 {
                     m_moves.RemoveByIndex(index);
                     return true;
