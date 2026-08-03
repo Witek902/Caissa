@@ -1704,12 +1704,22 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         node->depth / NmpEvalRedDiv +
                         std::min<int32_t>(NmpEvalBetaClamp, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
 
+                    // a TT lower bound below beta already rules out the [ttScore, beta) range,
+                    // so the null move can be searched against it to make the child search cheaper
+                    ScoreType nullMoveBeta = beta;
+                    if ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid &&
+                        ttEntry.depth >= node->depth - r &&
+                        ttScore < beta && std::abs(ttScore) < KnownWinValue)
+                    {
+                        nullMoveBeta = ttScore;
+                    }
+
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
                     childNode.pvIndex = node->pvIndex;
                     childNode.position = position;
-                    childNode.alpha = -beta;
-                    childNode.beta = -beta + 1;
+                    childNode.alpha = -nullMoveBeta;
+                    childNode.beta = -nullMoveBeta + 1;
                     childNode.isNullMove = true;
                     childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
