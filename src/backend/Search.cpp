@@ -74,6 +74,8 @@ DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
 DEFINE_PARAM(NmpReSearchDepthReduction, 5, 1, 8);
 DEFINE_PARAM(NmpReSearchMaxDepth, 10, 5, 20);
 DEFINE_PARAM(NmpEvalBetaClamp, 3, 1, 6);
+DEFINE_PARAM(NmpCutoffCountMin, 2, 1, 4);
+DEFINE_PARAM(NmpCutoffCountBonus, 19, 0, 60);
 
 DEFINE_PARAM(LateMoveReductionStartDepth, 1, 1, 3);
 DEFINE_PARAM(LateMovePruningBase, 4, 1, 8);
@@ -1658,6 +1660,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 4)->staticEval;
     }
 
+    // the counter two plies ahead is stale by now, the node about to be searched owns it
+    (node + 2)->cutoffCount = 0;
+
     if constexpr (!isPvNode)
     {
         if (!node->filteredMove.IsValid() && !node->isInCheck)
@@ -1687,8 +1692,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             }
 
             // Null Move Pruning
+            // few cutoffs at the next ply means it is not an "easy" node, so be more willing to try the null move
+            const int32_t nmpEvalMargin =
+                (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0)
+                - ((node + 1)->cutoffCount < NmpCutoffCountMin ? NmpCutoffCountBonus : 0);
+
             if (node->isCutNode &&
-                eval >= beta + (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0) &&
+                eval >= beta + nmpEvalMargin &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
                 position.HasNonPawnMaterial(position.GetSideToMove()))
@@ -2157,6 +2167,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             {
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
+
+                node->cutoffCount++;
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
