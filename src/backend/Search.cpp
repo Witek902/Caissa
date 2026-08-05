@@ -1697,7 +1697,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0)
                 - ((node + 1)->cutoffCount < NmpCutoffCountMin ? NmpCutoffCountBonus : 0);
 
+            // a TT move capturing a minor or better means the position is tactically live, so the null move proves little
+            const bool ttWinningCapture =
+                ttEntry.bounds == TTEntry::Bounds::Lower &&
+                ttEntry.move.IsValid() &&
+                position.GetOpponentSide().GetPieceAtSquare(ttEntry.move.ToSquare()) >= Piece::Knight;
+
             if (node->isCutNode &&
+                !ttWinningCapture &&
                 eval >= beta + nmpEvalMargin &&
                 node->staticEval >= beta &&
                 node->depth >= NmpStartDepth &&
