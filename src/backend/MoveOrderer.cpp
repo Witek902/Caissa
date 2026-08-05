@@ -30,6 +30,7 @@ DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
 DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
+DEFINE_PARAM(ContWeight2, 512, 1, 1024);
 DEFINE_PARAM(ContWeight3, 555, 1, 1024);
 DEFINE_PARAM(ContWeight5, 582, 1, 1024);
 
@@ -406,6 +407,7 @@ void MoveOrderer::ScoreMoves(
             // continuation history
             if (const PieceSquareHistory* h = node.continuationHistories[0]) score += (*h)[pieceTo];
             if (const PieceSquareHistory* h = node.continuationHistories[1]) score += (*h)[pieceTo] * ContWeight1 / 1024;
+            if (const PieceSquareHistory* h = node.continuationHistories[2]) score += (*h)[pieceTo] * ContWeight2 / 1024;
             if (const PieceSquareHistory* h = node.continuationHistories[3]) score += (*h)[pieceTo] * ContWeight3 / 1024;
             if (const PieceSquareHistory* h = node.continuationHistories[5]) score += (*h)[pieceTo] * ContWeight5 / 1024;
 
