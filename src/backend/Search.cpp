@@ -57,6 +57,11 @@ DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 32, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 383, 128, 1024);
 
+DEFINE_PARAM(BadNoisyFutilityDepth, 5, 3, 12);
+DEFINE_PARAM(BadNoisyFutilityScale, 120, 20, 300);
+DEFINE_PARAM(BadNoisyFutilityHistDiv, 96, 32, 256);
+DEFINE_PARAM(BadNoisyFutilityMinMoves, 2, 1, 5);
+
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 204, 100, 300);
 DEFINE_PARAM(SingularitySearchScoreTresholdMax, 407, 200, 600);
@@ -1890,6 +1895,16 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
                 }
+            }
+            // Bad-noisy Futility Pruning: skip SEE-losing captures that have low chance to beat alpha
+            else if (move.IsCapture() && move.GetPromoteTo() == Piece::None &&
+                !node->isInCheck &&
+                moveIndex > BadNoisyFutilityMinMoves &&
+                node->depth < BadNoisyFutilityDepth &&
+                moveScore < MoveOrderer::GoodCaptureValue &&
+                correctedEval + BadNoisyFutilityScale * lmrDepth + thread.moveOrderer.GetCaptureHistoryScore(*node, move) / BadNoisyFutilityHistDiv < alpha)
+            {
+                continue;
             }
 
             // Static Exchange Evaluation pruning - skip all moves that are bad according to SEE
