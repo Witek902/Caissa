@@ -1965,7 +1965,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 else if (ttScore <= alpha)
                     extension = -(int32_t)SingularTTAlphaNegExt;
             }
-            else if (isPvNode && move == ttMove && ttRecapture)
+            else if ((isPvNode || node->isCutNode) && move == ttMove && ttRecapture)
                 extension = 1; // recapture extension
         }
 
