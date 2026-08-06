@@ -1595,7 +1595,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // evaluate position
     if (node->isInCheck)
     {
-        correctedEval = eval = node->staticEval = InvalidValue;
+        node->correctedEval = correctedEval = eval = node->staticEval = InvalidValue;
 
         if ((isPvNode || !node->isCutNode) && node->depth > EnsureAccumulatorUpdatedDepth)
         {
@@ -1620,7 +1620,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         ASSERT(node->staticEval != InvalidValue);
 
         // adjust static eval based on node path
-        correctedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
+        node->correctedEval = correctedEval = eval = AdjustEvalScore(thread, *node, ctx.searchParam);
 
         if (!node->filteredMove.IsValid())
         {
@@ -1654,10 +1654,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     bool isImproving = false;
     if (!node->isInCheck && !node->isNullMove)
     {
-        if (node->ply > 1 && (node - 2)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 2)->staticEval;
-        else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
-            isImproving = node->staticEval > (node - 4)->staticEval;
+        if (node->ply > 1 && (node - 2)->correctedEval != InvalidValue)
+            isImproving = correctedEval > (node - 2)->correctedEval;
+        else if (node->ply > 3 && (node - 4)->correctedEval != InvalidValue)
+            isImproving = correctedEval > (node - 4)->correctedEval;
     }
 
     // the counter two plies ahead is stale by now, the node about to be searched owns it

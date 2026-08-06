@@ -128,6 +128,7 @@ struct NodeInfo
     ScoreType beta;
 
     ScoreType staticEval = InvalidValue;
+    ScoreType correctedEval = InvalidValue;
 
     Move previousMove = Move::Invalid();
     int32_t moveStatScore = 0;
