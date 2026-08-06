@@ -2023,6 +2023,26 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
+
+                // reduce less/more when pieces leave/enter threats
+                switch (move.GetPiece())
+                {
+                case Piece::Knight: [[fallthrough]];
+                case Piece::Bishop:
+                    if (node->threats.attackedByPawns & move.FromSquare())   r -= LmrScale / 8;
+                    if (node->threats.attackedByPawns & move.ToSquare())     r += LmrScale / 8;
+                    break;
+                case Piece::Rook:
+                    if (node->threats.attackedByMinors & move.FromSquare())  r -= LmrScale / 6;
+                    if (node->threats.attackedByMinors & move.ToSquare())    r += LmrScale / 6;
+                    break;
+                case Piece::Queen:
+                    if (node->threats.attackedByRooks & move.FromSquare())   r -= LmrScale / 4;
+                    if (node->threats.attackedByRooks & move.ToSquare())     r += LmrScale / 4;
+                    break;
+                default:
+                    break;
+                }
             }
             else
             {
