@@ -1150,7 +1150,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         }
     }
 
-    // Not checking for draw by repetition in the quiescence search
+    // Check for draw; an irreversible previous move rules out both repetition and the 50-move rule
+    if (!node->previousMove.IsIrreversible() &&
+        (node->position.IsFiftyMoveRuleDraw() || SearchUtils::IsRepetition(*node, ctx.game, isPvNode))) [[unlikely]]
+        return 0;
+
     if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
         return 0;
 
