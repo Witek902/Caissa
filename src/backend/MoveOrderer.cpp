@@ -25,7 +25,6 @@ DEFINE_PARAM(ContMalusScoreDiff, 174, 0, 400);
 DEFINE_PARAM(ContMalusLimit, 2065, 1000, 4000);
 
 DEFINE_PARAM(ContUpdateWeight1, 1014, 1, 2048);
-DEFINE_PARAM(ContUpdateWeight2, 300, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
@@ -256,7 +255,6 @@ void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move mov
 
     if (auto* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[pieceTo], delta);
     if (auto* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight1 / 1024);
-    if (auto* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight2 / 1024);
     if (auto* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight3 / 1024);
     if (auto* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight5 / 1024);
 }
