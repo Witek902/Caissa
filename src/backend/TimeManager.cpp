@@ -30,15 +30,18 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
+        // reserve time for engine-GUI communication latency, but never more than half of the clock
+        const float remainingTime = (float)(data.remainingTime - std::min(moveOverhead, data.remainingTime / 2));
+
         const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
         const float maxTimeFactor = static_cast<float>(TM_MaxTimeFactor) / 100.0f;
-        float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
-        float maxTime = maxTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
+        float idealTime = idealTimeFactor * (remainingTime / movesLeft + (float)data.timeIncrement);
+        float maxTime = maxTimeFactor * (remainingTime / movesLeft + (float)data.timeIncrement);
 
         const float minMoveTime = 0.00001f;
         const float timeMargin = 0.8f;
-        maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
-        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
+        maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * remainingTime));
+        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * remainingTime));
 
         // reduce time if opponent played a move predicted by the previous search, increase otherwise
         if (data.previousSearchHint == PreviousSearchHint::Hit)
@@ -56,7 +59,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
 
         // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.1f);
+        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
     }
 
     // fixed move time
