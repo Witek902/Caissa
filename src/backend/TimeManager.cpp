@@ -56,7 +56,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         limits.maxTime = TimePoint::FromSeconds(0.001f * maxTime);
 
         // activate root singularity search after some portion of estimated time passed
-        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.2f);
+        limits.rootSingularityTime = TimePoint::FromSeconds(0.001f * idealTime * 0.1f);
     }
 
     // fixed move time
