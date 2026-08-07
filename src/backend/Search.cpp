@@ -2223,7 +2223,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // Prior counter-move history update
-    if (!isRootNode && bestValue <= oldAlpha && node->previousMove.IsValid() && node->previousMove.IsQuiet())
+    // only reward the previous move when the fail-low was unexpected - an all-node failing low says nothing
+    if (!isRootNode && bestValue <= oldAlpha && (isPvNode || node->isCutNode) &&
+        node->previousMove.IsValid() && node->previousMove.IsQuiet())
     {
         const int32_t bonus = std::min<int32_t>(PriorCMHBonusCap, node->depth * PriorCMHBonusScale - PriorCMHBonusBias);
         thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bonus);
