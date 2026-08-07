@@ -51,6 +51,8 @@ DEFINE_PARAM(MinorThreatEnterMalus, 4000, 2000, 12000);
 DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
 DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
+DEFINE_PARAM(QueenOffenseBonus, 6000, 2000, 20000);
+
 DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 8000);
 
 
@@ -426,6 +428,32 @@ void MoveOrderer::ScoreMoves(
                     break;
                 default:
                     break;
+            }
+
+            // reward quiet moves that attack the enemy queen from their destination square
+            if (const Bitboard oppQueens = pos.GetOpponentSide().queens)
+            {
+                Bitboard attacks = 0;
+                switch (move.GetPiece())
+                {
+                    case Piece::Pawn:
+                        attacks = Bitboard::GetPawnAttacks(move.ToSquare(), (Color)color);
+                        break;
+                    case Piece::Knight:
+                        attacks = Bitboard::GetKnightAttacks(move.ToSquare());
+                        break;
+                    case Piece::Bishop:
+                        attacks = Bitboard::GenerateBishopAttacks(move.ToSquare(), pos.Occupied() & ~move.FromSquare().GetBitboard());
+                        break;
+                    case Piece::Rook:
+                        attacks = Bitboard::GenerateRookAttacks(move.ToSquare(), pos.Occupied() & ~move.FromSquare().GetBitboard());
+                        break;
+                    default:
+                        // our own queen or king attacking the enemy queen is an offer, not a threat
+                        break;
+                }
+
+                if (attacks & oppQueens) score += QueenOffenseBonus;
             }
 
             // use node cache for scoring moves near the root
