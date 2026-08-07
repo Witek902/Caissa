@@ -43,6 +43,9 @@ DEFINE_PARAM(CaptureMalusLimit, 1885, 1000, 4000);
 
 DEFINE_PARAM(MVVMultiplier, 4096, 2000, 6000);
 
+DEFINE_PARAM(GoodCapSeeHistDiv, 32, 8, 128);
+DEFINE_PARAM(GoodCapSeeHistClamp, 150, 50, 400);
+
 DEFINE_PARAM(MinorThreatEscapeBonus, 4000, 2000, 12000);
 DEFINE_PARAM(RookThreatEscapeBonus, 8000, 3000, 16000);
 DEFINE_PARAM(QueenThreatEscapeBonus, 12000, 4000, 20000);
@@ -378,22 +381,25 @@ void MoveOrderer::ScoreMoves(
             ASSERT(capturedPiece > Piece::None);
             ASSERT(capturedPiece < Piece::King);
 
+            const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
+            const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
+            ASSERT(capturedIdx < 5);
+            ASSERT(pieceIdx < 6);
+            const int32_t captureHist = capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()];
+
+            // a capture with good history stays "good" at slightly negative SEE, one with bad history must win material
+            const int32_t seeTreshold = std::clamp(-captureHist / GoodCapSeeHistDiv, -(int32_t)GoodCapSeeHistClamp, (int32_t)GoodCapSeeHistClamp);
+
             if ((uint32_t)attackingPiece < (uint32_t)capturedPiece)     score = WinningCaptureValue;
             else if (attackingPiece == capturedPiece)                   score = GoodCaptureValue;
-            else if (pos.StaticExchangeEvaluation(move))                score = GoodCaptureValue;
+            else if (pos.StaticExchangeEvaluation(move, seeTreshold))   score = GoodCaptureValue;
             else                                                        score = INT16_MIN;
 
             // most valuable victim first
             score += MVVMultiplier * (int32_t)capturedPiece;
 
-            // capture history
-            {
-                const uint32_t capturedIdx = (uint32_t)capturedPiece - 1;
-                const uint32_t pieceIdx = (uint32_t)attackingPiece - 1;
-                ASSERT(capturedIdx < 5);
-                ASSERT(pieceIdx < 6);
-                score += (int32_t)capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()] - INT16_MIN;
-            }
+            // add history bonus
+            score += captureHist - INT16_MIN;
         }
         else if (withQuiets) // non-capture
         {
