@@ -40,7 +40,6 @@ DEFINE_PARAM(LmrCaptureWinning, 1008, -2048, 4096);
 DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
 DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
 DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
-DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
@@ -2034,9 +2033,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrCaptureImproving;
-
-                // reduce less if move is a check
-                if (childNode.isInCheck) r -= LmrCaptureInCheck;
             }
 
             // reduce low-ply moves less
