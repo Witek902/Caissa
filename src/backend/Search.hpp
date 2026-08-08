@@ -325,6 +325,7 @@ private:
 
         bool isMainThread = false;
 
+        int32_t rootDelta = 0;
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
