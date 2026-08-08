@@ -1073,23 +1073,6 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
         (threats.attackedByPawns & (us.queens | us.rooks | us.bishops | us.knights));
 }
 
-ScoreType Search::GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const
-{
-    const Color stm = node.position.GetSideToMove();
-
-    int32_t corr = 0;
-    corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
-    corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
-
-    if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
-        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
-    if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
-        corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
-
-    return static_cast<ScoreType>(corr / EvalCorrectionScale);
-}
-
 INLINE static void AddToCorrHist(int16_t& history, int32_t value)
 {
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
@@ -1099,8 +1082,23 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
 {
     int32_t adjustedScore = node.staticEval;
     
-    // apply eval correction term
-    adjustedScore += GetEvalCorrection(thread.correctionHistories, node);
+    // apply eval correction
+    {
+        const Color stm = node.position.GetSideToMove();
+        const CorrectionHistories* corrHist = thread.correctionHistories;
+
+        int32_t corr = 0;
+        corr += EvalCorrectionPawnsScale * corrHist->pawnStructure[stm][node.position.GetPawnsHash() % PawnCorrTableSize];
+        corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnWhite[stm][node.position.GetNonPawnsHash(White) % NonPawnCorrTableSize];
+        corr += EvalCorrectionNonPawnsScale * corrHist->nonPawnBlack[stm][node.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize];
+
+        if (node.ply >= 2 && node.previousMove.IsValid() && (&node - 1)->previousMove.IsValid())
+            corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 1)->previousMove.PieceTo()];
+        if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
+            corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
+
+        adjustedScore += corr / EvalCorrectionScale;
+    }
 
     // scale down when approaching 50-move draw
     adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - std::max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
@@ -1481,12 +1479,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         // Check for draw
         // Skip root node as we need some move to be reported in PV
-        if (node->position.IsFiftyMoveRuleDraw() ||
-            CheckInsufficientMaterial(node->position) ||
-            SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
-        {
+        if (node->previousMove.IsCapture() && CheckInsufficientMaterial(node->position)) [[unlikely]]
             return 0;
-        }
+        if (node->position.IsFiftyMoveRuleDraw() || SearchUtils::IsRepetition(*node, ctx.game, isPvNode))
+            return 0;
 
         // mate distance pruning
         alpha = std::max<ScoreType>(-CheckmateValue + (ScoreType)node->ply, alpha);

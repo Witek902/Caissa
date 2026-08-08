@@ -370,8 +370,6 @@ private:
 
     static void WorkerThreadCallback(Search* search, uint32_t index);
 
-    ScoreType GetEvalCorrection(const CorrectionHistories* corrHist, const NodeInfo& node) const;
-
     ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
 
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
