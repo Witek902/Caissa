@@ -2050,6 +2050,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             r = (r + LmrScale / 2) / LmrScale;
         }
 
+        // convert negative reduction into extension
+        if (r < 0) extension++;
+
         int32_t newDepth = node->depth + extension - 1;
 
         // limit reduction, don't drop into QS
