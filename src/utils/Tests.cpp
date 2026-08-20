@@ -2350,6 +2350,56 @@ static void RunTimeManagerTests()
         TEST_EXPECT(fixedLimits.idealTimeBase.IsValid());
         TEST_EXPECT_NEAR(fixedLimits.idealTimeBase.ToSeconds(), 5.0f, 0.1f);
     }
+
+    TimeManagerInitData lowTimeData;
+    lowTimeData.moveTime = INT32_MAX;
+    lowTimeData.timeIncrement = 100;     // increment large enough to uncap the allocation
+    lowTimeData.theirTimeIncrement = 100;
+    lowTimeData.movesToGo = UINT32_MAX;
+    lowTimeData.previousSearchHint = PreviousSearchHint::Unknown;
+
+    // move overhead constrains the hard limit only
+    {
+        lowTimeData.remainingTime = lowTimeData.theirRemainingTime = 30;
+        lowTimeData.moveOverhead = 10;
+        SearchLimits lowTimeLimits;
+        InitTimeManager(game, lowTimeData, lowTimeLimits);
+
+        TEST_EXPECT(lowTimeLimits.maxTime.ToSeconds() <= 0.001f * (lowTimeData.remainingTime - lowTimeData.moveOverhead));
+
+        // ... the soft limit stays untouched by it
+        TimeManagerInitData noOverheadData = lowTimeData;
+        noOverheadData.moveOverhead = 0;
+        SearchLimits noOverheadLimits;
+        InitTimeManager(game, noOverheadData, noOverheadLimits);
+        TEST_EXPECT_NEAR(lowTimeLimits.idealTimeBase.ToSeconds(), noOverheadLimits.idealTimeBase.ToSeconds(), 0.0001f);
+    }
+
+    // an overhead larger than the clock must still leave a searchable budget
+    {
+        lowTimeData.remainingTime = lowTimeData.theirRemainingTime = 8;
+        lowTimeData.moveOverhead = 1000;
+        SearchLimits starvedLimits;
+        InitTimeManager(game, lowTimeData, starvedLimits);
+
+        TEST_EXPECT(starvedLimits.maxTime.ToSeconds() >= 0.001f * 0.5f * lowTimeData.remainingTime);
+    }
+
+    // with a healthy clock the overhead must not change the limits at all
+    {
+        TimeManagerInitData noOverheadData = initData;
+        noOverheadData.moveOverhead = 0;
+        SearchLimits noOverheadLimits;
+        InitTimeManager(game, noOverheadData, noOverheadLimits);
+
+        TimeManagerInitData bigOverheadData = initData;
+        bigOverheadData.moveOverhead = 1000;
+        SearchLimits bigOverheadLimits;
+        InitTimeManager(game, bigOverheadData, bigOverheadLimits);
+
+        TEST_EXPECT_NEAR(bigOverheadLimits.maxTime.ToSeconds(), noOverheadLimits.maxTime.ToSeconds(), 0.0001f);
+        TEST_EXPECT_NEAR(bigOverheadLimits.idealTimeBase.ToSeconds(), noOverheadLimits.idealTimeBase.ToSeconds(), 0.0001f);
+    }
 }
 
 static void RunBitboardAdvancedTests()
