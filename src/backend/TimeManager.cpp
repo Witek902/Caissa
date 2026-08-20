@@ -13,6 +13,7 @@ DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
+DEFINE_PARAM(TM_OverheadReserveFrac, 500, 100, 900);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -30,15 +31,25 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
     // soft limit
     if (data.remainingTime != INT32_MAX)
     {
+        const float remainingTime = (float)data.remainingTime;
         const float idealTimeFactor = static_cast<float>(TM_IdealTimeFactor) / 1000.0f;
         const float maxTimeFactor = static_cast<float>(TM_MaxTimeFactor) / 100.0f;
-        float idealTime = idealTimeFactor * (data.remainingTime / movesLeft + (float)data.timeIncrement);
-        float maxTime = maxTimeFactor * ((data.remainingTime - moveOverhead) / movesLeft + (float)data.timeIncrement);
+        float idealTime = idealTimeFactor * (remainingTime / movesLeft + (float)data.timeIncrement);
+        float maxTime = maxTimeFactor * (remainingTime / movesLeft + (float)data.timeIncrement);
 
         const float minMoveTime = 0.00001f;
         const float timeMargin = 0.8f;
-        maxTime = std::clamp(maxTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
-        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * (float)data.remainingTime));
+
+        // The hard limit must leave the communication latency on the clock, otherwise a search running
+        // to the very end of it loses on time. Never reserve more than half of the clock: an almost
+        // exhausted clock must still leave a budget the search can do something with.
+        // The soft limit is left alone.
+        const float reserveFrac = static_cast<float>(TM_OverheadReserveFrac) / 1000.0f;
+        const float overheadReserve = std::min((float)moveOverhead, reserveFrac * remainingTime);
+        const float hardTimeLimit = std::max(minMoveTime, std::min(timeMargin * remainingTime, remainingTime - overheadReserve));
+
+        maxTime = std::clamp(maxTime, 0.0f, hardTimeLimit);
+        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * remainingTime));
 
         // reduce time if opponent played a move predicted by the previous search, increase otherwise
         if (data.previousSearchHint == PreviousSearchHint::Hit)
