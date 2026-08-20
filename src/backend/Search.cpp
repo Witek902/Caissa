@@ -106,6 +106,7 @@ DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
 DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
+DEFINE_PARAM(QSearchFutilitySeeDepthScale, 80, 0, 120);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
@@ -1278,7 +1279,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 futilityBase > -KnownWinValue &&
                 futilityBase <= alpha &&
                 move.ToSquare() != prevSquare &&
-                !position.StaticExchangeEvaluation(move, 1))
+                !position.StaticExchangeEvaluation(move, 1 - QSearchFutilitySeeDepthScale * node->depth))
             {
                 bestValue = std::max(bestValue, futilityBase);
                 continue;
