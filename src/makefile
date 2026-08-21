@@ -1,3 +1,6 @@
+.DELETE_ON_ERROR:
+.DEFAULT_GOAL := ob
+
 EXE                = caissa
 VERSION            := $(strip $(file < ../version.txt))
 EXE_NAME           = $(EXE)-$(VERSION)
@@ -5,6 +8,10 @@ DEFAULT_EVALFILE   = ../data/neuralNets/eval-82-383B.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 NET_VERSION        = $(basename $(notdir $(DEFAULT_EVALFILE)))
 NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(notdir $(DEFAULT_EVALFILE))
+NET_TMP            = $(DEFAULT_EVALFILE).tmp
+# force HTTP/1.1: some hosts hit "HTTP/2 stream not closed cleanly (PROTOCOL_ERROR)" on the GitHub CDN
+NET_CURL           = curl -fsS -L --http1.1 --retry 5 --retry-delay 3 --connect-timeout 30 -o $(NET_TMP) $(NET_DOWNLOAD_URL)
+NET_WGET           = wget -q -O $(NET_TMP) $(NET_DOWNLOAD_URL)
 CC                 = g++
 SRC                = $(wildcard backend/*.cpp) $(wildcard frontend/*.cpp) backend/syzygy/tbprobe.cpp
 OBJ                = $(SRC:.cpp=.o)
@@ -43,11 +50,13 @@ ifeq ($(shell echo "test"), "test")
 	CLEAN = rmdir /s /q $(PGO_DIR)
 	CLEAN_OBJS = del /s /q $(subst /,\,$(OBJ))
 	MKDIR_NET_DIR = if not exist $(subst /,\,$(dir $(DEFAULT_EVALFILE))) mkdir $(subst /,\,$(dir $(DEFAULT_EVALFILE)))
+	MOVE_NET = move /y $(subst /,\,$(NET_TMP)) $(subst /,\,$(DEFAULT_EVALFILE)) > nul
 else
 	BENCH = ./$(EXE) bench 16 > /dev/null 2>&1
 	CLEAN = $(RM) -rf $(PGO_DIR)
 	CLEAN_OBJS = $(RM) -f $(OBJ)
 	MKDIR_NET_DIR = mkdir -p $(dir $(DEFAULT_EVALFILE))
+	MOVE_NET = mv -f $(NET_TMP) $(DEFAULT_EVALFILE)
 endif
 
 COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL -DNDEBUG -DCAISSA_VERSION=\"$(VERSION)\" -DCAISSA_EVALFILE=\"$(EVALFILE)\"
@@ -63,44 +72,50 @@ AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 %.o: %.c
 	$(CC) -march=native $(AVX2FLAGS) -c $< -o $@
 
+# Evaluate.cpp embeds the net via INCBIN, so it must not be compiled before the download completes
+backend/Evaluate.o: $(DEFAULT_EVALFILE)
+
 # for OpenBench
 ob: $(DEFAULT_EVALFILE) $(OBJ)
 	$(CC) $(OBJ) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
 	$(CLEAN_OBJS)
 
 # download the default net file if not present (needed for embedding via INCBIN)
+# written via a temporary file, so an interrupted transfer never looks like a complete net
 $(DEFAULT_EVALFILE):
 	@echo Downloading neural network $(notdir $@) from $(NET_DOWNLOAD_URL)...
 	@$(MKDIR_NET_DIR)
-	@curl -fsSL -o $@ $(NET_DOWNLOAD_URL) && echo Download complete: $@
+	@$(NET_CURL) || $(NET_CURL) || $(NET_WGET)
+	@$(MOVE_NET)
+	@echo Download complete: $@
 
-bmi2:
+bmi2: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
-avx2:
+avx2: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
-sse4:
+sse4: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
-sse2:
+sse2: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
-avx512:
+avx512: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
-legacy:
+legacy: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
 
 # Profile-guided optimization builds
-bmi2_pgo:
+bmi2_pgo: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx2_pgo:
+avx2_pgo: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx512_pgo:
+avx512_pgo: $(DEFAULT_EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
