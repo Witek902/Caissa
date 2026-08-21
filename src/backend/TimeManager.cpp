@@ -13,7 +13,7 @@ DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
-DEFINE_PARAM(TM_OverheadReserveFrac, 500, 100, 900);
+DEFINE_PARAM(TM_OverheadReserveFrac, 750, 400, 800);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
