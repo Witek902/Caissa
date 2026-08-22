@@ -65,6 +65,10 @@ public:
     void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
     void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights) const;
 
+    // GPU-time measurement of a training iteration.
+    void BeginIterationTiming();
+    float EndIterationTimingMs(); // records the end marker and waits for it
+
     const CudaStream& GetStream() const { return m_stream; }
 
     // Network architecture parameters
@@ -89,6 +93,10 @@ private:
     // Events synchronizing the training-vectors copy (m_copyStream) with its use (m_stream).
     cudaEvent_t m_trainConsumedEvent = nullptr; // recorded on m_stream after the last reader (FT gradients)
     cudaEvent_t m_copyDoneEvent = nullptr;      // recorded on m_copyStream after the batch copy completes
+
+    // Timing markers bracketing an iteration's work on the main stream.
+    cudaEvent_t m_iterationStartEvent = nullptr;
+    cudaEvent_t m_iterationEndEvent = nullptr;
 };
 
 } // namespace cuda

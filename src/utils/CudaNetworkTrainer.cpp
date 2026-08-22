@@ -20,6 +20,7 @@
 
 #include "minitrace/minitrace.h"
 
+#include <algorithm>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -130,6 +131,9 @@ private:
     alignas(CACHELINE_SIZE)
     std::atomic<uint64_t> m_numTrainingVectorsPassed = 0;
 
+    // GPU time of the last training iteration, excluding the concurrent data generation
+    float m_lastIterationGpuTimeMs = 0.0f;
+
     alignas(CACHELINE_SIZE)
     std::mutex m_mutex;
 
@@ -199,6 +203,50 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     outEntry.variant = GetNetworkVariant(pos);
 }
 
+// King bucket pair of an entry, packed as (whiteBucket, blackBucket).
+// PositionToFeaturesVector emits every feature as kingBucket * 12 * 64 + pieceIndex and each
+// position always has at least the two kings, so the first feature carries the bucket.
+INLINE static uint32_t GetKingBucketSortKey(const TrainingEntry& entry)
+{
+    const uint32_t whiteBucket = entry.whiteFeatures[0] / (12u * 64u);
+    const uint32_t blackBucket = entry.blackFeatures[0] / (12u * 64u);
+    ASSERT(whiteBucket < nn::NumKingBuckets && blackBucket < nn::NumKingBuckets);
+    return whiteBucket * nn::NumKingBuckets + blackBucket;
+}
+
+// Group a batch's entries by king bucket pair (counting sort, stable).
+// The feature transformer kernels assign 16 consecutive batch entries to a thread block, so
+// grouping equal buckets confines a block's weight gathers and gradient atomics to a single
+// bucket's 768-row window instead of scattering them over all NumNetworkInputs rows.
+// The batch gradient is a sum, so reordering within a batch does not change the math. Sorting must
+// stay inside one batch: sorting a whole iteration would make batches bucket-homogeneous and bias
+// each batch's gradient toward one bucket.
+static void SortBatchByKingBucket(TrainingEntry* entries, uint32_t count)
+{
+    constexpr uint32_t numKeys = nn::NumKingBuckets * nn::NumKingBuckets;
+
+    static thread_local std::vector<TrainingEntry> scratch;
+    scratch.resize(count);
+
+    uint32_t offsets[numKeys] = { 0 };
+
+    for (uint32_t i = 0; i < count; ++i)
+        offsets[GetKingBucketSortKey(entries[i])]++;
+
+    uint32_t sum = 0;
+    for (uint32_t key = 0; key < numKeys; ++key)
+    {
+        const uint32_t keyCount = offsets[key];
+        offsets[key] = sum;
+        sum += keyCount;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+        scratch[offsets[GetKingBucketSortKey(entries[i])]++] = entries[i];
+
+    memcpy(entries, scratch.data(), count * sizeof(TrainingEntry));
+}
+
 void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda)
 {
     builder.ParallelFor("GenerateSet", static_cast<uint32_t>(outSet.size()),
@@ -253,12 +301,25 @@ void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilde
             trainingEntry.targetOutput = score;
         }
     }, 0);
+
+    builder.Fence();
+
+    const uint32_t numBatches = (static_cast<uint32_t>(outSet.size()) + cBatchSize - 1) / cBatchSize;
+    builder.ParallelFor("SortSetByKingBucket", numBatches,
+        [&outSet](const TaskContext&, uint32_t batchIndex)
+    {
+        const uint32_t begin = batchIndex * cBatchSize;
+        const uint32_t end = std::min(begin + cBatchSize, static_cast<uint32_t>(outSet.size()));
+        SortBatchByKingBucket(outSet.data() + begin, end - begin);
+    }, 0);
 }
 
 void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t iteration)
 {
     const uint32_t numBatches = cNumTrainingVectorsPerIteration / cBatchSize;
     m_cudaBatchData.batchSize = cBatchSize;
+
+    m_cudaNetwork.BeginIterationTiming();
 
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
     // stall). Subsequent batches are prefetched while the previous batch's Adam updates run.
@@ -282,6 +343,8 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t ite
                 cBatchSize);
         }
     }
+
+    m_lastIterationGpuTimeMs = m_cudaNetwork.EndIterationTimingMs();
 
     m_cudaNetwork.GetStream().Synchronize();
 
@@ -657,7 +720,7 @@ bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!UnpackNetwork("eval-80-167B.pnn"))
+    if (!UnpackNetwork("eval-82-383B.pnn"))
         return false;
 
     // Copy unpacked weights to CUDA
@@ -745,7 +808,12 @@ bool CudaNetworkTrainer::Train()
             << "Learning rate:        " << learningRate << '\n'
             << "Training speed :      " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl;
 
-
+        if (m_lastIterationGpuTimeMs > 0.0f)
+        {
+            std::cout
+                << "GPU time:             " << m_lastIterationGpuTimeMs << " ms ("
+                << (1000.0f * (float)cNumTrainingVectorsPerIteration / m_lastIterationGpuTimeMs) << " pos/sec)" << std::endl;
+        }
 
         if (iteration % 50 == 2)
         {

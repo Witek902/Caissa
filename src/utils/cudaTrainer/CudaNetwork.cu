@@ -46,6 +46,10 @@ CudaNeuralNetwork::CudaNeuralNetwork()
     CUDA_CHECK(cudaEventCreateWithFlags(&m_trainConsumedEvent, cudaEventDisableTiming));
     CUDA_CHECK(cudaEventCreateWithFlags(&m_copyDoneEvent, cudaEventDisableTiming));
 
+    // Unlike the synchronization-only events above, these must keep timing enabled.
+    CUDA_CHECK(cudaEventCreate(&m_iterationStartEvent));
+    CUDA_CHECK(cudaEventCreate(&m_iterationEndEvent));
+
     // Pre-record so the first iteration's cross-stream waits are already satisfied.
     CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, m_stream.Get()));
     CUDA_CHECK(cudaEventRecord(m_ftGradClearedEvent, m_auxStream.Get()));
@@ -59,6 +63,23 @@ CudaNeuralNetwork::~CudaNeuralNetwork()
     cudaEventDestroy(m_ftGradClearedEvent);
     cudaEventDestroy(m_trainConsumedEvent);
     cudaEventDestroy(m_copyDoneEvent);
+    cudaEventDestroy(m_iterationStartEvent);
+    cudaEventDestroy(m_iterationEndEvent);
+}
+
+void CudaNeuralNetwork::BeginIterationTiming()
+{
+    CUDA_CHECK(cudaEventRecord(m_iterationStartEvent, m_stream.Get()));
+}
+
+float CudaNeuralNetwork::EndIterationTimingMs()
+{
+    CUDA_CHECK(cudaEventRecord(m_iterationEndEvent, m_stream.Get()));
+    CUDA_CHECK(cudaEventSynchronize(m_iterationEndEvent));
+
+    float elapsedMs = 0.0f;
+    CUDA_CHECK(cudaEventElapsedTime(&elapsedMs, m_iterationStartEvent, m_iterationEndEvent));
+    return elapsedMs;
 }
 
 void CudaNeuralNetwork::Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights)
