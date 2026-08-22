@@ -890,10 +890,21 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     occupied &= ~fromSquare.GetBitboard();
     occupied |= toSquare.GetBitboard();
 
-    const Bitboard bishopsAndQueens = Whites().bishops | Blacks().bishops | Whites().queens | Blacks().queens;
-    const Bitboard rooksAndQueens = Whites().rooks | Blacks().rooks | Whites().queens | Blacks().queens;
+    // restrict the slider sets to the rays through the target square, so that a slider
+    // that can never reach it does not cost a lookup in the magic attack tables
+    const Bitboard queens = Whites().queens | Blacks().queens;
+    const Bitboard bishopsAndQueens = Bitboard::GetBishopAttacks(toSquare) & (Whites().bishops | Blacks().bishops | queens);
+    const Bitboard rooksAndQueens = Bitboard::GetRookAttacks(toSquare) & (Whites().rooks | Blacks().rooks | queens);
+    const Bitboard knights = Whites().knights | Blacks().knights;
 
-    Bitboard allAttackers = GetAttackers(toSquare, occupied);
+    Bitboard allAttackers =
+        (Bitboard::GetKingAttacks(toSquare) & (Whites().king | Blacks().king)) |
+        (Bitboard::GetPawnAttacks(toSquare, Black) & Whites().pawns) |
+        (Bitboard::GetPawnAttacks(toSquare, White) & Blacks().pawns);
+
+    if (knights)            allAttackers |= Bitboard::GetKnightAttacks(toSquare) & knights;
+    if (bishopsAndQueens)   allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
+    if (rooksAndQueens)     allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
 
     Color sideToMove = mSideToMove;
     int32_t result = 1;
@@ -933,12 +944,15 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         // remove one attacker from occupied squares
         occupied ^= (1ull << FirstBitSet(side.GetPieceBitBoard(piece) & ourAttackers));
 
-        // update diagonal attackers
-        if (piece == Piece::Pawn || piece == Piece::Bishop || piece == Piece::Queen)
+        // update diagonal attackers; only worth regenerating while a slider that is not
+        // already a known attacker can still be uncovered
+        if ((piece == Piece::Pawn || piece == Piece::Bishop || piece == Piece::Queen) &&
+            (bishopsAndQueens & occupied & ~allAttackers))
             allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
 
         // update horizontal/vertical attackers
-        if (piece == Piece::Rook || piece == Piece::Queen)
+        if ((piece == Piece::Rook || piece == Piece::Queen) &&
+            (rooksAndQueens & occupied & ~allAttackers))
             allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
     }
 
