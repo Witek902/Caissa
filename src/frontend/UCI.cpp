@@ -188,7 +188,6 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << "option name GaviotaTbPath type string default <empty>\n";
         std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
 #endif // USE_GAVIOTA_TABLEBASES
-        std::cout << "option name UCI_AnalyseMode type check default false\n";
         std::cout << "option name UCI_Chess960 type check default false\n";
         std::cout << "option name UCI_ShowWDL type check default false\n";
         std::cout << "option name UseSAN type check default false\n";
@@ -632,7 +631,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
     mSearchCtx->searchParam.limits.maxNodesSoft = maxNodesSoft;
     mSearchCtx->searchParam.limits.mateSearch = mateSearchDepth > 0;
-    mSearchCtx->searchParam.limits.analysisMode = !isPonder && (isInfinite || mOptions.analysisMode); // run full analysis when pondering
+    mSearchCtx->searchParam.limits.isInfinite = isInfinite && !isPonder;
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.evalRandomization = mOptions.evalRandomization;
@@ -874,14 +873,6 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     else if (lowerCaseName == "usesan" || lowerCaseName == "usestandardalgebraicnotation")
     {
         if (!ParseBool(lowerCaseValue, mOptions.useStandardAlgebraicNotation))
-        {
-            std::cout << "Invalid value" << std::endl;
-            return false;
-        }
-    }
-    else if (lowerCaseName == "uci_analysemode" || lowerCaseName == "uci_analyzemode" || lowerCaseName == "analysis" || lowerCaseName == "analysismode")
-    {
-        if (!ParseBool(lowerCaseValue, mOptions.analysisMode))
         {
             std::cout << "Invalid value" << std::endl;
             return false;

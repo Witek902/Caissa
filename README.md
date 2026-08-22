@@ -48,7 +48,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 ### SPCC (Stefan Pohl Computer Chess)
 | List | Rating | Rank | Version |
 |------|--------|------|---------|
-| [SPCC UHO-Top15](https://www.sp-cc.de) | **3700** | #13 | Caissa 1.25 avx512 |
+| [SPCC UHO-Top15](https://www.sp-cc.de) | **3749** | around #18 | Caissa 1.26 avx512 |
 
 ### IpMan Chess
 | List | Rating | Rank | Version | Architecture |
@@ -266,7 +266,6 @@ The engine supports the following UCI options:
 - **SyzygyProbeLimit** (int) - Maximum number of pieces for tablebase probing
 
 ### Display Options
-- **UCI_AnalyseMode** (bool) - Analysis mode (full PV lines, no depth constraints)
 - **UCI_Chess960** (bool) - Enable Chess960 mode (castling as "king captures rook")
 - **UCI_ShowWDL** (bool) - Show win/draw/loss probabilities with evaluation
 - **UseSAN** (bool) - Use Standard Algebraic Notation (FIDE standard)
