@@ -48,8 +48,8 @@ struct SearchLimits
     // enable mate search, disables all pruning
     bool mateSearch = false;
 
-    // in analysis mode full PV lines are searched
-    bool analysisMode = false;
+    // true for "go infinite" (not pondering) - disables early-exit shortcuts and PV truncation
+    bool isInfinite = false;
 };
 
 struct SearchParam

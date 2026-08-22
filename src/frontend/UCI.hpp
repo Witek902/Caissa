@@ -15,7 +15,6 @@ struct Options
     uint32_t threads = 1;
     int32_t moveOverhead = 10;
     int32_t evalRandomization = 0;
-    bool analysisMode = false;
     bool useStandardAlgebraicNotation = false;
     bool colorConsoleOutput = false;
     bool showWDL = false;

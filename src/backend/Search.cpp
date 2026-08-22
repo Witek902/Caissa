@@ -363,7 +363,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
         return;
     }
 
-    if (!param.limits.analysisMode)
+    if (!param.limits.isInfinite)
     {
         // if we have time limit and there's only a single legal move, return it immediately without evaluation
         if (param.limits.maxTime.IsValid() && numLegalMoves == 1)
@@ -624,9 +624,7 @@ void Search::ReportPV(const AspirationWindowSearchParam& param, const PvLine& pv
     const float timeInSeconds = searchTime.ToSeconds();
 
     // don't report PV line if very small amount of time passed and we have time limits
-    if (timeInSeconds < PvLineReportDelay &&
-        param.searchParam.limits.maxTime.IsValid() &&
-        !param.searchParam.limits.analysisMode)
+    if (timeInSeconds < PvLineReportDelay && param.searchParam.limits.maxTime.IsValid())
     {
         return;
     }
@@ -859,7 +857,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
         // update time manager
-        if (isMainThread && !param.limits.analysisMode)
+        if (isMainThread)
         {
             TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
 
@@ -906,7 +904,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             }
 
             // stop the search if found mate in multiple depths in a row
-            if (!param.limits.analysisMode &&
+            if (!param.limits.isInfinite &&
                 mateCounter >= MateCountStopCondition &&
                 param.limits.maxDepth == UINT16_MAX)
             {
@@ -978,7 +976,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     PvLine pvLine; // working copy
     PvLine finalPvLine;
 
-    const uint32_t maxPvLine = param.searchParam.limits.analysisMode ? UINT32_MAX : std::min(param.depth, DefaultMaxPvLineLength);
+    const uint32_t maxPvLine = param.searchParam.limits.isInfinite ? UINT32_MAX : std::min(param.depth, DefaultMaxPvLineLength);
 
     // TODO root node could be created in Search_Internal
     NodeInfo& rootNode = thread.searchStack[0];
