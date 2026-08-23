@@ -712,9 +712,25 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
     return true;
 }
 
-static const float g_warmupTime = 20.0f;
-static volatile float g_learningRateScale = 2.0f;
+static const float cWarmupTime = 20.0f;
+
+// cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after cTrainingLength positions
+// then stays constant for the rest of the training
+static constexpr float cStartLearningRate = 2.0e-5f;
+static constexpr float cEndLearningRate =   2.0e-6f;
+static constexpr uint64_t cTrainingLength = 120'000'000'000ull;
+
+// if non-zero, overrides the learning rate scheduler (for tweaking under a debugger)
+static volatile float g_learningRateScale = 0.0f;
+
 static volatile float g_lambdaScale = 0.0f;
+
+static float GetScheduledLearningRate(uint64_t numTrainingVectorsPassed)
+{
+    constexpr float pi = 3.14159265358979323846f;
+    const float t = std::min(1.0f, (float)((double)numTrainingVectorsPassed / (double)cTrainingLength));
+    return cEndLearningRate + 0.5f * (cStartLearningRate - cEndLearningRate) * (1.0f + cosf(pi * t));
+}
 
 bool CudaNetworkTrainer::Train()
 {
@@ -734,7 +750,6 @@ bool CudaNetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float baseLearningRate = 1.0e-5f;
     const float maxLambda = 1.0f;
 
     uint64_t kingBucketMask = UINT64_MAX;
@@ -752,8 +767,8 @@ bool CudaNetworkTrainer::Train()
     for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
     {
         const float lambda = g_lambdaScale * maxLambda;
-        const float warmup = g_warmupTime > 0.0f ? (iteration < g_warmupTime ? (float)(iteration + 1) / g_warmupTime : 1.0f) : 1.0f;
-        const float learningRate = g_learningRateScale * warmup * baseLearningRate;
+        const float warmup = cWarmupTime > 0.0f ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
+        const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(m_numTrainingVectorsPassed);
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
