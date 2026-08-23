@@ -1076,6 +1076,23 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
 }
 
+void Search::UpdateCorrectionHistories(const ThreadData& thread, const NodeInfo* node, int32_t bonus) const
+{
+    if (bonus == 0)
+        return;
+
+    const Position& position = node->position;
+    const Color stm = position.GetSideToMove();
+    CorrectionHistories* corrHist = thread.correctionHistories;
+    AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
+    AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
+    AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
+    if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
+        AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
+    if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
+        AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
+}
+
 ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
 {
     int32_t adjustedScore = node.staticEval;
@@ -1462,6 +1479,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     {
         if (alpha < 0 && SearchUtils::CanReachGameCycle(*node))
         {
+            // the side to move can force a draw, so the true score of this node is known
+            if (!node->isInCheck)
+            {
+                node->staticEval = Evaluate(*node, thread.accumulatorCache);
+                const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
+                const int32_t bonus = std::clamp<int32_t>(-adjustedEvalScore * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
+                UpdateCorrectionHistories(thread, node, bonus);
+            }
+
             alpha = 0;
             if (alpha >= beta)
             {
@@ -2281,18 +2307,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
              (bestValue > correctedEval && bestMove.IsValid())))
         {
             const int32_t bonus = std::clamp<int32_t>((bestValue - correctedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
-            if (bonus != 0)
-            {
-                const Color stm = position.GetSideToMove();
-                CorrectionHistories* corrHist = thread.correctionHistories;
-                AddToCorrHist(corrHist->pawnStructure[stm][position.GetPawnsHash() % PawnCorrTableSize], bonus);
-                AddToCorrHist(corrHist->nonPawnWhite[stm][position.GetNonPawnsHash(White) % NonPawnCorrTableSize], bonus);
-                AddToCorrHist(corrHist->nonPawnBlack[stm][position.GetNonPawnsHash(Black) % NonPawnCorrTableSize], bonus);
-                if (node->ply >= 2 && node->previousMove.IsValid() && (node - 1)->previousMove.IsValid())
-                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 1)->previousMove.PieceTo()], bonus);
-                if (node->ply >= 4 && node->previousMove.IsValid() && (node - 3)->previousMove.IsValid())
-                    AddToCorrHist(corrHist->continuation[stm][node->previousMove.PieceTo()][(node - 3)->previousMove.PieceTo()], bonus);
-            }
+            UpdateCorrectionHistories(thread, node, bonus);
         }
     }
 

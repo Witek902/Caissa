@@ -372,6 +372,8 @@ private:
 
     ScoreType AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const;
 
+    void UpdateCorrectionHistories(const ThreadData& thread, const NodeInfo* node, int32_t bonus) const;
+
     void ReportPV(const AspirationWindowSearchParam& param, const PvLine& pvLine, BoundsType boundsType, const TimePoint& searchTime) const;
 
     void Search_Internal(const uint32_t threadID, const uint32_t numPvLines, const Game& game, SearchParam& param, SearchStats& outStats);
