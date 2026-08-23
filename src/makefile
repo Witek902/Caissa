@@ -4,7 +4,7 @@
 EXE                = caissa
 VERSION            := $(strip $(file < ../version.txt))
 EXE_NAME           = $(EXE)-$(VERSION)
-DEFAULT_EVALFILE   = ../data/neuralNets/eval-82-383B.pnn
+DEFAULT_EVALFILE   = ../data/neuralNets/eval-84-144B.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 NET_VERSION        = $(basename $(notdir $(DEFAULT_EVALFILE)))
 NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(notdir $(DEFAULT_EVALFILE))
