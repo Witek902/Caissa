@@ -9,8 +9,10 @@ EVALFILE           = $(DEFAULT_EVALFILE)
 NET_VERSION        = $(basename $(notdir $(DEFAULT_EVALFILE)))
 NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(notdir $(DEFAULT_EVALFILE))
 NET_TMP            = $(DEFAULT_EVALFILE).tmp
-# force HTTP/1.1: some hosts hit "HTTP/2 stream not closed cleanly (PROTOCOL_ERROR)" on the GitHub CDN
-NET_CURL           = curl -fsS -L --http1.1 --retry 5 --retry-delay 3 --connect-timeout 30 -o $(NET_TMP) $(NET_DOWNLOAD_URL)
+# IPv4 + HTTP/1.1: a broken IPv6 route stalls the connect, and old HTTP/2 stacks
+# hit "stream not closed cleanly (PROTOCOL_ERROR)" on the GitHub CDN
+NET_CURL           = curl -fsS -L -4 --http1.1 --retry 3 --retry-delay 2 --connect-timeout 15 -o $(NET_TMP) $(NET_DOWNLOAD_URL)
+NET_CURL_ANY       = curl -fsS -L --retry 3 --retry-delay 2 --connect-timeout 15 -o $(NET_TMP) $(NET_DOWNLOAD_URL)
 NET_WGET           = wget -q -O $(NET_TMP) $(NET_DOWNLOAD_URL)
 CC                 = g++
 SRC                = $(wildcard backend/*.cpp) $(wildcard frontend/*.cpp) backend/syzygy/tbprobe.cpp
@@ -73,49 +75,50 @@ AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 	$(CC) -march=native $(AVX2FLAGS) -c $< -o $@
 
 # Evaluate.cpp embeds the net via INCBIN, so it must not be compiled before the download completes
-backend/Evaluate.o: $(DEFAULT_EVALFILE)
+backend/Evaluate.o: $(EVALFILE)
 
 # for OpenBench
-ob: $(DEFAULT_EVALFILE) $(OBJ)
+ob: $(EVALFILE) $(OBJ)
 	$(CC) $(OBJ) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
 	$(CLEAN_OBJS)
 
 # download the default net file if not present (needed for embedding via INCBIN)
+# pass EVALFILE=<path> to build against a local net instead, with no network access
 # written via a temporary file, so an interrupted transfer never looks like a complete net
 $(DEFAULT_EVALFILE):
 	@echo Downloading neural network $(notdir $@) from $(NET_DOWNLOAD_URL)...
 	@$(MKDIR_NET_DIR)
-	@$(NET_CURL) || $(NET_CURL) || $(NET_WGET)
+	@$(NET_CURL) || $(NET_CURL_ANY) || $(NET_WGET)
 	@$(MOVE_NET)
 	@echo Download complete: $@
 
-bmi2: $(DEFAULT_EVALFILE)
+bmi2: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
-avx2: $(DEFAULT_EVALFILE)
+avx2: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
-sse4: $(DEFAULT_EVALFILE)
+sse4: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
-sse2: $(DEFAULT_EVALFILE)
+sse2: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
-avx512: $(DEFAULT_EVALFILE)
+avx512: $(EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
-legacy: $(DEFAULT_EVALFILE)
+legacy: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
 
 # Profile-guided optimization builds
-bmi2_pgo: $(DEFAULT_EVALFILE)
+bmi2_pgo: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx2_pgo: $(DEFAULT_EVALFILE)
+avx2_pgo: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx512_pgo: $(DEFAULT_EVALFILE)
+avx512_pgo: $(EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
