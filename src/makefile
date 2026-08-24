@@ -66,20 +66,45 @@ COMMONFLAGS   = $(FLAGS) $(LIBS) -DCONFIGURATION_FINAL -DNDEBUG -DCAISSA_VERSION
 SSE2FLAGS     = $(COMMONFLAGS) -DUSE_SSE -DUSE_SSE2
 SSE4FLAGS     = $(SSE2FLAGS) -DUSE_SSE4 -DUSE_POPCNT
 AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
+AVX2VNNIFLAGS = $(AVX2FLAGS) -mavxvnni -DUSE_VNNI
 BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
 AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
 
+# Native build: ask the compiler which ISA extensions -march=native enables on this host,
+# so the feature defines match the CPU instead of being pinned to a fixed baseline.
+ifeq ($(shell echo "test"), "test")
+	NATIVE_MACROS := $(shell echo. | $(CC) -march=native -dM -E -x c++ - 2>nul)
+else
+	NATIVE_MACROS := $(shell $(CC) -march=native -dM -E -x c++ /dev/null 2>/dev/null)
+endif
+
+has-native = $(if $(findstring $(1),$(NATIVE_MACROS)),$(2))
+
+ifeq ($(strip $(NATIVE_MACROS)),)
+	# probe failed - fall back to the portable AVX2 baseline
+	NATIVEFLAGS = $(AVX2FLAGS) -march=native -mtune=native
+else
+	NATIVEFLAGS = $(COMMONFLAGS) -march=native -mtune=native -DUSE_SSE -DUSE_SSE2 \
+	              $(call has-native,__SSE4_1__,-DUSE_SSE4) \
+	              $(call has-native,__POPCNT__,-DUSE_POPCNT) \
+	              $(call has-native,__AVX__,-DUSE_AVX) \
+	              $(call has-native,__AVX2__,-DUSE_AVX2) \
+	              $(call has-native,__BMI2__,-DUSE_BMI2) \
+	              $(call has-native,__AVXVNNI__,-DUSE_VNNI) \
+	              $(if $(findstring __AVX512DQ__,$(NATIVE_MACROS)),$(call has-native,__AVX512BW__,-DUSE_AVX512))
+endif
+
 %.o: %.cpp
-	$(CC) -march=native $(AVX2FLAGS) -c $< -o $@
+	$(CC) $(NATIVEFLAGS) -c $< -o $@
 %.o: %.c
-	$(CC) -march=native $(AVX2FLAGS) -c $< -o $@
+	$(CC) $(NATIVEFLAGS) -c $< -o $@
 
 # Evaluate.cpp embeds the net via INCBIN, so it must not be compiled before the download completes
 backend/Evaluate.o: $(EVALFILE)
 
 # for OpenBench
 ob: $(EVALFILE) $(OBJ)
-	$(CC) $(OBJ) -march=native $(AVX2FLAGS) -o $(EXE)$(EXT)
+	$(CC) $(OBJ) $(NATIVEFLAGS) -o $(EXE)$(EXT)
 	$(CLEAN_OBJS)
 
 # download the default net file if not present (needed for embedding via INCBIN)
@@ -96,6 +121,8 @@ bmi2: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
 avx2: $(EVALFILE)
 	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
+avx2-vnni: $(EVALFILE)
+	$(CC) $(SRC) -march=core-avx2 $(AVX2VNNIFLAGS) -o $(EXE_NAME)-x64-avx2-vnni$(EXT)
 sse4: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
 sse2: $(EVALFILE)

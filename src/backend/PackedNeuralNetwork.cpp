@@ -41,6 +41,16 @@ INLINE static int32_t m256_hadd(__m256i a)
     const __m128i hi = _mm256_extracti128_si256(a, 1);
     return m128_hadd(_mm_add_epi32(lo, hi));
 }
+
+// Multiply 16bit pairs and accumulate into 32bit lanes; AVX-VNNI fuses it into one instruction
+INLINE static __m256i m256_dpwssd(__m256i sum, __m256i a, __m256i b)
+{
+#ifdef NN_USE_VNNI
+    return _mm256_dpwssd_avx_epi32(sum, a, b);
+#else
+    return _mm256_add_epi32(sum, _mm256_madd_epi16(a, b));
+#endif // NN_USE_VNNI
+}
 #endif // USE_AVX2
 
 #ifdef USE_AVX512
@@ -112,11 +122,8 @@ INLINE static int32_t LinearLayer_Accum_SingleOutput(
         const __m256i wB = _mm256_load_si256(reinterpret_cast<const __m256i*>(weights + j + AccumulatorSize));
 
         // apply SCReLU: in * in * w
-        const __m256i resultA = _mm256_madd_epi16(_mm256_mullo_epi16(wA, inA), inA);
-        const __m256i resultB = _mm256_madd_epi16(_mm256_mullo_epi16(wB, inB), inB);
-
-        sumA = _mm256_add_epi32(sumA, resultA);
-        sumB = _mm256_add_epi32(sumB, resultB);
+        sumA = m256_dpwssd(sumA, _mm256_mullo_epi16(wA, inA), inA);
+        sumB = m256_dpwssd(sumB, _mm256_mullo_epi16(wB, inB), inB);
     }
 
     // add 8 int32s horizontally
