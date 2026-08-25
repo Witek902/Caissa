@@ -287,7 +287,7 @@
 
 inline uint64_t ParallelBitsDeposit(uint64_t src, uint64_t mask)
 {
-#if defined(USE_BMI2) && defined(_WIN64)
+#if defined(USE_BMI2) && (defined(_WIN64) || defined(__x86_64__))
     return _pdep_u64(src, mask);
 #else
     uint64_t result = 0;
@@ -323,7 +323,7 @@ inline uint32_t ParallelBitsDeposit(uint32_t src, uint32_t mask)
 
 inline uint64_t ParallelBitsExtract(uint64_t src, uint64_t mask)
 {
-#if defined(USE_BMI2) && defined(_WIN64)
+#if defined(USE_BMI2) && (defined(_WIN64) || defined(__x86_64__))
     return _pext_u64(src, mask);
 #else
     uint64_t result = 0;
