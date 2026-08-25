@@ -47,7 +47,7 @@ INLINE constexpr bool IsAscendingOrDescending(const T& a, const T& b, const T& c
 // return high bits of a 64 bit multiplication
 INLINE uint64_t MulHi64(uint64_t a, uint64_t b)
 {
-#if defined(__GNUC__) && defined(ARCHITECTURE_X64)
+#if defined(__GNUC__) && defined(__SIZEOF_INT128__)
     __extension__ typedef unsigned __int128 uint128;
     return ((uint128)a * (uint128)b) >> 64;
 #elif defined(_MSC_VER) && defined(_WIN64)

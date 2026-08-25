@@ -89,6 +89,7 @@ else
 	              $(call has-native,__POPCNT__,-DUSE_POPCNT) \
 	              $(call has-native,__AVX__,-DUSE_AVX) \
 	              $(call has-native,__AVX2__,-DUSE_AVX2) \
+	              $(call has-native,__BMI2__,-DUSE_BMI2) \
 	              $(call has-native,__AVXVNNI__,-DUSE_VNNI) \
 	              $(if $(findstring __AVX512DQ__,$(NATIVE_MACROS)),$(call has-native,__AVX512BW__,-DUSE_AVX512))
 endif
