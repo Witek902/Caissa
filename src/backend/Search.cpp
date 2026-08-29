@@ -97,6 +97,8 @@ DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 51, 15, 100);
 DEFINE_PARAM(SingularExtTTDepthMargin, 3, 1, 6);
+DEFINE_PARAM(SingularHistDiv, 1024, 256, 4096);
+DEFINE_PARAM(SingularHistClampDiv, 4, 1, 16);
 DEFINE_PARAM(SingularExtPVBonus, 256, 64, 512);
 DEFINE_PARAM(SingularFailHighNegExt, 2, 1, 4);
 DEFINE_PARAM(SingularCutNodeNegExt, 2, 1, 4);
@@ -1908,7 +1910,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - SingularExtTTDepthMargin)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                // a move with strong history failing high is weaker evidence of singularity, so test it more strictly
+                int32_t ttMoveHist = 0;
+                if (move.IsQuiet())             ttMoveHist = moveStatScore;
+                else if (move.IsCapture())      ttMoveHist = thread.moveOrderer.GetCaptureHistoryScore(*node, move);
+
+                const int32_t singularHistClamp = node->depth / SingularHistClampDiv;
+                const int32_t singularHistAdj = std::clamp(ttMoveHist / SingularHistDiv, -singularHistClamp, singularHistClamp);
+
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth - singularHistAdj);
                 const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
                 const bool originalIsCutNode = node->isCutNode;
