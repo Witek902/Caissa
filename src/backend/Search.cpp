@@ -1319,14 +1319,6 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                 alpha = score;
                 bestMove = move;
 
-                // update PV line
-                if constexpr (isPvNode)
-                {
-                    node->pvLength = std::min<uint16_t>(1u + childNode.pvLength, MaxSearchDepth);
-                    node->pvLine[0] = move;
-                    memcpy(node->pvLine + 1, childNode.pvLine, sizeof(PackedMove) * std::min<uint16_t>(childNode.pvLength, MaxSearchDepth - 1));
-                }
-
                 if (score >= beta)
                 {
                     if (bestMove.IsCapture())
