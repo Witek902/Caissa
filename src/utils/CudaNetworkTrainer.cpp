@@ -712,7 +712,7 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
     return true;
 }
 
-static const float cWarmupTime = 20.0f;
+static const float cWarmupTime = 50.0f;
 
 // cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after cTrainingLength positions
 // then stays constant for the rest of the training
@@ -736,7 +736,7 @@ bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!UnpackNetwork("eval-82-383B.pnn"))
+    if (!UnpackNetwork("eval-84-144B.pnn"))
         return false;
 
     // Copy unpacked weights to CUDA

@@ -5,6 +5,10 @@
 namespace nn {
 namespace cuda {
 
+// Hardware limit on the grid's Y dimension; kernels indexing the batch with blockIdx.y must
+// grid-stride past it.
+static constexpr uint32_t c_maxGridDimY = 65535;
+
 // Activation functions
 __device__ __forceinline__ float Sigmoid(float x)
 {
@@ -383,18 +387,21 @@ __global__ void BackpropToCReLUKernel(
 )
 {
     const uint32_t inputIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    const uint32_t batchIdx = blockIdx.y;
-    if (batchIdx >= batchSize || inputIdx >= inputSize) return;
+    if (inputIdx >= inputSize) return;
 
-    const uint32_t v = trainingVectors[batchIdx].variant;
-    const uint32_t weightsOffset = v * (inputSize + 1);
+    // Grid-stride over the batch: gridDim.y is capped at the 65535 hardware limit.
+    for (uint32_t batchIdx = blockIdx.y; batchIdx < batchSize; batchIdx += gridDim.y)
+    {
+        const uint32_t v = trainingVectors[batchIdx].variant;
+        const uint32_t weightsOffset = v * (inputSize + 1);
 
-    const float error = outputErrors[batchIdx];
-    // Use the same fake-quantized weight as the forward pass (straight-through estimator).
-    const float w = FakeQuantize(weights[weightsOffset + inputIdx], weightScale, invWeightScale);
-    const float x = creluInputs[batchIdx * inputSize + inputIdx];
+        const float error = outputErrors[batchIdx];
+        // Use the same fake-quantized weight as the forward pass (straight-through estimator).
+        const float w = FakeQuantize(weights[weightsOffset + inputIdx], weightScale, invWeightScale);
+        const float x = creluInputs[batchIdx * inputSize + inputIdx];
 
-    creluErrors[batchIdx * inputSize + inputIdx] = error * w * SCReLUDerivative(x);
+        creluErrors[batchIdx * inputSize + inputIdx] = error * w * SCReLUDerivative(x);
+    }
 }
 
 __global__ void FeatureTransformerGradientsKernel(
@@ -482,7 +489,7 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
 
     {
         const dim3 blockSize(256);
-        const dim3 gridSize((2 * c_accumulatorSize + blockSize.x - 1) / blockSize.x, batchSize);
+        const dim3 gridSize((2 * c_accumulatorSize + blockSize.x - 1) / blockSize.x, std::min(batchSize, c_maxGridDimY));
         BackpropToCReLUKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
             batch.trainingVectors.Get(),
             batch.outputErrors.Get(),
