@@ -96,6 +96,7 @@ DEFINE_PARAM(SingularExtDepthRedMul, 59, 32, 128);
 DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 51, 15, 100);
+DEFINE_PARAM(SingularQuadrupleExtensionMarigin, 400, 100, 1200);
 DEFINE_PARAM(SingularExtTTDepthMargin, 3, 1, 6);
 DEFINE_PARAM(SingularExtPVBonus, 256, 64, 512);
 DEFINE_PARAM(SingularFailHighNegExt, 2, 1, 4);
@@ -1938,6 +1939,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                         // multiple extensions if singular score is way below beta
                         extension += (singularScore < singularBeta - SingularDoubleExtensionMarigin - SingularExtPVBonus * isPvNode);
                         extension += (singularScore < singularBeta - SingularTripleExtensionMarigin - SingularExtPVBonus * isPvNode);
+                        extension += (singularScore < singularBeta - SingularQuadrupleExtensionMarigin - SingularExtPVBonus * isPvNode);
                     }
                 }
                 // if second best move beats current beta, there most likely would be beta cutoff when searching it at full depth
