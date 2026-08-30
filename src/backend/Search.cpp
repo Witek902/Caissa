@@ -97,6 +97,7 @@ DEFINE_PARAM(SingularExtDepthRedSub, 215, 0, 512);
 DEFINE_PARAM(SingularDoubleExtensionMarigin, 14, 5, 25);
 DEFINE_PARAM(SingularTripleExtensionMarigin, 51, 15, 100);
 DEFINE_PARAM(SingularExtTTDepthMargin, 3, 1, 6);
+DEFINE_PARAM(SingularExactBoundMul, 48, 16, 128);
 DEFINE_PARAM(SingularExtPVBonus, 256, 64, 512);
 DEFINE_PARAM(SingularFailHighNegExt, 2, 1, 4);
 DEFINE_PARAM(SingularCutNodeNegExt, 2, 1, 4);
@@ -1908,7 +1909,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ((ttEntry.bounds & TTEntry::Bounds::Lower) != TTEntry::Bounds::Invalid) &&
                 ttEntry.depth >= node->depth - SingularExtTTDepthMargin)
             {
-                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - node->depth);
+                // an exact TT score is more reliable, so use a tighter window and prove singularity more readily
+                const int32_t singularMargin = ttEntry.bounds == TTEntry::Bounds::Exact
+                    ? (node->depth * SingularExactBoundMul + 127) / 128
+                    : node->depth;
+                const ScoreType singularBeta = (ScoreType)std::max(-CheckmateValue, (int32_t)ttScore - singularMargin);
                 const int16_t singularDepth = std::max<int16_t>(1, static_cast<int16_t>(SingularExtDepthRedMul * node->depth - SingularExtDepthRedSub) / 128);
 
                 const bool originalIsCutNode = node->isCutNode;
