@@ -1,4 +1,5 @@
 #include "UCI.hpp"
+#include "Playout.hpp"
 #include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
@@ -312,6 +313,11 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Command_NodeCacheProbe();
     }
+    else if (command == "playout")
+    {
+        Command_Stop();
+        Command_Playout(args);
+    }
     else if (command == "bench" || command == "benchmark")
     {
         uint32_t depth = 12;
@@ -363,6 +369,8 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         std::cout << " * tbprobe - probe tablebases with current position" << std::endl;
         std::cout << " * cacheprobe - probe node cache" << std::endl;
         std::cout << " * bench|benchmark - run benchmark" << std::endl;
+        std::cout << " * playout nodes <N> [games <M>] - play self-play games from the current position at N nodes per move" << std::endl;
+        std::cout << "       and report win/draw/loss statistics; runs until 'stop' if no game count is given" << std::endl;
     }
     else
     {
@@ -771,6 +779,12 @@ void UniversalChessInterface::DoSearch()
 
 bool UniversalChessInterface::Command_Stop()
 {
+    if (mPlayout)
+    {
+        mPlayout->Stop();
+        mPlayout.reset();
+    }
+
     if (mSearchCtx)
     {
         // wait for previous search to complete
@@ -1571,6 +1585,36 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
 #ifdef NN_ACCUMULATOR_STATS
     PrintNNEvaluatorStats();
 #endif // NN_ACCUMULATOR_STATS
+
+    return true;
+}
+
+bool UniversalChessInterface::Command_Playout(const std::vector<std::string>& args)
+{
+    uint64_t softNodeLimit = 0;
+    uint64_t maxGames = 0;
+    bool validArgs = true;
+
+    for (size_t i = 1; i < args.size(); ++i)
+    {
+        if (args[i] == "nodes" && i + 1 < args.size())
+            softNodeLimit = std::stoull(args[++i]);
+        else if (args[i] == "games" && i + 1 < args.size())
+            maxGames = std::stoull(args[++i]);
+        else
+            validArgs = false;
+    }
+
+    if (!validArgs || softNodeLimit == 0)
+    {
+        std::cout << "Usage: playout nodes <N> [games <M>]" << std::endl;
+        return true;
+    }
+
+    mPlayout = std::make_unique<PlayoutRunner>();
+
+    if (!mPlayout->Start(mGame.GetPosition(), softNodeLimit, maxGames))
+        mPlayout.reset();
 
     return true;
 }

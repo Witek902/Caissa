@@ -782,8 +782,11 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.reserve(param.excludedMoves.size() + numPvLines);
 
+    // TT stores depth in 8 bits
+    const uint16_t maxDepth = std::min<uint16_t>(param.limits.maxDepth, UINT8_MAX);
+
     // main iterative deepening loop
-    for (uint16_t depth = 1; depth <= param.limits.maxDepth; ++depth)
+    for (uint16_t depth = 1; depth <= maxDepth; ++depth)
     {
         SearchResult tempResult;
         tempResult.resize(numPvLines);

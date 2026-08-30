@@ -5,9 +5,12 @@
 #include "../backend/TranspositionTable.hpp"
 #include "../backend/Waitable.hpp"
 
+#include <memory>
 #include <mutex>
 #include <vector>
 #include <thread>
+
+class PlayoutRunner;
 
 struct Options
 {
@@ -54,6 +57,7 @@ private:
     bool Command_ScoreMoves();
     bool Command_EvalDetailed(const std::vector<std::string>& args);
     bool Command_Benchmark(uint32_t depth);
+    bool Command_Playout(const std::vector<std::string>& args);
 
     void StopSearchThread();
     void DoSearch();
@@ -76,6 +80,8 @@ private:
     SearchTaskContext* mNewSearchContext = nullptr;
 
     std::unique_ptr<SearchTaskContext> mSearchCtx;
+
+    std::unique_ptr<PlayoutRunner> mPlayout;
 
     std::vector<std::string> mCommandArgs;
 };
