@@ -107,6 +107,11 @@ DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
 DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
+DEFINE_PARAM(QSearchDeltaPawnValue, 300, 100, 700);
+DEFINE_PARAM(QSearchDeltaMinorValue, 900, 300, 1800);
+DEFINE_PARAM(QSearchDeltaRookValue, 1100, 500, 2200);
+DEFINE_PARAM(QSearchDeltaQueenValue, 2200, 1000, 4000);
+DEFINE_PARAM(QSearchDeltaCushion, 300, 0, 1000);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
@@ -1108,6 +1113,25 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
     return static_cast<ScoreType>(adjustedScore);
 }
 
+// upper bound on the material a single capture or promotion can win in the position
+static INLINE int32_t QSearchBestCaseValue(const Position& position)
+{
+    const SidePosition& opponentSide = position.GetOpponentSide();
+
+    int32_t value = 0;
+    if (opponentSide.queens)                                value = QSearchDeltaQueenValue;
+    else if (opponentSide.rooks)                            value = QSearchDeltaRookValue;
+    else if (opponentSide.bishops | opponentSide.knights)   value = QSearchDeltaMinorValue;
+    else if (opponentSide.pawns)                            value = QSearchDeltaPawnValue;
+
+    // a pawn on the relative 7th rank can promote to a queen
+    if (position.GetCurrentSide().pawns &
+        (position.GetSideToMove() == White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
+        value += QSearchDeltaQueenValue - QSearchDeltaPawnValue;
+
+    return value;
+}
+
 template<NodeType nodeType>
 ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx)
 {
@@ -1230,6 +1254,11 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
             alpha = bestValue;
 
         futilityBase = bestValue + static_cast<ScoreType>(QSearchFutilityPruningOffset);
+
+        // Delta pruning: if winning even the most valuable piece on the board can't reach alpha, skip the search
+        if (bestValue > -KnownWinValue &&
+            bestValue + QSearchBestCaseValue(position) + QSearchDeltaCushion < alpha)
+            return bestValue;
     }
 
     // guard against overflowing the search stack
