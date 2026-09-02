@@ -11,6 +11,8 @@ DEFINE_PARAM(TM_NodesCountScale, 208, 160, 260);
 DEFINE_PARAM(TM_NodesCountOffset, 63, 10, 90);
 DEFINE_PARAM(TM_StabilityScale, 58, 0, 200);
 DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
+DEFINE_PARAM(TM_InstabilityScale, 2272, 500, 4000);
+DEFINE_PARAM(TM_InstabilityOffset, 1000, 900, 1500);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
 DEFINE_PARAM(TM_OverheadReserveFrac, 750, 400, 800);
@@ -113,6 +115,15 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // increase time if the threads disagree on the best root move
+    if (data.numThreads > 1)
+    {
+        const double scale = static_cast<double>(TM_InstabilityScale) / 1000.0;
+        const double offset = static_cast<double>(TM_InstabilityOffset) / 1000.0;
+        const double instabilityFactor = offset + scale * data.rootMoveInstability;
+        limits.idealTimeCurrent *= instabilityFactor;
     }
 
 #ifndef CONFIGURATION_FINAL

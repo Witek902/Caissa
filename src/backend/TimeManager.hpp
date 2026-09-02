@@ -27,6 +27,9 @@ struct TimeManagerUpdateData
     const SearchResult& currResult;
     const SearchResult& prevResult;
     double bestMoveNodeFraction = 0.0;
+    // average number of root move changes per thread in the last iteration
+    double rootMoveInstability = 0.0;
+    uint32_t numThreads = 1;
 };
 
 struct TimeManagerState

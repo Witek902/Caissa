@@ -404,6 +404,9 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
     SearchStats globalStats;
 
+    for (ThreadData* threadData : mThreadData)
+        threadData->rootMoveChanges.store(0, std::memory_order_relaxed);
+
     // kick off worker threads
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
@@ -857,10 +860,28 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         const ScoreType primaryMoveScore = tempResult.front().score;
         const Move primaryMove = !tempResult.front().moves.empty() ? tempResult.front().moves.front() : Move::Invalid();
 
+        // publish own root move change so the main thread can measure how much the threads disagree
+        if (param.numThreads > 1 &&
+            !thread.pvLines.front().moves.empty() &&
+            thread.pvLines.front().moves.front() != primaryMove)
+        {
+            thread.rootMoveChanges.fetch_add(1, std::memory_order_relaxed);
+        }
+
         // update time manager
         if (isMainThread)
         {
             TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            data.numThreads = param.numThreads;
+
+            // collect root move changes accumulated by all threads since the previous iteration
+            if (param.numThreads > 1)
+            {
+                uint32_t totalRootMoveChanges = 0;
+                for (uint32_t i = 0; i < param.numThreads; ++i)
+                    totalRootMoveChanges += mThreadData[i]->rootMoveChanges.exchange(0, std::memory_order_relaxed);
+                data.rootMoveInstability = static_cast<double>(totalRootMoveChanges) / static_cast<double>(param.numThreads);
+            }
 
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))

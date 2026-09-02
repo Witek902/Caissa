@@ -327,6 +327,8 @@ private:
 
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
+        // number of root move changes since the main thread last collected them
+        std::atomic<uint32_t> rootMoveChanges = 0;
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
         std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
