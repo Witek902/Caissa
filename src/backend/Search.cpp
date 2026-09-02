@@ -56,6 +56,7 @@ DEFINE_PARAM(InCheckProbcutTTDepthMargin, 4, 2, 8);
 DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 32, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 383, 128, 1024);
+DEFINE_PARAM(FutilityPruningPVMargin, 32, 0, 200);
 
 DEFINE_PARAM(SingularitySearchMinDepth, 9, 5, 20);
 DEFINE_PARAM(SingularitySearchScoreTresholdMin, 204, 100, 300);
@@ -84,6 +85,7 @@ DEFINE_PARAM(LateMovePruningPVScale, 2, 0, 4);
 DEFINE_PARAM(HistoryPruningLinearFactor, 234, 100, 400);
 DEFINE_PARAM(HistoryPruningQuadraticFactor, 148, 60, 300);
 DEFINE_PARAM(HistoryPruningMaxDepth, 9, 4, 12);
+DEFINE_PARAM(HistoryPruningPVOffset, 0, 0, 4096);
 
 DEFINE_PARAM(AspirationWindowMaxSize, 547, 200, 800);
 DEFINE_PARAM(AspirationWindow, 6, 5, 20);
@@ -119,6 +121,8 @@ DEFINE_PARAM(SSEPruningDepth_Captures, 5, 1, 12);
 DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 120, 60, 180);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 49, 10, 100);
+DEFINE_PARAM(SSEPruningPVMultiplier_Captures, 30, 0, 120);
+DEFINE_PARAM(SSEPruningPVMultiplier_NonCaptures, 25, 0, 100);
 DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 134, 64, 256);
 
 DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
@@ -1863,7 +1867,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // if a move score is really bad, do not consider this move at low depth
                 if (quietMoveIndex > 1 &&
                     node->depth < HistoryPruningMaxDepth &&
-                    moveStatScore < GetHistoryPruningTreshold(lmrDepth))
+                    moveStatScore < GetHistoryPruningTreshold(lmrDepth) - HistoryPruningPVOffset * isPvNode)
                 {
                     continue;
                 }
@@ -1872,7 +1876,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
                     node->depth < FutilityPruningDepth &&
-                    correctedEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
+                    correctedEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv + FutilityPruningPVMargin * isPvNode < alpha)
                 {
                     movePicker.SkipQuiets();
                     if (quietMoveIndex > 1) continue;
@@ -1887,12 +1891,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->depth <= SSEPruningDepth_Captures &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                        !position.StaticExchangeEvaluation(move, -(SSEPruningMultiplier_Captures + SSEPruningPVMultiplier_Captures * isPvNode) * node->depth)) continue;
                 }
                 else
                 {
                     if (node->depth <= SSEPruningDepth_NonCaptures &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_NonCaptures * lmrDepth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
+                        !position.StaticExchangeEvaluation(move, -(SSEPruningMultiplier_NonCaptures + SSEPruningPVMultiplier_NonCaptures * isPvNode) * lmrDepth - moveStatScore / SSEPruningMoveStatDivNonCaptures)) continue;
                 }
             }
         }
