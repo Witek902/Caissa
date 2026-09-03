@@ -1559,9 +1559,9 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
         // print best move and stats
         printf(" Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
             searchResult[0].moves.front().ToString().c_str(),
-            stats.nodes.load(),
+            stats.nodes,
             (endTimePoint - startTimePoint).ToSeconds(),
-            stats.nodes.load() / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
+            stats.nodes / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
     }
 
     std::cout << totalNodes << " nodes " << static_cast<int64_t>(totalNodes / totalTime) << " nps" << std::endl;
