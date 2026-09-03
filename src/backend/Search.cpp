@@ -1974,7 +1974,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             Prefetch(&corrHist->pawnStructure[stm][childNode.position.GetPawnsHash() % PawnCorrTableSize]);
             Prefetch(&corrHist->nonPawnWhite[stm][childNode.position.GetNonPawnsHash(White) % NonPawnCorrTableSize]);
             Prefetch(&corrHist->nonPawnBlack[stm][childNode.position.GetNonPawnsHash(Black) % NonPawnCorrTableSize]);
-            Prefetch(&corrHist->continuation[stm][move.PieceTo()][node->previousMove.PieceTo()]);
+            if (node->previousMove.IsValid())
+                Prefetch(&corrHist->continuation[stm][move.PieceTo()][node->previousMove.PieceTo()]);
         }
 
         childNode.staticEval = InvalidValue;
