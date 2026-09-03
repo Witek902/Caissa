@@ -291,18 +291,24 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 
     const Bitboard threats = node.threats.allThreats;
 
-    for (uint32_t i = 0; i < numMoves; ++i)
+    const auto updateQuietMove = [&](const Move move, const int32_t histDelta, const int32_t contDelta) INLINE_LAMBDA
     {
-        const Move move = moves[i];
-        const int32_t histDelta = move == bestMove ? histBonus : histMalus;
-        const int32_t contDelta = move == bestMove ? contBonus : contMalus;
-
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
 
         UpdateContinuationHistory(node, move, contDelta);
+    };
+
+    // the cutoff move is updated separately, as it is missing from the list when the list overflowed
+    updateQuietMove(bestMove, histBonus, contBonus);
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        const Move move = moves[i];
+        if (move != bestMove)
+            updateQuietMove(move, histMalus, contMalus);
     }
 }
 
@@ -322,12 +328,9 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
     const int32_t malus = -std::min<int32_t>(CaptureMalusOffset + CaptureMalusLinear * depth, CaptureMalusLimit);
 
-    for (uint32_t i = 0; i < numMoves; ++i)
+    const auto updateCapture = [&](const Move move, const int32_t delta) INLINE_LAMBDA
     {
-        const Move move = moves[i];
         ASSERT(move.IsCapture());
-
-        const int32_t delta = move == bestMove ? bonus : malus;
 
         const Piece captured = node.position.GetCapturedPiece(move);
         ASSERT(captured > Piece::None);
@@ -339,6 +342,18 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
         ASSERT(pieceIdx < 6);
         ASSERT(capturedIdx < 5);
         UpdateHistoryCounter(capturesHistory[color][pieceIdx][capturedIdx][move.ToSquare().Index()], delta);
+    };
+
+    // the cutoff move is updated separately, as it is missing from the list when the list overflowed
+    // (a quiet cutoff move only penalizes the tried captures)
+    if (bestMove.IsCapture())
+        updateCapture(bestMove, bonus);
+
+    for (uint32_t i = 0; i < numMoves; ++i)
+    {
+        const Move move = moves[i];
+        if (move != bestMove)
+            updateCapture(move, malus);
     }
 }
 
