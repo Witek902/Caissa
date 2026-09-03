@@ -171,28 +171,45 @@ struct NodeInfo
     }
 };
 
+// value written by a single thread and read by others; the increment is a plain store, not a locked RMW
+template<typename T>
+class RelaxedAtomic
+{
+public:
+    INLINE operator T() const { return mValue.load(std::memory_order_relaxed); }
+    INLINE RelaxedAtomic& operator = (T value) { mValue.store(value, std::memory_order_relaxed); return *this; }
+    INLINE void operator ++ (int) { *this = T(*this) + 1; }
+private:
+    std::atomic<T> mValue = 0;
+};
+
+// per-thread counters, aggregated across threads only when the totals are needed
 struct SearchThreadStats
 {
-    uint64_t nodesTemp = 0;     // flushed to global stats
-    uint64_t nodesTotal = 0;
-    uint64_t quiescenceNodes = 0;
-    uint32_t maxDepth = 0;
-    uint64_t tbHits = 0;
+    RelaxedAtomic<uint64_t> nodes;
+    RelaxedAtomic<uint64_t> tbHits;
+    RelaxedAtomic<uint32_t> maxDepth;
+
+    void Reset()
+    {
+        nodes = 0;
+        tbHits = 0;
+        maxDepth = 0;
+    }
 
     void OnNodeEnter(uint32_t height)
     {
-        nodesTemp++;
-        nodesTotal++;
-        maxDepth = std::max(maxDepth, height);
+        nodes++;
+        if (height > maxDepth) maxDepth = height;
     }
 };
 
 struct SearchStats
 {
-    std::atomic<uint64_t> nodes = 0;
-    std::atomic<uint64_t> quiescenceNodes = 0;
-    std::atomic<uint32_t> maxDepth = 0;
-    std::atomic<uint64_t> tbHits = 0;
+    uint64_t nodes = 0;
+    uint64_t quiescenceNodes = 0;
+    uint32_t maxDepth = 0;
+    uint64_t tbHits = 0;
 
 #ifdef COLLECT_SEARCH_STATS
     static const int32_t EvalHistogramMaxValue = 1600;
@@ -219,17 +236,6 @@ struct SearchStats
 
     uint64_t evalHistogram[EvalHistogramBins] = { 0 };
 #endif // COLLECT_SEARCH_STATS
-
-    void Append(SearchThreadStats& threadStats, bool flush = false);
-
-    SearchStats& operator = (const SearchStats& other)
-    {
-        nodes = other.nodes.load();
-        quiescenceNodes = other.quiescenceNodes.load();
-        maxDepth = other.maxDepth.load();
-        tbHits = other.tbHits.load();
-        return *this;
-    }
 };
 
 enum class NodeType
@@ -386,5 +392,9 @@ private:
     ScoreType NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx);
 
     // returns true if the search needs to be aborted immediately
-    static bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode);
+    bool CheckStopCondition(const ThreadData& thread, const SearchContext& ctx, bool isRootNode) const;
+
+    // sums per-thread counters; O(numThreads), so not for per-node use
+    uint64_t GetNodesSearched(uint32_t numThreads) const;
+    void CollectStats(SearchStats& outStats, uint32_t numThreads) const;
 };
