@@ -1,8 +1,15 @@
 #pragma once
 
-#include "Node.hpp"
+#include "../Common.hpp"
+
+#include "../../backend/Memory.hpp"
+
+#include <vector>
+#include <memory>
 
 namespace nn {
+
+using Values = std::vector<float, AlignmentAllocator<float, 32>>;
 
 struct Gradients;
 
@@ -14,17 +21,6 @@ public:
     void Init(uint32_t numActiveInputs, float bias = 0.0f);
 
     void PrintStats() const;
-
-    struct WeightsUpdateOptions
-    {
-        float learningRate = 1.0f;
-        float gradientScale = 1.0f;
-        float weightDecay = 0.0f;
-        size_t iteration = 0;
-    };
-
-    void Update_Adadelta(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options);
-    void Update_Adam(const Gradients& gradients, uint32_t inputIndex, const WeightsUpdateOptions& options);
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;

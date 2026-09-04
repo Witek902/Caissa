@@ -154,4 +154,4 @@ Some LMR parameters have non-obvious sign semantics — verify the usage in code
 Warnings are errors (`-Werror` / `/WX`). Do not introduce new warnings. Approved warning suppressions are listed in the root `CMakeLists.txt`.
 
 ### Namespace usage
-The neural network runtime lives in namespace `nn`. The trainer lives in `src/utils/net/`. The thread pool utility is in namespace `threadpool`.
+The neural network runtime lives in namespace `nn`. The trainer lives in `src/utils/cudaTrainer/` and `src/utils/CudaNetworkTrainer.cpp`. The thread pool utility is in namespace `threadpool`.
