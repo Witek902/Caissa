@@ -90,14 +90,25 @@ void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
 {
     m_featureTransformerWeights->Init(c_numNetworkInputs, seed);
     m_lastLayerWeights->Init(2 * c_accumulatorSize, seed + 1);
+
+#if USE_FACTORIZER
+    // the factorizer starts at zero, so the effective weights are just the bucket weights
+    CUDA_CHECK(cudaMemset(
+        m_featureTransformerWeights->m_weights.Get() + c_numNetworkInputs * c_accumulatorSize,
+        0, FactorizerInputs * c_accumulatorSize * sizeof(float)));
+#endif // USE_FACTORIZER
 }
 
 void CudaNeuralNetwork::Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights)
 {
     // Create CUDA weight storages based on host network
     m_featureTransformerWeights = std::make_shared<CudaWeightsStorage>(
-        c_numNetworkInputs, c_accumulatorSize, 1
+        FeatureTransformerInputs, c_accumulatorSize, 1
     );
+#if USE_FACTORIZER
+    m_featureTransformerWeights->m_factorizerFirstWeight = c_numNetworkInputs * c_accumulatorSize;
+    m_featureTransformerWeights->m_factorizerRange = FactorizerWeightRange;
+#endif // USE_FACTORIZER
 
     m_lastLayerWeights = std::make_shared<CudaWeightsStorage>(
         2 * c_accumulatorSize, 1, c_numVariants
@@ -155,6 +166,17 @@ __global__ void SparseBinaryInputKernel(
     // biases are stored right after the weight matrix
     const float bias = FakeQuantize(weights[inputSize * accumulatorSize + accumulatorIdx], biasScale, invBiasScale);
 
+    // Effective weight of a feature: the bucket weight plus the shared factorizer weight,
+    // fake-quantized as a sum because that is what gets packed.
+    const auto featureWeight = [&](uint32_t feature)
+    {
+        float w = weights[feature * accumulatorSize + accumulatorIdx];
+#if USE_FACTORIZER
+        w += weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * accumulatorSize + accumulatorIdx];
+#endif // USE_FACTORIZER
+        return FakeQuantize(w, weightScale, invWeightScale);
+    };
+
     // Process white features
     float whiteSum = bias;
     for (uint32_t i = 0; i < trainingVector->numWhiteFeatures; ++i)
@@ -162,7 +184,7 @@ __global__ void SparseBinaryInputKernel(
         const uint16_t feature = trainingVector->whiteFeatures[i];
         if (feature >= inputSize) continue;
 
-        whiteSum += FakeQuantize(weights[feature * accumulatorSize + accumulatorIdx], weightScale, invWeightScale);
+        whiteSum += featureWeight(feature);
     }
     accumulators[2 * batchIdx * accumulatorSize + accumulatorIdx] = whiteSum;
 
@@ -173,10 +195,30 @@ __global__ void SparseBinaryInputKernel(
         const uint16_t feature = trainingVector->blackFeatures[i];
         if (feature >= inputSize) continue;
 
-        blackSum += FakeQuantize(weights[feature * accumulatorSize + accumulatorIdx], weightScale, invWeightScale);
+        blackSum += featureWeight(feature);
     }
     accumulators[2 * batchIdx * accumulatorSize + accumulatorSize + accumulatorIdx] = blackSum;
 }
+
+#if USE_FACTORIZER
+// The factorizer weight of a feature is shared by all king buckets, so its gradient is the sum of
+// the bucket gradients of that feature. Computed from the accumulated bucket gradients instead of
+// adding a second atomic per feature to FeatureTransformerGradientsKernel.
+__global__ void FactorizerGradientsKernel(
+    float* __restrict__ weightGradients,
+    uint32_t accumulatorSize
+)
+{
+    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= FactorizerInputs * accumulatorSize) return;
+
+    float sum = 0.0f;
+    for (uint32_t bucket = 0; bucket < nn::NumKingBuckets; ++bucket)
+        sum += weightGradients[bucket * FactorizerInputs * accumulatorSize + idx];
+
+    weightGradients[nn::NumNetworkInputs * accumulatorSize + idx] = sum;
+}
+#endif // USE_FACTORIZER
 
 // CUDA kernel for fully connected layer (last layer)
 __global__ void FullyConnectedKernel(
@@ -257,7 +299,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
             m_featureTransformerWeights->m_weights.Get(),
             batch.accumulatorBuffer.Get(),
             batchSize,
-            c_numNetworkInputs,
+            FeatureTransformerInputs,
             c_accumulatorSize,
             m_featureTransformerWeights->m_weightQuantScale,
             m_featureTransformerWeights->m_biasQuantScale,
@@ -548,11 +590,23 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
             batch.trainingVectors.Get(),
             batch.featureTransformerGradients.Get(),
             batchSize,
-            c_numNetworkInputs,
+            FeatureTransformerInputs,
             c_accumulatorSize
         );
         CUDA_CHECK(cudaGetLastError());
     }
+
+#if USE_FACTORIZER
+    {
+        const dim3 blockSize(256);
+        const dim3 gridSize((FactorizerInputs * c_accumulatorSize + blockSize.x - 1) / blockSize.x);
+        FactorizerGradientsKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
+            batch.featureTransformerGradients.Get(),
+            c_accumulatorSize
+        );
+        CUDA_CHECK(cudaGetLastError());
+    }
+#endif // USE_FACTORIZER
 
     // The training-vectors buffer is no longer read after the FT gradient accumulation (the Adam
     // updates below don't touch it), so signal that the next batch's copy may overwrite it.

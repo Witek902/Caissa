@@ -31,6 +31,10 @@ public:
     float m_weightsRange = 10.0f;
     float m_biasRange = 10.0f;
 
+    // Weights at index >= m_factorizerFirstWeight (excluding biases) are clamped to m_factorizerRange
+    uint32_t m_factorizerFirstWeight = UINT32_MAX;
+    float m_factorizerRange = 0.0f;
+
     // AdamW decoupled weight decay (applied to weights only, never biases).
     float m_weightDecay = 0.0f;
 
