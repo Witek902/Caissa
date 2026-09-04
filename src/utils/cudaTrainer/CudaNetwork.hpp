@@ -5,8 +5,22 @@
 #include "../TrainerCommon.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"
 
+// Input factorizer: a shared 768-feature weight block (king-bucket independent) that is added to the
+// weights of every king bucket during training and folded into them when the net is packed.
+#define USE_FACTORIZER 1
+
 namespace nn {
 namespace cuda {
+
+static constexpr uint32_t FactorizerInputs = 12 * 64;
+#if USE_FACTORIZER
+static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs + FactorizerInputs;
+#else
+static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs;
+#endif // USE_FACTORIZER
+
+// factorizer weights are clipped so that their sum with the (unclipped) bucket weights stays bounded
+static constexpr float FactorizerWeightRange = 0.99f;
 
 struct CudaBatchData
 {
@@ -41,7 +55,7 @@ struct CudaBatchData
         hiddenBuffer.Allocate(batchSize); // Single output for final layer
 
         lastLayerGradients.Allocate((2 * nn::AccumulatorSize + 1) * nn::NumVariants);
-        featureTransformerGradients.Allocate((nn::NumNetworkInputs + 1) * nn::AccumulatorSize);
+        featureTransformerGradients.Allocate((FeatureTransformerInputs + 1) * nn::AccumulatorSize);
     }
 };
 

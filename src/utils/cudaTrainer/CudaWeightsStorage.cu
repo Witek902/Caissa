@@ -132,6 +132,8 @@ __global__ void AdamUpdateKernel(
     float weightDecay,
     float maxWeightRange,
     float maxBiasRange,
+    uint32_t factorizerFirstWeight,
+    float maxFactorizerRange,
     float biasCorrection1, // 1 / (1 - beta1^t), precomputed on the host
     float biasCorrection2  // 1 / (1 - beta2^t), precomputed on the host
 )
@@ -140,7 +142,7 @@ __global__ void AdamUpdateKernel(
     if (idx >= numWeights) return;
 
     const bool isBias = IsBiasIndex(idx, inputSize, outputSize);
-    const float maxWeightValue = isBias ? maxBiasRange : maxWeightRange;
+    const float maxWeightValue = isBias ? maxBiasRange : (idx >= factorizerFirstWeight ? maxFactorizerRange : maxWeightRange);
 
     const float grad = static_cast<float>(gradients[idx]);
 
@@ -195,6 +197,8 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
         m_weightDecay,
         m_weightsRange,
         m_biasRange,
+        m_factorizerFirstWeight,
+        m_factorizerRange,
         biasCorrection1,
         biasCorrection2
     );
