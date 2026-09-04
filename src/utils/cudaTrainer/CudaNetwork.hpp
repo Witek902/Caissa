@@ -14,6 +14,7 @@ struct CudaBatchData
     CudaBuffer<float> networkOutputs;
     CudaBuffer<float> outputErrors;
     CudaBuffer<float> creluErrors;
+    CudaBuffer<float> lossSum;              // sum of squared output errors, accumulated across batches
 
     // Intermediate buffers for forward/backward pass
     CudaBuffer<float> accumulatorBuffer;    // For sparse input accumulation
@@ -33,6 +34,7 @@ struct CudaBatchData
         networkOutputs.Allocate(batchSize);
         outputErrors.Allocate(batchSize);
         creluErrors.Allocate(batchSize * 2 * nn::AccumulatorSize);
+        lossSum.Allocate(1);
 
         // Allocate intermediate buffers based on network size
         accumulatorBuffer.Allocate(batchSize * nn::AccumulatorSize * 2); // For white and black accumulators
@@ -50,6 +52,9 @@ public:
     ~CudaNeuralNetwork();
 
     void Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
+
+    // Replace the weights with a random initialization (training from scratch)
+    void InitRandomWeights(uint32_t seed);
     void Forward(CudaBatchData& batch);
     void Backward(CudaBatchData& batch, float learningRate, size_t iteration);
 

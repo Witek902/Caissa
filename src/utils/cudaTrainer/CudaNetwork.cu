@@ -86,18 +86,22 @@ float CudaNeuralNetwork::EndIterationTimingMs()
     return elapsedMs;
 }
 
+void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
+{
+    m_featureTransformerWeights->Init(c_numNetworkInputs, seed);
+    m_lastLayerWeights->Init(2 * c_accumulatorSize, seed + 1);
+}
+
 void CudaNeuralNetwork::Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights)
 {
     // Create CUDA weight storages based on host network
     m_featureTransformerWeights = std::make_shared<CudaWeightsStorage>(
         c_numNetworkInputs, c_accumulatorSize, 1
     );
-    m_featureTransformerWeights->Init(c_numNetworkInputs);
 
     m_lastLayerWeights = std::make_shared<CudaWeightsStorage>(
         2 * c_accumulatorSize, 1, c_numVariants
     );
-    m_lastLayerWeights->Init(2 * c_accumulatorSize);
 
     // Copy initial weights from host
     m_featureTransformerWeights->CopyFromHost(*featureTransformerWeights);
@@ -298,20 +302,44 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 }
 
 // Backward pass kernels
+static constexpr uint32_t c_sigmoidDerivativeBlockSize = 256;
+
+// Also accumulates the batch's squared-error sum into lossSum (one atomic per block).
 __global__ void SigmoidDerivativeKernel(
     const float* __restrict__ outputs,
     const TrainingEntry* __restrict__ trainingVectors,
     float* __restrict__ outputErrors,
+    float* __restrict__ lossSum,
     uint32_t batchSize
 )
 {
-    const uint32_t batchIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (batchIdx >= batchSize) return;
+    __shared__ float s_squaredErrors[c_sigmoidDerivativeBlockSize];
 
-    const float output = outputs[batchIdx];
-    const float target = trainingVectors[batchIdx].targetOutput;
-    const float derivative = output * (1.0f - output);
-    outputErrors[batchIdx] = 2.0f * (output - target) * derivative;
+    const uint32_t batchIdx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    float squaredError = 0.0f;
+    if (batchIdx < batchSize)
+    {
+        const float output = outputs[batchIdx];
+        const float target = trainingVectors[batchIdx].targetOutput;
+        const float derivative = output * (1.0f - output);
+        const float diff = output - target;
+        outputErrors[batchIdx] = 2.0f * diff * derivative;
+        squaredError = diff * diff;
+    }
+
+    s_squaredErrors[threadIdx.x] = squaredError;
+    __syncthreads();
+
+    for (uint32_t stride = blockDim.x / 2; stride > 0; stride /= 2)
+    {
+        if (threadIdx.x < stride)
+            s_squaredErrors[threadIdx.x] += s_squaredErrors[threadIdx.x + stride];
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0)
+        atomicAdd(lossSum, s_squaredErrors[0]);
 }
 
 __global__ void LastLayerGradientsKernel(
@@ -460,12 +488,13 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate, size_
 
     // Compute output layer error (sigmoid derivative)
     {
-        const dim3 blockSize(256);
+        const dim3 blockSize(c_sigmoidDerivativeBlockSize);
         const dim3 gridSize((batchSize + blockSize.x - 1) / blockSize.x);
         SigmoidDerivativeKernel<<<gridSize, blockSize, 0, m_stream.Get()>>>(
             batch.networkOutputs.Get(),
             batch.trainingVectors.Get(),
             batch.outputErrors.Get(),
+            batch.lossSum.Get(),
             batchSize
         );
         CUDA_CHECK(cudaGetLastError());

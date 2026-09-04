@@ -23,7 +23,7 @@ extern void AnalyzeGames();
 extern void FindMagics();
 
 #ifdef USE_CUDA
-extern bool TrainCudaNetwork();
+extern bool TrainCudaNetwork(const std::vector<std::string>& args);
 #endif // USE_CUDA
 
 
@@ -90,7 +90,7 @@ int main(int argc, const char* argv[])
         FindMagics();
 #ifdef USE_CUDA
     else if (toolName == "trainCudaNetwork")
-        TrainCudaNetwork();
+        TrainCudaNetwork(args);
 #endif // USE_CUDA
     else if (toolName == "generateEndgamePositions")
         GenerateEndgamePositions();

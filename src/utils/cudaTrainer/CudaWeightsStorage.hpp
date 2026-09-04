@@ -12,7 +12,7 @@ public:
     CudaWeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants);
     ~CudaWeightsStorage();
 
-    void Init(uint32_t numActiveInputs, float bias = 0.0f);
+    void Init(uint32_t numActiveInputs, uint32_t seed, float bias = 0.0f);
 
     // Copy weights from host WeightsStorage
     void CopyFromHost(const nn::WeightsStorage& hostWeights);

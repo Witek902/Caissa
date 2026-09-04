@@ -21,6 +21,7 @@
 #include "minitrace/minitrace.h"
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -35,7 +36,6 @@
 
 using namespace threadpool;
 
-static constexpr uint32_t cMaxIterations = 4'000'000'000;
 static constexpr uint32_t cNumTrainingVectorsPerIteration = 2 * 1024 * 1024;
 static constexpr uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
 static constexpr uint32_t cBatchSize = 32 * 1024;
@@ -48,8 +48,16 @@ static constexpr float cLastLayerWeightDecay = 0.001f;
 class CudaNetworkTrainer
 {
 public:
-    CudaNetworkTrainer()
-        : m_trainingLog("training.log")
+    struct Options
+    {
+        std::string startNetPath; // empty = train from scratch
+        size_t maxIterations = std::numeric_limits<size_t>::max();
+        uint32_t seed = 12345;
+    };
+
+    CudaNetworkTrainer(const Options& options)
+        : m_options(options)
+        , m_trainingLog("training.log")
     {
         m_packedNet = std::make_unique<nn::PackedNeuralNetwork>();
 
@@ -60,7 +68,8 @@ public:
 
         for (uint32_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
         {
-            m_randomGenerators.emplace_back(m_randomDevice());
+            std::seed_seq seedSeq{ options.seed, i };
+            m_randomGenerators.emplace_back(seedSeq);
         }
 
         // Initialize CUDA batch data
@@ -134,10 +143,13 @@ private:
     // GPU time of the last training iteration, excluding the concurrent data generation
     float m_lastIterationGpuTimeMs = 0.0f;
 
+    // training-set RMSE of the last training iteration; written by the training task, read by Validate
+    std::atomic<float> m_lastTrainingRmse = 0.0f;
+
     alignas(CACHELINE_SIZE)
     std::mutex m_mutex;
 
-    std::random_device m_randomDevice;
+    Options m_options;
     std::vector<std::mt19937> m_randomGenerators; // per-thread RNGs
 
     std::ofstream m_trainingLog;
@@ -321,6 +333,8 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t ite
 
     m_cudaNetwork.BeginIterationTiming();
 
+    m_cudaBatchData.lossSum.ClearAsync(m_cudaNetwork.GetStream().Get());
+
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
     // stall). Subsequent batches are prefetched while the previous batch's Adam updates run.
     m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), cBatchSize);
@@ -347,6 +361,12 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate, size_t ite
     m_lastIterationGpuTimeMs = m_cudaNetwork.EndIterationTimingMs();
 
     m_cudaNetwork.GetStream().Synchronize();
+
+    {
+        float squaredErrorSum = 0.0f;
+        m_cudaBatchData.lossSum.CopyToHost(&squaredErrorSum, 1);
+        m_lastTrainingRmse = sqrtf(squaredErrorSum / (float)(numBatches * cBatchSize));
+    }
 
     // Copy weights from CUDA to host
     m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_lastLayerWeights);
@@ -437,8 +457,11 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
 #endif // USE_PACKED_NET_VALIDATION
 
 
+        const float trainingRmse = m_lastTrainingRmse;
+
         std::cout
             << "-------------------------------------------------------------------------\n"
+            << "Training set error:     " << std::setprecision(6) << trainingRmse << '\n'
 #ifdef USE_PACKED_NET_VALIDATION
             << "PNN avg/min/max error:  " << std::setprecision(6) << stats.nnPackedErrorSum << " " << std::setprecision(5) << stats.nnPackedMinError << " " << std::setprecision(5) << stats.nnPackedMaxError << '\n'
 #endif // USE_PACKED_NET_VALIDATION
@@ -495,6 +518,7 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
 
         m_trainingLog
             << iteration << "\t"
+            << "\t" << std::setprecision(8) << trainingRmse
 #ifdef USE_PACKED_NET_VALIDATION
             << "\t" << std::setprecision(8) << stats.nnPackedErrorSum
 #endif // USE_PACKED_NET_VALIDATION
@@ -736,11 +760,21 @@ bool CudaNetworkTrainer::Train()
 {
     InitNetwork();
 
-    if (!UnpackNetwork("eval-84-144B.pnn"))
-        return false;
+    const bool fromScratch = m_options.startNetPath.empty();
 
-    // Copy unpacked weights to CUDA
-    m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_lastLayerWeights);
+    if (fromScratch)
+    {
+        std::cout << "Training from scratch" << std::endl;
+        m_cudaNetwork.InitRandomWeights(m_options.seed);
+        m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_lastLayerWeights);
+    }
+    else
+    {
+        std::cout << "Starting from net: " << m_options.startNetPath << std::endl;
+        if (!UnpackNetwork(m_options.startNetPath.c_str()))
+            return false;
+        m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_lastLayerWeights);
+    }
 
     if (!m_dataLoader.Init(m_randomGenerators[0]))
     {
@@ -764,10 +798,10 @@ bool CudaNetworkTrainer::Train()
         waitable.Wait();
     }
 
-    for (size_t iteration = 0; iteration < cMaxIterations; ++iteration)
+    for (size_t iteration = 0; iteration < m_options.maxIterations; ++iteration)
     {
         const float lambda = g_lambdaScale * maxLambda;
-        const float warmup = cWarmupTime > 0.0f ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
+        const float warmup = (!fromScratch && cWarmupTime > 0.0f) ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
         const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(m_numTrainingVectorsPassed);
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
@@ -842,8 +876,20 @@ bool CudaNetworkTrainer::Train()
     return true;
 }
 
-bool TrainCudaNetwork()
+bool TrainCudaNetwork(const std::vector<std::string>& args)
 {
-    CudaNetworkTrainer trainer;
+    CudaNetworkTrainer::Options options;
+    for (size_t i = 0; i + 1 < args.size(); ++i)
+    {
+        if (args[i] == "--net")
+            options.startNetPath = args[i + 1];
+        else if (args[i] == "--iterations")
+            options.maxIterations = std::stoull(args[i + 1]);
+        else if (args[i] == "--seed")
+            options.seed = (uint32_t)std::stoul(args[i + 1]);
+    }
+    std::cout << "Seed: " << options.seed << std::endl;
+
+    CudaNetworkTrainer trainer(options);
     return trainer.Train();
 }
