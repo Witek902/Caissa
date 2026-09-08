@@ -21,6 +21,10 @@ public:
     // Copy weights to host WeightsStorage
     void CopyToHost(nn::WeightsStorage& hostWeights) const;
 
+    // Full optimizer state (weights plus both Adam moments), for checkpointing
+    void CopyStateToHost(std::vector<float>& outWeights, std::vector<float>& outMoment1, std::vector<float>& outMoment2) const;
+    void CopyStateFromHost(const std::vector<float>& weights, const std::vector<float>& moment1, const std::vector<float>& moment2);
+
     // Update weights using gradients
     void UpdateAdam(const float* gradients, float learningRate, cudaStream_t stream);
 

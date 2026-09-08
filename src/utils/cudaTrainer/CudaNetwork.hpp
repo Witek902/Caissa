@@ -115,6 +115,12 @@ public:
                            const nn::WeightsStoragePtr& l2Weights,
                            const nn::WeightsStoragePtr& l3Weights) const;
 
+    // Full training state: float master weights plus both Adam moments of every layer, the Adam
+    // step counters and the training position count. Unlike a packed net this resumes exactly -
+    // no re-snapping onto the quantization grid and no loss of optimizer state.
+    bool SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const;
+    bool LoadCheckpoint(const char* path, uint64_t& outNumTrainingVectorsPassed);
+
     // GPU-time measurement of a training iteration.
     void BeginIterationTiming();
     float EndIterationTimingMs(); // records the end marker and waits for it

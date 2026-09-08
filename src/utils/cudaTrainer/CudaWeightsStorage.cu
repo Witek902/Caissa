@@ -100,6 +100,24 @@ void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
     }
 }
 
+void CudaWeightsStorage::CopyStateToHost(std::vector<float>& outWeights, std::vector<float>& outMoment1, std::vector<float>& outMoment2) const
+{
+    outWeights.resize(m_totalWeights);
+    outMoment1.resize(m_totalWeights);
+    outMoment2.resize(m_totalWeights);
+
+    m_weights.CopyToHost(outWeights.data(), m_totalWeights);
+    m_moment1.CopyToHost(outMoment1.data(), m_totalWeights);
+    m_moment2.CopyToHost(outMoment2.data(), m_totalWeights);
+}
+
+void CudaWeightsStorage::CopyStateFromHost(const std::vector<float>& weights, const std::vector<float>& moment1, const std::vector<float>& moment2)
+{
+    m_weights.CopyFromHost(weights.data(), m_totalWeights);
+    m_moment1.CopyFromHost(moment1.data(), m_totalWeights);
+    m_moment2.CopyFromHost(moment2.data(), m_totalWeights);
+}
+
 // Adam parameters
 constexpr float c_beta1 = 0.9f;
 constexpr float c_beta2 = 0.999f;

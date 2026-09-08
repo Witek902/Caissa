@@ -2,9 +2,38 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <iostream>
 
 namespace nn {
 namespace cuda {
+
+namespace {
+
+constexpr uint32_t c_checkpointMagic = 'CCKP';
+constexpr uint32_t c_checkpointVersion = 1;
+
+struct CheckpointHeader
+{
+    uint32_t magic;
+    uint32_t version;
+    uint32_t numLayers;
+    uint32_t padding;
+    uint64_t numTrainingVectorsPassed;
+};
+
+// Repeated per layer, so a checkpoint written for a different architecture is rejected instead of
+// being read as garbage.
+struct CheckpointLayerHeader
+{
+    uint32_t inputSize;
+    uint32_t outputSize;
+    uint32_t numVariants;
+    uint32_t padding;
+    uint64_t adamStep;
+};
+
+} // namespace
 
 
 // Number of slices the batch is split into when reducing dense weight gradients. Each slice is a
@@ -167,6 +196,111 @@ void CudaNeuralNetwork::CopyWeightsFromHost(
     m_l1Weights->CopyFromHost(*l1Weights);
     m_l2Weights->CopyFromHost(*l2Weights);
     m_l3Weights->CopyFromHost(*l3Weights);
+}
+
+bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const
+{
+    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+
+    FILE* file = fopen(path, "wb");
+    if (!file)
+    {
+        std::cerr << "Failed to save checkpoint: cannot open " << path << std::endl;
+        return false;
+    }
+
+    CheckpointHeader header{};
+    header.magic = c_checkpointMagic;
+    header.version = c_checkpointVersion;
+    header.numLayers = (uint32_t)std::size(layers);
+    header.numTrainingVectorsPassed = numTrainingVectorsPassed;
+
+    bool ok = fwrite(&header, sizeof(header), 1, file) == 1;
+
+    std::vector<float> weights, moment1, moment2;
+    for (const CudaWeightsStoragePtr& layer : layers)
+    {
+        if (!ok) break;
+
+        CheckpointLayerHeader layerHeader{};
+        layerHeader.inputSize = layer->m_inputSize;
+        layerHeader.outputSize = layer->m_outputSize;
+        layerHeader.numVariants = layer->m_numVariants;
+        layerHeader.adamStep = layer->m_adamStep;
+
+        layer->CopyStateToHost(weights, moment1, moment2);
+
+        ok = fwrite(&layerHeader, sizeof(layerHeader), 1, file) == 1
+            && fwrite(weights.data(), sizeof(float), weights.size(), file) == weights.size()
+            && fwrite(moment1.data(), sizeof(float), moment1.size(), file) == moment1.size()
+            && fwrite(moment2.data(), sizeof(float), moment2.size(), file) == moment2.size();
+    }
+
+    fclose(file);
+
+    if (!ok)
+        std::cerr << "Failed to save checkpoint: cannot write " << path << std::endl;
+
+    return ok;
+}
+
+bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainingVectorsPassed)
+{
+    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+
+    FILE* file = fopen(path, "rb");
+    if (!file)
+    {
+        std::cerr << "Failed to load checkpoint: cannot open " << path << std::endl;
+        return false;
+    }
+
+    CheckpointHeader header{};
+    if (fread(&header, sizeof(header), 1, file) != 1 ||
+        header.magic != c_checkpointMagic ||
+        header.version != c_checkpointVersion ||
+        header.numLayers != (uint32_t)std::size(layers))
+    {
+        fclose(file);
+        std::cerr << "Failed to load checkpoint: " << path << " is not a compatible checkpoint" << std::endl;
+        return false;
+    }
+
+    std::vector<float> weights, moment1, moment2;
+    for (const CudaWeightsStoragePtr& layer : layers)
+    {
+        CheckpointLayerHeader layerHeader{};
+        if (fread(&layerHeader, sizeof(layerHeader), 1, file) != 1 ||
+            layerHeader.inputSize != layer->m_inputSize ||
+            layerHeader.outputSize != layer->m_outputSize ||
+            layerHeader.numVariants != layer->m_numVariants)
+        {
+            fclose(file);
+            std::cerr << "Failed to load checkpoint: " << path << " was written for a different architecture" << std::endl;
+            return false;
+        }
+
+        weights.resize(layer->m_totalWeights);
+        moment1.resize(layer->m_totalWeights);
+        moment2.resize(layer->m_totalWeights);
+
+        const size_t count = layer->m_totalWeights;
+        if (fread(weights.data(), sizeof(float), count, file) != count ||
+            fread(moment1.data(), sizeof(float), count, file) != count ||
+            fread(moment2.data(), sizeof(float), count, file) != count)
+        {
+            fclose(file);
+            std::cerr << "Failed to load checkpoint: " << path << " is truncated" << std::endl;
+            return false;
+        }
+
+        layer->CopyStateFromHost(weights, moment1, moment2);
+        layer->m_adamStep = (size_t)layerHeader.adamStep;
+    }
+
+    fclose(file);
+    outNumTrainingVectorsPassed = header.numTrainingVectorsPassed;
+    return true;
 }
 
 void CudaNeuralNetwork::CopyWeightsToHost(
