@@ -25,17 +25,28 @@ static constexpr float FactorizerWeightRange = 0.99f;
 struct CudaBatchData
 {
     CudaBuffer<TrainingEntry> trainingVectors;
-    CudaBuffer<float> networkOutputs;
-    CudaBuffer<float> outputErrors;
-    CudaBuffer<float> creluErrors;
+    CudaBuffer<float> networkOutputs;       // post-sigmoid output
+    CudaBuffer<float> outputErrors;         // dLoss / d(pre-sigmoid output)
+    CudaBuffer<float> creluErrors;          // dLoss / d(raw feature transformer accumulator)
     CudaBuffer<float> lossSum;              // sum of squared output errors, accumulated across batches
 
-    // Intermediate buffers for forward/backward pass
-    CudaBuffer<float> accumulatorBuffer;    // For sparse input accumulation
-    CudaBuffer<float> hiddenBuffer;         // For hidden layer outputs
+    // Forward activations. accumulatorBuffer holds the raw (pre-activation) feature transformer
+    // output; every later buffer holds the post-activation value.
+    CudaBuffer<float> accumulatorBuffer;    // [batch][2][AccumulatorSize]
+    CudaBuffer<float> pairwiseBuffer;       // [batch][L1InputSize]
+    CudaBuffer<float> l1Buffer;             // [batch][L1Size]
+    CudaBuffer<float> l2Buffer;             // [batch][L2Size]
+    CudaBuffer<float> l3Buffer;             // [batch] (pre-sigmoid)
 
-    // Temporary buffers for gradients
-    CudaBuffer<float> lastLayerGradients;
+    // dLoss / d(pre-activation) of the hidden layers
+    CudaBuffer<float> l1PreErrors;          // [batch][L1Size]
+    CudaBuffer<float> l2PreErrors;          // [batch][L2Size]
+
+    // Weight gradients. Each must match its weight storage element count exactly,
+    // (inputSize + 1) * outputSize * numVariants - the "+1" row holds the per-output biases.
+    CudaBuffer<float> l1Gradients;
+    CudaBuffer<float> l2Gradients;
+    CudaBuffer<float> l3Gradients;
     CudaBuffer<float> featureTransformerGradients;
 
     uint32_t batchSize;
@@ -50,11 +61,18 @@ struct CudaBatchData
         creluErrors.Allocate(batchSize * 2 * nn::AccumulatorSize);
         lossSum.Allocate(1);
 
-        // Allocate intermediate buffers based on network size
-        accumulatorBuffer.Allocate(batchSize * nn::AccumulatorSize * 2); // For white and black accumulators
-        hiddenBuffer.Allocate(batchSize); // Single output for final layer
+        accumulatorBuffer.Allocate(batchSize * 2 * nn::AccumulatorSize);
+        pairwiseBuffer.Allocate(batchSize * nn::L1InputSize);
+        l1Buffer.Allocate(batchSize * nn::L1Size);
+        l2Buffer.Allocate(batchSize * nn::L2Size);
+        l3Buffer.Allocate(batchSize);
 
-        lastLayerGradients.Allocate((2 * nn::AccumulatorSize + 1) * nn::NumVariants);
+        l1PreErrors.Allocate(batchSize * nn::L1Size);
+        l2PreErrors.Allocate(batchSize * nn::L2Size);
+
+        l1Gradients.Allocate((nn::L1InputSize + 1) * nn::L1Size * nn::NumVariants);
+        l2Gradients.Allocate((nn::L1Size + 1) * nn::L2Size * nn::NumVariants);
+        l3Gradients.Allocate((nn::L2Size + 1) * 1 * nn::NumVariants);
         featureTransformerGradients.Allocate((FeatureTransformerInputs + 1) * nn::AccumulatorSize);
     }
 };
@@ -65,15 +83,22 @@ public:
     CudaNeuralNetwork();
     ~CudaNeuralNetwork();
 
-    void Init(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
+    void Init(const nn::WeightsStoragePtr& featureTransformerWeights,
+              const nn::WeightsStoragePtr& l1Weights,
+              const nn::WeightsStoragePtr& l2Weights,
+              const nn::WeightsStoragePtr& l3Weights);
 
     // Replace the weights with a random initialization (training from scratch)
     void InitRandomWeights(uint32_t seed);
+    // Random initialization of the output subnets only, keeping the feature transformer
+    // (used when warm starting the feature transformer from an existing single-layer net)
+    void InitRandomOutputSubnetWeights(uint32_t seed);
+
     void Forward(CudaBatchData& batch);
-    void Backward(CudaBatchData& batch, float learningRate, size_t iteration);
+    void Backward(CudaBatchData& batch, float learningRate);
 
     // Set per-layer AdamW weight decay (applied to weights only, not biases).
-    void SetWeightDecay(float featureTransformerDecay, float lastLayerDecay);
+    void SetWeightDecay(float featureTransformerDecay, float outputSubnetDecay);
 
     // Asynchronously copy a batch's training vectors on a dedicated copy stream. The copy waits
     // for the previous batch's last reader (FeatureTransformerGradientsKernel) so it overlaps the
@@ -81,8 +106,14 @@ public:
     void CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* hostSrc, uint32_t count);
 
     // Weight management
-    void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights);
-    void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights, const nn::WeightsStoragePtr& lastLayerWeights) const;
+    void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights,
+                             const nn::WeightsStoragePtr& l1Weights,
+                             const nn::WeightsStoragePtr& l2Weights,
+                             const nn::WeightsStoragePtr& l3Weights);
+    void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights,
+                           const nn::WeightsStoragePtr& l1Weights,
+                           const nn::WeightsStoragePtr& l2Weights,
+                           const nn::WeightsStoragePtr& l3Weights) const;
 
     // GPU-time measurement of a training iteration.
     void BeginIterationTiming();
@@ -94,11 +125,17 @@ public:
     static constexpr uint32_t c_accumulatorSize = nn::AccumulatorSize;
     static constexpr uint32_t c_numNetworkInputs = nn::NumNetworkInputs;
     static constexpr uint32_t c_numVariants = nn::NumVariants;
+    static constexpr uint32_t c_l1InputSize = nn::L1InputSize;
+    static constexpr uint32_t c_l1Size = nn::L1Size;
+    static constexpr uint32_t c_l2Size = nn::L2Size;
 
 private:
-    // CUDA weight storages
+    // CUDA weight storages. The feature transformer has a single variant; each output subnet
+    // layer has one per output bucket.
     CudaWeightsStoragePtr m_featureTransformerWeights;
-    CudaWeightsStoragePtr m_lastLayerWeights;
+    CudaWeightsStoragePtr m_l1Weights;
+    CudaWeightsStoragePtr m_l2Weights;
+    CudaWeightsStoragePtr m_l3Weights;
 
     // CUDA streams for overlapping operations
     CudaStream m_stream;

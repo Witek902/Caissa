@@ -28,13 +28,12 @@ void CudaWeightsStorage::AllocateBuffers()
     m_moment2.Allocate(m_totalWeights);
 }
 
-void CudaWeightsStorage::Init(uint32_t numActiveInputs, uint32_t seed, float bias)
+void CudaWeightsStorage::Init(uint32_t seed, float stdev, float bias)
 {
     std::vector<float> hostWeights(m_totalWeights, 0.0f);
-    std::vector<float> hostMask(m_totalWeights, 1.0f);
 
     std::mt19937 gen(seed);
-    std::normal_distribution<float> dist(0.0f, 1.0f);
+    std::normal_distribution<float> dist(0.0f, stdev);
 
     const uint32_t weightsPerVariant = (m_inputSize + 1) * m_outputSize;
 
@@ -45,7 +44,7 @@ void CudaWeightsStorage::Init(uint32_t numActiveInputs, uint32_t seed, float bia
         // Initialize weights (excluding biases)
         for (uint32_t i = 0; i < m_inputSize * m_outputSize; ++i)
         {
-            hostWeights[variantOffset + i] = dist(gen) * 0.1f;
+            hostWeights[variantOffset + i] = dist(gen);
         }
 
         // Initialize biases

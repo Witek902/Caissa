@@ -79,7 +79,7 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 12;
+static constexpr uint32_t CurrentVersion = 13;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 32;
@@ -103,17 +103,36 @@ static constexpr uint8_t KingBucketIndex[64] =
 // by this value neuron inputs are scaled
 static constexpr int16_t ActivationRangeScaling = 255;
 
+// The two halves of each accumulator are clipped and multiplied together, then shifted back into
+// uint8. 255*255 >> 9 = 127, and that upper bound is what makes the int8 hidden layers safe:
+// _mm256_maddubs_epi16 sums adjacent pairs with int16 saturation, and 2*127*127 = 32258 < 32767,
+// so the whole int8 weight range is usable without saturating.
+static constexpr int32_t PairwiseShift = 9;
+static constexpr int32_t HiddenActivationMax = ActivationRangeScaling * ActivationRangeScaling >> PairwiseShift;
+static constexpr float PairwiseOutputScale =
+    (float)(ActivationRangeScaling * ActivationRangeScaling) / (float)(1 << PairwiseShift);
+
+// Output subnet topology: L1InputSize -> L1Size -> L2Size -> 1. Pairing halves each perspective,
+// so the two accumulators contribute AccumulatorSize values in total.
+static constexpr uint32_t L1InputSize = AccumulatorSize;
+static constexpr uint32_t L1Size = 16;
+static constexpr uint32_t L2Size = 32;
+
 static constexpr int32_t WeightScaleShift = 8;
 static constexpr int32_t WeightScale = 1 << WeightScaleShift;
 
-static constexpr int32_t OutputScaleShift = 6;
+static constexpr int32_t OutputScaleShift = 10;
 static constexpr int32_t OutputScale = 1 << OutputScaleShift;
+
+// int8 weight scale of the L1/L2 hidden layers
+static constexpr int32_t HiddenWeightScaleShift = 6;
+static constexpr int32_t HiddenWeightScale = 1 << HiddenWeightScaleShift;
 
 static constexpr float InputLayerWeightQuantizationScale = ActivationRangeScaling;
 static constexpr float InputLayerBiasQuantizationScale = ActivationRangeScaling;
-static constexpr float HiddenLayerWeightQuantizationScale = WeightScale;
-static constexpr float HiddenLayerBiasQuantizationScale = WeightScale * ActivationRangeScaling;
-static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / (float)ActivationRangeScaling;
+static constexpr float HiddenLayerWeightQuantizationScale = HiddenWeightScale;
+static constexpr float HiddenLayerBiasQuantizationScale = PairwiseOutputScale * HiddenWeightScale;
+static constexpr float OutputLayerWeightQuantizationScale = WeightScale * OutputScale / PairwiseOutputScale;
 static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputScale;
 
 using FirstLayerWeightType = int16_t;
@@ -125,7 +144,8 @@ using HiddenLayerBiasType = int32_t;
 using LastLayerWeightType = int16_t;
 using LastLayerBiasType = int32_t;
 
-using IntermediateType = int8_t;
+// hidden layer activations are unsigned, so they can feed maddubs directly
+using IntermediateType = uint8_t;
 
 struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
 {
@@ -138,17 +158,26 @@ struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
         uint32_t padding[6];
     };
 
-    struct alignas(CACHELINE_SIZE) LastLayerVariant
+    // One full output subnet per variant. Weight matrices are stored output-major
+    // (weights[output * inputSize + input]) so a single output row is contiguous.
+    struct alignas(CACHELINE_SIZE) OutputSubnetVariant
     {
-        LastLayerWeightType weights[2 * AccumulatorSize];
-        LastLayerBiasType bias;
+        HiddenLayerWeightType l1Weights[L1InputSize * L1Size];
+        HiddenLayerBiasType   l1Biases[L1Size];
+        HiddenLayerWeightType l2Weights[L1Size * L2Size];
+        HiddenLayerBiasType   l2Biases[L2Size];
+        LastLayerWeightType   l3Weights[L2Size];
+        LastLayerBiasType     l3Bias;
         int32_t padding[15];
     };
+
+    static_assert(sizeof(Header) == CACHELINE_SIZE, "");
+    static_assert(sizeof(OutputSubnetVariant) % CACHELINE_SIZE == 0, "");
 
     Header header;
     FirstLayerWeightType accumulatorWeights[NumNetworkInputs * AccumulatorSize];
     FirstLayerBiasType accumulatorBiases[AccumulatorSize];
-    LastLayerVariant lastLayerVariants[NumVariants];
+    OutputSubnetVariant outputSubnetVariants[NumVariants];
 
     PackedNeuralNetwork();
 
