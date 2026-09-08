@@ -54,6 +54,9 @@ public:
         size_t maxIterations = std::numeric_limits<size_t>::max();
         uint32_t seed = 12345;
         float startLearningRate = 0.0f; // 0 = use cStartLearningRate
+        // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
+        // game result with move count). The validation set always uses 1.
+        float lambda = 0.0f;
     };
 
     CudaNetworkTrainer(const Options& options)
@@ -757,6 +760,7 @@ static constexpr uint64_t cTrainingLength = 150'000'000'000ull;
 // if non-zero, overrides the learning rate scheduler (for tweaking under a debugger)
 static volatile float g_learningRateScale = 0.0f;
 
+// if non-zero, overrides the target blend (for tweaking under a debugger)
 static volatile float g_lambdaScale = 0.0f;
 
 static float GetScheduledLearningRate(float startLearningRate, uint64_t numTrainingVectorsPassed)
@@ -796,7 +800,9 @@ bool CudaNetworkTrainer::Train()
 
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
-    const float maxLambda = 1.0f;
+    const float validationLambda = 1.0f;
+    const float lambda = (g_lambdaScale != 0.0f) ? g_lambdaScale : m_options.lambda;
+    std::cout << "Target lambda:       " << lambda << std::endl;
 
     uint64_t kingBucketMask = UINT64_MAX;
 
@@ -805,14 +811,13 @@ bool CudaNetworkTrainer::Train()
         Waitable waitable;
         {
             TaskBuilder taskBuilder{ waitable };
-            GenerateTrainingSet(m_validationSet, taskBuilder, kingBucketMask, maxLambda, true);
+            GenerateTrainingSet(m_validationSet, taskBuilder, kingBucketMask, validationLambda, true);
         }
         waitable.Wait();
     }
 
     for (size_t iteration = 0; iteration < m_options.maxIterations; ++iteration)
     {
-        const float lambda = g_lambdaScale * maxLambda;
         const float warmup = (!fromScratch && cWarmupTime > 0.0f) ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
         const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(startLearningRate, m_numTrainingVectorsPassed);
 
@@ -901,6 +906,8 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.seed = (uint32_t)std::stoul(args[i + 1]);
         else if (args[i] == "--lr")
             options.startLearningRate = std::stof(args[i + 1]);
+        else if (args[i] == "--lambda")
+            options.lambda = std::stof(args[i + 1]);
     }
     std::cout << "Seed: " << options.seed << std::endl;
 
