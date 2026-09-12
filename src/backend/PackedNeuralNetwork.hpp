@@ -79,7 +79,7 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 13;
+static constexpr uint32_t CurrentVersion = 14;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 32;
@@ -147,19 +147,25 @@ using LastLayerBiasType = int32_t;
 // hidden layer activations are unsigned, so they can feed maddubs directly
 using IntermediateType = uint8_t;
 
+// Hidden layer weights are stored input-major in groups of 4 inputs: the 4 weights of one output for
+// 4 consecutive inputs are adjacent, so a non-zero input group feeds one uint8 x int8 dot product
+// per output
+constexpr uint32_t HiddenWeightIndex(uint32_t input, uint32_t output, uint32_t numOutputs)
+{
+    return (input / 4) * (numOutputs * 4) + output * 4 + (input % 4);
+}
+
 struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
 {
     struct Header
     {
         uint32_t magic = 0;
         uint32_t version = 0;
-        uint32_t layerSizes[4] = { 0, 0, 0, 0 };
-        uint32_t layerVariants[4] = { 0, 0, 0, 0 };
-        uint32_t padding[6];
+        uint32_t padding[14];
     };
 
-    // One full output subnet per variant. Weight matrices are stored output-major
-    // (weights[output * inputSize + input]) so a single output row is contiguous.
+    // One full output subnet per variant. L1 and L2 weights use the grouped layout of
+    // HiddenWeightIndex; L3 is a plain row.
     struct alignas(CACHELINE_SIZE) OutputSubnetVariant
     {
         HiddenLayerWeightType l1Weights[L1InputSize * L1Size];

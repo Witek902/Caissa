@@ -37,20 +37,23 @@ void CudaWeightsStorage::Init(uint32_t seed, float stdev, float bias)
 
     const uint32_t weightsPerVariant = (m_inputSize + 1) * m_outputSize;
 
+    // Initialize weights (excluding biases)
+    for (uint32_t i = 0; i < m_inputSize * m_outputSize; ++i)
+    {
+        const float weightValue = dist(gen);
+        for (uint32_t variant = 0; variant < m_numVariants; ++variant)
+        {
+            hostWeights[variant * weightsPerVariant + i] = weightValue;
+        }
+    }
+
+    // Initialize biases
     for (uint32_t variant = 0; variant < m_numVariants; ++variant)
     {
         const uint32_t variantOffset = variant * weightsPerVariant;
-
-        // Initialize weights (excluding biases)
-        for (uint32_t i = 0; i < m_inputSize * m_outputSize; ++i)
-        {
-            hostWeights[variantOffset + i] = dist(gen);
-        }
-
-        // Initialize biases
         for (uint32_t i = 0; i < m_outputSize; ++i)
         {
-            hostWeights[variantOffset + m_inputSize * m_outputSize + i] = bias;
+            hostWeights[variant * weightsPerVariant + m_inputSize * m_outputSize + i] = bias;
         }
     }
 

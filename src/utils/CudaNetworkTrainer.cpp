@@ -47,9 +47,8 @@ static constexpr uint32_t cBatchSize = 32 * 1024;
 // A packed net and a full training checkpoint are kept every this many training positions
 static constexpr uint64_t cCheckpointInterval = 10'000'000'000ull;
 
-// AdamW decoupled weight decay (applied to weights only, not biases). Smaller on the large, sparse
-// feature transformer than on the dense output subnet.
-static constexpr float cFeatureTransformerWeightDecay = 0.0f;
+// AdamW decoupled weight decay (applied to weights only, not biases)
+static constexpr float cFeatureTransformerWeightDecay = 0.005f;
 static constexpr float cOutputSubnetWeightDecay = 0.0f;
 
 class CudaNetworkTrainer
@@ -63,6 +62,10 @@ public:
         size_t maxIterations = std::numeric_limits<size_t>::max();
         uint32_t seed = 12345;
         float startLearningRate = 0.0f; // 0 = use cStartLearningRate
+        uint64_t trainingLength = 0;    // 0 = use cTrainingLength
+        // start a new schedule from a checkpoint: the restored weights and optimizer state are kept,
+        // but the position counter is reset, so the learning rate and milestones restart
+        bool restartSchedule = false;
         // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
         // game result with move count). The validation set always uses 1.
         float lambda = 0.0f;
@@ -208,8 +211,8 @@ void CudaNetworkTrainer::InitNetwork()
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::cuda::FeatureTransformerInputs, accumulatorSize, 1);
     m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    m_featureTransformerWeights->m_weightsRange = 1000.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
-    m_featureTransformerWeights->m_biasRange = 1000.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = 4.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = 4.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
     // L1/L2 weights are int8; the range is exactly what the quantization scale can represent.
@@ -674,13 +677,31 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
     });
 }
 
+// How a layer's weights are laid out in the packed network
+enum class WeightLayout
+{
+    OutputMajor,    // weights[output * numInputs + input]
+    InputMajor,     // weights[input * numOutputs + output]
+    Grouped,        // nn::HiddenWeightIndex
+};
+
+static uint32_t PackedWeightIndex(WeightLayout layout, uint32_t input, uint32_t output, uint32_t numInputs, uint32_t numOutputs)
+{
+    switch (layout)
+    {
+    case WeightLayout::InputMajor:  return input * numOutputs + output;
+    case WeightLayout::Grouped:     return nn::HiddenWeightIndex(input, output, numOutputs);
+    default:                        return output * numInputs + input;
+    }
+}
+
 template<typename WeightType, typename BiasType>
 static void PackWeights(
     const nn::Values& weights, uint32_t numInputs, uint32_t numOutputs,
     WeightType* outWeights, BiasType* outBiases,
     float weightScale, float biasScale,
     float maxWeightRange, float maxBiasRange,
-    bool transpose)
+    WeightLayout layout)
 {
     (void)maxWeightRange;
     (void)maxBiasRange;
@@ -698,10 +719,7 @@ static void PackWeights(
             ASSERT(quantizedWeight <= std::numeric_limits<WeightType>::max());
             ASSERT(quantizedWeight >= std::numeric_limits<WeightType>::min());
 
-            if (transpose)
-                outWeights[numOutputs * j + i] = (WeightType)quantizedWeight;
-            else
-                outWeights[numInputs * i + j] = (WeightType)quantizedWeight;
+            outWeights[PackedWeightIndex(layout, j, i, numInputs, numOutputs)] = (WeightType)quantizedWeight;
         }
     }
 
@@ -721,16 +739,14 @@ static void PackWeights(
 }
 
 template<typename WeightType, typename BiasType>
-static void UnpackWeights(nn::Values& outWeights, uint32_t numInputs, uint32_t numOutputs, const WeightType* weights, const BiasType* biases, float weightScale, float biasScale, bool transpose)
+static void UnpackWeights(nn::Values& outWeights, uint32_t numInputs, uint32_t numOutputs, const WeightType* weights, const BiasType* biases, float weightScale, float biasScale, WeightLayout layout)
 {
     // weights
     for (uint32_t j = 0; j < numInputs; j++)
     {
         for (uint32_t i = 0; i < numOutputs; i++)
         {
-            outWeights[j * numOutputs + i] = transpose ?
-                (float)weights[numOutputs * j + i] / weightScale :
-                (float)weights[numInputs * i + j] / weightScale;
+            outWeights[j * numOutputs + i] = (float)weights[PackedWeightIndex(layout, j, i, numInputs, numOutputs)] / weightScale;
         }
     }
 
@@ -775,10 +791,10 @@ bool CudaNetworkTrainer::PackNetwork()
             const_cast<nn::FirstLayerBiasType*>(m_packedNet->accumulatorBiases),
             nn::InputLayerWeightQuantizationScale, nn::InputLayerBiasQuantizationScale,
             m_featureTransformerWeights->m_weightsRange, m_featureTransformerWeights->m_biasRange,
-            true);
+            WeightLayout::InputMajor);
     }
 
-    // output subnets (packed output-major, so one output row is contiguous)
+    // output subnets: L1/L2 in the grouped layout the sparse inference reads, L3 as a plain row
     for (uint32_t variantIdx = 0; variantIdx < nn::NumVariants; ++variantIdx)
     {
         nn::PackedNeuralNetwork::OutputSubnetVariant& subnet = m_packedNet->outputSubnetVariants[variantIdx];
@@ -789,7 +805,7 @@ bool CudaNetworkTrainer::PackNetwork()
             subnet.l1Weights, subnet.l1Biases,
             nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale,
             m_l1Weights->m_weightsRange, m_l1Weights->m_biasRange,
-            false);
+            WeightLayout::Grouped);
 
         PackWeights(
             m_l2Weights->m_variants[variantIdx].m_weights,
@@ -797,7 +813,7 @@ bool CudaNetworkTrainer::PackNetwork()
             subnet.l2Weights, subnet.l2Biases,
             nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale,
             m_l2Weights->m_weightsRange, m_l2Weights->m_biasRange,
-            false);
+            WeightLayout::Grouped);
 
         PackWeights(
             m_l3Weights->m_variants[variantIdx].m_weights,
@@ -805,7 +821,7 @@ bool CudaNetworkTrainer::PackNetwork()
             subnet.l3Weights, &subnet.l3Bias,
             nn::OutputLayerWeightQuantizationScale, nn::OutputLayerBiasQuantizationScale,
             m_l3Weights->m_weightsRange, m_l3Weights->m_biasRange,
-            false);
+            WeightLayout::OutputMajor);
     }
 
     MTR_END("CudaNetworkTrainer", "PackNetwork");
@@ -863,7 +879,7 @@ static bool UnpackNetworkV12(const char* path, nn::Values& featureTransformerWei
             oldPackedNet->accumulatorBiases,
             OldInputLayerWeightQuantizationScale,
             OldInputLayerBiasQuantizationScale,
-            true);
+            WeightLayout::InputMajor);
 
 #if USE_FACTORIZER
         // a packed net has the factorizer already folded in: move the biases behind the (zeroed)
@@ -909,24 +925,10 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
         return UnpackNetworkV12(path, m_featureTransformerWeights->m_variants.front().m_weights);
     }
 
-    if (header.version != nn::CurrentVersion)
-    {
-        std::cerr << "Failed to load neural network: unsupported version " << header.version << std::endl;
-        return false;
-    }
-
+    // loads the current version and upgrades version 13 in place
     auto packedNet = std::make_unique<nn::PackedNeuralNetwork>();
-    {
-        FILE* file = fopen(path, "rb");
-        const bool read = file && fread(packedNet.get(), sizeof(nn::PackedNeuralNetwork), 1, file) == 1;
-        if (file) fclose(file);
-
-        if (!read)
-        {
-            std::cerr << "Failed to load neural network: " << path << " is truncated" << std::endl;
-            return false;
-        }
-    }
+    if (!packedNet->LoadFromFile(path))
+        return false;
 
     // feature transformer
     {
@@ -940,7 +942,7 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
             packedNet->accumulatorBiases,
             nn::InputLayerWeightQuantizationScale,
             nn::InputLayerBiasQuantizationScale,
-            true);
+            WeightLayout::InputMajor);
 
 #if USE_FACTORIZER
         // a packed net has the factorizer already folded in: move the biases behind the (zeroed)
@@ -966,21 +968,21 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
             nn::L1InputSize, nn::L1Size,
             subnet.l1Weights, subnet.l1Biases,
             nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale,
-            false);
+            WeightLayout::Grouped);
 
         UnpackWeights(
             m_l2Weights->m_variants[variantIdx].m_weights,
             nn::L1Size, nn::L2Size,
             subnet.l2Weights, subnet.l2Biases,
             nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale,
-            false);
+            WeightLayout::Grouped);
 
         UnpackWeights(
             m_l3Weights->m_variants[variantIdx].m_weights,
             nn::L2Size, 1u,
             subnet.l3Weights, &subnet.l3Bias,
             nn::OutputLayerWeightQuantizationScale, nn::OutputLayerBiasQuantizationScale,
-            false);
+            WeightLayout::OutputMajor);
     }
 
     outHasOutputSubnet = true;
@@ -989,8 +991,8 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
 
 static const float cWarmupTime = 50.0f;
 
-// cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after cTrainingLength positions
-// then stays constant for the rest of the training
+// cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after the
+// training length, then stays constant for the rest of the training
 static constexpr float cStartLearningRate = 1.0e-4f;
 static constexpr float cEndLearningRate =   2.0e-6f;
 static constexpr uint64_t cTrainingLength = 150'000'000'000ull;
@@ -1001,10 +1003,10 @@ static volatile float g_learningRateScale = 0.0f;
 // if non-zero, overrides the target blend (for tweaking under a debugger)
 static volatile float g_lambdaScale = 0.0f;
 
-static float GetScheduledLearningRate(float startLearningRate, uint64_t numTrainingVectorsPassed)
+static float GetScheduledLearningRate(float startLearningRate, uint64_t numTrainingVectorsPassed, uint64_t trainingLength)
 {
     constexpr float pi = 3.14159265358979323846f;
-    const float t = std::min(1.0f, (float)((double)numTrainingVectorsPassed / (double)cTrainingLength));
+    const float t = std::min(1.0f, (float)((double)numTrainingVectorsPassed / (double)trainingLength));
     return cEndLearningRate + 0.5f * (startLearningRate - cEndLearningRate) * (1.0f + cosf(pi * t));
 }
 
@@ -1015,7 +1017,9 @@ bool CudaNetworkTrainer::Train()
     const bool resuming = !m_options.resumePath.empty();
     const bool fromScratch = m_options.startNetPath.empty() && !resuming;
     const float startLearningRate = m_options.startLearningRate > 0.0f ? m_options.startLearningRate : cStartLearningRate;
+    const uint64_t trainingLength = m_options.trainingLength > 0 ? m_options.trainingLength : cTrainingLength;
     std::cout << "Start learning rate: " << startLearningRate << std::endl;
+    std::cout << "Training length:     " << std::setprecision(4) << trainingLength / 1.0e9f << "B positions" << std::endl;
 
     if (resuming)
     {
@@ -1023,11 +1027,13 @@ bool CudaNetworkTrainer::Train()
         if (!m_cudaNetwork.LoadCheckpoint(m_options.resumePath.c_str(), positionsPassed))
             return false;
 
-        m_numTrainingVectorsPassed = positionsPassed;
+        m_numTrainingVectorsPassed = m_options.restartSchedule ? 0 : positionsPassed;
         m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights);
 
         std::cout << "Resuming from checkpoint: " << m_options.resumePath
             << " at " << std::setprecision(4) << positionsPassed / 1.0e9f << "B positions" << std::endl;
+        if (m_options.restartSchedule)
+            std::cout << "Restarting the schedule from zero positions" << std::endl;
     }
     else if (fromScratch)
     {
@@ -1082,9 +1088,9 @@ bool CudaNetworkTrainer::Train()
 
     for (size_t iteration = 0; iteration < m_options.maxIterations; ++iteration)
     {
-        const bool useWarmup = !fromScratch && !resuming && cWarmupTime > 0.0f;
+        const bool useWarmup = !fromScratch && (!resuming || m_options.restartSchedule) && cWarmupTime > 0.0f;
         const float warmup = useWarmup ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
-        const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(startLearningRate, m_numTrainingVectorsPassed);
+        const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(startLearningRate, m_numTrainingVectorsPassed, trainingLength);
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
@@ -1178,9 +1184,13 @@ bool CudaNetworkTrainer::Train()
 bool TrainCudaNetwork(const std::vector<std::string>& args)
 {
     CudaNetworkTrainer::Options options;
-    for (size_t i = 0; i + 1 < args.size(); ++i)
+    for (size_t i = 0; i < args.size(); ++i)
     {
-        if (args[i] == "--net")
+        if (args[i] == "--restartSchedule")
+            options.restartSchedule = true;
+        else if (i + 1 >= args.size())
+            continue; // every remaining option takes a value
+        else if (args[i] == "--net")
             options.startNetPath = args[i + 1];
         else if (args[i] == "--iterations")
             options.maxIterations = std::stoull(args[i + 1]);
@@ -1194,6 +1204,8 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.name = args[i + 1];
         else if (args[i] == "--resume")
             options.resumePath = args[i + 1];
+        else if (args[i] == "--trainingLength")
+            options.trainingLength = std::stoull(args[i + 1]);
     }
     std::cout << "Seed: " << options.seed << std::endl;
 
