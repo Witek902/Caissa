@@ -19,6 +19,7 @@ extern void GenerateRandomPositions(const std::vector<std::string>& args);
 extern void ValidateEndgame();
 extern void AnalyzeGames();
 extern void FindMagics();
+extern bool PermuteNet(const std::vector<std::string>& args);
 
 #ifdef USE_CUDA
 extern bool TrainCudaNetwork(const std::vector<std::string>& args);
@@ -82,6 +83,8 @@ int main(int argc, const char* argv[])
         AnalyzeGames();
     else if (toolName == "findMagics")
         FindMagics();
+    else if (toolName == "permuteNet")
+        PermuteNet(args);
 #ifdef USE_CUDA
     else if (toolName == "trainCudaNetwork")
         TrainCudaNetwork(args);
