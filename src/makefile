@@ -4,7 +4,7 @@
 EXE                = caissa
 VERSION            := $(strip $(file < ../version.txt))
 EXE_NAME           = $(EXE)-$(VERSION)
-DEFAULT_EVALFILE   = ../data/neuralNets/eval-84-144B.pnn
+DEFAULT_EVALFILE   = ../data/neuralNets/eval-ml-5-200B-permuted.pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
 NET_VERSION        = $(basename $(notdir $(DEFAULT_EVALFILE)))
 NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(notdir $(DEFAULT_EVALFILE))
@@ -69,6 +69,7 @@ AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
 AVX2VNNIFLAGS = $(AVX2FLAGS) -mavxvnni -DUSE_VNNI
 BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
 AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
+NEONFLAGS     = $(COMMONFLAGS) -DUSE_ARM_NEON
 
 # Native build: ask the compiler which ISA extensions -march=native enables on this host,
 # so the feature defines match the CPU instead of being pinned to a fixed baseline.
@@ -83,6 +84,9 @@ has-native = $(if $(findstring $(1),$(NATIVE_MACROS)),$(2))
 ifeq ($(strip $(NATIVE_MACROS)),)
 	# probe failed - fall back to the portable AVX2 baseline
 	NATIVEFLAGS = $(AVX2FLAGS) -march=native -mtune=native
+else ifneq ($(findstring __aarch64__,$(NATIVE_MACROS)),)
+	NATIVEFLAGS = $(COMMONFLAGS) -march=native -mtune=native \
+	              $(call has-native,__ARM_NEON,-DUSE_ARM_NEON)
 else
 	NATIVEFLAGS = $(COMMONFLAGS) -march=native -mtune=native -DUSE_SSE -DUSE_SSE2 \
 	              $(call has-native,__SSE4_1__,-DUSE_SSE4) \
@@ -131,6 +135,8 @@ avx512: $(EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
 legacy: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
+neon: $(EVALFILE)
+	$(CC) $(SRC) -march=armv8-a+simd $(NEONFLAGS) -o $(EXE_NAME)-aarch64-neon$(EXT)
 
 # Profile-guided optimization builds
 bmi2_pgo: $(EVALFILE)

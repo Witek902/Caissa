@@ -7,6 +7,7 @@
 #include "../backend/PositionUtils.hpp"
 
 #include <array>
+#include <memory>
 
 struct PositionEntry
 {
