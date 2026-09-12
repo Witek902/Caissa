@@ -165,7 +165,7 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
 
 void TranspositionTable::NextGeneration()
 {
-    generation++;
+    generation = (uint8_t)((generation + 1) & (TTEntry::GenerationCycle - 1));
 }
 
 void TranspositionTable::Prefetch(const uint64_t hash) const
@@ -201,15 +201,6 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 {
     ASSERT(position.GetHash() == position.ComputeHash());
 
-    TTEntry entry;
-    entry.score = score;
-    entry.staticEval = staticEval;
-    entry.depth = (uint8_t)std::min<uint32_t>(depth, UINT8_MAX);
-    entry.bounds = bounds;
-    entry.move = move;
-
-    ASSERT(entry.IsValid());
-
     if (!clusters)
     {
         return;
@@ -222,8 +213,6 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
     uint32_t replaceIndex = 0;
     int32_t minRelevanceInCluster = INT32_MAX;
-    uint16_t prevKey = 0;
-    TTEntry prevEntry;
 
     // find target entry in the cluster (the one with lowest depth)
     for (uint32_t i = 0; i < NumEntriesPerCluster; ++i)
@@ -235,12 +224,10 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         if (key == positionKey || !data.IsValid())
         {
             replaceIndex = i;
-            prevKey = key;
-            prevEntry = data;
             break;
         }
 
-        // old entriess are less relevant
+        // old entries are less relevant
         const int32_t entryAge = (TTEntry::GenerationCycle + this->generation - data.generation) & (TTEntry::GenerationCycle - 1);
         const int32_t entryRelevance = (int32_t)data.depth - entryAge;
 
@@ -248,34 +235,42 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
         {
             minRelevanceInCluster = entryRelevance;
             replaceIndex = i;
-            prevKey = key;
-            prevEntry = data;
         }
     }
 
-    // don't overwrite entries with worse depth if the bounds are not exact
-    if (entry.bounds != TTEntry::Bounds::Exact &&
-        positionKey == prevKey &&
-        entry.depth < prevEntry.depth - 4)
+    InternalEntry& entry = cluster.entries[replaceIndex];
+    const bool sameKey = positionKey == entry.key;
+    const uint8_t newDepth = (uint8_t)std::min<uint32_t>(depth, UINT8_MAX);
+
+    // don't overwrite entries with worse depth if the bounds are not exact, unless the entry is from an older search
+    if (bounds != TTEntry::Bounds::Exact &&
+        sameKey &&
+        (int32_t)newDepth < (int32_t)entry.entry.depth - 4 &&
+        entry.entry.generation == generation)
     {
-        if (!prevEntry.move.IsValid() && entry.move.IsValid())
+        if (!entry.entry.move.IsValid() && move.IsValid())
         {
             // but update move if needed
-            cluster.entries[replaceIndex].entry.move = entry.move;
+            entry.entry.move = move;
         }
 
         return;
     }
 
-    // preserve existing move
-    if (positionKey == prevKey && !entry.move.IsValid())
+    // preserve existing move if the new one is invalid
+    if (move.IsValid() || !sameKey)
     {
-        entry.move = prevEntry.move;
+        entry.entry.move = move;
     }
 
-    entry.generation = generation;
+    entry.entry.score = score;
+    entry.entry.staticEval = staticEval;
+    entry.entry.depth = newDepth;
+    entry.entry.bounds = bounds;
+    entry.entry.generation = generation;
+    ASSERT(entry.entry.IsValid());
 
-    cluster.entries[replaceIndex] = { positionKey, entry };
+    entry.key = positionKey;
 }
 
 void TranspositionTable::PrintInfo() const
