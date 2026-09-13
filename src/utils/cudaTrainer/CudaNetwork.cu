@@ -186,6 +186,11 @@ void CudaNeuralNetwork::SetWeightDecay(float featureTransformerDecay, float outp
     m_l3Weights->m_weightDecay = outputSubnetDecay;
 }
 
+void CudaNeuralNetwork::SetFeatureTransformerFrozen(bool frozen)
+{
+    m_featureTransformerWeights->m_updateWeights = !frozen;
+}
+
 void CudaNeuralNetwork::CopyWeightsFromHost(
     const nn::WeightsStoragePtr& featureTransformerWeights,
     const nn::WeightsStoragePtr& l1Weights,

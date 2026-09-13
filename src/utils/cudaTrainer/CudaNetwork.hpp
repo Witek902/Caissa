@@ -7,7 +7,7 @@
 
 // Input factorizer: a shared 768-feature weight block (king-bucket independent) that is added to the
 // weights of every king bucket during training and folded into them when the net is packed.
-#define USE_FACTORIZER 1
+#define USE_FACTORIZER 0
 
 namespace nn {
 namespace cuda {
@@ -99,6 +99,10 @@ public:
 
     // Set per-layer AdamW weight decay (applied to weights only, not biases).
     void SetWeightDecay(float featureTransformerDecay, float outputSubnetDecay);
+
+    // A frozen feature transformer keeps its weights and skips its backward pass, so only the output
+    // subnets train.
+    void SetFeatureTransformerFrozen(bool frozen);
 
     // Asynchronously copy a batch's training vectors on a dedicated copy stream. The copy waits
     // for the previous batch's last reader (FeatureTransformerGradientsKernel) so it overlaps the

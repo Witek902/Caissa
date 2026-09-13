@@ -17,7 +17,7 @@
 #else // !defined(CAISSA_EVALFILE)
 
     // use eval file
-    const char* c_DefaultEvalFile = "eval-ml-5-200B-permuted.pnn";
+    const char* c_DefaultEvalFile = "eval-ml-6-160B.pnn";
 
 #endif // defined(CAISSA_EVALFILE)
 

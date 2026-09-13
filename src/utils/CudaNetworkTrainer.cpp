@@ -66,6 +66,13 @@ public:
         // start a new schedule from a checkpoint: the restored weights and optimizer state are kept,
         // but the position counter is reset, so the learning rate and milestones restart
         bool restartSchedule = false;
+        // fine-tune the output subnets only, keeping the feature transformer fixed
+        bool freezeFeatureTransformer = false;
+        // re-seed output subnet neurons that can no longer learn, see ReviveDeadNeurons
+        bool reviveDeadNeurons = false;
+        // probability that a training position picks its bucket as if it had one piece more or one piece
+        // less, so positions at a bucket range edge also train the neighbouring subnet
+        float bucketLeak = 0.0f;
         // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
         // game result with move count). The validation set always uses 1.
         float lambda = 0.0f;
@@ -179,10 +186,10 @@ private:
 
     std::ofstream m_trainingLog;
 
-    void GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda);
+    void GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak);
 
     // deterministic: single-threaded with a dedicated RNG, so the set depends only on the seed
-    void GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, bool deterministic = false);
+    void GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic = false);
 
     void Validate(const TaskContext& ctx, size_t iteration);
 
@@ -199,6 +206,7 @@ private:
     // Loads a packed net. Version 12 has no output subnet, so outHasOutputSubnet reports whether
     // the caller still needs to initialize one.
     bool UnpackNetwork(const char* path, bool& outHasOutputSubnet);
+    void ReviveDeadNeurons();
 
     // CUDA-specific methods
     void RunCudaTrainingIteration(float learningRate);
@@ -211,8 +219,8 @@ void CudaNetworkTrainer::InitNetwork()
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::cuda::FeatureTransformerInputs, accumulatorSize, 1);
     m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    m_featureTransformerWeights->m_weightsRange = 4.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
-    m_featureTransformerWeights->m_biasRange = 4.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = 8.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = 8.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
     // L1/L2 weights are int8; the range is exactly what the quantization scale can represent.
@@ -310,70 +318,75 @@ static void SortBatchByKingBucket(TrainingEntry* entries, uint32_t count)
     memcpy(entries, scratch.data(), count * sizeof(TrainingEntry));
 }
 
-void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda)
+void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak)
 {
+    Position pos;
+    PositionEntry entry;
+
+    if (!m_dataLoader.FetchNextPosition(rng, entry, pos, kingBucketMask))
+        return;
+
+    // flip the board randomly in pawnless positions
+    if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
     {
-        Position pos;
-        PositionEntry entry;
+        if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
+            pos.MirrorVertically();
+        if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
+            pos.FlipDiagonally();
+    }
 
-        if (!m_dataLoader.FetchNextPosition(rng, entry, pos, kingBucketMask))
-            return;
+    // make game score more important for high move count
+    const float wdlLambda = lambda * expf(-(float)pos.GetMoveCount() / 120.0f);
 
-        // flip the board randomly in pawnless positions
-        if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
-        {
-            if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
-                pos.MirrorVertically();
-            if (std::uniform_int_distribution<>(0, 1)(rng) != 0)
-                pos.FlipDiagonally();
-        }
+    const Game::Score gameScore = (Game::Score)entry.wdlScore;
+    const Game::Score tbScore = (Game::Score)entry.tbScore;
+    float score = InternalEvalToExpectedGameScore(entry.score);
 
-        // make game score more important for high move count
-        const float wdlLambda = lambda * expf(-(float)pos.GetMoveCount() / 120.0f);
+    if (gameScore != Game::Score::Unknown)
+    {
+        const float wdlScore = gameScore == Game::Score::WhiteWins ? 1.0f : (gameScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+        score = std::lerp(wdlScore, score, wdlLambda);
+    }
 
-        const Game::Score gameScore = (Game::Score)entry.wdlScore;
-        const Game::Score tbScore = (Game::Score)entry.tbScore;
-        float score = InternalEvalToExpectedGameScore(entry.score);
+    if (tbScore == Game::Score::Draw)
+    {
+        const float tbDrawLambda = 0.0f;
+        score = std::lerp(0.5f, score, tbDrawLambda);
+    }
+    else if (tbScore != Game::Score::Unknown)
+    {
+        const float tbLambda = 0.0f;
+        const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
+        score = std::lerp(wdlScore, score, tbLambda);
+    }
 
-        if (gameScore != Game::Score::Unknown)
-        {
-            const float wdlScore = gameScore == Game::Score::WhiteWins ? 1.0f : (gameScore == Game::Score::BlackWins ? 0.0f : 0.5f);
-            score = std::lerp(wdlScore, score, wdlLambda);
-        }
+    PositionToTrainingEntry(pos, outEntry);
+    outEntry.targetOutput = score;
 
-        if (tbScore == Game::Score::Draw)
-        {
-            const float tbDrawLambda = 0.0f;
-            score = std::lerp(0.5f, score, tbDrawLambda);
-        }
-        else if (tbScore != Game::Score::Unknown)
-        {
-            const float tbLambda = 0.0f;
-            const float wdlScore = tbScore == Game::Score::WhiteWins ? 1.0f : (tbScore == Game::Score::BlackWins ? 0.0f : 0.5f);
-            score = std::lerp(wdlScore, score, tbLambda);
-        }
-
-        PositionToTrainingEntry(pos, outEntry);
-        outEntry.targetOutput = score;
+    // training as if the position had one piece more or less only changes the bucket at a range edge
+    if (bucketLeak > 0.0f && std::bernoulli_distribution(bucketLeak)(rng))
+    {
+        const int32_t shiftedPieces = (int32_t)pos.GetNumPiecesExcludingKing() + (std::bernoulli_distribution(0.5)(rng) ? 1 : -1);
+        outEntry.variant = (uint8_t)std::min((uint32_t)std::max(shiftedPieces, 0) / 4u, nn::NumVariants - 1u);
     }
 }
 
-void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, bool deterministic)
+void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic)
 {
     if (deterministic)
     {
-        builder.Task("GenerateSet", [this, &outSet, kingBucketMask, lambda](const TaskContext&)
+        builder.Task("GenerateSet", [this, &outSet, kingBucketMask, lambda, bucketLeak](const TaskContext&)
         {
             for (TrainingEntry& entry : outSet)
-                GenerateTrainingEntry(m_deterministicRng, entry, kingBucketMask, lambda);
+                GenerateTrainingEntry(m_deterministicRng, entry, kingBucketMask, lambda, bucketLeak);
         });
     }
     else
     {
         builder.ParallelFor("GenerateSet", static_cast<uint32_t>(outSet.size()),
-            [this, &outSet, kingBucketMask, lambda](const TaskContext& ctx, uint32_t index)
+            [this, &outSet, kingBucketMask, lambda, bucketLeak](const TaskContext& ctx, uint32_t index)
         {
-            GenerateTrainingEntry(m_randomGenerators[ctx.threadId], outSet[index], kingBucketMask, lambda);
+            GenerateTrainingEntry(m_randomGenerators[ctx.threadId], outSet[index], kingBucketMask, lambda, bucketLeak);
         }, 0);
     }
 
@@ -994,7 +1007,7 @@ static const float cWarmupTime = 50.0f;
 // cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after the
 // training length, then stays constant for the rest of the training
 static constexpr float cStartLearningRate = 1.0e-4f;
-static constexpr float cEndLearningRate =   2.0e-6f;
+static constexpr float cEndLearningRate =   2.5e-6f;
 static constexpr uint64_t cTrainingLength = 150'000'000'000ull;
 
 // if non-zero, overrides the learning rate scheduler (for tweaking under a debugger)
@@ -1008,6 +1021,64 @@ static float GetScheduledLearningRate(float startLearningRate, uint64_t numTrain
     constexpr float pi = 3.14159265358979323846f;
     const float t = std::min(1.0f, (float)((double)numTrainingVectorsPassed / (double)trainingLength));
     return cEndLearningRate + 0.5f * (startLearningRate - cEndLearningRate) * (1.0f + cosf(pi * t));
+}
+
+// A hidden neuron is dead when it can never activate (zero incoming weights and a non-positive bias) or when the
+// next layer ignores it (zero outgoing weights). Either way it gets no gradient, so both sides are re-seeded.
+void CudaNetworkTrainer::ReviveDeadNeurons()
+{
+    std::mt19937 gen(m_options.seed + 1000);
+
+    const auto revive = [&gen](nn::WeightsStorage& layer, nn::WeightsStorage& nextLayer, float nextWeightScale, const char* name)
+    {
+        const uint32_t numInputs = layer.m_inputSize;
+        const uint32_t numOutputs = layer.m_outputSize;
+        const uint32_t nextNumOutputs = nextLayer.m_outputSize;
+        std::normal_distribution<float> inputDist(0.0f, sqrtf(2.0f / (float)numInputs));
+        std::normal_distribution<float> outputDist(0.0f, sqrtf(2.0f / (float)numOutputs));
+
+        uint32_t numRevived = 0;
+        for (size_t variantIdx = 0; variantIdx < layer.m_variants.size(); ++variantIdx)
+        {
+            nn::Values& weights = layer.m_variants[variantIdx].m_weights;
+            nn::Values& nextWeights = nextLayer.m_variants[variantIdx].m_weights;
+
+            for (uint32_t output = 0; output < numOutputs; ++output)
+            {
+                bool neverActive = std::round(weights[numInputs * numOutputs + output] * nn::HiddenLayerBiasQuantizationScale) <= 0.0f;
+                for (uint32_t input = 0; neverActive && input < numInputs; ++input)
+                    neverActive = std::round(weights[input * numOutputs + output] * nn::HiddenLayerWeightQuantizationScale) == 0.0f;
+
+                bool ignored = true;
+                for (uint32_t nextOutput = 0; ignored && nextOutput < nextNumOutputs; ++nextOutput)
+                    ignored = std::round(nextWeights[output * nextNumOutputs + nextOutput] * nextWeightScale) == 0.0f;
+
+                if (!neverActive && !ignored)
+                    continue;
+
+                for (uint32_t input = 0; input < numInputs; ++input)
+                    weights[input * numOutputs + output] = std::clamp(inputDist(gen), -layer.m_weightsRange, layer.m_weightsRange);
+                weights[numInputs * numOutputs + output] = 0.0f;
+
+                // outgoing weights must survive quantization, otherwise the neuron is ignored again
+                for (uint32_t nextOutput = 0; nextOutput < nextNumOutputs; ++nextOutput)
+                {
+                    float w;
+                    do
+                        w = std::clamp(outputDist(gen), -nextLayer.m_weightsRange, nextLayer.m_weightsRange);
+                    while (std::round(w * nextWeightScale) == 0.0f);
+                    nextWeights[output * nextNumOutputs + nextOutput] = w;
+                }
+
+                numRevived++;
+            }
+        }
+
+        std::cout << "Revived dead " << name << " neurons: " << numRevived << std::endl;
+    };
+
+    revive(*m_l1Weights, *m_l2Weights, nn::HiddenLayerWeightQuantizationScale, "L1");
+    revive(*m_l2Weights, *m_l3Weights, nn::OutputLayerWeightQuantizationScale, "L2");
 }
 
 bool CudaNetworkTrainer::Train()
@@ -1059,6 +1130,21 @@ bool CudaNetworkTrainer::Train()
         }
     }
 
+    if (m_options.reviveDeadNeurons)
+    {
+        ReviveDeadNeurons();
+        m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+    }
+
+    if (m_options.freezeFeatureTransformer)
+    {
+        m_cudaNetwork.SetFeatureTransformerFrozen(true);
+        std::cout << "Feature transformer frozen" << std::endl;
+    }
+
+    if (m_options.bucketLeak > 0.0f)
+        std::cout << "Bucket leak:         " << m_options.bucketLeak << std::endl;
+
     if (!m_dataLoader.Init(m_randomGenerators[0]))
     {
         std::cout << "ERROR: Failed to initialize data loader" << std::endl;
@@ -1081,7 +1167,7 @@ bool CudaNetworkTrainer::Train()
         Waitable waitable;
         {
             TaskBuilder taskBuilder{ waitable };
-            GenerateTrainingSet(m_validationSet, taskBuilder, kingBucketMask, validationLambda, true);
+            GenerateTrainingSet(m_validationSet, taskBuilder, kingBucketMask, validationLambda, 0.0f, true);
         }
         waitable.Wait();
     }
@@ -1131,7 +1217,7 @@ bool CudaNetworkTrainer::Train()
             taskBuilder.Task("GenerateTrainingSet", [this, kingBucketMask, lambda](const TaskContext& ctx)
             {
                 TaskBuilder taskBuilder{ ctx };
-                GenerateTrainingSet(m_trainingSet_Write, taskBuilder, kingBucketMask, lambda);
+                GenerateTrainingSet(m_trainingSet_Write, taskBuilder, kingBucketMask, lambda, m_options.bucketLeak);
             });
         }
         waitable.Wait();
@@ -1188,6 +1274,10 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
     {
         if (args[i] == "--restartSchedule")
             options.restartSchedule = true;
+        else if (args[i] == "--freezeFeatureTransformer")
+            options.freezeFeatureTransformer = true;
+        else if (args[i] == "--reviveDeadNeurons")
+            options.reviveDeadNeurons = true;
         else if (i + 1 >= args.size())
             continue; // every remaining option takes a value
         else if (args[i] == "--net")
@@ -1206,6 +1296,8 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.resumePath = args[i + 1];
         else if (args[i] == "--trainingLength")
             options.trainingLength = std::stoull(args[i + 1]);
+        else if (args[i] == "--bucketLeak")
+            options.bucketLeak = std::stof(args[i + 1]);
     }
     std::cout << "Seed: " << options.seed << std::endl;
 
