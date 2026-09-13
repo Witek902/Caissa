@@ -36,9 +36,11 @@ else
 endif
 
 ifneq ($(findstring g++, $(CC)),)
+	# no loop peeling (and no tracer with a profile): the code they duplicate slows the build down
+	FLAGS += -fno-peel-loops
 	PGO_DIR = "pgo"
 	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
-	PGO_USE      = -fprofile-use=$(PGO_DIR)
+	PGO_USE      = -fprofile-use=$(PGO_DIR) -fno-tracer
 else ifneq ($(findstring clang++, $(CC)),)
 	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
 	PGO_GENERATE = -fprofile-instr-generate
