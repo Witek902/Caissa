@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Caissa NNUE Visualizer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 13px/1.4 system-ui, "Segoe UI", sans-serif;
+    background: #14161a; color: #d7dbe0;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 10px 14px; background: #1b1e24; border-bottom: 1px solid #2a2e36;
+    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group label { color: #9aa3ad; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button {
+    background: #232730; color: #cfd4da; border: 1px solid #313640;
+    padding: 4px 12px; border-radius: 6px; cursor: pointer; font: inherit;
+  }
+  .tabs button.active { background: #3b6ea5; border-color: #4f86c6; color: #fff; }
+  select, input[type=number] {
+    background: #232730; color: #e6e9ed; border: 1px solid #313640;
+    border-radius: 5px; padding: 3px 6px; font: inherit;
+  }
+  input[type=number] { width: 64px; }
+  input[type=range] { width: 150px; }
+  input[type=file] { color: #9aa3ad; font-size: 12px; max-width: 230px; }
+  button.flat {
+    background: #232730; color: #cfd4da; border: 1px solid #313640;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit;
+  }
+  #status { color: #8b939d; font-size: 12px; }
+  #status.err { color: #e07a7a; }
+  #info { color: #79828c; font-size: 12px; }
+  #legend { display: flex; gap: 10px; flex-wrap: wrap; color: #8b939d; font-size: 11px; }
+  #legend b { color: #c7ccd3; font-weight: 600; }
+  #stageWrap { position: relative; flex: 1; min-height: 0; }
+  #stage { display: block; width: 100%; height: 100%; cursor: grab; background: #0d0f12; }
+  #stage.dragging { cursor: grabbing; }
+  #tooltip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    background: #0b0c0fdd; border: 1px solid #3b4250; border-radius: 6px;
+    padding: 6px 8px; font-size: 12px; white-space: nowrap;
+    box-shadow: 0 4px 14px #0008;
+  }
+  #tooltip .k { color: #8b939d; }
+  #tooltip .v { color: #f0f3f6; }
+  #tooltip .pos { color: #ff6b6b; }
+  #tooltip .neg { color: #5aa9ff; }
+  .hint { color: #5d646d; font-size: 11px; }
+  #colorbar { width: 162px; height: 14px; border: 1px solid #313640; border-radius: 3px; }
+  .cblabel { width: 44px; color: #8b939d; font-size: 11px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Caissa NNUE Visualizer</h1>
+  <div class="group">
+    <input type="file" id="file" accept=".pnn,application/octet-stream" />
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-view="acc" class="active">Accumulator</button>
+    <button data-view="l1">L1 (pairs&rarr;16)</button>
+    <button data-view="l2">L2 (16&rarr;32)</button>
+    <button data-view="l3">L3 (32&rarr;1)</button>
+  </div>
+  <div class="group" id="bucketGroup">
+    <label for="bucket">King bucket</label>
+    <select id="bucket"></select>
+  </div>
+  <div class="group" id="variantGroup">
+    <label for="variant">Output bucket</label>
+    <select id="variant"></select>
+  </div>
+  <div class="group" id="colsGroup">
+    <label for="cols">Columns</label>
+    <input type="number" id="cols" min="1" max="64" step="1" value="8" />
+  </div>
+  <div class="group">
+    <label for="gain">Gain</label>
+    <input type="range" id="gain" min="-100" max="200" value="0" />
+    <span id="gainVal" style="width:42px; text-align:right;">1.0&times;</span>
+  </div>
+  <div class="group">
+    <label for="exponent">Exponent</label>
+    <input type="range" id="exponent" min="0.1" max="2" step="0.05" value="0.45" />
+    <span id="exponentVal" style="width:34px; text-align:right;">0.45</span>
+  </div>
+  <div class="group" title="blue = negative, black = 0, red = positive; equal |w| has equal lightness. Spans &plusmn;max|w| of this layer's weights; bias cells are scaled by their own max.">
+    <span id="cbMin" class="cblabel" style="text-align:right;"></span>
+    <canvas id="colorbar" width="160" height="12"></canvas>
+    <span id="cbMax" class="cblabel"></span>
+  </div>
+  <div class="group">
+    <label for="traceLayer">Trace</label>
+    <select id="traceLayer">
+      <option value="">none</option>
+      <option value="acc">Acc neuron</option>
+      <option value="l1">L1 neuron</option>
+      <option value="l2">L2 neuron</option>
+    </select>
+    <input type="number" id="traceIdx" min="0" value="0" style="width:72px" disabled />
+    <button class="flat" id="traceClear">clear</button>
+  </div>
+  <button class="flat" id="fit">Fit</button>
+  <span class="hint">scroll = zoom &middot; drag = pan &middot; click = trace neuron</span>
+</header>
+
+<div class="group" style="padding:6px 14px; background:#181b20; border-bottom:1px solid #2a2e36; gap:18px;">
+  <span id="status">Open a <b>.pnn</b> file to begin.</span>
+  <span id="info"></span>
+  <span id="legend"></span>
+</div>
+
+<div id="stageWrap">
+  <canvas id="stage"></canvas>
+  <div id="tooltip"></div>
+</div>
+
+<script>
+"use strict";
+
+// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 and 14) ----
+const HEADER_SIZE      = 64;
+const NUM_KING_BUCKETS = 32;
+const ACC_SIZE         = 1024;            // AccumulatorSize
+const NUM_INPUTS       = NUM_KING_BUCKETS * 12 * 64; // 24576
+const L1_SIZE          = 16;
+const L2_SIZE          = 32;
+const NUM_VARIANTS     = 8;
+
+// The two halves of each accumulator are clipped and multiplied together, so one perspective
+// contributes ACC_SIZE/2 pair slots and both perspectives together are ACC_SIZE wide.
+const PAIR_COUNT       = ACC_SIZE / 2;    // 512 pair slots per perspective
+const L1_IN_SIZE       = ACC_SIZE;        // L1InputSize = 1024
+
+// Dequantization scales (raw_int / scale = float weight), see PackedNeuralNetwork.hpp
+const PAIRWISE_SCALE = 255 * 255 / 512;   // 127.002, the hidden activation scale
+const Q_ACC_W   = 255;                       // InputLayerWeightQuantizationScale
+const Q_HID_W   = 64;                        // HiddenLayerWeightQuantizationScale
+const Q_HID_B   = PAIRWISE_SCALE * 64;       // ~8128.1
+const Q_L3_W    = 256 * 1024 / PAIRWISE_SCALE;  // ~2064.09
+const Q_L3_B    = 256 * 1024;                   // 262144
+
+const PIECE_LABELS = ["wP","wN","wB","wR","wQ","wK","bP","bN","bB","bR","bQ","bK"];
+const FILES = "abcdefgh";
+
+const HL_OUT = "#39d0ff";   // output-neuron (row / strip) highlight
+const HL_IN  = "#ff45c8";   // input-neuron (column) highlight
+
+// ---- Parsed network ----
+let net = null;
+
+// ---- Byte offsets ----
+const ACC_W_OFF = HEADER_SIZE;                                 // int16[NUM_INPUTS*ACC_SIZE]
+const ACC_B_OFF = ACC_W_OFF + 2 * NUM_INPUTS * ACC_SIZE;       // int16[ACC_SIZE]
+const VARIANTS_OFF = ACC_B_OFF + 2 * ACC_SIZE;                 // OutputSubnetVariant[8]
+const VARIANT_STRIDE = 17216;                                  // sizeof(OutputSubnetVariant)
+const L1_W_OFF = 0;       // int8[L1_IN*L1]  see hiddenWeightIndex
+const L1_B_OFF = 16384;   // int32[16]
+const L2_W_OFF = 16448;   // int8[16*32]     see hiddenWeightIndex
+const L2_B_OFF = 16960;   // int32[32]
+const L3_W_OFF = 17088;   // int16[32]
+const L3_B_OFF = 17152;   // int32
+
+function variantBase(v) { return VARIANTS_OFF + v * VARIANT_STRIDE; }
+
+// Version 13 stores hidden layer weights output-major. Version 14 stores them input-major in groups
+// of 4 inputs (nn::HiddenWeightIndex), so a non-zero input group is one contiguous block per output.
+function hiddenWeightIndex(input, output, numInputs, numOutputs) {
+  if (net.grouped) return (input >> 2) * (numOutputs * 4) + output * 4 + (input & 3);
+  return output * numInputs + input;
+}
+
+// ---- Weight accessors ----
+function accW(input, neuron) { return net.accI16[input * ACC_SIZE + neuron]; }
+function l1W(v, out, inp)    { return net.dv.getInt8 (variantBase(v) + L1_W_OFF + hiddenWeightIndex(inp, out, L1_IN_SIZE, L1_SIZE)); }
+function l1B(v, out)         { return net.dv.getInt32(variantBase(v) + L1_B_OFF + out * 4, true); }
+function l2W(v, out, inp)    { return net.dv.getInt8 (variantBase(v) + L2_W_OFF + hiddenWeightIndex(inp, out, L1_SIZE, L2_SIZE)); }
+function l2B(v, out)         { return net.dv.getInt32(variantBase(v) + L2_B_OFF + out * 4, true); }
+function l3W(v, inp)         { return net.dv.getInt16(variantBase(v) + L3_W_OFF + inp * 2, true); }
+function l3B(v)              { return net.dv.getInt32(variantBase(v) + L3_B_OFF, true); }
+
+// Accumulator neuron n is multiplied by its partner and drives one L1 column per perspective.
+function pairSlotOf(n)  { return n % PAIR_COUNT; }
+function pairPartner(n) { return n < PAIR_COUNT ? n + PAIR_COUNT : n - PAIR_COUNT; }
+
+// ---- Color mapping: blue (neg) -> black (0) -> red (pos) ----
+// Both ramps have equal CIE L* at equal |w|, and L* is linear in the mapped magnitude.
+const RAMP_STEPS = 1024;
+const RAMP_POS_LIN = [1, 0, 0];
+const RAMP_NEG_LIN = [0, (0.2126 - 0.0722) / 0.7152, 1];   // green lifts blue's luminance to pure red's
+
+function srgbByte(c) { return Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)); }
+function lstarToY(L) { return L > 8 ? Math.pow((L + 16) / 116, 3) : L * 27 / 24389; }
+
+function buildRamp(lin) {
+  const y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  const lMax = 116 * Math.cbrt(y) - 16;
+  const ramp = new Array(RAMP_STEPS);
+  for (let i = 0; i < RAMP_STEPS; i++) {
+    const k = lstarToY(lMax * i / (RAMP_STEPS - 1)) / y;
+    ramp[i] = [srgbByte(k * lin[0]), srgbByte(k * lin[1]), srgbByte(k * lin[2])];
+  }
+  return ramp;
+}
+const RAMP_POS = buildRamp(RAMP_POS_LIN);
+const RAMP_NEG = buildRamp(RAMP_NEG_LIN);
+
+// |w| / maxAbs is scaled by tone.gain, clipped to 1, then raised to tone.exponent.
+function colorFor(raw, maxAbs, tone) {
+  if (maxAbs <= 0) return RAMP_POS[0];
+  const m = Math.min(1, Math.abs(raw) / maxAbs * tone.gain);
+  const i = Math.round(Math.pow(m, tone.exponent) * (RAMP_STEPS - 1));
+  return raw >= 0 ? RAMP_POS[i] : RAMP_NEG[i];
+}
+
+// Fast block fill into an ImageData buffer (RGBA, opaque)
+function fillBlock(data, W, x0, y0, w, h, r, g, b) {
+  for (let yy = 0; yy < h; yy++) {
+    let idx = ((y0 + yy) * W + x0) * 4;
+    for (let xx = 0; xx < w; xx++) {
+      data[idx++] = r; data[idx++] = g; data[idx++] = b; data[idx++] = 255;
+    }
+  }
+}
+
+// =====================================================================
+//  Parsing
+// =====================================================================
+function parseNet(buffer) {
+  const dv = new DataView(buffer);
+  const magic = dv.getUint32(0, true);
+  const version = dv.getUint32(4, true);
+
+  if (version !== 13 && version !== 14) {
+    throw new Error(`Unsupported network version ${version}; this viewer reads the multilayer ` +
+                    `layout of versions 13 and 14.`);
+  }
+
+  const needed = VARIANTS_OFF + NUM_VARIANTS * VARIANT_STRIDE;
+  if (buffer.byteLength < needed) {
+    throw new Error(`File too small: ${buffer.byteLength} bytes, expected at least ${needed}.`);
+  }
+
+  const accI16 = new Int16Array(buffer, ACC_W_OFF, NUM_INPUTS * ACC_SIZE);
+
+  let accMaxAbs = 0;
+  for (let i = 0; i < accI16.length; i++) { const a = Math.abs(accI16[i]); if (a > accMaxAbs) accMaxAbs = a; }
+
+  const obj = { dv, accI16, magic, version, grouped: version >= 14, accMaxAbs, l1MaxAbs: 1, l2MaxAbs: 1, l3MaxAbs: 1 };
+  net = obj;
+
+  let m1 = 0, m2 = 0, m3 = 0;
+  for (let v = 0; v < NUM_VARIANTS; v++) {
+    for (let o = 0; o < L1_SIZE; o++)
+      for (let i = 0; i < L1_IN_SIZE; i++) { const a = Math.abs(l1W(v, o, i)); if (a > m1) m1 = a; }
+    for (let o = 0; o < L2_SIZE; o++)
+      for (let i = 0; i < L1_SIZE; i++)     { const a = Math.abs(l2W(v, o, i)); if (a > m2) m2 = a; }
+    for (let i = 0; i < L2_SIZE; i++)       { const a = Math.abs(l3W(v, i));    if (a > m3) m3 = a; }
+  }
+  obj.l1MaxAbs = m1 || 1; obj.l2MaxAbs = m2 || 1; obj.l3MaxAbs = m3 || 1;
+  return obj;
+}
+
+// =====================================================================
+//  View builders -> { canvas, hitTest, annotations, geometry }
+//   - canvas:       offscreen pixel layer (cells only), drawn nearest-neighbor scaled
+//   - annotations:  vector text drawn crisp in screen space by the viewport
+//   - geometry:     highlightsFor(selection) -> rects (for neuron tracing)
+//   - hitTest(x,y): tooltip info + a `select` unit for click-to-trace
+// =====================================================================
+
+// --- Accumulator board view ---
+function buildAccumulator(bucket, cols, tone) {
+  const SQ = 4, BOARD = 8 * SQ, GAP = 1, COLOR_GAP = 4, LABEL_H = 11, PAD_X = 8;
+  const boardOffX = (pt) => pt * (BOARD + GAP) + (pt >= 6 ? COLOR_GAP : 0);
+  const STRIP_W = boardOffX(11) + BOARD;
+  const CELL_W = STRIP_W + PAD_X;
+  const CELL_H = LABEL_H + BOARD + 4;
+  // Partners are stacked so a pair can be compared at a glance: pair slot k puts neuron k on top
+  // and neuron k+PAIR_COUNT directly underneath, and pair groups are separated by a small gap.
+  const PAIR_GAP = 6;
+  const PAIR_H = 2 * CELL_H + PAIR_GAP;
+  const pairRows = Math.ceil(PAIR_COUNT / cols);
+  const W = cols * CELL_W, H = pairRows * PAIR_H;
+
+  const cellPos = (n) => {
+    const k = n % PAIR_COUNT;
+    const col = k % cols, prow = (k - col) / cols;
+    return { col, x: col * CELL_W, y: prow * PAIR_H + (n < PAIR_COUNT ? 0 : CELL_H) };
+  };
+
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H);
+  const data = img.data;
+  for (let i = 0; i < data.length; i += 4) { data[i] = 13; data[i + 1] = 15; data[i + 2] = 18; data[i + 3] = 255; }
+
+  const maxAbs = net.accMaxAbs;
+  for (let n = 0; n < ACC_SIZE; n++) {
+    const { x: cellX, y: cellY } = cellPos(n);
+    const top = cellY + LABEL_H;
+    for (let pt = 0; pt < 12; pt++) {
+      const bx = cellX + PAD_X + boardOffX(pt);
+      const inputBase = bucket * 768 + pt * 64;
+      for (let sq = 0; sq < 64; sq++) {
+        const file = sq & 7, rank = sq >> 3;
+        const c = colorFor(accW(inputBase + sq, n), maxAbs, tone);
+        fillBlock(data, W, bx + file * SQ, top + (7 - rank) * SQ, SQ, SQ, c[0], c[1], c[2]);
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const annotations = [];
+  for (let n = 0; n < ACC_SIZE; n++) {
+    const { x, y } = cellPos(n);
+    annotations.push({ sx: x + 2, sy: y + 1, text: "#" + n,
+                       align: "left", baseline: "top", color: "#7a828c", minScale: 0.7 });
+  }
+
+  const cellRect = (n) => {
+    const { x, y } = cellPos(n);
+    return { x: x + 1, y: y + 1, w: CELL_W - 2, h: CELL_H - 2 };
+  };
+
+  const hitTest = (ox, oy) => {
+    const col = Math.floor(ox / CELL_W), prow = Math.floor(oy / PAIR_H);
+    if (col < 0 || col >= cols || prow < 0 || prow >= pairRows) return null;
+    const withinPair = oy - prow * PAIR_H;
+    if (withinPair >= 2 * CELL_H) return null;   // the gap separating pair groups
+    const half = withinPair < CELL_H ? 0 : 1;
+    const k = prow * cols + col;
+    if (k >= PAIR_COUNT) return null;
+    const n = k + half * PAIR_COUNT;
+    const select = { layer: "acc", index: n };
+    const pairLines = [["pair partner", "#" + pairPartner(n)], ["feeds L1 input", "#" + pairSlotOf(n)]];
+    const lx = ox - col * CELL_W - PAD_X, ly = withinPair - half * CELL_H - LABEL_H;
+    if (ly < 0 || ly >= BOARD) return { select, lines: [["neuron", "#" + n], ...pairLines], raw: 0, val: 0, noVal: true };
+    for (let pt = 0; pt < 12; pt++) {
+      const within = lx - boardOffX(pt);
+      if (within >= 0 && within < BOARD) {
+        const file = Math.floor(within / SQ), rank = 7 - Math.floor(ly / SQ);
+        const sq = rank * 8 + file;
+        const raw = accW(bucket * 768 + pt * 64 + sq, n);
+        return { select, raw, val: raw / Q_ACC_W,
+          lines: [["neuron", "#" + n], ...pairLines,
+                  ["feature", `${PIECE_LABELS[pt]} ${FILES[file]}${rank + 1}`],
+                  ["king bucket", bucket]] };
+      }
+    }
+    return { select, lines: [["neuron", "#" + n], ...pairLines], raw: 0, val: 0, noVal: true };
+  };
+
+  const geometry = {
+    highlightsFor: (sel) => {
+      if (!(sel && sel.layer === "acc" && sel.index >= 0 && sel.index < ACC_SIZE)) return [];
+      // the selected neuron and the one it is multiplied by, which share an L1 input
+      return [{ ...cellRect(sel.index), color: HL_OUT },
+              { ...cellRect(pairPartner(sel.index)), color: HL_IN }];
+    },
+  };
+  return { canvas: cv, hitTest, annotations, geometry };
+}
+
+// --- Generic matrix view (L1 / L2 / L3) ---
+function buildMatrix(opts) {
+  const { numOut, numIn, cellPx, getW, getB, maxAbs, biasMaxAbs, tone,
+          rowLabel, colLabel, splitAt, deqW, deqB, inputDesc, outLayer, inLayer } = opts;
+  const CELL = cellPx, AXIS = 30, BIAS_GAP = 8, SPLIT_GAP = 6;
+  const hasSplit = splitAt != null && splitAt > 0 && splitAt < numIn;
+  const colX = (i) => { let x = AXIS + i * CELL; if (hasSplit && i >= splitAt) x += SPLIT_GAP; return x; };
+  const rowY = (o) => AXIS + o * CELL;
+  const splitW = hasSplit ? SPLIT_GAP : 0;
+  const biasX = AXIS + numIn * CELL + splitW + BIAS_GAP;
+  const W = biasX + CELL + 2, H = AXIS + numOut * CELL + 2;
+
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#0d0f12";
+  ctx.fillRect(0, 0, W, H);
+  for (let o = 0; o < numOut; o++) {
+    const y = rowY(o);
+    for (let i = 0; i < numIn; i++) {
+      const c = colorFor(getW(o, i), maxAbs, tone);
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fillRect(colX(i), y, CELL, CELL);
+    }
+    if (getB) {
+      const c = colorFor(getB(o), biasMaxAbs, tone);
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fillRect(biasX, y, CELL, CELL);
+    }
+  }
+
+  const annotations = [];
+  const tickEvery = numIn > 256 ? 64 : (numIn > 32 ? 8 : (numIn > 8 ? 4 : 1));
+  for (let i = 0; i < numIn; i += tickEvery)
+    annotations.push({ sx: colX(i) + CELL / 2, sy: AXIS - 3, text: String(i),
+                       align: "center", baseline: "bottom", color: "#8b939d" });
+  if (getB) annotations.push({ sx: biasX + CELL / 2, sy: AXIS - 3, text: "bias",
+                               align: "center", baseline: "bottom", color: "#aab2bd" });
+  const rowEvery = numOut > 64 ? 8 : 1;
+  for (let o = 0; o < numOut; o += rowEvery)
+    annotations.push({ sx: AXIS - 5, sy: rowY(o) + CELL / 2, text: String(o),
+                       align: "right", baseline: "middle", color: "#8b939d" });
+
+  const hitTest = (ox, oy) => {
+    const o = Math.floor((oy - AXIS) / CELL);
+    if (o < 0 || o >= numOut) return null;
+    if (getB && ox >= biasX && ox < biasX + CELL) {
+      const raw = getB(o);
+      const select = outLayer ? { layer: outLayer, index: o } : { layer: inLayer, index: 0 };
+      return { select, raw, val: raw / deqB, lines: [[rowLabel, "#" + o], [colLabel, "bias"]] };
+    }
+    let x = ox - AXIS;
+    if (hasSplit) {
+      if (x >= splitAt * CELL && x < splitAt * CELL + SPLIT_GAP) return null;
+      if (x >= splitAt * CELL) x -= SPLIT_GAP;
+    }
+    const i = Math.floor(x / CELL);
+    if (i < 0 || i >= numIn) return null;
+    const raw = getW(o, i);
+    // Click selects the output neuron (row) when this layer has its own outputs,
+    // otherwise (L3, single output) selects the L2 input neuron under the cursor.
+    const select = outLayer ? { layer: outLayer, index: o } : { layer: inLayer, index: i };
+    return { select, raw, val: raw / deqW,
+      lines: [[rowLabel, "#" + o], [colLabel, inputDesc ? inputDesc(i) : "#" + i]] };
+  };
+
+  const geometry = {
+    highlightsFor: (sel) => {
+      if (!sel) return [];
+      const rects = [];
+      if (sel.layer === inLayer) {
+        let cols = [sel.index];
+        // an accumulator neuron feeds its pair slot, once per perspective
+        if (inLayer === "acc") { const k = pairSlotOf(sel.index); cols = [k, k + PAIR_COUNT]; }
+        for (const c of cols)
+          if (c >= 0 && c < numIn) rects.push({ x: colX(c), y: AXIS, w: CELL, h: numOut * CELL, color: HL_IN });
+      }
+      if (outLayer && sel.layer === outLayer && sel.index >= 0 && sel.index < numOut)
+        rects.push({ x: AXIS, y: rowY(sel.index), w: (biasX + CELL) - AXIS, h: CELL, color: HL_OUT });
+      return rects;
+    },
+  };
+  return { canvas: cv, hitTest, annotations, geometry };
+}
+
+function maxAbsBias(fn, variant, count) {
+  let m = 0;
+  for (let o = 0; o < count; o++) { const a = Math.abs(fn(variant, o)); if (a > m) m = a; }
+  return m || 1;
+}
+
+function buildL1(variant, tone) {
+  return buildMatrix({
+    numOut: L1_SIZE, numIn: L1_IN_SIZE, cellPx: 6,
+    getW: (o, i) => l1W(variant, o, i), getB: (o) => l1B(variant, o),
+    maxAbs: net.l1MaxAbs, biasMaxAbs: maxAbsBias(l1B, variant, L1_SIZE), tone,
+    rowLabel: "L1 out", colLabel: "pair in", splitAt: PAIR_COUNT,
+    deqW: Q_HID_W, deqB: Q_HID_B, outLayer: "l1", inLayer: "acc",
+    inputDesc: (i) => {
+      const side = i < PAIR_COUNT ? "STM" : "NSTM";
+      const k = i % PAIR_COUNT;
+      return `${side} pair #${k} (acc ${k} x ${k + PAIR_COUNT})`;
+    },
+  });
+}
+function buildL2(variant, tone) {
+  return buildMatrix({
+    numOut: L2_SIZE, numIn: L1_SIZE, cellPx: 16,
+    getW: (o, i) => l2W(variant, o, i), getB: (o) => l2B(variant, o),
+    maxAbs: net.l2MaxAbs, biasMaxAbs: maxAbsBias(l2B, variant, L2_SIZE), tone,
+    rowLabel: "L2 out", colLabel: "L1 in", splitAt: null,
+    deqW: Q_HID_W, deqB: Q_HID_B, outLayer: "l2", inLayer: "l1",
+    inputDesc: (i) => "L1 #" + i,
+  });
+}
+function buildL3(variant, tone) {
+  return buildMatrix({
+    numOut: 1, numIn: L2_SIZE, cellPx: 22,
+    getW: (o, i) => l3W(variant, i), getB: () => l3B(variant),
+    maxAbs: net.l3MaxAbs, biasMaxAbs: Math.abs(l3B(variant)) || 1, tone,
+    rowLabel: "output", colLabel: "L2 in", splitAt: null,
+    deqW: Q_L3_W, deqB: Q_L3_B, outLayer: null, inLayer: "l2",
+    inputDesc: (i) => "L2 #" + i,
+  });
+}
+
+// =====================================================================
+//  Zoomable / pannable viewport (cells = scaled image, text/highlights = screen-space)
+// =====================================================================
+class Viewport {
+  constructor(canvas, tooltipEl) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.tip = tooltipEl;
+    this.src = null; this.hit = null; this.annotations = []; this.highlights = [];
+    this.scale = 1; this.tx = 0; this.ty = 0; this.drag = null;
+    this.onSelect = null;
+    this._bind();
+  }
+  setSource(src, hit, annotations, refit) {
+    this.src = src; this.hit = hit; this.annotations = annotations || [];
+    if (refit) this.fit(); else this.draw();
+  }
+  setHighlights(h) { this.highlights = h || []; this.draw(); }
+  resize() {
+    const r = this.canvas.getBoundingClientRect();
+    this.canvas.width = Math.max(1, Math.floor(r.width));
+    this.canvas.height = Math.max(1, Math.floor(r.height));
+    this.draw();
+  }
+  fit() {
+    if (!this.src) return;
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const s = Math.min(cw / this.src.width, ch / this.src.height) * 0.98;
+    this.scale = s > 0 ? s : 1;
+    this.tx = (cw - this.src.width * this.scale) / 2;
+    this.ty = (ch - this.src.height * this.scale) / 2;
+    this.draw();
+  }
+  draw() {
+    const ctx = this.ctx, cw = this.canvas.width, ch = this.canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#0d0f12";
+    ctx.fillRect(0, 0, cw, ch);
+    if (!this.src) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(this.scale, 0, 0, this.scale, this.tx, this.ty);
+    ctx.drawImage(this.src, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // highlights (screen space, constant line width)
+    for (const r of this.highlights) {
+      const x = this.tx + r.x * this.scale, y = this.ty + r.y * this.scale;
+      const w = r.w * this.scale, h = r.h * this.scale;
+      ctx.fillStyle = r.color + "26";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    }
+
+    // annotations (crisp vector text)
+    ctx.font = "11px system-ui, sans-serif";
+    for (const a of this.annotations) {
+      if (a.minScale && this.scale < a.minScale) continue;
+      const x = this.tx + a.sx * this.scale, y = this.ty + a.sy * this.scale;
+      if (x < -60 || x > cw + 60 || y < -20 || y > ch + 20) continue;
+      ctx.textAlign = a.align; ctx.textBaseline = a.baseline;
+      ctx.fillStyle = a.color;
+      ctx.fillText(a.text, x, y);
+    }
+  }
+  _screenToSrc(px, py) { return { x: (px - this.tx) / this.scale, y: (py - this.ty) / this.scale }; }
+  _bind() {
+    const c = this.canvas;
+    c.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      if (!this.src) return;
+      const rect = c.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const before = this._screenToSrc(mx, my);
+      const f = Math.exp(-e.deltaY * 0.0015);
+      this.scale = Math.min(80, Math.max(0.02, this.scale * f));
+      this.tx = mx - before.x * this.scale;
+      this.ty = my - before.y * this.scale;
+      this.draw();
+    }, { passive: false });
+
+    c.addEventListener("mousedown", (e) => {
+      this.drag = { x: e.clientX, y: e.clientY, tx: this.tx, ty: this.ty };
+      c.classList.add("dragging");
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (this.drag) {
+        this.tx = this.drag.tx + (e.clientX - this.drag.x);
+        this.ty = this.drag.ty + (e.clientY - this.drag.y);
+        this.draw();
+      } else {
+        this._hover(e);
+      }
+    });
+    window.addEventListener("mouseup", (e) => {
+      if (!this.drag) return;
+      const moved = Math.hypot(e.clientX - this.drag.x, e.clientY - this.drag.y);
+      this.drag = null; c.classList.remove("dragging");
+      if (moved < 4) this._click(e);
+    });
+    c.addEventListener("mouseleave", () => { this.tip.style.display = "none"; });
+  }
+  _click(e) {
+    if (!this.src || !this.hit || !this.onSelect) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const p = this._screenToSrc(e.clientX - rect.left, e.clientY - rect.top);
+    const info = this.hit(p.x, p.y);
+    if (info && info.select) this.onSelect(info.select);
+  }
+  _hover(e) {
+    if (!this.src || !this.hit) { this.tip.style.display = "none"; return; }
+    const rect = this.canvas.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top  || e.clientY > rect.bottom) { this.tip.style.display = "none"; return; }
+    const p = this._screenToSrc(e.clientX - rect.left, e.clientY - rect.top);
+    const info = this.hit(p.x, p.y);
+    if (!info) { this.tip.style.display = "none"; return; }
+    let html = info.lines.map(([k, v]) => `<span class="k">${k}:</span> <span class="v">${v}</span>`).join("<br>");
+    if (!info.noVal) {
+      const cls = info.raw > 0 ? "pos" : (info.raw < 0 ? "neg" : "");
+      html += `<br><span class="k">raw int:</span> <span class="${cls}">${info.raw}</span>`;
+      html += `<br><span class="k">float:</span> <span class="${cls}">${info.val.toFixed(5)}</span>`;
+    }
+    this.tip.innerHTML = html;
+    this.tip.style.display = "block";
+    const wrap = this.canvas.parentElement.getBoundingClientRect();
+    let tx = e.clientX - wrap.left + 14, ty = e.clientY - wrap.top + 14;
+    const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
+    if (tx + tw > wrap.width) tx = e.clientX - wrap.left - tw - 14;
+    if (ty + th > wrap.height) ty = e.clientY - wrap.top - th - 14;
+    this.tip.style.left = tx + "px";
+    this.tip.style.top = ty + "px";
+  }
+}
+
+// =====================================================================
+//  UI wiring
+// =====================================================================
+const els = {};
+["file","tabs","bucket","variant","cols","gain","gainVal","exponent","exponentVal",
+ "colorbar","cbMin","cbMax","fit","status","info","legend",
+ "bucketGroup","variantGroup","colsGroup","stage","tooltip",
+ "traceLayer","traceIdx","traceClear"].forEach(id => els[id] = document.getElementById(id));
+
+const state = { view: "acc", bucket: 0, variant: 0, cols: 8, exponent: 0.45, selection: null };
+const gains = { acc: 0, l1: 0, l2: 0, l3: 0 };   // raw slider values, per view
+const TRACE_MAX = { acc: ACC_SIZE - 1, l1: L1_SIZE - 1, l2: L2_SIZE - 1 };
+let currentGeometry = null;
+
+const vp = new Viewport(els.stage, els.tooltip);
+vp.onSelect = (sel) => setSelection(sel);
+
+for (let i = 0; i < NUM_KING_BUCKETS; i++) els.bucket.add(new Option("king bucket " + i, i));
+for (let i = 0; i < NUM_VARIANTS; i++) els.variant.add(new Option("output bucket " + i, i));
+
+function gainFactor(view) { return Math.pow(10, gains[view] / 100); }
+function toneFor(view) { return { gain: gainFactor(view), exponent: state.exponent }; }
+
+// Largest raw weight magnitude of the view and the scale that dequantizes it.
+function weightRange(view) {
+  if (view === "acc") return { maxAbs: net.accMaxAbs, deq: Q_ACC_W };
+  if (view === "l1")  return { maxAbs: net.l1MaxAbs, deq: Q_HID_W };
+  if (view === "l2")  return { maxAbs: net.l2MaxAbs, deq: Q_HID_W };
+  return { maxAbs: net.l3MaxAbs, deq: Q_L3_W };
+}
+
+// Spans -max|w| .. +max|w| of the current view, so clipping by gain shows up as flat ends.
+function drawColorbar() {
+  const cv = els.colorbar, W = cv.width, H = cv.height;
+  const range = net ? weightRange(state.view) : { maxAbs: 1, deq: 1 };
+  const tone = toneFor(state.view);
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H);
+  for (let x = 0; x < W; x++) {
+    const c = colorFor(((x + 0.5) / W * 2 - 1) * range.maxAbs, range.maxAbs, tone);
+    fillBlock(img.data, W, x, 0, 1, H, c[0], c[1], c[2]);
+  }
+  ctx.putImageData(img, 0, 0);
+  const label = net ? (range.maxAbs / range.deq).toPrecision(3) : "";
+  els.cbMin.textContent = net ? "−" + label : "";
+  els.cbMax.textContent = net ? "+" + label : "";
+}
+
+function rebuild(refit) {
+  if (!net) return;
+  const tone = toneFor(state.view);
+  let built;
+  if (state.view === "acc")      built = buildAccumulator(state.bucket, state.cols, tone);
+  else if (state.view === "l1")  built = buildL1(state.variant, tone);
+  else if (state.view === "l2")  built = buildL2(state.variant, tone);
+  else                           built = buildL3(state.variant, tone);
+  currentGeometry = built.geometry;
+  vp.setSource(built.canvas, built.hitTest, built.annotations, refit);
+  applyHighlights();
+  updateContextUI();
+}
+
+function applyHighlights() {
+  vp.setHighlights(currentGeometry ? currentGeometry.highlightsFor(state.selection) : []);
+}
+
+function setSelection(sel) {
+  state.selection = sel;
+  syncTraceUI();
+  applyHighlights();   // overlay-only update, no pixel rebuild
+}
+
+function syncTraceUI() {
+  const s = state.selection;
+  els.traceLayer.value = s ? s.layer : "";
+  els.traceIdx.disabled = !s;
+  if (s) { els.traceIdx.max = TRACE_MAX[s.layer]; els.traceIdx.value = s.index; }
+}
+
+function updateContextUI() {
+  const acc = state.view === "acc";
+  els.bucketGroup.style.display = acc ? "" : "none";
+  els.colsGroup.style.display = acc ? "" : "none";
+  els.variantGroup.style.display = acc ? "none" : "";
+  els.gain.value = gains[state.view];
+  els.gainVal.textContent = gainFactor(state.view).toFixed(1) + "×";
+  els.exponent.value = state.exponent;
+  els.exponentVal.textContent = state.exponent.toFixed(2);
+  drawColorbar();
+  if (acc) {
+    els.legend.innerHTML = "<b>piece order:</b> " + PIECE_LABELS.join(" ") +
+      " &nbsp;|&nbsp; each strip = one accumulator neuron (12 boards), " +
+      "and each pair is stacked: neuron k on top, neuron k+" + PAIR_COUNT + " directly under it. " +
+      "The two are multiplied together to form one L1 input. " +
+      "Click a neuron: <span style='color:" + HL_OUT + "'>cyan</span> = selected, " +
+      "<span style='color:" + HL_IN + "'>pink</span> = the neuron it is multiplied by. " +
+      "The L1 tab then highlights the pair slot they feed.";
+  } else if (state.view === "l1") {
+    els.legend.innerHTML = "<b>L1:</b> rows = 16 outputs, columns = " + L1_IN_SIZE + " pairwise inputs " +
+      "(left = STM pairs, right = NSTM pairs), trailing = bias. Column k is " +
+      "CReLU(acc k) &times; CReLU(acc k+" + PAIR_COUNT + "). " +
+      "Pink = pair slot of the selected Acc neuron, cyan = selected L1 neuron.";
+  } else if (state.view === "l2") {
+    els.legend.innerHTML = "<b>L2:</b> rows = 32 outputs, columns = 16 L1 inputs, trailing = bias. " +
+      "Pink = selected L1 neuron, cyan = selected L2 neuron.";
+  } else {
+    els.legend.innerHTML = "<b>L3:</b> single output row, 32 L2 inputs, trailing = bias. " +
+      "Pink = selected L2 neuron.";
+  }
+}
+
+// Coalesce rapid rebuilds (gain slider drag) into one per frame.
+let rebuildPending = false, rebuildRefit = false;
+function scheduleRebuild(refit) {
+  rebuildRefit = rebuildRefit || refit;
+  if (rebuildPending) return;
+  rebuildPending = true;
+  requestAnimationFrame(() => {
+    rebuildPending = false;
+    const r = rebuildRefit; rebuildRefit = false;
+    rebuild(r);
+  });
+}
+
+// events
+els.tabs.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-view]");
+  if (!b) return;
+  state.view = b.dataset.view;
+  [...els.tabs.children].forEach(x => x.classList.toggle("active", x === b));
+  rebuild(true);
+});
+els.bucket.addEventListener("change", () => { state.bucket = +els.bucket.value; rebuild(false); });
+els.variant.addEventListener("change", () => { state.variant = +els.variant.value; rebuild(false); });
+els.cols.addEventListener("change", () => {
+  state.cols = Math.max(1, Math.min(64, +els.cols.value || 8));
+  els.cols.value = state.cols; rebuild(true);
+});
+els.gain.addEventListener("input", () => {
+  gains[state.view] = +els.gain.value;
+  els.gainVal.textContent = gainFactor(state.view).toFixed(1) + "×";
+  drawColorbar();
+  scheduleRebuild(false);
+});
+els.exponent.addEventListener("input", () => {
+  state.exponent = +els.exponent.value;
+  els.exponentVal.textContent = state.exponent.toFixed(2);
+  drawColorbar();
+  scheduleRebuild(false);
+});
+els.fit.addEventListener("click", () => vp.fit());
+
+els.traceLayer.addEventListener("change", () => {
+  const layer = els.traceLayer.value;
+  if (!layer) { setSelection(null); return; }
+  const idx = Math.max(0, Math.min(TRACE_MAX[layer], +els.traceIdx.value || 0));
+  setSelection({ layer, index: idx });
+});
+els.traceIdx.addEventListener("change", () => {
+  if (!state.selection) return;
+  const idx = Math.max(0, Math.min(TRACE_MAX[state.selection.layer], +els.traceIdx.value || 0));
+  setSelection({ layer: state.selection.layer, index: idx });
+});
+els.traceClear.addEventListener("click", () => setSelection(null));
+
+els.file.addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  els.status.className = "";
+  els.status.textContent = `Loading ${f.name} (${(f.size / 1e6).toFixed(1)} MB)…`;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const t0 = performance.now();
+      parseNet(reader.result);
+      const ms = (performance.now() - t0).toFixed(0);
+      const magicStr = String.fromCharCode((net.magic >> 24) & 255, (net.magic >> 16) & 255,
+                                            (net.magic >> 8) & 255, net.magic & 255);
+      els.status.textContent = `Loaded ${f.name}`;
+      els.info.innerHTML =
+        `magic <b>${/^[\x20-\x7e]+$/.test(magicStr) ? magicStr : net.magic}</b> &middot; ` +
+        `version <b>${net.version}</b>${net.grouped ? " &middot; grouped layout" : ""} &middot; ` +
+        `acc max|w| <b>${net.accMaxAbs}</b> &middot; ` +
+        `L1/L2/L3 max|w| <b>${net.l1MaxAbs}/${net.l2MaxAbs}/${net.l3MaxAbs}</b> &middot; ` +
+        `parsed in ${ms} ms`;
+      state.selection = null; syncTraceUI();
+      rebuild(true);
+    } catch (err) {
+      els.status.className = "err";
+      els.status.textContent = "Error: " + err.message;
+      console.error(err);
+    }
+  };
+  reader.onerror = () => {
+    els.status.className = "err";
+    els.status.textContent = "Failed to read file.";
+  };
+  reader.readAsArrayBuffer(f);
+});
+
+window.addEventListener("resize", () => vp.resize());
+syncTraceUI();
+updateContextUI();
+requestAnimationFrame(() => vp.resize());
+</script>
+</body>
+</html>
