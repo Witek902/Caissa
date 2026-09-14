@@ -7,7 +7,8 @@
 
 // Input factorizer: a shared 768-feature weight block (king-bucket independent) that is added to the
 // weights of every king bucket during training and folded into them when the net is packed.
-#define USE_FACTORIZER 0
+// TODO make it runtime switch instead of compile-time
+#define USE_FACTORIZER 1
 
 namespace nn {
 namespace cuda {
@@ -27,7 +28,6 @@ struct CudaBatchData
     CudaBuffer<TrainingEntry> trainingVectors;
     CudaBuffer<float> networkOutputs;       // post-sigmoid output
     CudaBuffer<float> outputErrors;         // dLoss / d(pre-sigmoid output)
-    CudaBuffer<float> creluErrors;          // dLoss / d(raw feature transformer accumulator)
     CudaBuffer<float> lossSum;              // sum of squared output errors, accumulated across batches
 
     // Forward activations. accumulatorBuffer holds the raw (pre-activation) feature transformer
@@ -58,7 +58,6 @@ struct CudaBatchData
         trainingVectors.Allocate(batchSize);
         networkOutputs.Allocate(batchSize);
         outputErrors.Allocate(batchSize);
-        creluErrors.Allocate(batchSize * 2 * nn::AccumulatorSize);
         lossSum.Allocate(1);
 
         accumulatorBuffer.Allocate(batchSize * 2 * nn::AccumulatorSize);

@@ -128,19 +128,20 @@
 <script>
 "use strict";
 
-// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 and 14) ----
+// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 to 15) ----
 const HEADER_SIZE      = 64;
 const NUM_KING_BUCKETS = 32;
-const ACC_SIZE         = 1024;            // AccumulatorSize
 const NUM_INPUTS       = NUM_KING_BUCKETS * 12 * 64; // 24576
 const L1_SIZE          = 16;
 const L2_SIZE          = 32;
 const NUM_VARIANTS     = 8;
 
+// The accumulator width (AccumulatorSize) differs between nets and is set from the loaded file.
 // The two halves of each accumulator are clipped and multiplied together, so one perspective
 // contributes ACC_SIZE/2 pair slots and both perspectives together are ACC_SIZE wide.
-const PAIR_COUNT       = ACC_SIZE / 2;    // 512 pair slots per perspective
-const L1_IN_SIZE       = ACC_SIZE;        // L1InputSize = 1024
+let ACC_SIZE   = 1024;
+let PAIR_COUNT = ACC_SIZE / 2;      // pair slots per perspective
+let L1_IN_SIZE = ACC_SIZE;          // L1InputSize
 
 // Dequantization scales (raw_int / scale = float weight), see PackedNeuralNetwork.hpp
 const PAIRWISE_SCALE = 255 * 255 / 512;   // 127.002, the hidden activation scale
@@ -159,17 +160,37 @@ const HL_IN  = "#ff45c8";   // input-neuron (column) highlight
 // ---- Parsed network ----
 let net = null;
 
-// ---- Byte offsets ----
-const ACC_W_OFF = HEADER_SIZE;                                 // int16[NUM_INPUTS*ACC_SIZE]
-const ACC_B_OFF = ACC_W_OFF + 2 * NUM_INPUTS * ACC_SIZE;       // int16[ACC_SIZE]
-const VARIANTS_OFF = ACC_B_OFF + 2 * ACC_SIZE;                 // OutputSubnetVariant[8]
-const VARIANT_STRIDE = 17216;                                  // sizeof(OutputSubnetVariant)
-const L1_W_OFF = 0;       // int8[L1_IN*L1]  see hiddenWeightIndex
-const L1_B_OFF = 16384;   // int32[16]
-const L2_W_OFF = 16448;   // int8[16*32]     see hiddenWeightIndex
-const L2_B_OFF = 16960;   // int32[32]
-const L3_W_OFF = 17088;   // int16[32]
-const L3_B_OFF = 17152;   // int32
+// ---- Byte offsets (all but the first two depend on the accumulator width) ----
+const ACC_W_OFF = HEADER_SIZE;      // int16[NUM_INPUTS*ACC_SIZE]
+const L1_W_OFF = 0;                 // int8[L1_IN*L1]  see hiddenWeightIndex
+let ACC_B_OFF, VARIANTS_OFF, VARIANT_STRIDE, L1_B_OFF, L2_W_OFF, L2_B_OFF, L3_W_OFF, L3_B_OFF;
+
+// Every struct in the file is aligned to 64 bytes (CACHELINE_SIZE).
+function alignTo64(x) { return Math.ceil(x / 64) * 64; }
+
+function setAccumulatorSize(acc) {
+  ACC_SIZE = acc;
+  PAIR_COUNT = acc / 2;
+  L1_IN_SIZE = acc;
+  ACC_B_OFF = ACC_W_OFF + 2 * NUM_INPUTS * acc;                // int16[ACC_SIZE]
+  VARIANTS_OFF = alignTo64(ACC_B_OFF + 2 * acc);               // OutputSubnetVariant[8]
+  L1_B_OFF = L1_IN_SIZE * L1_SIZE;                              // int32[16]
+  L2_W_OFF = L1_B_OFF + 4 * L1_SIZE;                            // int8[16*32]  see hiddenWeightIndex
+  L2_B_OFF = L2_W_OFF + L1_SIZE * L2_SIZE;                      // int32[32]
+  L3_W_OFF = L2_B_OFF + 4 * L2_SIZE;                            // int16[32]
+  L3_B_OFF = L3_W_OFF + 2 * L2_SIZE;                            // int32
+  VARIANT_STRIDE = alignTo64(L3_B_OFF + 4 + 4 * 15);            // sizeof(OutputSubnetVariant)
+}
+setAccumulatorSize(ACC_SIZE);
+
+// The trainer writes zero layer sizes into the header, so the width comes from the file size:
+// every accumulator neuron adds its FT weights and bias plus one L1 column per output subnet.
+function accumulatorSizeFromFile(byteLength) {
+  const fixedBytes = HEADER_SIZE + NUM_VARIANTS * (4 * L1_SIZE + L1_SIZE * L2_SIZE + 4 * L2_SIZE + 2 * L2_SIZE + 4 + 4 * 15);
+  const bytesPerNeuron = 2 * NUM_INPUTS + 2 + NUM_VARIANTS * L1_SIZE;
+  const acc = (byteLength - fixedBytes) / bytesPerNeuron;
+  return Number.isInteger(acc) && acc > 0 && acc % 32 === 0 ? acc : 0;
+}
 
 function variantBase(v) { return VARIANTS_OFF + v * VARIANT_STRIDE; }
 
@@ -241,10 +262,19 @@ function parseNet(buffer) {
   const magic = dv.getUint32(0, true);
   const version = dv.getUint32(4, true);
 
-  if (version !== 13 && version !== 14) {
+  if (version < 13 || version > 15) {
     throw new Error(`Unsupported network version ${version}; this viewer reads the multilayer ` +
-                    `layout of versions 13 and 14.`);
+                    `layout of versions 13 to 15.`);
   }
+
+  const acc = accumulatorSizeFromFile(buffer.byteLength);
+  const headerAcc = dv.getUint32(12, true);
+  if (acc === 0 || (headerAcc !== 0 && headerAcc !== acc)) {
+    throw new Error(`File size ${buffer.byteLength} bytes does not match a multilayer net` +
+                    (headerAcc !== 0 ? ` with accumulator size ${headerAcc}.` : "."));
+  }
+  setAccumulatorSize(acc);
+  TRACE_MAX.acc = ACC_SIZE - 1;
 
   const needed = VARIANTS_OFF + NUM_VARIANTS * VARIANT_STRIDE;
   if (buffer.byteLength < needed) {
@@ -817,6 +847,7 @@ els.file.addEventListener("change", (e) => {
       els.info.innerHTML =
         `magic <b>${/^[\x20-\x7e]+$/.test(magicStr) ? magicStr : net.magic}</b> &middot; ` +
         `version <b>${net.version}</b>${net.grouped ? " &middot; grouped layout" : ""} &middot; ` +
+        `accumulator <b>${ACC_SIZE}</b> &middot; ` +
         `acc max|w| <b>${net.accMaxAbs}</b> &middot; ` +
         `L1/L2/L3 max|w| <b>${net.l1MaxAbs}/${net.l2MaxAbs}/${net.l3MaxAbs}</b> &middot; ` +
         `parsed in ${ms} ms`;

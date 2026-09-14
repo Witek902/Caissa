@@ -48,36 +48,57 @@ static constexpr uint32_t cBatchSize = 32 * 1024;
 static constexpr uint64_t cCheckpointInterval = 10'000'000'000ull;
 
 // AdamW decoupled weight decay (applied to weights only, not biases)
-static constexpr float cFeatureTransformerWeightDecay = 0.005f;
+static constexpr float cFeatureTransformerWeightDecay = 0.0025f;
 static constexpr float cOutputSubnetWeightDecay = 0.0f;
+
+struct Options
+{
+    // empty = train from scratch
+    std::string startNetPath;
+
+    // checkpoint to continue an interrupted run from
+    std::string resumePath;
+
+    // output directory and file name prefix
+    std::string name = "eval";
+
+    // number of training iterations to run; after reaching this the trainer exits
+    size_t maxIterations = std::numeric_limits<size_t>::max();
+
+    // seed for weights initialization
+    uint32_t seed = 12345;
+
+    // cosine learning rate decay: starts at startLearningRate and reaches cEndLearningRate after the
+    // 'training length', then stays constant for the rest of the training
+    float startLearningRate = 1.0e-4f;
+    float endLearningRate = 2.5e-6f;
+
+    // number of training positions to process in whole LR schedule (in billions)
+    uint64_t trainingLength = 150;
+
+    // start a new schedule from a checkpoint: the restored weights and optimizer state are kept,
+    // but the position counter is reset, so the learning rate and milestones restart
+    bool restartSchedule = false;
+
+    // fine-tune the output subnets only, keeping the feature transformer fixed
+    bool freezeFeatureTransformer = false;
+
+    // re-seed output subnet neurons that can no longer learn, see ReviveDeadNeurons
+    bool reviveDeadNeurons = false;
+
+    // probability that a training position picks its bucket as if it had one piece more or one piece
+    // less, so positions at a bucket range edge also train the neighbouring subnet
+    float bucketLeak = 0.0f;
+
+    // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
+    // game result with move count). The validation set always uses 1.
+    float startLambda = 0.0f;   // at the beginning of training
+    float endLambda = 0.0f;     // at the end of training
+};
 
 class CudaNetworkTrainer
 {
 public:
-    struct Options
-    {
-        std::string startNetPath; // empty = train from scratch
-        std::string resumePath;   // checkpoint to continue an interrupted run from
-        std::string name = "eval"; // output directory and file name prefix
-        size_t maxIterations = std::numeric_limits<size_t>::max();
-        uint32_t seed = 12345;
-        float startLearningRate = 0.0f; // 0 = use cStartLearningRate
-        uint64_t trainingLength = 0;    // 0 = use cTrainingLength
-        // start a new schedule from a checkpoint: the restored weights and optimizer state are kept,
-        // but the position counter is reset, so the learning rate and milestones restart
-        bool restartSchedule = false;
-        // fine-tune the output subnets only, keeping the feature transformer fixed
-        bool freezeFeatureTransformer = false;
-        // re-seed output subnet neurons that can no longer learn, see ReviveDeadNeurons
-        bool reviveDeadNeurons = false;
-        // probability that a training position picks its bucket as if it had one piece more or one piece
-        // less, so positions at a bucket range edge also train the neighbouring subnet
-        float bucketLeak = 0.0f;
-        // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
-        // game result with move count). The validation set always uses 1.
-        float lambda = 0.0f;
-    };
-
     CudaNetworkTrainer(const Options& options)
         : m_options(options)
         , m_deterministicRng(options.seed)
@@ -203,9 +224,11 @@ private:
     }
 
     bool PackNetwork();
+
     // Loads a packed net. Version 12 has no output subnet, so outHasOutputSubnet reports whether
     // the caller still needs to initialize one.
     bool UnpackNetwork(const char* path, bool& outHasOutputSubnet);
+
     void ReviveDeadNeurons();
 
     // CUDA-specific methods
@@ -219,14 +242,14 @@ void CudaNetworkTrainer::InitNetwork()
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::cuda::FeatureTransformerInputs, accumulatorSize, 1);
     m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
-    m_featureTransformerWeights->m_weightsRange = 8.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
-    m_featureTransformerWeights->m_biasRange = 8.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
+    m_featureTransformerWeights->m_weightsRange = 6.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
+    m_featureTransformerWeights->m_biasRange = 6.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
     m_featureTransformerWeights->Init(32u, 0.0f);
 
     // L1/L2 weights are int8; the range is exactly what the quantization scale can represent.
     // Their biases are int32, so the range only has to keep the layer's int32 sum from overflowing.
     constexpr float hiddenWeightRange = INT8_MAX / nn::HiddenLayerWeightQuantizationScale;
-    constexpr float hiddenBiasRange = 128.0f;
+    constexpr float hiddenBiasRange = 64.0f;
 
     m_l1Weights = std::make_shared<nn::WeightsStorage>(nn::L1InputSize, nn::L1Size, nn::NumVariants);
     m_l1Weights->m_weightsRange = hiddenWeightRange;
@@ -1004,23 +1027,13 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
 
 static const float cWarmupTime = 50.0f;
 
-// cosine learning rate decay: starts at cStartLearningRate and reaches cEndLearningRate after the
-// training length, then stays constant for the rest of the training
-static constexpr float cStartLearningRate = 1.0e-4f;
-static constexpr float cEndLearningRate =   2.5e-6f;
-static constexpr uint64_t cTrainingLength = 150'000'000'000ull;
-
 // if non-zero, overrides the learning rate scheduler (for tweaking under a debugger)
 static volatile float g_learningRateScale = 0.0f;
 
-// if non-zero, overrides the target blend (for tweaking under a debugger)
-static volatile float g_lambdaScale = 0.0f;
-
-static float GetScheduledLearningRate(float startLearningRate, uint64_t numTrainingVectorsPassed, uint64_t trainingLength)
+static float GetScheduledLearningRate(const Options& options, float trainingProgress)
 {
     constexpr float pi = 3.14159265358979323846f;
-    const float t = std::min(1.0f, (float)((double)numTrainingVectorsPassed / (double)trainingLength));
-    return cEndLearningRate + 0.5f * (startLearningRate - cEndLearningRate) * (1.0f + cosf(pi * t));
+    return options.endLearningRate + 0.5f * (options.startLearningRate - options.endLearningRate) * (1.0f + cosf(pi * trainingProgress));
 }
 
 // A hidden neuron is dead when it can never activate (zero incoming weights and a non-positive bias) or when the
@@ -1087,10 +1100,8 @@ bool CudaNetworkTrainer::Train()
 
     const bool resuming = !m_options.resumePath.empty();
     const bool fromScratch = m_options.startNetPath.empty() && !resuming;
-    const float startLearningRate = m_options.startLearningRate > 0.0f ? m_options.startLearningRate : cStartLearningRate;
-    const uint64_t trainingLength = m_options.trainingLength > 0 ? m_options.trainingLength : cTrainingLength;
-    std::cout << "Start learning rate: " << startLearningRate << std::endl;
-    std::cout << "Training length:     " << std::setprecision(4) << trainingLength / 1.0e9f << "B positions" << std::endl;
+    std::cout << "Learning rate: " << m_options.startLearningRate << " -> " << m_options.endLearningRate << std::endl;
+    std::cout << "Training length: " << m_options.trainingLength << "B positions" << std::endl;
 
     if (resuming)
     {
@@ -1143,7 +1154,7 @@ bool CudaNetworkTrainer::Train()
     }
 
     if (m_options.bucketLeak > 0.0f)
-        std::cout << "Bucket leak:         " << m_options.bucketLeak << std::endl;
+        std::cout << "Bucket leak: " << m_options.bucketLeak << std::endl;
 
     if (!m_dataLoader.Init(m_randomGenerators[0]))
     {
@@ -1154,8 +1165,7 @@ bool CudaNetworkTrainer::Train()
     TimePoint prevIterationStartTime = TimePoint::GetCurrent();
 
     const float validationLambda = 1.0f;
-    const float lambda = (g_lambdaScale != 0.0f) ? g_lambdaScale : m_options.lambda;
-    std::cout << "Target lambda:       " << lambda << std::endl;
+    std::cout << "Lambda: " << m_options.startLambda << " -> " << m_options.endLambda << std::endl;
 
     uint64_t kingBucketMask = UINT64_MAX;
 
@@ -1176,7 +1186,9 @@ bool CudaNetworkTrainer::Train()
     {
         const bool useWarmup = !fromScratch && (!resuming || m_options.restartSchedule) && cWarmupTime > 0.0f;
         const float warmup = useWarmup ? (iteration < cWarmupTime ? (float)(iteration + 1) / cWarmupTime : 1.0f) : 1.0f;
-        const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(startLearningRate, m_numTrainingVectorsPassed, trainingLength);
+        const float t = std::min(1.0f, (float)((double)m_numTrainingVectorsPassed * 1.0e-9 / (double)m_options.trainingLength));
+        const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(m_options, t);
+        const float lambda = m_options.startLambda + (m_options.endLambda - m_options.startLambda) * t;
 
         TimePoint iterationStartTime = TimePoint::GetCurrent();
         float iterationTime = (iterationStartTime - prevIterationStartTime).ToSeconds();
@@ -1228,7 +1240,7 @@ bool CudaNetworkTrainer::Train()
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
 
         std::cout
-            << "Iteration:            " << iteration << '\n'
+            << "Progress:             " << std::setprecision(4) << t * 100.0f << "% (iteration " << iteration << ")\n"
             << "Num training vectors: " << std::setprecision(4) << m_numTrainingVectorsPassed / 1.0e9f << "B" << '\n'
             << "Learning rate:        " << learningRate << '\n'
             << "Training speed :      " << ((float)cNumTrainingVectorsPerIteration / iterationTime) << " pos/sec" << std::endl;
@@ -1269,7 +1281,7 @@ bool CudaNetworkTrainer::Train()
 
 bool TrainCudaNetwork(const std::vector<std::string>& args)
 {
-    CudaNetworkTrainer::Options options;
+    Options options;
     for (size_t i = 0; i < args.size(); ++i)
     {
         if (args[i] == "--restartSchedule")
@@ -1279,25 +1291,38 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
         else if (args[i] == "--reviveDeadNeurons")
             options.reviveDeadNeurons = true;
         else if (i + 1 >= args.size())
-            continue; // every remaining option takes a value
+        {
+            std::cerr << "Missing value for option: " << args[i] << std::endl;
+            return false;
+        }
+        // every remaining option takes a value
         else if (args[i] == "--net")
-            options.startNetPath = args[i + 1];
+            options.startNetPath = args[++i];
         else if (args[i] == "--iterations")
-            options.maxIterations = std::stoull(args[i + 1]);
+            options.maxIterations = std::stoull(args[++i]);
         else if (args[i] == "--seed")
-            options.seed = (uint32_t)std::stoul(args[i + 1]);
-        else if (args[i] == "--lr")
-            options.startLearningRate = std::stof(args[i + 1]);
-        else if (args[i] == "--lambda")
-            options.lambda = std::stof(args[i + 1]);
+            options.seed = (uint32_t)std::stoul(args[++i]);
+        else if (args[i] == "--LR")
+            options.startLearningRate = std::stof(args[++i]);
+        else if (args[i] == "--endLR")
+            options.endLearningRate = std::stof(args[++i]);
+        else if (args[i] == "--startLambda")
+            options.startLambda = std::stof(args[++i]);
+        else if (args[i] == "--endLambda")
+            options.endLambda = std::stof(args[++i]);
         else if (args[i] == "--name")
-            options.name = args[i + 1];
+            options.name = args[++i];
         else if (args[i] == "--resume")
-            options.resumePath = args[i + 1];
+            options.resumePath = args[++i];
         else if (args[i] == "--trainingLength")
-            options.trainingLength = std::stoull(args[i + 1]);
+            options.trainingLength = std::stoull(args[++i]);
         else if (args[i] == "--bucketLeak")
-            options.bucketLeak = std::stof(args[i + 1]);
+            options.bucketLeak = std::stof(args[++i]);
+        else
+        {
+            std::cerr << "Unknown option: " << args[i] << std::endl;
+            return false;
+        }
     }
     std::cout << "Seed: " << options.seed << std::endl;
 
