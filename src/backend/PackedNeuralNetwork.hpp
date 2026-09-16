@@ -79,12 +79,12 @@ namespace nn {
 class NeuralNetwork;
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 14;
+static constexpr uint32_t CurrentVersion = 15;
 static constexpr uint32_t MagicNumber = 'CSNN';
 
 static constexpr uint32_t NumKingBuckets = 32;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
-static constexpr uint32_t AccumulatorSize = 1024;
+static constexpr uint32_t AccumulatorSize = 1536;
 static constexpr uint32_t OutputSize = 1;
 static constexpr uint32_t NumVariants = 8;
 
