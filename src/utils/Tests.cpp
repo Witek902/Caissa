@@ -130,8 +130,71 @@ static void RunPositionTests()
         // invalid en passant square
         TEST_EXPECT(!Position().FromFEN("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w Qkq e6 0 3"));
 
+        // en passant square and the square the pawn moved from must be empty
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppp1ppp/4N3/3Pp3/8/8/PPP1PPPP/R1BQKBNR w KQkq e6 0 3"));
+        TEST_EXPECT(!Position().FromFEN("rnbqkb1r/ppppnppp/8/3Pp3/8/8/PPP1PPPP/RNBQKBNR w KQkq e6 0 3"));
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/ppp1pppp/8/8/3pP3/4N3/PPPP1PPP/R1BQKBNR b KQkq e3 0 3"));
+
+        // en passant square is kept only if a pawn can capture there
+        {
+            Position p;
+            TEST_EXPECT(p.FromFEN("rnbqkbnr/pppp1ppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 3"));
+            TEST_EXPECT(p.GetEnPassantSquare() == Square_e3);
+
+            TEST_EXPECT(p.FromFEN("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"));
+            TEST_EXPECT(!p.GetEnPassantSquare().IsValid());
+            TEST_EXPECT(p.ToFEN() == "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
+
+            TEST_EXPECT(p.FromFEN("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"));
+            TEST_EXPECT(!p.GetEnPassantSquare().IsValid());
+
+            Position q(Position::InitPositionFEN);
+            TEST_EXPECT(q.DoMove(q.MoveFromString("e2e4")));
+            TEST_EXPECT(q.DoMove(q.MoveFromString("e7e5")));
+            TEST_EXPECT(p == q);
+            TEST_EXPECT(p.GetHash() == q.GetHash());
+        }
+
         // invalid syntax
         TEST_EXPECT(!Position().FromFEN("4k3/8/8/9/8/8/8/4K3 w - - 0 1"));
+
+        // too many pieces in a rank
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnrr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8p/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNRR w KQkq - 0 1"));
+
+        // not enough pieces in a rank
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/7/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN w Qkq - 0 1"));
+
+        // invalid side to move
+        TEST_EXPECT(!Position().FromFEN("4k3/8/8/8/8/8/8/4K3 x - - 0 1"));
+        TEST_EXPECT(!Position().FromFEN("4k3/8/8/8/8/8/8/4K3 wK - 0 1"));
+
+        // non-ASCII character
+        TEST_EXPECT(!Position().FromFEN("4k3/8/8/8/8/8/8/4K3 w \xC3\xA9 - 0 1"));
+
+        // move counters
+        {
+            Position p;
+            TEST_EXPECT(!p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - -5 1"));
+            TEST_EXPECT(!p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 1a 1"));
+            TEST_EXPECT(!p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 65536 1"));
+            TEST_EXPECT(!p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 0 x"));
+            TEST_EXPECT(!p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 0 -1"));
+
+            TEST_EXPECT(p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 12 34"));
+            TEST_EXPECT(p.GetHalfMoveCount() == 12);
+            TEST_EXPECT(p.GetMoveCount() == 34);
+
+            TEST_EXPECT(p.FromFEN("4k3/8/8/8/8/8/8/4K3 w - - 65535 0"));
+            TEST_EXPECT(p.GetHalfMoveCount() == 65535);
+            TEST_EXPECT(p.GetMoveCount() == 1);
+
+            TEST_EXPECT(p.FromFEN("4k3/8/8/8/8/8/8/4K3 b - -"));
+            TEST_EXPECT(p.GetHalfMoveCount() == 0);
+            TEST_EXPECT(p.GetMoveCount() == 1);
+        }
     }
 
     // FEN printing
@@ -783,6 +846,38 @@ static void RunPositionTests()
         }
     }
 
+    // X-FEN castling rights with multiple rooks on one side of the king
+    {
+        Position pos("rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w Kq - 0 1");
+        TEST_EXPECT(pos.GetWhitesCastlingRights() == 0b10000000);
+        TEST_EXPECT(pos.GetBlacksCastlingRights() == 0b00000001);
+
+        const char* moves[] =
+        {
+            "h2h4", "g7g6", "h4h5", "d7d5", "h5g6", "f7g6", "b2b3", "d5d4", "f2f4", "c7c5", "c2c4", "c8c6", "b1e4", "f8g7",
+            "g2g4", "d8d6", "h1h3", "g6g5", "d2d3", "b8d8", "h3h5", "g5f4", "c1f4", "d6e6", "e4h1", "d8d6", "a1b2",
+        };
+        for (const char* moveStr : moves)
+        {
+            const Move move = pos.MoveFromString(moveStr);
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(pos.DoMove(move));
+        }
+        TEST_EXPECT(pos.ToFEN() == "r3k1qq/pp2p1qp/2rrr3/2p4R/2Pp1QP1/1P1P4/PQ2P3/3RKRRQ b q - 4 14");
+
+        const Move move = pos.MoveFromString("e8c8");
+        TEST_EXPECT(move.IsValid());
+        TEST_EXPECT(move.FromSquare() == Square_e8);
+        TEST_EXPECT(move.ToSquare() == Square_a8);
+        TEST_EXPECT(move.GetPiece() == Piece::King);
+        TEST_EXPECT(move.IsLongCastle() == true);
+        TEST_EXPECT(move == pos.MoveFromString("O-O-O", MoveNotation::SAN));
+        TEST_EXPECT(pos.IsMoveValid(move));
+        TEST_EXPECT(pos.IsMoveLegal(move));
+        TEST_EXPECT(pos.DoMove(move));
+        TEST_EXPECT(pos.ToFEN() == "2kr2qq/pp2p1qp/2rrr3/2p4R/2Pp1QP1/1P1P4/PQ2P3/3RKRRQ w - - 5 15");
+    }
+
     // Chess960 tests
     {
         Position::s_enableChess960 = true;
@@ -795,6 +890,39 @@ static void RunPositionTests()
             TEST_EXPECT(posC.FromFEN("r3k1r1/pppppppp/8/8/8/8/PPPPPPPP/R3K1R1 w AGag - 0 1"));
             TEST_EXPECT(posA == posB);
             TEST_EXPECT(posA.GetHash() != posC.GetHash());
+        }
+
+        // K/Q should map to the outermost rook, file letters select any rook
+        {
+            Position pos;
+            TEST_EXPECT(pos.FromFEN("rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w KQkq - 0 1"));
+            TEST_EXPECT(pos.GetWhitesCastlingRights() == 0b10001000);
+            TEST_EXPECT(pos.GetBlacksCastlingRights() == 0b00000001);
+            TEST_EXPECT(pos.ToFEN() == "rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w DHa - 0 1");
+
+            TEST_EXPECT(pos.FromFEN("rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w Gc - 0 1"));
+            TEST_EXPECT(pos.GetWhitesCastlingRights() == 0b01000000);
+            TEST_EXPECT(pos.GetBlacksCastlingRights() == 0b00000100);
+            TEST_EXPECT(pos.ToFEN() == "rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w Gc - 0 1");
+
+            TEST_EXPECT(pos.FromFEN("1r2krr1/pppppppp/8/8/8/8/PPPPPPPP/RR2K1RR w KQkq - 0 1"));
+            TEST_EXPECT(pos.GetWhitesCastlingRights() == 0b10000001);
+            TEST_EXPECT(pos.GetBlacksCastlingRights() == 0b01000010);
+            TEST_EXPECT(pos.ToFEN() == "1r2krr1/pppppppp/8/8/8/8/PPPPPPPP/RR2K1RR w AHbg - 0 1");
+
+            // the same rook given twice
+            TEST_EXPECT(pos.FromFEN("rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w KHqa - 0 1"));
+            TEST_EXPECT(pos.GetWhitesCastlingRights() == 0b10000000);
+            TEST_EXPECT(pos.GetBlacksCastlingRights() == 0b00000001);
+        }
+
+        // multiple castling rooks on one side of the king
+        {
+            Position pos;
+            TEST_EXPECT(!pos.FromFEN("4k3/8/8/8/8/8/8/RR2K3 w AB - 0 1"));
+            TEST_EXPECT(!pos.FromFEN("rrrrkqqq/pppppppp/8/8/8/8/PPPPPPPP/QQQRKRRR w KG - 0 1"));
+            TEST_EXPECT(!pos.FromFEN("1r2krr1/pppppppp/8/8/8/8/PPPPPPPP/RR2K1RR w fg - 0 1"));
+            TEST_EXPECT(!pos.FromFEN("1r2krr1/pppppppp/8/8/8/8/PPPPPPPP/RR2K1RR w QB - 0 1"));
         }
 
         // parsing/printing

@@ -201,6 +201,24 @@ bool Position::IsValid(bool strict) const
     return true;
 }
 
+static bool ParseFenCounter(const std::string& str, uint16_t& outValue)
+{
+    uint32_t v = 0;
+    for (const char ch : str)
+    {
+        if (ch < '0' || ch > '9')
+            return false;
+
+        v = 10 * v + (uint32_t)(ch - '0');
+
+        if (v > UINT16_MAX)
+            return false;
+    }
+
+    outValue = (uint16_t)v;
+    return true;
+}
+
 bool Position::FromFEN(const std::string& fenString)
 {
     *this = Position();
@@ -216,6 +234,12 @@ bool Position::FromFEN(const std::string& fenString)
         else if (p == '/')
         {
             ++numRows;
+        }
+        else if ((unsigned char)p > 127)
+        {
+            // non-ASCII bytes are undefined behavior in isspace/isdigit
+            fprintf(stderr, "Invalid FEN: invalid character\n");
+            return false;
         }
     }
 
@@ -267,6 +291,12 @@ bool Position::FromFEN(const std::string& fenString)
             }
             else
             {
+                if (file >= 8)
+                {
+                    fprintf(stderr, "Invalid FEN: Too many pieces in rank %u\n", (uint32_t)(rank + 1));
+                    return false;
+                }
+
                 const Square square(file, rank);
                 const Color color = ch <= 90 ? White : Black;
 
@@ -280,13 +310,13 @@ bool Position::FromFEN(const std::string& fenString)
                 SetPiece(square, piece, color);
 
                 file++;
-
-                if (file > 8)
-                {
-                    fprintf(stderr, "Invalid FEN: Too many pieces in rank %u\n", (uint32_t)(rank + 1));
-                    return false;
-                }
             }
+        }
+
+        if (rank != 0 || file != 8)
+        {
+            fprintf(stderr, "Invalid FEN: Not enough pieces in rank %u\n", (uint32_t)(rank + 1));
+            return false;
         }
     }
 
@@ -294,7 +324,12 @@ bool Position::FromFEN(const std::string& fenString)
     if (++loc < fenString.length())
     {
         const char nextToMove = (char)tolower(fenString[loc]);
-        if (nextToMove == 'w')
+        if (loc + 1 < fenString.length() && !isspace(fenString[loc + 1]))
+        {
+            fprintf(stderr, "Invalid FEN: invalid next to move\n");
+            return false;
+        }
+        else if (nextToMove == 'w')
         {
             mSideToMove = White;
         }
@@ -314,6 +349,9 @@ bool Position::FromFEN(const std::string& fenString)
         return false;
     }
 
+    constexpr uint8_t longCastleMask[] =  { 0b00000000, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111 };
+    constexpr uint8_t shortCastleMask[] = { 0b11111110, 0b11111100, 0b11111000, 0b11110000, 0b11100000, 0b11000000, 0b10000000, 0b00000000 };
+
     // castling rights
     if (Whites().king && Blacks().king)
     {
@@ -324,9 +362,6 @@ bool Position::FromFEN(const std::string& fenString)
         mCastlingRights[1] = 0;
         for (loc += 2; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
         {
-            constexpr uint8_t longCastleMask[] =    { 0b00000000, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111 };
-            constexpr uint8_t shortCastleMask[] =   { 0b11111110, 0b11111100, 0b11111000, 0b11110000, 0b11100000, 0b11000000, 0b10000000, 0b00000000 };
-
             const char c = fenString[loc];
             if (c >= 'A' && c <= 'H')
             {
@@ -339,25 +374,25 @@ bool Position::FromFEN(const std::string& fenString)
             else if (c == 'K')
             {
                 uint8_t mask = shortCastleMask[whiteKingSq.File()] & (uint8_t)(uint64_t)Whites().rooks;
-                if (PopCount(mask) > 1) mask = 0; // ambiguous short castle
+                if (mask) mask = (uint8_t)(1u << LastBitSet((uint64_t)mask)); // X-FEN: outermost rook
                 mCastlingRights[0] = mCastlingRights[0] | mask;
             }
             else if (c == 'Q')
             {
                 uint8_t mask = longCastleMask[whiteKingSq.File()] & (uint8_t)(uint64_t)Whites().rooks;
-                if (PopCount(mask) > 1) mask = 0; // ambiguous long castle
+                if (mask) mask = (uint8_t)(1u << FirstBitSet((uint32_t)mask)); // X-FEN: outermost rook
                 mCastlingRights[0] = mCastlingRights[0] | mask;
             }
             else if (c == 'k')
             {
                 uint8_t mask = shortCastleMask[blackKingSq.File()] & (uint8_t)(uint64_t)((uint64_t)Blacks().rooks >> (7 * 8));
-                if (PopCount(mask) > 1) mask = 0; // ambiguous short castle
+                if (mask) mask = (uint8_t)(1u << LastBitSet((uint64_t)mask)); // X-FEN: outermost rook
                 mCastlingRights[1] = mCastlingRights[1] | mask;
             }
             else if (c == 'q')
             {
                 uint8_t mask = longCastleMask[blackKingSq.File()] & (uint8_t)(uint64_t)((uint64_t)Blacks().rooks >> (7 * 8));
-                if (PopCount(mask) > 1) mask = 0; // ambiguous long castle
+                if (mask) mask = (uint8_t)(1u << FirstBitSet((uint32_t)mask)); // X-FEN: outermost rook
                 mCastlingRights[1] = mCastlingRights[1] | mask;
             }
             else if (c == '-')
@@ -378,6 +413,20 @@ bool Position::FromFEN(const std::string& fenString)
         // clear up castling rights if king is in wrong place
         if (whiteKingSq.Rank() > 0 || whiteKingSq.File() == 0 || whiteKingSq.File() == 7) mCastlingRights[0] = 0;
         if (blackKingSq.Rank() < 7 || blackKingSq.File() == 0 || blackKingSq.File() == 7) mCastlingRights[1] = 0;
+
+        if (PopCount((uint32_t)(mCastlingRights[0] & longCastleMask[whiteKingSq.File()])) > 1 ||
+            PopCount((uint32_t)(mCastlingRights[0] & shortCastleMask[whiteKingSq.File()])) > 1 ||
+            PopCount((uint32_t)(mCastlingRights[1] & longCastleMask[blackKingSq.File()])) > 1 ||
+            PopCount((uint32_t)(mCastlingRights[1] & shortCastleMask[blackKingSq.File()])) > 1)
+        {
+            fprintf(stderr, "Invalid FEN: multiple castling rooks on one side of the king\n");
+            return false;
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Invalid FEN: missing king\n");
+        return false;
     }
 
     std::string enPassantSquare;
@@ -395,6 +444,8 @@ bool Position::FromFEN(const std::string& fenString)
             return false;
         }
 
+        const Bitboard occupied = Occupied();
+
         if (mSideToMove == White)
         {
             if (mEnPassantSquare.Rank() != 5)
@@ -402,7 +453,7 @@ bool Position::FromFEN(const std::string& fenString)
                 fprintf(stderr, "Invalid FEN: invalid en passant square\n");
                 return false;
             }
-            if (Blacks().GetPieceAtSquare(mEnPassantSquare) != Piece::None ||
+            if ((occupied & mEnPassantSquare) || (occupied & mEnPassantSquare.North()) ||
                 Blacks().GetPieceAtSquare(mEnPassantSquare.South()) != Piece::Pawn)
             {
                 fprintf(stderr, "Invalid FEN: invalid en passant square\n");
@@ -416,12 +467,18 @@ bool Position::FromFEN(const std::string& fenString)
                 fprintf(stderr, "Invalid FEN: invalid en passant square\n");
                 return false;
             }
-            if (Whites().GetPieceAtSquare(mEnPassantSquare) != Piece::None ||
+            if ((occupied & mEnPassantSquare) || (occupied & mEnPassantSquare.South()) ||
                 Whites().GetPieceAtSquare(mEnPassantSquare.North()) != Piece::Pawn)
             {
                 fprintf(stderr, "Invalid FEN: invalid en passant square\n");
                 return false;
             }
+        }
+
+        // same rule as DoMove: keep the en passant square only if a pawn can capture there
+        if (!(Bitboard::GetPawnAttacks(mEnPassantSquare, mSideToMove == White ? Black : White) & GetCurrentSide().pawns))
+        {
+            mEnPassantSquare = Square::Invalid();
         }
     }
     else
@@ -439,7 +496,11 @@ bool Position::FromFEN(const std::string& fenString)
 
         if (!halfMovesStr.empty())
         {
-            mHalfMoveCount = (int16_t)atoi(halfMovesStr.c_str());
+            if (!ParseFenCounter(halfMovesStr, mHalfMoveCount))
+            {
+                fprintf(stderr, "Invalid FEN: invalid half-move counter\n");
+                return false;
+            }
         }
         else
         {
@@ -457,7 +518,12 @@ bool Position::FromFEN(const std::string& fenString)
 
         if (!moveNumberStr.empty())
         {
-            mMoveCount = (int16_t)std::max(1, atoi(moveNumberStr.c_str()));
+            if (!ParseFenCounter(moveNumberStr, mMoveCount))
+            {
+                fprintf(stderr, "Invalid FEN: invalid move number\n");
+                return false;
+            }
+            mMoveCount = std::max<uint16_t>(1, mMoveCount);
         }
         else
         {
