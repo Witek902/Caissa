@@ -787,18 +787,7 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
         return false;
     }
 
-    // version 13 differs from 14 only in the hidden layer weight layout
-    if (header.version == 13)
-    {
-        static_assert(CurrentVersion == 14, "Remove this code when version 13 is no longer supported");
-        for (OutputSubnetVariant& subnet : outputSubnetVariants)
-        {
-            RegroupHiddenWeights(subnet.l1Weights, L1InputSize, L1Size);
-            RegroupHiddenWeights(subnet.l2Weights, L1Size, L2Size);
-        }
-        header.version = CurrentVersion;
-    }
-    else if (header.version != CurrentVersion)
+    if (header.version != CurrentVersion)
     {
         std::cerr << "Failed to load neural network: " << "unsupported version " << header.version << std::endl;
         return false;

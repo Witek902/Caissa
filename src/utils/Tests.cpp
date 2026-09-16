@@ -2101,7 +2101,7 @@ void RunSearchTests()
 
     // drawing KPvK
     {
-        param.limits.maxDepth = 8;
+        param.limits.maxDepth = 15;
         param.numPvLines = UINT32_MAX;
 
         game.Reset(Position("4k3/8/8/8/8/8/7P/7K w - - 0 1"));
