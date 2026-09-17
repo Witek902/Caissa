@@ -4,25 +4,26 @@
 
 // enable search parameter tuning
 // will expose all parameters defined with DEFINE_PARAM to UCI
-//#define ENABLE_TUNING
+#define ENABLE_TUNING
 
 
 #ifdef ENABLE_TUNING
 
+#include <string>
 #include <vector>
 
 struct TunableParameter
 {
     using Type = int32_t;
 
-    TunableParameter(const char* name, Type& v, Type minValue, Type maxValue)
+    TunableParameter(const std::string& name, Type& v, Type minValue, Type maxValue)
         : m_name(name)
         , m_value(v)
         , m_min(minValue)
         , m_max(maxValue)
     { }
 
-    const char* m_name = nullptr;
+    std::string m_name;
     Type& m_value;
     Type m_min = 0;
     Type m_max = 0;

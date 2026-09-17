@@ -408,6 +408,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
 #ifdef ENABLE_TUNING
     BuildMoveReductionTable();
+    ApplyNeuralNetTunables();
 #endif // ENABLE_TUNING
 
     SearchStats globalStats;
