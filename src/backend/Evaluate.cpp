@@ -31,6 +31,69 @@ static constexpr ScoreType c_castlingRightsBonus = 5;
 const nn::PackedNeuralNetwork* g_mainNeuralNetwork = nullptr;
 static bool g_usingEmbeddedNeuralNetwork = false;
 
+#ifdef ENABLE_NET_L3_TUNING
+
+// Last-layer weights and biases of output buckets 1..NumVariants-1 exposed as tunable parameters.
+// They are copied into the (writable) network at search start, so the evaluation code reads the
+// network exactly as in a regular build. Bucket 0 is skipped: it covers only up to 3 non-king pieces.
+static constexpr uint32_t c_firstTunableVariant = 1;
+static int32_t s_l3WeightShadow[nn::NumVariants][nn::L2Size];
+static int32_t s_l3BiasShadow[nn::NumVariants];
+static nn::PackedNeuralNetwork* g_tunableNeuralNetwork = nullptr;
+static bool s_netTunablesRegistered = false;
+
+static void RegisterNeuralNetTunables(nn::PackedNeuralNetwork* network)
+{
+    g_tunableNeuralNetwork = network;
+
+    for (uint32_t v = c_firstTunableVariant; v < nn::NumVariants; ++v)
+    {
+        const nn::PackedNeuralNetwork::OutputSubnetVariant& subnet = network->outputSubnetVariants[v];
+        for (uint32_t i = 0; i < nn::L2Size; ++i)
+            s_l3WeightShadow[v][i] = subnet.l3Weights[i];
+        s_l3BiasShadow[v] = subnet.l3Bias;
+    }
+
+    if (s_netTunablesRegistered)
+        return;
+    s_netTunablesRegistered = true;
+
+    // weights: 1 unit is 1/2064 of a float weight (median |w| ~1000); biases: ~1500 units per centipawn
+    constexpr int32_t c_weightRange = 1000;
+    constexpr int32_t c_biasRange = 30000;
+    constexpr int32_t c_weightMin = std::numeric_limits<nn::LastLayerWeightType>::min();
+    constexpr int32_t c_weightMax = std::numeric_limits<nn::LastLayerWeightType>::max();
+
+    for (uint32_t v = c_firstTunableVariant; v < nn::NumVariants; ++v)
+    {
+        const std::string prefix = "NN_L3_B" + std::to_string(v) + "_";
+        for (uint32_t i = 0; i < nn::L2Size; ++i)
+        {
+            int32_t& value = s_l3WeightShadow[v][i];
+            const std::string name = prefix + "W" + (i < 10 ? "0" : "") + std::to_string(i);
+            g_TunableParameters.emplace_back(name, value, std::max(c_weightMin, value - c_weightRange), std::min(c_weightMax, value + c_weightRange));
+        }
+        int32_t& bias = s_l3BiasShadow[v];
+        g_TunableParameters.emplace_back(prefix + "Bias", bias, bias - c_biasRange, bias + c_biasRange);
+    }
+}
+
+void ApplyNeuralNetTunables()
+{
+    if (!g_tunableNeuralNetwork)
+        return;
+
+    for (uint32_t v = c_firstTunableVariant; v < nn::NumVariants; ++v)
+    {
+        nn::PackedNeuralNetwork::OutputSubnetVariant& subnet = g_tunableNeuralNetwork->outputSubnetVariants[v];
+        for (uint32_t i = 0; i < nn::L2Size; ++i)
+            subnet.l3Weights[i] = static_cast<nn::LastLayerWeightType>(s_l3WeightShadow[v][i]);
+        subnet.l3Bias = s_l3BiasShadow[v];
+    }
+}
+
+#endif // ENABLE_NET_L3_TUNING
+
 bool LoadMainNeuralNetwork(const char* path)
 {
     if (!g_usingEmbeddedNeuralNetwork)
@@ -38,6 +101,9 @@ bool LoadMainNeuralNetwork(const char* path)
         // release previous network
         delete g_mainNeuralNetwork;
         g_mainNeuralNetwork = nullptr;
+#ifdef ENABLE_NET_L3_TUNING
+        g_tunableNeuralNetwork = nullptr;
+#endif // ENABLE_NET_L3_TUNING
     }
 
     if (path == nullptr || strcmp(path, "") == 0 || strcmp(path, "<empty>") == 0)
@@ -50,8 +116,17 @@ bool LoadMainNeuralNetwork(const char* path)
             std::cout << "info string Embedded neural network has unsupported version " << embeddedNetwork->header.version << std::endl;
             return false;
         }
+#ifdef ENABLE_NET_L3_TUNING
+        // writable copy, so the tunable last-layer values can be applied
+        auto* networkCopy = new nn::PackedNeuralNetwork();
+        memcpy(networkCopy, embeddedNetwork, sizeof(nn::PackedNeuralNetwork));
+        g_mainNeuralNetwork = networkCopy;
+        g_usingEmbeddedNeuralNetwork = false;
+        RegisterNeuralNetTunables(networkCopy);
+#else
         g_mainNeuralNetwork = embeddedNetwork;
         g_usingEmbeddedNeuralNetwork = true;
+#endif // ENABLE_NET_L3_TUNING
         std::cout << "info string Using embedded neural network" << std::endl;
         return true;
 #else
@@ -67,6 +142,9 @@ bool LoadMainNeuralNetwork(const char* path)
     {
         g_mainNeuralNetwork = newNetwork;
         g_usingEmbeddedNeuralNetwork = false;
+#ifdef ENABLE_NET_L3_TUNING
+        RegisterNeuralNetTunables(newNetwork);
+#endif // ENABLE_NET_L3_TUNING
         std::cout << "info string Loaded neural network: " << path << std::endl;
         return true;
     }

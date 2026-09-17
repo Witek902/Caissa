@@ -3,6 +3,7 @@
 #include "Position.hpp"
 #include "Move.hpp"
 #include "Score.hpp"
+#include "Tuning.hpp"
 
 #include <math.h>
 #include <algorithm>
@@ -40,6 +41,11 @@ static constexpr PieceScore c_pieceValues[] =
 
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
+
+#ifdef ENABLE_NET_L3_TUNING
+// copy the tunable last-layer values into the loaded network
+void ApplyNeuralNetTunables();
+#endif // ENABLE_NET_L3_TUNING
 
 // scaling factor when converting from neural network output (logistic space) to centipawn value
 // equal to 400/ln(10) = 173.7177...

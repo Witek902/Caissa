@@ -195,7 +195,7 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
 #ifdef ENABLE_TUNING
         for (const TunableParameter& param : g_TunableParameters)
         {
-            std::cout << "option name " << param.m_name << " type spin default " << param.m_value << "\n";
+            std::cout << "option name " << param.m_name << " type spin default " << param.m_value << " min " << param.m_min << " max " << param.m_max << "\n";
         }
 #endif // ENABLE_TUNING
         std::cout << "uciok" << std::endl;
