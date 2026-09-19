@@ -10,7 +10,7 @@
 
 ## Overview
 
-**Caissa** is a strong, UCI-compatible chess engine written from scratch in C++ since early 2021 by Michał Witanowski, released under the MIT license. It uses a custom neural network evaluation trained on 20.5+ billion self-play positions and is rated **3600+ ELO** on major chess engine rating lists, placing it at around top-16 spot.
+**Caissa** is a strong, UCI-compatible chess engine written from scratch in C++ since early 2021 by Michał Witanowski, released under the MIT license. It uses a custom neural network evaluation trained on 20.5+ billion self-play positions and is rated **3600+ ELO** on major chess engine rating lists, placing it around the top 20.
 
 Supported variants:
 - **Regular Chess** — standard chess rules
@@ -26,30 +26,30 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 ### CCRL (Computer Chess Rating Lists)
 | List | Rating | Rank | Version | Notes |
 |------|--------|------|---------|-------|
-| [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) | **4037** | #12 | 1.26 | Fischer Random Chess |
+| [CCRL 40/2 FRC](https://www.computerchess.org.uk/ccrl/404FRC/) | **4036** | #12 | 1.26 | Fischer Random Chess |
 | [CCRL Chess324](https://www.computerchess.org.uk/ccrl/Chess324/rating_list_all.html) | **3749** | #15 | 1.25 | Chess324 variant |
-| [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | **3633** | #11 | 1.26 | 4 CPU |
-| [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) | **3749** | #12 | 1.22 | 8 CPU |
+| [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | **3628** | #15 | 1.26 | 4 CPU |
+| [CCRL Blitz](https://www.computerchess.org.uk/ccrl/404/) | **3745** | #13 | 1.22 | 8 CPU |
 
 ### SPCC (Stefan Pohl Computer Chess)
 | List | Rating | Rank | Version |
 |------|--------|------|---------|
-| [SPCC UHO-Top15](https://www.sp-cc.de) | **3749** | around #18 | Caissa 1.26 avx512 |
+| [SPCC UHO full list](https://www.sp-cc.de/files/uho_full_list.txt) | **3749** | #19 | Caissa 1.26 avx512 |
 
 ### IpMan Chess
 | List | Rating | Rank | Version | Architecture |
 |------|--------|------|---------|--------------|
-| [10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) | **3532** | #18 | 1.25 | AVX-512 |
-| [10+1 (i9-13700H)](https://ipmanchess.yolasite.com/i7-13700h.php) | **3546** | #16 | 1.25 | AVX-512 |
+| [10+1 (R9-7945HX)](https://ipmanchess.yolasite.com/r9-7945hx.php) | **3533** | #18 | 1.25 | AVX-512 |
+| [3+2, 2 cores (i7-13700H)](https://ipmanchess.yolasite.com/i7-13700h.php) | **3545** | #17 | 1.25 | BMI2 |
 
 ### CEGT (Chess Engine Grand Tournament)
 | List | Rating | Rank | Version |
 |------|--------|------|---------|
-| [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) | **3570** | #12 | 1.25 |
+| [CEGT 40/20](http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/rangliste.html) | **3574** | #16 | 1.25 |
 | [CEGT 40/4](http://www.cegt.net/40_4_Ratinglist/40_4_single/rangliste.html) | **3614** | #8 | 1.22 |
 | [CEGT 5+3](http://www.cegt.net/5Plus3Rating/BestVersionsNEW/rangliste.html) | **3618** | #5 | 1.22 |
 
-> **Note**: The rankings above may be outdated.
+> **Note**: Ratings as of September 2026, ranked by the best version of each engine. The lists are updated regularly, so the numbers above may be outdated.
 
 ---
 
@@ -90,19 +90,23 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 
 ### Architecture
 
-`(32×768 → 1024) × 2 → 1` — dual-perspective (one accumulator per king side), 32 king buckets,
-768 features per perspective (12 piece types × 64 squares).
+`(32×768 → 1536) × 2 → 16 → 32 → 1` — dual-perspective feature transformer (one accumulator per king side),
+32 king buckets, 768 features per perspective (12 piece types × 64 squares), followed by a small multilayer output network.
 
 - **Features**: absolute piece coordinates with horizontal symmetry
-- **Activation**: Squared-Clipped-ReLU (SCReLU)
-- **Output**: 8 variants of the last layer, selected by piece count
-- **Incremental Updates** — efficiently updated first layer
-- **Vectorized Code** — hand-written SIMD for AVX-512, AVX2 (with optional VNNI), SSE4 and ARM NEON
+- **Feature Transformer**: 1536 neurons per perspective, int16 weights, incrementally updated
+- **Pairwise Activation**: the two halves of each accumulator are clipped and multiplied together, giving 768 values per perspective
+- **Output Network**: `1536 → 16 → 32 → 1`, int8 weights and clipped ReLU in the hidden layers; 8 variants of the whole output network, selected by piece count
+- **Sparse Inference** — the first hidden layer skips all-zero input groups; accumulator neurons are reordered (`utils permuteNet`) so that more groups are zero
+- **Vectorized Code** — hand-written SIMD for AVX-512 (with optional VNNI and VBMI2), AVX2 (with optional VNNI), SSE4 and ARM NEON, plus a scalar fallback
 
 ### Training
 
 - **Custom CUDA Trainer** written from scratch, using AdamW optimizer
 - **Highly Optimized** — manual CUDA kernel optimizations for speed
+- **Input Factorizer** — shared piece-square weights trained alongside the king buckets and folded into them on export
+- **Quantization-Aware Training** — all layers are trained against the same integer grid used at runtime
+- **Cosine Learning-Rate Schedule**, with per-run checkpointing and resume
 - **Self-Play Data** — 20.5+ billion positions from self-generated games
 - **Progressive Training** — older games are purged, so networks are trained only on data from the latest engine versions
 
@@ -125,6 +129,7 @@ The same variant names are used for the release binaries and for the CMake `TARG
 
 | Variant | `TARGET_ARCH` | CPU Requirements | Recommended For |
 |---------|---------------|------------------|-----------------|
+| **AVX-512 ICL** | — (Makefile `avx512icl` only) | AVX-512 + VNNI + VBMI2 (Ice Lake feature set) | Intel Ice Lake and newer, AMD Zen 4/5 |
 | **AVX-512** | `x64-avx512` | AVX-512F + AVX-512BW | Latest Intel Xeon, AMD Zen 4/5 |
 | **BMI2** | `x64-bmi2` | AVX2 + BMI2 | Most modern CPUs (2015+) — *default* |
 | **AVX2** | `x64-avx2` | AVX2 | Intel Haswell, early AMD Ryzen |
@@ -150,7 +155,17 @@ The same variant names are used for the release binaries and for the CMake `TARG
 
 ### Linux
 
-#### Using CMake (recommended)
+#### Using the Makefile (recommended)
+
+```bash
+cd src
+make -j$(nproc)
+```
+
+> **Note**: The default goal (`ob`, used by OpenBench) builds with `-march=native`, tuned for the host CPU. For a portable binary pick an explicit target: `bmi2`, `avx512`, `avx2`, `avx2-vnni`, `sse4`, `sse2`, `legacy`, `release` (builds all of them), or the PGO variants `bmi2_pgo`, `avx2_pgo`, `avx512_pgo`.
+> Pass `EVALFILE=<path>` to build against a local network file instead of downloading one.
+
+#### Using CMake
 
 ```bash
 mkdir build && cd build
@@ -170,16 +185,6 @@ cmake -DTARGET_ARCH=x64-avx512 -DCMAKE_BUILD_TYPE=Final ..
 ```
 
 The binary is written to `build/bin/`, together with the neural network file.
-
-#### Using the Makefile (quick build)
-
-```bash
-cd src
-make -j$(nproc)
-```
-
-> **Note**: The default goal (`ob`, used by OpenBench) builds with `-march=native`, tuned for the host CPU. For a portable binary pick an explicit target: `bmi2`, `avx512`, `avx2`, `avx2-vnni`, `sse4`, `sse2`, `legacy`, `release` (builds all of them), or the PGO variants `bmi2_pgo`, `avx2_pgo`, `avx512_pgo`.
-> Pass `EVALFILE=<path>` to build against a local network file instead of downloading one.
 
 ### Windows
 
@@ -298,7 +303,7 @@ src/
 ```
 
 The `utils` executable bundles the development tooling, invoked as `utils <command>`:
-`unittest`, `selfplay`, `trainCudaNetwork` (CUDA builds only), `prepareTrainingData`, `plainTextToTrainingData`, `pgnToTrainingData`, and more.
+`unittest`, `selfplay`, `trainCudaNetwork` (CUDA builds only), `prepareTrainingData`, `plainTextToTrainingData`, `pgnToTrainingData`, `permuteNet`, and more.
 
 ---
 
