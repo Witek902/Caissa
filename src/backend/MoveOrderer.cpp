@@ -250,6 +250,16 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
+void MoveOrderer::UpdateQuietHistory(const NodeInfo& node, const Move move, int32_t delta)
+{
+    const Bitboard threats = node.threats.allThreats;
+    const uint32_t from = move.FromSquare().Index();
+    const uint32_t to = move.ToSquare().Index();
+    ASSERT(from < 64);
+    ASSERT(to < 64);
+    UpdateHistoryCounter(quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], delta);
+}
+
 void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move move, int32_t delta)
 {
     const uint32_t pieceTo = move.PieceTo();
