@@ -10,7 +10,9 @@
 #define CAISSA_VERSION "unknown"
 #endif // CAISSA_VERSION
 
-#if defined(USE_AVX512)
+#if defined(USE_AVX512) && defined(USE_BMI2) && defined(USE_VNNI) && defined(USE_VBMI2)
+#define ArchitectureStr "AVX-512 ICL"
+#elif defined(USE_AVX512)
 #define ArchitectureStr "AVX-512"
 #elif defined(USE_BMI2) && defined(USE_AVX2)
 #define ArchitectureStr "BMI2"

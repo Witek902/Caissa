@@ -101,7 +101,10 @@ INLINE static int32_t m256_hadd(__m256i a)
 // the result is the same with and without VNNI.
 INLINE static __m256i m256_dpbusd(__m256i sum, __m256i a, __m256i b)
 {
-#if defined(NN_USE_VNNI)
+#if defined(NN_USE_VNNI) && defined(USE_AVX512)
+    // AVX512VNNI + AVX512VL form: these CPUs may lack the VEX-encoded AVX-VNNI
+    return _mm256_dpbusd_epi32(sum, a, b);
+#elif defined(NN_USE_VNNI)
     return _mm256_dpbusd_avx_epi32(sum, a, b);
 #else
     return _mm256_add_epi32(sum, _mm256_madd_epi16(_mm256_maddubs_epi16(a, b), _mm256_set1_epi16(1)));
@@ -120,8 +123,7 @@ INLINE static __m256i m256_requantize(__m256i sumLo, __m256i sumHi)
 
 #if defined(USE_AVX512)
 
-// Same as m256_dpbusd. A build with USE_VNNI and USE_AVX512 comes from a native build, where the
-// 512-bit VNNI instructions are available as well.
+// Same as m256_dpbusd
 INLINE static __m512i m512_dpbusd(__m512i sum, __m512i a, __m512i b)
 {
 #if defined(NN_USE_VNNI)
@@ -143,7 +145,12 @@ INLINE static void FT_PairwiseCReLU(
     const __m512i maxActivation = _mm512_set1_epi16(ActivationRangeScaling);
     // the pack interleaves the 128-bit lanes of its two inputs; this permutation restores the order
     const __m512i packOrder = _mm512_setr_epi64(0, 2, 4, 6, 1, 3, 5, 7);
+#if defined(USE_VBMI2)
+    __m256i groupIndices = _mm256_add_epi16(_mm256_set1_epi16((int16_t)firstGroupIndex),
+        _mm256_setr_epi16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15));
+#else
     __m128i groupIndexBase = _mm_set1_epi16((int16_t)firstGroupIndex);
+#endif // USE_VBMI2
 
     for (uint32_t i = 0; i < halfSize; i += 64)
     {
@@ -168,10 +175,18 @@ INLINE static void FT_PairwiseCReLU(
 
         // one bit per non-zero 4-byte group, 16 groups per iteration
         const uint32_t nnzMask = _mm512_cmpneq_epi32_mask(packed, zero);
+#if defined(USE_VBMI2)
+        // Always stores 16 entries, like AppendNnzIndices stores 8.
+        // Compress into a register and then store: the compress-to-memory form is microcoded on Zen 4.
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(nnzIndices + nnzCount), _mm256_maskz_compress_epi16((__mmask16)nnzMask, groupIndices));
+        nnzCount += PopCount(nnzMask);
+        groupIndices = _mm256_add_epi16(groupIndices, _mm256_set1_epi16(16));
+#else
         AppendNnzIndices(nnzIndices, nnzCount, nnzMask & 0xFFu, groupIndexBase);
         groupIndexBase = _mm_add_epi16(groupIndexBase, _mm_set1_epi16(8));
         AppendNnzIndices(nnzIndices, nnzCount, nnzMask >> 8, groupIndexBase);
         groupIndexBase = _mm_add_epi16(groupIndexBase, _mm_set1_epi16(8));
+#endif // USE_VBMI2
     }
 }
 
@@ -807,8 +822,9 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator&
 
 #if defined(USE_AVX2) || defined(USE_AVX512) || defined(USE_SSE4) || defined(USE_ARM_NEON)
 
-    // Indices of the non-zero 4-byte groups of l1Input. Every 8-group block stores 8 entries starting
-    // at the running count, which never exceeds the block's own first slot, so the buffer needs no slack.
+    // Indices of the non-zero 4-byte groups of l1Input. Every block of 8 groups (16 with VBMI2) stores one
+    // entry per group starting at the running count, which never exceeds the block's own first slot, so
+    // the buffer needs no slack.
     alignas(16) uint16_t nnzIndices[L1InputSize / 4];
     uint32_t nnzCount = 0;
     FT_PairwiseCReLU(l1Input, stmAccum.values, nnzIndices, nnzCount, 0);

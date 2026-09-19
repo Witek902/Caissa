@@ -71,6 +71,7 @@ AVX2FLAGS     = $(SSE4FLAGS) -DUSE_AVX2
 AVX2VNNIFLAGS = $(AVX2FLAGS) -mavxvnni -DUSE_VNNI
 BMI2FLAGS     = $(AVX2FLAGS) -DUSE_BMI2
 AVX512FLAGS   = $(AVX2FLAGS) -mavx512f -mavx512bw -mavx512dq -DUSE_AVX512
+AVX512ICLFLAGS = $(AVX512FLAGS) -DUSE_BMI2 -DUSE_VNNI -DUSE_VBMI2
 NEONFLAGS     = $(COMMONFLAGS) -DUSE_ARM_NEON
 
 # Native build: ask the compiler which ISA extensions -march=native enables on this host,
@@ -90,14 +91,18 @@ else ifneq ($(findstring __aarch64__,$(NATIVE_MACROS)),)
 	NATIVEFLAGS = $(COMMONFLAGS) -march=native -mtune=native \
 	              $(call has-native,__ARM_NEON,-DUSE_ARM_NEON)
 else
+	NATIVE_AVX512 := $(call has-native,__AVX512DQ__,$(call has-native,__AVX512BW__,yes))
+	# AVX-512 builds use the EVEX forms of VNNI and VBMI2, which also need AVX512VL
+	NATIVE_AVX512FLAGS = -DUSE_AVX512 \
+	              $(call has-native,__AVX512VL__,$(call has-native,__AVX512VNNI__,-DUSE_VNNI)) \
+	              $(call has-native,__AVX512VL__,$(call has-native,__AVX512VBMI2__,-DUSE_VBMI2))
 	NATIVEFLAGS = $(COMMONFLAGS) -march=native -mtune=native -DUSE_SSE -DUSE_SSE2 \
 	              $(call has-native,__SSE4_1__,-DUSE_SSE4) \
 	              $(call has-native,__POPCNT__,-DUSE_POPCNT) \
 	              $(call has-native,__AVX__,-DUSE_AVX) \
 	              $(call has-native,__AVX2__,-DUSE_AVX2) \
 	              $(call has-native,__BMI2__,-DUSE_BMI2) \
-	              $(call has-native,__AVXVNNI__,-DUSE_VNNI) \
-	              $(if $(findstring __AVX512DQ__,$(NATIVE_MACROS)),$(call has-native,__AVX512BW__,-DUSE_AVX512))
+	              $(if $(NATIVE_AVX512),$(NATIVE_AVX512FLAGS),$(call has-native,__AVXVNNI__,-DUSE_VNNI))
 endif
 
 %.o: %.cpp
@@ -135,6 +140,8 @@ sse2: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
 avx512: $(EVALFILE)
 	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
+avx512icl: $(EVALFILE)
+	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE_NAME)-x64-avx512icl$(EXT)
 legacy: $(EVALFILE)
 	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
 neon: $(EVALFILE)
@@ -161,4 +168,4 @@ avx512_pgo: $(EVALFILE)
 	$(CLEAN)
 
 release:
-	make -j sse2 sse4 avx2 bmi2 avx512
+	make -j sse2 sse4 avx2 bmi2 avx512 avx512icl
