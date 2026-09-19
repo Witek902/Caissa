@@ -142,6 +142,12 @@ DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
 DEFINE_PARAM(PriorCMHBonusCap, 1200, 400, 2400);
 DEFINE_PARAM(PriorCMHBonusScale, 120, 20, 240);
 DEFINE_PARAM(PriorCMHBonusBias, 100, 0, 200);
+
+DEFINE_PARAM(EvalHistScale, 64, 32, 192);
+DEFINE_PARAM(EvalHistBias, 76, 20, 160);
+DEFINE_PARAM(EvalHistBonusMax, 150, 50, 400);
+DEFINE_PARAM(EvalHistMalusMax, 60, 20, 200);
+
 DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
 DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 2, 0, 6);
@@ -1646,6 +1652,19 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         && (node->isCutNode || isPvNode)
         && (!ttEntry.move.IsValid() || ttEntry.depth + IIRTTDepthMargin < node->depth))
         node->depth--;
+
+    // adjust history based on static evaluation change
+    if constexpr (!isRootNode)
+    {
+        if (!node->isInCheck && !node->filteredMove.IsValid() &&
+            node->previousMove.IsValid() && node->previousMove.IsQuiet() &&
+            (node - 1)->staticEval != InvalidValue)
+        {
+            const int32_t theirLoss = (node - 1)->staticEval + node->staticEval - EvalHistBias;
+            const int32_t bonus = std::clamp<int32_t>(-EvalHistScale * theirLoss / 64, -EvalHistMalusMax, EvalHistBonusMax);
+            thread.moveOrderer.UpdateQuietHistory(*(node - 1), node->previousMove, bonus);
+        }
+    }
 
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
