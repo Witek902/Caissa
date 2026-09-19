@@ -1259,6 +1259,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
 
+    // quiet evasions are scored with continuation history
+    if (node->isInCheck)
+        thread.moveOrderer.InitContinuationHistoryPointers(*node);
+
     MovePicker movePicker(position, thread.moveOrderer, nullptr, ttEntry.move, node->isInCheck);
 
     int32_t moveScore = 0;
