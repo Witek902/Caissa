@@ -8,6 +8,7 @@
 #define NOMINMAX
 #endif // NOMINMAX
 #include <Windows.h>
+#include <psapi.h>
 
 bool EnableLargePagesSupport()
 {
@@ -76,9 +77,28 @@ void Free(void* ptr)
     ::VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
+int64_t GetLargePageBytes(const void* ptr, size_t size)
+{
+    PSAPI_WORKING_SET_EX_INFORMATION info = {};
+    info.VirtualAddress = const_cast<void*>(ptr);
+    if (!::QueryWorkingSetEx(::GetCurrentProcess(), &info, sizeof(info)) || !info.VirtualAttributes.Valid)
+    {
+        return -1;
+    }
+
+    // large-page allocations are all or nothing
+    return info.VirtualAttributes.LargePage ? (int64_t)size : 0;
+}
+
 
 #elif defined(__GNUC__) || defined(__clang__)
 
+#if defined(__linux__)
+#include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <string>
+#endif // defined(__linux__)
 
 bool EnableLargePagesSupport()
 {
@@ -109,6 +129,42 @@ void* Malloc(size_t size)
 void Free(void* ptr)
 {
     free(ptr);
+}
+
+int64_t GetLargePageBytes(const void* ptr, size_t size)
+{
+#if defined(__linux__)
+    std::ifstream smaps("/proc/self/smaps");
+    if (!smaps)
+    {
+        return -1;
+    }
+
+    // Sums AnonHugePages of the mappings overlapping the range. The madvise in Malloc gives the
+    // range its own mapping, so neighbouring allocations are not counted.
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t end = begin + size;
+    bool overlaps = false;
+    uint64_t largePageBytes = 0;
+    std::string line;
+    while (std::getline(smaps, line))
+    {
+        unsigned long long mappingBegin, mappingEnd, kilobytes;
+        if (sscanf(line.c_str(), "%llx-%llx", &mappingBegin, &mappingEnd) == 2)
+        {
+            overlaps = mappingBegin < end && mappingEnd > begin;
+        }
+        else if (overlaps && sscanf(line.c_str(), "AnonHugePages: %llu kB", &kilobytes) == 1)
+        {
+            largePageBytes += kilobytes * 1024;
+        }
+    }
+    return (int64_t)std::min<uint64_t>(largePageBytes, size);
+#else
+    UNUSED(ptr);
+    UNUSED(size);
+    return -1;
+#endif // defined(__linux__)
 }
 
 

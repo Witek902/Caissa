@@ -1,8 +1,10 @@
 #include "Evaluate.hpp"
 #include "Endgame.hpp"
 #include "Search.hpp"
+#include "Memory.hpp"
 
 #include <fstream>
+#include <type_traits>
 
 #if defined(CAISSA_EVALFILE)
 
@@ -29,7 +31,36 @@ static constexpr ScoreType c_castlingRightsBonus = 5;
 } // namespace
 
 const nn::PackedNeuralNetwork* g_mainNeuralNetwork = nullptr;
-static bool g_usingEmbeddedNeuralNetwork = false;
+
+// Networks are kept in memory from Malloc, which uses large pages where the OS allows it: the
+// first-layer weights take tens of MB and accumulator updates read rows of a few KB from random
+// places in them, so with 4 KB pages most of those reads miss the TLB.
+static nn::PackedNeuralNetwork* AllocateNeuralNetwork()
+{
+    void* memory = Malloc(sizeof(nn::PackedNeuralNetwork));
+    if (!memory)
+    {
+        std::cout << "info string Failed to allocate memory for neural network" << std::endl;
+        return nullptr;
+    }
+    return new (memory) nn::PackedNeuralNetwork();
+}
+
+static void ReleaseNeuralNetwork(const nn::PackedNeuralNetwork* network)
+{
+    static_assert(std::is_trivially_destructible_v<nn::PackedNeuralNetwork>);
+    Free(const_cast<nn::PackedNeuralNetwork*>(network));
+}
+
+static void PrintNeuralNetworkLargePages(const nn::PackedNeuralNetwork* network)
+{
+    const int64_t largePageBytes = GetLargePageBytes(network, sizeof(nn::PackedNeuralNetwork));
+    if (largePageBytes >= 0)
+    {
+        std::cout << "info string Neural network in large pages: " << (largePageBytes >> 20)
+            << " of " << (sizeof(nn::PackedNeuralNetwork) >> 20) << " MB" << std::endl;
+    }
+}
 
 #ifdef ENABLE_NET_L3_TUNING
 
@@ -96,10 +127,10 @@ void ApplyNeuralNetTunables()
 
 bool LoadMainNeuralNetwork(const char* path)
 {
-    if (!g_usingEmbeddedNeuralNetwork)
+    if (g_mainNeuralNetwork)
     {
         // release previous network
-        delete g_mainNeuralNetwork;
+        ReleaseNeuralNetwork(g_mainNeuralNetwork);
         g_mainNeuralNetwork = nullptr;
 #ifdef ENABLE_NET_L3_TUNING
         g_tunableNeuralNetwork = nullptr;
@@ -116,41 +147,43 @@ bool LoadMainNeuralNetwork(const char* path)
             std::cout << "info string Embedded neural network has unsupported version " << embeddedNetwork->header.version << std::endl;
             return false;
         }
-#ifdef ENABLE_NET_L3_TUNING
-        // writable copy, so the tunable last-layer values can be applied
-        auto* networkCopy = new nn::PackedNeuralNetwork();
+        nn::PackedNeuralNetwork* networkCopy = AllocateNeuralNetwork();
+        if (!networkCopy)
+        {
+            return false;
+        }
         memcpy(networkCopy, embeddedNetwork, sizeof(nn::PackedNeuralNetwork));
         g_mainNeuralNetwork = networkCopy;
-        g_usingEmbeddedNeuralNetwork = false;
+#ifdef ENABLE_NET_L3_TUNING
         RegisterNeuralNetTunables(networkCopy);
-#else
-        g_mainNeuralNetwork = embeddedNetwork;
-        g_usingEmbeddedNeuralNetwork = true;
 #endif // ENABLE_NET_L3_TUNING
         std::cout << "info string Using embedded neural network" << std::endl;
+        PrintNeuralNetworkLargePages(networkCopy);
         return true;
 #else
         std::cout << "info string disabled neural network evaluation" << std::endl;
-        g_mainNeuralNetwork = nullptr;
-        g_usingEmbeddedNeuralNetwork = false;
         return true;
 #endif // defined(CAISSA_EVALFILE)
     }
 
-    auto* newNetwork = new nn::PackedNeuralNetwork();
+    nn::PackedNeuralNetwork* newNetwork = AllocateNeuralNetwork();
+    if (!newNetwork)
+    {
+        return false;
+    }
     if (newNetwork->LoadFromFile(path))
     {
         g_mainNeuralNetwork = newNetwork;
-        g_usingEmbeddedNeuralNetwork = false;
 #ifdef ENABLE_NET_L3_TUNING
         RegisterNeuralNetTunables(newNetwork);
 #endif // ENABLE_NET_L3_TUNING
         std::cout << "info string Loaded neural network: " << path << std::endl;
+        PrintNeuralNetworkLargePages(newNetwork);
         return true;
     }
     else
     {
-        delete newNetwork;
+        ReleaseNeuralNetwork(newNetwork);
     }
 
     // TODO use embedded net?

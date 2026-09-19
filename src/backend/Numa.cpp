@@ -14,7 +14,10 @@ namespace numa {
 void Init()
 {
     const uint32_t numNodes = GetNumNodes();
-    std::cout << "info string " << numNodes << " NUMA nodes detected (WinAPI)" << std::endl;
+    if (numNodes > 1)
+    {
+        std::cout << "info string " << numNodes << " NUMA nodes detected (WinAPI)" << std::endl;
+    }
 }
 
 uint32_t GetNumNodes()

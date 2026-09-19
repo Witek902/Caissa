@@ -35,6 +35,9 @@ bool EnableLargePagesSupport();
 [[nodiscard]] void* Malloc(size_t size);
 void Free(void* ptr);
 
+// Bytes of the range backed by large pages, or -1 if the OS does not tell. The pages must be touched already.
+int64_t GetLargePageBytes(const void* ptr, size_t size);
+
 
 // https://stackoverflow.com/a/8545389
 template <typename T, std::size_t N = 16>
