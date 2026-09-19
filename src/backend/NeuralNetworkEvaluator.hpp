@@ -26,11 +26,8 @@ struct NNEvaluatorContext
     bool accumDirty[2];
 
     // added and removed pieces information
+    uint8_t numDirtyPieces;
     DirtyPiece dirtyPieces[MaxNumDirtyPieces];
-    uint32_t numDirtyPieces;
-
-    // cache NN output
-    int32_t nnScore;
 
     NNEvaluatorContext()
     {
@@ -42,7 +39,6 @@ struct NNEvaluatorContext
         accumDirty[0] = true;
         accumDirty[1] = true;
         numDirtyPieces = 0;
-        nnScore = InvalidValue;
     }
 };
 

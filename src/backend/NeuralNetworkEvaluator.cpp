@@ -587,13 +587,6 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-#ifndef VALIDATE_NETWORK_OUTPUT
-    if (node.nnContext.nnScore != InvalidValue)
-    {
-        return node.nnContext.nnScore;
-    }
-#endif // VALIDATE_NETWORK_OUTPUT
-
     RefreshAccumulator<White>(network, node, cache);
     RefreshAccumulator<Black>(network, node, cache);
 
@@ -603,17 +596,11 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {
+        // validate that the incremental update produced the same result as a full evaluation
         const int32_t nnOutputReference = Evaluate(network, node.position);
         ASSERT(nnOutput == nnOutputReference);
     }
-    if (node.nnContext.nnScore != InvalidValue)
-    {
-        ASSERT(node.nnContext.nnScore == nnOutput);
-    }
 #endif // VALIDATE_NETWORK_OUTPUT
-
-    // cache NN output
-    node.nnContext.nnScore = nnOutput;
 
     // search-time statistics collection (disabled by default: single relaxed load + predicted-not-taken branch)
     if (s_collectAccumulatorStats.load(std::memory_order_relaxed)) [[unlikely]]
