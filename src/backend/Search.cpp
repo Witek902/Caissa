@@ -107,6 +107,7 @@ DEFINE_PARAM(QSearchStandPatBetaScale, 519, 1, 1024);
 DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
+DEFINE_PARAM(QSearchMaxEvasions, 2, 1, 4);
 
 DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
@@ -1277,10 +1278,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         if (bestValue > -TablebaseWinValue && moveIndex > QSearchMoveCountPruningThreshold)
             break;
 
-        if (bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
+        if (!node->isInCheck && bestValue > -TablebaseWinValue && position.HasNonPawnMaterial(position.GetSideToMove()))
         {
-            ASSERT(!node->isInCheck);
-
             // skip underpromotions
             if (move.IsUnderpromotion()) continue;
 
@@ -1340,9 +1339,10 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
                     break;
                 }
             }
-
-            if (node->isInCheck) break; // try only one check evasion
         }
+
+        // search only a limited number of check evasions
+        if (node->isInCheck && moveIndex >= QSearchMaxEvasions) break;
     }
 
     // no legal moves - checkmate
