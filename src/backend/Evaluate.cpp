@@ -286,7 +286,7 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
     const int32_t pieceCount = queens + rooks + bishopsAndKnights + pawns;
 
     // check endgame evaluation first
-    if (pieceCount <= 6) [[unlikely]]
+    if (pieceCount <= c_endgameEvalMaxPieces) [[unlikely]]
     {
         int32_t endgameScore;
         if (EvaluateEndgame(pos, endgameScore))

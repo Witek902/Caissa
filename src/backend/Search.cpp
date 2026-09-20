@@ -4,6 +4,7 @@
 #include "Game.hpp"
 #include "Material.hpp"
 #include "Evaluate.hpp"
+#include "Endgame.hpp"
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
 #include "Tuning.hpp"
@@ -1095,7 +1096,10 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
 {
     int32_t adjustedScore = node.staticEval;
     
-    // apply eval correction
+    // apply eval correction (ignore endgame evaluator scores)
+    int32_t endgameScore;
+    if (node.position.GetNumPiecesExcludingKing() > c_endgameEvalMaxPieces ||
+        !EvaluateEndgame(node.position, endgameScore)) [[likely]]
     {
         const Color stm = node.position.GetSideToMove();
         const CorrectionHistories* corrHist = thread.correctionHistories;

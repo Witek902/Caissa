@@ -5,6 +5,9 @@
 // enable collecting endgame stats
 // #define COLLECT_ENDGAME_STATISTICS
 
+// max number of pieces (kings excluded) for which the endgame evaluation is used
+static constexpr int32_t c_endgameEvalMaxPieces = 6;
+
 // Initialize endgame data
 void InitEndgame();
 
