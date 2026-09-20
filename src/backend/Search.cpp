@@ -112,6 +112,8 @@ DEFINE_PARAM(RfpDepth, 6, 4, 10);
 DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
+DEFINE_PARAM(RfpOppWorseningScale, 32, 10, 80);
+DEFINE_PARAM(OppWorseningMargin, 75, 0, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 DEFINE_PARAM(RfpAdjBetaScale, 525, 1, 1024);
 
@@ -1658,6 +1660,11 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             isImproving = node->staticEval > (node - 4)->staticEval;
     }
 
+    // the opponent's last move cost them more than the tempo it gained
+    bool isOppWorsening = false;
+    if (!node->isInCheck && node->ply > 0 && (node - 1)->staticEval != InvalidValue)
+        isOppWorsening = node->staticEval + (node - 1)->staticEval > OppWorseningMargin;
+
     // the counter two plies ahead is stale by now, the node about to be searched owns it
     (node + 2)->cutoffCount = 0;
 
@@ -1669,7 +1676,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             const int32_t rfpMargin =
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
-                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats));
+                - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats))
+                - RfpOppWorseningScale * isOppWorsening;
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta + std::max<int32_t>(rfpMargin, RfpTreshold))
