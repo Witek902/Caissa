@@ -29,7 +29,7 @@ DEFINE_PARAM(ContUpdateWeight2, 300, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight3, 978, 1, 2048);
 DEFINE_PARAM(ContUpdateWeight5, 978, 1, 2048);
 
-DEFINE_PARAM(ContWeight1, 1019, 1, 2048);
+DEFINE_PARAM(ContWeight1, 600, 1, 2048);
 DEFINE_PARAM(ContWeight3, 555, 1, 1024);
 DEFINE_PARAM(ContWeight5, 582, 1, 1024);
 
