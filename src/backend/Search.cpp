@@ -1800,6 +1800,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     Move bestMove = Move::Invalid();
 
     uint32_t moveIndex = 0;
+    uint32_t pickedMoveIndex = 0; // counting moves that get pruned
     uint32_t quietMoveIndex = 0;
     bool searchAborted = false;
     bool filteredSomeMove = false;
@@ -1841,6 +1842,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 continue;
             }
         }
+
+        pickedMoveIndex++;
 
         int32_t moveStatScore = 0;
 
@@ -2013,7 +2016,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (move.IsQuiet())
             {
-                r = GetQuietsDepthReduction(node->depth, moveIndex);
+                r = GetQuietsDepthReduction(node->depth, pickedMoveIndex);
 
                 // reduce non-PV nodes more
                 if constexpr (!isPvNode) r += LmrQuietNonPv;
