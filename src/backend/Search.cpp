@@ -108,9 +108,9 @@ DEFINE_PARAM(QSearchMoveCountPruningThreshold, 3, 2, 5);
 DEFINE_PARAM(QSearchAdjBetaScale, 540, 1, 1024);
 DEFINE_PARAM(QSearchFutilityPruningOffset, 77, 40, 120);
 
-DEFINE_PARAM(RfpDepth, 6, 4, 10);
-DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
-DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
+DEFINE_PARAM(RfpDepth, 8, 4, 10);
+DEFINE_PARAM(RfpDepthScale, 83, 40, 180);
+DEFINE_PARAM(RfpDepthFactorClamp, 300, 100, 500);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
 DEFINE_PARAM(RfpOppWorseningScale, 32, 10, 80);
 DEFINE_PARAM(OppWorseningMargin, 75, 0, 200);
@@ -1673,9 +1673,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if (!node->filteredMove.IsValid() && !node->isInCheck)
         {
             // Reverse Futility Pruning
-            const int32_t rfpMargin =
-                RfpDepthScaleLinear * node->depth
-                + RfpDepthScaleQuad * (node->depth * node->depth)
+            const int32_t rfpMargin = std::min(RfpDepthScale * node->depth, RfpDepthFactorClamp)
                 - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats))
                 - RfpOppWorseningScale * isOppWorsening;
             if (node->depth <= RfpDepth &&
