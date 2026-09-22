@@ -68,6 +68,7 @@ DEFINE_PARAM(IIRTTDepthMargin, 4, 2, 8);
 DEFINE_PARAM(NmpStartDepth, 3, 1, 10);
 DEFINE_PARAM(NmpEvalTreshold, 16, 0, 40);
 DEFINE_PARAM(NmpDepthTreshold, 4, 0, 10);
+DEFINE_PARAM(NmpNotImprovingMargin, 30, 0, 80);
 DEFINE_PARAM(NmpEvalRedDiv, 3, 2, 5);
 DEFINE_PARAM(NmpEvalDiffDiv, 85, 16, 512);
 DEFINE_PARAM(NmpNullMoveDepthReduction, 3, 1, 5);
@@ -1701,6 +1702,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // few cutoffs at the next ply means it is not an "easy" node, so be more willing to try the null move
             const int32_t nmpEvalMargin =
                 (node->depth < NmpDepthTreshold ? NmpEvalTreshold : 0)
+                + NmpNotImprovingMargin * !isImproving
                 - ((node + 1)->cutoffCount < NmpCutoffCountMin ? NmpCutoffCountBonus : 0);
 
             if (node->isCutNode &&
