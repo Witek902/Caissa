@@ -135,6 +135,7 @@ DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
 DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
+DEFINE_PARAM(CorrHistLeafMax, 96, 64, 128);
 
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
@@ -1091,7 +1092,7 @@ INLINE static void AddToCorrHist(int16_t& history, int32_t value)
     history = static_cast<int16_t>(history + value - history * std::abs(value) / CorrHistGravity);
 }
 
-ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
+ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam, int32_t correctionClamp) const
 {
     int32_t adjustedScore = node.staticEval;
     
@@ -1110,7 +1111,7 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
         if (node.ply >= 4 && node.previousMove.IsValid() && (&node - 3)->previousMove.IsValid())
             corr += ContCorrectionScale * corrHist->continuation[stm][node.previousMove.PieceTo()][(&node - 3)->previousMove.PieceTo()];
 
-        adjustedScore += corr / EvalCorrectionScale;
+        adjustedScore += std::clamp(corr / EvalCorrectionScale, -correctionClamp, correctionClamp);
     }
 
     // scale down when approaching 50-move draw
@@ -1219,7 +1220,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
         ASSERT(node->staticEval != InvalidValue);
 
-        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam);
+        const ScoreType adjustedEvalScore = AdjustEvalScore(thread, *node, ctx.searchParam, CorrHistLeafMax);
 
         bestValue = adjustedEvalScore;
 
