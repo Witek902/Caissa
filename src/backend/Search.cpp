@@ -138,6 +138,7 @@ DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
 DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
+DEFINE_PARAM(TTCutoffMargin, 80, 0, 200);
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
 DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
@@ -1523,7 +1524,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (ttEntry.depth >= node->depth + (ttScore >= beta) &&
+            if (ttEntry.depth >= node->depth + (ttScore >= beta && ttScore < beta + TTCutoffMargin) &&
                 position.GetHalfMoveCount() < TTCutoffHalfMoveLimit)
             {
                 // transposition table cutoff
