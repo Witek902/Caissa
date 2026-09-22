@@ -1648,7 +1648,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
     // reduce depth if position was not found in transposition table
     if (node->depth >= IIRStartDepth
-        && (node->isCutNode || isPvNode)
+        && (node->isCutNode || (nodeType == NodeType::PV))
         && (!ttEntry.move.IsValid() || ttEntry.depth + IIRTTDepthMargin < node->depth))
         node->depth--;
 
