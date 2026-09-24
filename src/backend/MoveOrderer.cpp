@@ -250,15 +250,29 @@ INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
 
+INLINE static void UpdateContHistoryCounter(MoveOrderer::CounterType& counter, int32_t base, int32_t delta)
+{
+    // shrink towards the summed continuation score, not each entry's own value
+    const int32_t newValue = (int32_t)counter + delta - base * std::abs(delta) / 16384;
+    counter = static_cast<MoveOrderer::CounterType>(std::clamp(newValue, -16384, 16384));
+}
+
 void MoveOrderer::UpdateContinuationHistory(const NodeInfo& node, const Move move, int32_t delta)
 {
     const uint32_t pieceTo = move.PieceTo();
 
-    if (auto* h = node.continuationHistories[0]) UpdateHistoryCounter((*h)[pieceTo], delta);
-    if (auto* h = node.continuationHistories[1]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight1 / 1024);
-    if (auto* h = node.continuationHistories[2]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight2 / 1024);
-    if (auto* h = node.continuationHistories[3]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight3 / 1024);
-    if (auto* h = node.continuationHistories[5]) UpdateHistoryCounter((*h)[pieceTo], delta * ContUpdateWeight5 / 1024);
+    int32_t base = 0;
+    if (const auto* h = node.continuationHistories[0]) base += (*h)[pieceTo];
+    if (const auto* h = node.continuationHistories[1]) base += (*h)[pieceTo] * ContWeight1 / 1024;
+    if (const auto* h = node.continuationHistories[3]) base += (*h)[pieceTo] * ContWeight3 / 1024;
+    if (const auto* h = node.continuationHistories[5]) base += (*h)[pieceTo] * ContWeight5 / 1024;
+    base = std::clamp(base, -16384, 16384);
+
+    if (auto* h = node.continuationHistories[0]) UpdateContHistoryCounter((*h)[pieceTo], base, delta);
+    if (auto* h = node.continuationHistories[1]) UpdateContHistoryCounter((*h)[pieceTo], base, delta * ContUpdateWeight1 / 1024);
+    if (auto* h = node.continuationHistories[2]) UpdateContHistoryCounter((*h)[pieceTo], base, delta * ContUpdateWeight2 / 1024);
+    if (auto* h = node.continuationHistories[3]) UpdateContHistoryCounter((*h)[pieceTo], base, delta * ContUpdateWeight3 / 1024);
+    if (auto* h = node.continuationHistories[5]) UpdateContHistoryCounter((*h)[pieceTo], base, delta * ContUpdateWeight5 / 1024);
 }
 
 void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove, int32_t scoreDiff)
