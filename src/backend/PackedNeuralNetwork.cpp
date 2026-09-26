@@ -166,9 +166,9 @@ INLINE static void FT_PairwiseCReLU(
         b0 = _mm512_min_epi16(b0, maxActivation);
         b1 = _mm512_min_epi16(b1, maxActivation);
 
-        // (a << (16 - PairwiseShift)) * b >> 16 == (a * b) >> PairwiseShift
-        const __m512i p0 = _mm512_mulhi_epi16(_mm512_slli_epi16(a0, 16 - PairwiseShift), b0);
-        const __m512i p1 = _mm512_mulhi_epi16(_mm512_slli_epi16(a1, 16 - PairwiseShift), b1);
+        // mulhrs is (x * y + (1 << 14)) >> 15, so this is (a * b) >> PairwiseShift rounded to nearest
+        const __m512i p0 = _mm512_mulhrs_epi16(_mm512_slli_epi16(a0, 15 - PairwiseShift), b0);
+        const __m512i p1 = _mm512_mulhrs_epi16(_mm512_slli_epi16(a1, 15 - PairwiseShift), b1);
 
         const __m512i packed = _mm512_permutexvar_epi64(packOrder, _mm512_packus_epi16(p0, p1));
         _mm512_store_si512(output + i, packed);
@@ -263,9 +263,9 @@ INLINE static void FT_PairwiseCReLU(
         b0 = _mm256_min_epi16(b0, maxActivation);
         b1 = _mm256_min_epi16(b1, maxActivation);
 
-        // (a << (16 - PairwiseShift)) * b >> 16 == (a * b) >> PairwiseShift
-        const __m256i p0 = _mm256_mulhi_epi16(_mm256_slli_epi16(a0, 16 - PairwiseShift), b0);
-        const __m256i p1 = _mm256_mulhi_epi16(_mm256_slli_epi16(a1, 16 - PairwiseShift), b1);
+        // mulhrs is (x * y + (1 << 14)) >> 15, so this is (a * b) >> PairwiseShift rounded to nearest
+        const __m256i p0 = _mm256_mulhrs_epi16(_mm256_slli_epi16(a0, 15 - PairwiseShift), b0);
+        const __m256i p1 = _mm256_mulhrs_epi16(_mm256_slli_epi16(a1, 15 - PairwiseShift), b1);
 
         // the pack interleaves the 128-bit lanes, so restore the natural order
         const __m256i packed = _mm256_permute4x64_epi64(_mm256_packus_epi16(p0, p1), _MM_SHUFFLE(3, 1, 2, 0));
@@ -408,9 +408,9 @@ INLINE static void FT_PairwiseCReLU(
             b0 = _mm_min_epi16(b0, maxActivation);
             b1 = _mm_min_epi16(b1, maxActivation);
 
-            // (a << (16 - PairwiseShift)) * b >> 16 == (a * b) >> PairwiseShift
-            const __m128i p0 = _mm_mulhi_epi16(_mm_slli_epi16(a0, 16 - PairwiseShift), b0);
-            const __m128i p1 = _mm_mulhi_epi16(_mm_slli_epi16(a1, 16 - PairwiseShift), b1);
+            // mulhrs is (x * y + (1 << 14)) >> 15, so this is (a * b) >> PairwiseShift rounded to nearest
+            const __m128i p0 = _mm_mulhrs_epi16(_mm_slli_epi16(a0, 15 - PairwiseShift), b0);
+            const __m128i p1 = _mm_mulhrs_epi16(_mm_slli_epi16(a1, 15 - PairwiseShift), b1);
 
             const __m128i packed = _mm_packus_epi16(p0, p1);
             _mm_store_si128(reinterpret_cast<__m128i*>(output + i + j), packed);
@@ -562,10 +562,10 @@ INLINE static void FT_PairwiseCReLU(
             b0 = vminq_s16(b0, maxActivation);
             b1 = vminq_s16(b1, maxActivation);
 
-            // The doubling multiply-high returns (2 * a * b) >> 16, so the first factor is shifted
-            // by one bit less than on x86: (a << (15 - PairwiseShift)) * 2 * b >> 16 == (a * b) >> PairwiseShift
-            const int16x8_t p0 = vqdmulhq_s16(vshlq_n_s16(a0, 15 - PairwiseShift), b0);
-            const int16x8_t p1 = vqdmulhq_s16(vshlq_n_s16(a1, 15 - PairwiseShift), b1);
+            // The rounding doubling multiply-high is (2 * x * y + (1 << 15)) >> 16, the same as mulhrs
+            // on x86, so this is (a * b) >> PairwiseShift rounded to nearest
+            const int16x8_t p0 = vqrdmulhq_s16(vshlq_n_s16(a0, 15 - PairwiseShift), b0);
+            const int16x8_t p1 = vqrdmulhq_s16(vshlq_n_s16(a1, 15 - PairwiseShift), b1);
 
             const uint8x16_t packed = vcombine_u8(vqmovun_s16(p0), vqmovun_s16(p1));
             vst1q_u8(output + i + j, packed);
@@ -678,7 +678,7 @@ INLINE static void FT_PairwiseCReLU(IntermediateType* output, const AccumulatorT
     {
         const int32_t a = std::clamp<int32_t>(accumulator[i], 0, ActivationRangeScaling);
         const int32_t b = std::clamp<int32_t>(accumulator[i + halfSize], 0, ActivationRangeScaling);
-        output[i] = (IntermediateType)((a * b) >> PairwiseShift);
+        output[i] = (IntermediateType)((a * b + PairwiseRounding) >> PairwiseShift);
     }
 }
 

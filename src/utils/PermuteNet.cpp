@@ -63,7 +63,7 @@ void AppendSample(SampleRows& rows, const nn::Accumulator& accum)
     {
         const int32_t a = std::clamp<int32_t>(accum.values[k], 0, nn::ActivationRangeScaling);
         const int32_t b = std::clamp<int32_t>(accum.values[k + PairCount], 0, nn::ActivationRangeScaling);
-        if (((a * b) >> nn::PairwiseShift) != 0)
+        if (((a * b + nn::PairwiseRounding) >> nn::PairwiseShift) != 0)
         {
             rows[base + k / 64] |= 1ull << (k % 64);
         }

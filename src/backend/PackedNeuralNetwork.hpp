@@ -104,11 +104,12 @@ static constexpr uint8_t KingBucketIndex[64] =
 static constexpr int16_t ActivationRangeScaling = 255;
 
 // The two halves of each accumulator are clipped and multiplied together, then shifted back into
-// uint8. 255*255 >> 9 = 127, and that upper bound is what makes the int8 hidden layers safe:
-// _mm256_maddubs_epi16 sums adjacent pairs with int16 saturation, and 2*127*127 = 32258 < 32767,
-// so the whole int8 weight range is usable without saturating.
+// uint8 with rounding to nearest. (255*255 + 256) >> 9 = 127, and that upper bound is what makes
+// the int8 hidden layers safe: _mm256_maddubs_epi16 sums adjacent pairs with int16 saturation, and
+// 2*127*127 = 32258 < 32767, so the whole int8 weight range is usable without saturating.
 static constexpr int32_t PairwiseShift = 9;
-static constexpr int32_t HiddenActivationMax = ActivationRangeScaling * ActivationRangeScaling >> PairwiseShift;
+static constexpr int32_t PairwiseRounding = 1 << (PairwiseShift - 1);
+static constexpr int32_t HiddenActivationMax = (ActivationRangeScaling * ActivationRangeScaling + PairwiseRounding) >> PairwiseShift;
 static constexpr float PairwiseOutputScale =
     (float)(ActivationRangeScaling * ActivationRangeScaling) / (float)(1 << PairwiseShift);
 
