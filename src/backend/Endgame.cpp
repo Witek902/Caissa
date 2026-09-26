@@ -436,36 +436,6 @@ static bool EvaluateEndgame_KBvKB(const Position& pos, int32_t& outScore)
     return false;
 }
 
-// knight + bishop vs. lone king
-static bool EvaluateEndgame_KNBvK(const Position& pos, int32_t& outScore)
-{
-    ASSERT(pos.Whites().bishops > 0 && pos.Whites().knights > 0 && pos.Whites().rooks == 0 && pos.Whites().queens == 0);
-    ASSERT(pos.Blacks().OccupiedExcludingKing().Count() == 0);
-
-    const Square strongKing(FirstBitSet(pos.Whites().king));
-    const Square weakKing(FirstBitSet(pos.Blacks().king));
-
-    // push king to 'right' board corner
-    const Square kingSquare = (pos.Whites().bishops & Bitboard::DarkSquares()) ? weakKing : weakKing.FlippedFile();
-
-    outScore = KnownWinValue;
-    outScore += c_pawnValue.eg * pos.Whites().pawns.Count(); // prefer keeping pawns
-    outScore += c_knightValue.eg * (pos.Whites().bishops.Count() - 1); // prefer keeping bishops
-    outScore += c_bishopValue.eg * (pos.Whites().knights.Count() - 1); // prefer keeping knights
-    outScore += 4 * (3 - kingSquare.EdgeDistance()); // push king to edge
-    outScore += 4 * (7 - kingSquare.DarkCornerDistance()); // push king to right corner
-    outScore += (7 - Square::Distance(weakKing, strongKing)); // push kings close
-
-    // limit weak king movement
-    const Bitboard kingLegalSquares =
-        Bitboard::GetKingAttacks(weakKing) &
-        ~Bitboard::GetKnightAttacks(pos.Whites().knights) &
-        ~Bitboard::GetKingAttacks(strongKing);
-    outScore -= kingLegalSquares.Count();
-
-    return true;
-}
-
 // pawn(s) vs. lone king
 static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
 {
@@ -1148,8 +1118,6 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteKnight, EvaluateEndgame_KNvK);
     RegisterEndgame(MaterialMask_WhiteBishop, EvaluateEndgame_KBvK);
     RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_BlackKnight, EvaluateEndgame_KBvK);
-    RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_WhiteKnight, EvaluateEndgame_KNBvK);
-    RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_WhiteKnight|MaterialMask_WhitePawn, EvaluateEndgame_KNBvK);
     RegisterEndgame(MaterialMask_WhiteBishop|MaterialMask_WhitePawn, EvaluateEndgame_KBPvK);
     RegisterEndgame(MaterialMask_WhiteKnight|MaterialMask_WhitePawn, EvaluateEndgame_KNPvK);
     RegisterEndgame(MaterialMask_WhitePawn, EvaluateEndgame_KPvK);

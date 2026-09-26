@@ -1902,12 +1902,6 @@ static void RunEvalTests()
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/8/7K/8/B6P/8 w - - 0 1")));
     TEST_EXPECT(0 > Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 b - - 0 1")));
 
-    // KBPvK (winning)
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("4k3/8/8/8/8/8/8/2NBK3 w - - 0 1")));
-    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("4k3/8/8/8/8/8/8/2NBK3 b - - 0 1")));
-    TEST_EXPECT(KnownWinValue <= Evaluate(Position("2nbk3/8/8/8/8/8/8/4K3 b - - 0 1")));
-    TEST_EXPECT(-KnownWinValue >= Evaluate(Position("2nbk3/8/8/8/8/8/8/4K3 w - - 0 1")));
-
     // KNNNvK
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 w - - 0 1")) >= KnownWinValue);
     TEST_EXPECT(Evaluate(Position("3k4/8/8/8/8/8/8/2NKNN2 b - - 0 1")) <= -KnownWinValue);
