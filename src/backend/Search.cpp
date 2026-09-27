@@ -391,7 +391,8 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             int32_t wdl = 0;
             Move tbMove;
 
-            if (ProbeGaviota_Root(game.GetPosition(), tbMove, nullptr, &wdl))
+            // Syzygy first: Gaviota's DTM-optimal move ignores the 50-move rule
+            if (ProbeSyzygy_Root(game.GetPosition(), tbMove, nullptr, &wdl))
             {
                 ASSERT(tbMove.IsValid());
                 outResult.front().moves.push_back(tbMove);
@@ -399,7 +400,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
                 return;
             }
 
-            if (ProbeSyzygy_Root(game.GetPosition(), tbMove, nullptr, &wdl))
+            if (ProbeGaviota_Root(game.GetPosition(), tbMove, nullptr, &wdl))
             {
                 ASSERT(tbMove.IsValid());
                 outResult.front().moves.push_back(tbMove);

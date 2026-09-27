@@ -17,6 +17,24 @@ NET_WGET           = wget -q -O $(NET_TMP) $(NET_DOWNLOAD_URL)
 CC                 = g++
 SRC                = $(wildcard backend/*.cpp) $(wildcard frontend/*.cpp) backend/syzygy/tbprobe.cpp
 OBJ                = $(SRC:.cpp=.o)
+C_CC               = $(subst g++,gcc,$(subst clang++,clang,$(CC)))
+GAVIOTA_DIR        = backend/gaviota
+GAVIOTA_SRC        = $(addprefix $(GAVIOTA_DIR)/, gtb-probe.c gtb-dec.c gtb-att.c sysport/sysport.c \
+                     compression/wrap.c compression/huffman/hzip.c \
+                     compression/lzma/LzmaEnc.c compression/lzma/LzmaDec.c compression/lzma/Alloc.c \
+                     compression/lzma/LzFind.c compression/lzma/Lzma86Enc.c compression/lzma/Lzma86Dec.c \
+                     compression/lzma/Bra86.c \
+                     compression/zlib/zcompress.c compression/zlib/uncompr.c compression/zlib/inflate.c \
+                     compression/zlib/deflate.c compression/zlib/adler32.c compression/zlib/crc32.c \
+                     compression/zlib/infback.c compression/zlib/inffast.c compression/zlib/inftrees.c \
+                     compression/zlib/trees.c compression/zlib/zutil.c \
+                     compression/liblzf/lzf_c.c compression/liblzf/lzf_d.c)
+GAVIOTA_OBJ        = $(GAVIOTA_SRC:.c=.o)
+# vendored third-party C code: generic flags for every target, warnings off
+GAVIOTA_CFLAGS     = -O2 -w -DNDEBUG -DZ_PREFIX $(addprefix -I$(GAVIOTA_DIR)/, sysport compression \
+                     compression/liblzf compression/zlib compression/lzma compression/huffman)
+# Gaviota tablebases are in the per-architecture builds, not in 'ob' (OpenBench) and 'pgo'
+GAVIOTA            = -DUSE_GAVIOTA_TABLEBASES $(GAVIOTA_OBJ)
 
 ifeq ($(OS), Windows_NT)
 	EXT = .exe
@@ -31,6 +49,7 @@ LIBS =
 ifeq ($(EXT), .exe)
 	FLAGS += -static -static-libgcc -static-libstdc++
 	LIBS += -pthread
+	GAVIOTA_CFLAGS += -DMINGW
 else
 	LIBS += -lpthread
 endif
@@ -115,7 +134,7 @@ endif
 %.o: %.cpp
 	$(CC) $(NATIVEFLAGS) $(PGOFLAGS) -c $< -o $@
 %.o: %.c
-	$(CC) $(NATIVEFLAGS) $(PGOFLAGS) -c $< -o $@
+	$(C_CC) $(GAVIOTA_CFLAGS) -c $< -o $@
 
 # Evaluate.cpp embeds the net via INCBIN, so it must not be compiled before the download completes
 backend/Evaluate.o: $(EVALFILE)
@@ -135,24 +154,24 @@ $(DEFAULT_EVALFILE):
 	@$(MOVE_NET)
 	@echo Download complete: $@
 
-bmi2: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
-avx2: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
-avx2-vnni: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2VNNIFLAGS) -o $(EXE_NAME)-x64-avx2-vnni$(EXT)
-sse4: $(EVALFILE)
-	$(CC) $(SRC) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
-sse2: $(EVALFILE)
-	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
-avx512: $(EVALFILE)
-	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
-avx512icl: $(EVALFILE)
-	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE_NAME)-x64-avx512icl$(EXT)
-legacy: $(EVALFILE)
-	$(CC) $(SRC) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
-neon: $(EVALFILE)
-	$(CC) $(SRC) -march=armv8-a+simd $(NEONFLAGS) -o $(EXE_NAME)-aarch64-neon$(EXT)
+bmi2: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(BMI2FLAGS) -o $(EXE_NAME)-x64-bmi2$(EXT)
+avx2: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(AVX2FLAGS) -o $(EXE_NAME)-x64-avx2$(EXT)
+avx2-vnni: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(AVX2VNNIFLAGS) -o $(EXE_NAME)-x64-avx2-vnni$(EXT)
+sse4: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core2 $(SSE4FLAGS) -o $(EXE_NAME)-x64-sse4-popcnt$(EXT)
+sse2: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-sse2$(EXT)
+avx512: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE_NAME)-x64-avx512$(EXT)
+avx512icl: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE_NAME)-x64-avx512icl$(EXT)
+legacy: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core2 $(SSE2FLAGS) -o $(EXE_NAME)-x64-legacy$(EXT)
+neon: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=armv8-a+simd $(NEONFLAGS) -o $(EXE_NAME)-aarch64-neon$(EXT)
 
 # Profile-guided optimization builds
 # native build like ob; phony because the profile directory has the same name
@@ -163,29 +182,29 @@ pgo: $(EVALFILE)
 	$(PGO_MERGE)
 	$(MAKE) ob PGO_STEP=use
 	$(CLEAN)
-bmi2_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+bmi2_pgo: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx2_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+avx2_pgo: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CC) $(SRC) $(GAVIOTA) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx512_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+avx512_pgo: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CC) $(SRC) $(GAVIOTA) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
-avx512icl_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+avx512icl_pgo: $(EVALFILE) $(GAVIOTA_OBJ)
+	$(CC) $(SRC) $(GAVIOTA) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(CC) $(SRC) $(GAVIOTA) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_USE)
 	$(CLEAN)
 
 release:

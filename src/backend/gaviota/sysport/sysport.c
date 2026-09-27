@@ -38,7 +38,7 @@
 
 /**** PATH NAMES *************************************************************************/
 
-#if defined(GCCLINUX)
+#if defined(GCCLINUX) && !defined(MINGW)
 	extern int isfoldersep (int x) { return x == '/';}
 #elif defined(MVSC)
 	extern int isfoldersep (int x) { return x == '\\' || x == ':';}
@@ -48,7 +48,7 @@
 
 /**** Maximum Files Open *****************************************************************/
 
-#if defined(GCCLINUX)
+#if defined(GCCLINUX) && !defined(MINGW)
 	#include <sys/resource.h>
 	#if 0	
 	struct rlimit {

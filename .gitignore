@@ -10,6 +10,7 @@ release/
 scripts/*.png
 src/*.exe
 src/*.o
+src/backend/gaviota/**/*.o
 src/caissa
 src/pgo/
 CMakeSettings.json

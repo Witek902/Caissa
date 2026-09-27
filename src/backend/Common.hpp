@@ -43,7 +43,7 @@
 #define CACHELINE_SIZE 64u
 
 #define USE_SYZYGY_TABLEBASES
-// #define USE_GAVIOTA_TABLEBASES
+// USE_GAVIOTA_TABLEBASES comes from the build: CMake and the per-architecture makefile targets, not 'make ob'
 
 #if defined(_MSC_VER) && !defined(__clang__)
 

@@ -9,6 +9,9 @@ uint32_t g_syzygyProbeLimit = 6;
 #endif
 
 #ifdef USE_GAVIOTA_TABLEBASES
+#include "MoveList.hpp"
+#include "MoveGen.hpp"
+#include "gaviota/gtb-probe.h"
 #endif
 
 #include <mutex>
@@ -318,46 +321,33 @@ bool ProbeGaviota(const Position& pos, uint32_t* outDTM, int32_t* outWDL)
     if (pos.GetBlacksCastlingRights() & c_shortCastleMask)    castlingRights |= tb_BOO;
     if (pos.GetBlacksCastlingRights() & c_longCastleMask)     castlingRights |= tb_BOOO;
 
-    uint32_t    ws[17];     // list of squares for white
-    uint32_t    bs[17];     // list of squares for black
-    uint8_t     wp[17];     // what white pieces are on those squares
-    uint8_t     bp[17];     // what black pieces are on those squares
+    // piece lists (king first, terminated with tb_NOSQUARE / tb_NOPIECE), sized for every square
+    uint32_t    ws[65];     // list of squares for white
+    uint32_t    bs[65];     // list of squares for black
+    uint8_t     wp[65];     // what white pieces are on those squares
+    uint8_t     bp[65];     // what black pieces are on those squares
 
-    // write white pieces
+    const auto writePieceList = [](const SidePosition& side, uint32_t* squares, uint8_t* pieces) INLINE_LAMBDA
     {
         uint32_t index = 0;
 
-        ws[index] = FirstBitSet(pos.Whites().king);
-        wp[index] = tb_KING;
+        squares[index] = FirstBitSet(side.king);
+        pieces[index] = tb_KING;
         index++;
 
-        pos.Whites().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA{ ws[index] = square; wp[index] = tb_PAWN; index++; });
-        pos.Whites().knights.Iterate([&](uint32_t square) INLINE_LAMBDA{ ws[index] = square; wp[index] = tb_KNIGHT; index++; });
-        pos.Whites().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA{ ws[index] = square; wp[index] = tb_BISHOP; index++; });
-        pos.Whites().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA{ ws[index] = square; wp[index] = tb_ROOK; index++; });
-        pos.Whites().queens.Iterate([&](uint32_t square) INLINE_LAMBDA{ ws[index] = square; wp[index] = tb_QUEEN; index++; });
+        side.OccupiedExcludingKing().Iterate([&](uint32_t square) INLINE_LAMBDA
+        {
+            squares[index] = square;
+            pieces[index] = static_cast<uint8_t>(PieceToGaviota(side.GetPieceAtSquare(Square(square))));
+            index++;
+        });
 
-        wp[index] = tb_NOPIECE;
-        ws[index] = tb_NOSQUARE;
-    }
+        squares[index] = tb_NOSQUARE;
+        pieces[index] = tb_NOPIECE;
+    };
 
-    // write black pieces
-    {
-        uint32_t index = 0;
-
-        bs[index] = FirstBitSet(pos.Blacks().king);
-        bp[index] = tb_KING;
-        index++;
-
-        pos.Blacks().pawns.Iterate([&](uint32_t square) INLINE_LAMBDA{ bs[index] = square; bp[index] = tb_PAWN; index++; });
-        pos.Blacks().knights.Iterate([&](uint32_t square) INLINE_LAMBDA{ bs[index] = square; bp[index] = tb_KNIGHT; index++; });
-        pos.Blacks().bishops.Iterate([&](uint32_t square) INLINE_LAMBDA{ bs[index] = square; bp[index] = tb_BISHOP; index++; });
-        pos.Blacks().rooks.Iterate([&](uint32_t square) INLINE_LAMBDA{ bs[index] = square; bp[index] = tb_ROOK; index++; });
-        pos.Blacks().queens.Iterate([&](uint32_t square) INLINE_LAMBDA{ bs[index] = square; bp[index] = tb_QUEEN; index++; });
-
-        bp[index] = tb_NOPIECE;
-        bs[index] = tb_NOSQUARE;
-    }
+    writePieceList(pos.Whites(), ws, wp);
+    writePieceList(pos.Blacks(), bs, bp);
 
     if (outDTM)
     {
@@ -389,6 +379,12 @@ bool ProbeGaviota(const Position& pos, uint32_t* outDTM, int32_t* outWDL)
     else
     {
         return false;
+    }
+
+    // side to move perspective, like Syzygy
+    if (outWDL && pos.GetSideToMove() == Black)
+    {
+        *outWDL = -*outWDL;
     }
 
     if (outDTM)
@@ -432,11 +428,10 @@ bool ProbeGaviota_Root(const Position& pos, Move& outMove, uint32_t* outDTM, int
                 return false;
             }
 
+            // child WDL is from the opponent's perspective
             int32_t score = 0;
-            if (wdl < 0) score = -CheckmateValue + dtm;
-            if (wdl > 0) score =  CheckmateValue - dtm;
-
-            if (pos.GetSideToMove() == Black) score = -score;
+            if (wdl > 0) score = -CheckmateValue + dtm;
+            if (wdl < 0) score =  CheckmateValue - dtm;
 
             if (score > bestScore)
             {
