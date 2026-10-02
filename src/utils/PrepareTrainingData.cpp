@@ -190,6 +190,9 @@ void PrepareTrainingData(const std::vector<std::string>& args)
 
         for (const auto& path : std::filesystem::directory_iterator(gamesPath))
         {
+            if (path.path().extension() != ".dat")
+                continue;
+
             {
                 std::unique_lock<std::mutex> lock(g_mutex);
                 std::cout << "Loading " << path.path().string() << "..." << std::endl;
