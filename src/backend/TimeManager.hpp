@@ -27,6 +27,7 @@ struct TimeManagerUpdateData
     const SearchResult& currResult;
     const SearchResult& prevResult;
     double bestMoveNodeFraction = 0.0;
+    ScoreType rootStaticEval = InvalidValue;
 };
 
 struct TimeManagerState

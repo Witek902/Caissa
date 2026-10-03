@@ -884,6 +884,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
         if (isMainThread)
         {
             TimeManagerUpdateData data{ depth, tempResult, thread.pvLines };
+            data.rootStaticEval = thread.searchStack[0].staticEval;
 
             // compute fraction of nodes spent on searching best move
             if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))

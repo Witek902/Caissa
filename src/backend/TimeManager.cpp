@@ -14,6 +14,9 @@ DEFINE_PARAM(TM_StabilityOffset, 1549, 1000, 2000);
 DEFINE_PARAM(TM_PredictedMoveHitScale, 915, 800, 1000);
 DEFINE_PARAM(TM_PredictedMoveMissScale, 1132, 1000, 1400);
 DEFINE_PARAM(TM_OverheadReserveFrac, 750, 400, 800);
+DEFINE_PARAM(TM_ComplexityBase, 700, 400, 1000);
+DEFINE_PARAM(TM_ComplexityScale, 500, 0, 1000);
+DEFINE_PARAM(TM_ComplexityCap, 250, 100, 600);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -113,6 +116,16 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
         const double offset = static_cast<double>(TM_NodesCountOffset) / 100.0;
         const double nodeCountFactor = nonBestMoveNodeFraction * scale + offset;
         limits.idealTimeCurrent *= nodeCountFactor;
+    }
+
+    // more time when the search score disagrees with the root static eval, less otherwise (averages ~1.0)
+    const ScoreType score = data.currResult[0].score;
+    if (data.rootStaticEval != InvalidValue && std::abs(score) < KnownWinValue)
+    {
+        const double cap = static_cast<double>(TM_ComplexityCap);
+        const double complexity = std::min(std::abs(score - data.rootStaticEval) * std::log(static_cast<double>(data.depth)), cap);
+        const double complexityFactor = static_cast<double>(TM_ComplexityBase) / 1000.0 + static_cast<double>(TM_ComplexityScale) / 1000.0 * complexity / cap;
+        limits.idealTimeCurrent *= complexityFactor;
     }
 
 #ifndef CONFIGURATION_FINAL
