@@ -7,7 +7,7 @@ namespace nn {
 struct Accumulator;
 
 static constexpr uint32_t CurrentVersion = 15;
-static constexpr uint32_t MagicNumber = 'CSNN';
+static constexpr uint32_t MagicNumber = 0x43534E4E; // 'CSNN'
 
 static constexpr uint32_t NumKingBuckets = 32;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;

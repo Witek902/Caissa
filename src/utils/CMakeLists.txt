@@ -48,7 +48,6 @@ if (CUDAToolkit_FOUND)
     target_compile_definitions(utils PRIVATE USE_CUDA)
     target_link_libraries(utils PRIVATE CUDA::cudart)
     set_property(TARGET utils PROPERTY CUDA_ARCHITECTURES native)
-    set_property(TARGET utils PROPERTY CUDA_SEPARABLE_COMPILATION ON)
     set_target_properties(utils PROPERTIES
         CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED ON

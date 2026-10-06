@@ -7,7 +7,7 @@ namespace cuda {
 
 namespace {
 
-constexpr uint32_t c_checkpointMagic = 'CCKP';
+constexpr uint32_t c_checkpointMagic = 0x43434B50; // 'CCKP'
 constexpr uint32_t c_checkpointVersion = 1;
 
 struct CheckpointHeader
