@@ -43,6 +43,9 @@ public:
     // AdamW decoupled weight decay (applied to weights only, never biases).
     float m_weightDecay = 0.0f;
 
+    float m_beta1 = 0.9f;
+    float m_beta2 = 0.999f;
+
     // Number of Adam steps performed so far. Used for bias correction; must count actual update
     // steps (one per batch), NOT outer training iterations, or the beta2 correction never saturates.
     size_t m_adamStep = 0;

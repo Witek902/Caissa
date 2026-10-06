@@ -25,10 +25,6 @@ static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs;
 // factorizer weights are clipped so that their sum with the (unclipped) bucket weights stays bounded
 static constexpr float FactorizerWeightRange = 0.99f;
 
-// Adam parameters
-constexpr float c_beta1 = 0.9f;
-constexpr float c_beta2 = 0.999f;
-
 // Quantization-aware training scales of one layer (a scale of 0 disables fake quantization)
 struct QuantScales
 {
@@ -53,6 +49,8 @@ struct AdamUpdateParams
     float maxBiasRange;
     uint32_t factorizerFirstWeight;
     float maxFactorizerRange;
+    float beta1;
+    float beta2;
     float biasCorrection1; // 1 / (1 - beta1^t)
     float biasCorrection2; // 1 / (1 - beta2^t)
 };

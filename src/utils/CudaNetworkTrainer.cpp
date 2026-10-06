@@ -20,13 +20,11 @@ static constexpr uint32_t cNumValidationVectorsPerIteration = 256 * 1024;
 // The float reference network is evaluated on a prefix of the validation set only - it runs the
 // dense feature transformer on the CPU, so it is far too slow for the whole set.
 static constexpr uint32_t cNumFloatReferenceVectors = 4 * 1024;
-static constexpr uint32_t cBatchSize = 32 * 1024;
 
 // A packed net and a full training checkpoint are kept every this many training positions
 static constexpr uint64_t cCheckpointInterval = 10'000'000'000ull;
 
-// AdamW decoupled weight decay (applied to weights only, not biases)
-static constexpr float cFeatureTransformerWeightDecay = 0.0025f;
+// AdamW decoupled weight decay of the output subnet (applied to weights only, not biases)
 static constexpr float cOutputSubnetWeightDecay = 0.0f;
 
 struct Options
@@ -72,6 +70,14 @@ struct Options
     // game result with move count). The validation set always uses 1.
     float startLambda = 0.0f;   // at the beginning of training
     float endLambda = 0.0f;     // at the end of training
+
+    // positions per optimizer step; must divide cNumTrainingVectorsPerIteration
+    uint32_t batchSize = 32 * 1024;
+
+    // AdamW
+    float beta1 = 0.9f;
+    float beta2 = 0.999f;
+    float featureTransformerWeightDecay = 0.0025f; // applied to weights only, not biases
 };
 
 class CudaNetworkTrainer
@@ -98,7 +104,7 @@ public:
         }
 
         // Initialize CUDA batch data
-        m_cudaBatchData.Allocate(cBatchSize);
+        m_cudaBatchData.Allocate(options.batchSize);
 
         // Choose which GPU to run on, change this on a multi-GPU system.
         CUDA_CHECK(cudaSetDevice(0));
@@ -248,7 +254,8 @@ void CudaNetworkTrainer::InitNetwork()
     m_cudaNetwork.Init(m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights);
 
     // AdamW weight decay (QAT is enabled inside CudaNeuralNetwork::Init).
-    m_cudaNetwork.SetWeightDecay(cFeatureTransformerWeightDecay, cOutputSubnetWeightDecay);
+    m_cudaNetwork.SetWeightDecay(m_options.featureTransformerWeightDecay, cOutputSubnetWeightDecay);
+    m_cudaNetwork.SetAdamBetas(m_options.beta1, m_options.beta2);
 }
 
 static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
@@ -393,20 +400,22 @@ void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilde
 
     builder.Fence();
 
-    const uint32_t numBatches = (static_cast<uint32_t>(outSet.size()) + cBatchSize - 1) / cBatchSize;
+    const uint32_t batchSize = m_options.batchSize;
+    const uint32_t numBatches = (static_cast<uint32_t>(outSet.size()) + batchSize - 1) / batchSize;
     builder.ParallelFor("SortSetByKingBucket", numBatches,
-        [&outSet](const TaskContext&, uint32_t batchIndex)
+        [&outSet, batchSize](const TaskContext&, uint32_t batchIndex)
     {
-        const uint32_t begin = batchIndex * cBatchSize;
-        const uint32_t end = std::min(begin + cBatchSize, static_cast<uint32_t>(outSet.size()));
+        const uint32_t begin = batchIndex * batchSize;
+        const uint32_t end = std::min(begin + batchSize, static_cast<uint32_t>(outSet.size()));
         SortBatchByKingBucket(outSet.data() + begin, end - begin);
     }, 0);
 }
 
 void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
 {
-    const uint32_t numBatches = cNumTrainingVectorsPerIteration / cBatchSize;
-    m_cudaBatchData.batchSize = cBatchSize;
+    const uint32_t batchSize = m_options.batchSize;
+    const uint32_t numBatches = cNumTrainingVectorsPerIteration / batchSize;
+    m_cudaBatchData.batchSize = batchSize;
 
     m_cudaNetwork.BeginIterationTiming();
 
@@ -414,7 +423,7 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
 
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
     // stall). Subsequent batches are prefetched while the previous batch's Adam updates run.
-    m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), cBatchSize);
+    m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), batchSize);
 
     for (uint32_t b = 0; b < numBatches; ++b)
     {
@@ -430,8 +439,8 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
         {
             m_cudaNetwork.CopyTrainingBatchAsync(
                 m_cudaBatchData,
-                m_trainingSet_Read.data() + (b + 1) * cBatchSize,
-                cBatchSize);
+                m_trainingSet_Read.data() + (b + 1) * batchSize,
+                batchSize);
         }
     }
 
@@ -442,7 +451,7 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
     {
         float squaredErrorSum = 0.0f;
         m_cudaBatchData.lossSum.CopyToHost(&squaredErrorSum, 1);
-        m_lastTrainingRmse = sqrtf(squaredErrorSum / (float)(numBatches * cBatchSize));
+        m_lastTrainingRmse = sqrtf(squaredErrorSum / (float)(numBatches * batchSize));
     }
 
     // Copy weights from CUDA to host
@@ -1079,6 +1088,9 @@ bool CudaNetworkTrainer::Train()
     const bool fromScratch = m_options.startNetPath.empty() && !resuming;
     std::cout << "Learning rate: " << m_options.startLearningRate << " -> " << m_options.endLearningRate << std::endl;
     std::cout << "Training length: " << m_options.trainingLength << "B positions" << std::endl;
+    std::cout << "Batch size: " << m_options.batchSize << std::endl;
+    std::cout << "AdamW: beta1 " << m_options.beta1 << ", beta2 " << m_options.beta2
+              << ", FT weight decay " << m_options.featureTransformerWeightDecay << std::endl;
 
     if (resuming)
     {
@@ -1295,11 +1307,25 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.trainingLength = std::stoull(args[++i]);
         else if (args[i] == "--bucketLeak")
             options.bucketLeak = std::stof(args[++i]);
+        else if (args[i] == "--batchSize")
+            options.batchSize = (uint32_t)std::stoul(args[++i]);
+        else if (args[i] == "--beta1")
+            options.beta1 = std::stof(args[++i]);
+        else if (args[i] == "--beta2")
+            options.beta2 = std::stof(args[++i]);
+        else if (args[i] == "--ftDecay")
+            options.featureTransformerWeightDecay = std::stof(args[++i]);
         else
         {
             std::cerr << "Unknown option: " << args[i] << std::endl;
             return false;
         }
+    }
+
+    if (options.batchSize == 0 || cNumTrainingVectorsPerIteration % options.batchSize != 0)
+    {
+        std::cerr << "Batch size must divide " << cNumTrainingVectorsPerIteration << std::endl;
+        return false;
     }
     std::cout << "Seed: " << options.seed << std::endl;
 

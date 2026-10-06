@@ -33,6 +33,8 @@ __global__ void AdamUpdateKernel(
     float maxBiasRange,
     uint32_t factorizerFirstWeight,
     float maxFactorizerRange,
+    float beta1,
+    float beta2,
     float biasCorrection1, // 1 / (1 - beta1^t), precomputed on the host
     float biasCorrection2  // 1 / (1 - beta2^t), precomputed on the host
 )
@@ -46,10 +48,10 @@ __global__ void AdamUpdateKernel(
     const float grad = static_cast<float>(gradients[idx]);
 
     // Update biased first moment estimate
-    const float m1 = moment1[idx] = c_beta1 * moment1[idx] + (1.0f - c_beta1) * grad;
+    const float m1 = moment1[idx] = beta1 * moment1[idx] + (1.0f - beta1) * grad;
 
     // Update biased second raw moment estimate
-    const float m2 = moment2[idx] = c_beta2 * moment2[idx] + (1.0f - c_beta2) * grad * grad;
+    const float m2 = moment2[idx] = beta2 * moment2[idx] + (1.0f - beta2) * grad * grad;
 
     // Bias-corrected moment estimates (the correction factors are step-only, precomputed host-side)
     const float m_hat = m1 * biasCorrection1;
@@ -88,6 +90,8 @@ void LaunchAdamUpdate(const AdamUpdateParams& p, cudaStream_t stream)
         p.maxBiasRange,
         p.factorizerFirstWeight,
         p.maxFactorizerRange,
+        p.beta1,
+        p.beta2,
         p.biasCorrection1,
         p.biasCorrection2
     );

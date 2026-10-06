@@ -139,6 +139,15 @@ void CudaNeuralNetwork::SetWeightDecay(float featureTransformerDecay, float outp
     m_l3Weights->m_weightDecay = outputSubnetDecay;
 }
 
+void CudaNeuralNetwork::SetAdamBetas(float beta1, float beta2)
+{
+    for (CudaWeightsStorage* weights : { m_featureTransformerWeights.get(), m_l1Weights.get(), m_l2Weights.get(), m_l3Weights.get() })
+    {
+        weights->m_beta1 = beta1;
+        weights->m_beta2 = beta2;
+    }
+}
+
 void CudaNeuralNetwork::SetFeatureTransformerFrozen(bool frozen)
 {
     m_featureTransformerWeights->m_updateWeights = !frozen;

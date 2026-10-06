@@ -29,6 +29,8 @@ public:
     // Set per-layer AdamW weight decay (applied to weights only, not biases).
     void SetWeightDecay(float featureTransformerDecay, float outputSubnetDecay);
 
+    void SetAdamBetas(float beta1, float beta2);
+
     // A frozen feature transformer keeps its weights and skips its backward pass, so only the output
     // subnets train.
     void SetFeatureTransformerFrozen(bool frozen);

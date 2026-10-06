@@ -8,7 +8,6 @@
 namespace nn {
 namespace cuda {
 
-
 CudaWeightsStorage::CudaWeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants)
     : m_inputSize(inputSize)
     , m_outputSize(outputSize)
@@ -146,8 +145,10 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
     params.maxBiasRange = m_biasRange;
     params.factorizerFirstWeight = m_factorizerFirstWeight;
     params.maxFactorizerRange = m_factorizerRange;
-    params.biasCorrection1 = (float)(1.0 / (1.0 - std::pow(c_beta1, (double)(step + 1))));
-    params.biasCorrection2 = (float)(1.0 / (1.0 - std::pow(c_beta2, (double)(step + 1))));
+    params.beta1 = m_beta1;
+    params.beta2 = m_beta2;
+    params.biasCorrection1 = (float)(1.0 / (1.0 - std::pow((double)m_beta1, (double)(step + 1))));
+    params.biasCorrection2 = (float)(1.0 / (1.0 - std::pow((double)m_beta2, (double)(step + 1))));
 
     LaunchAdamUpdate(params, stream);
 }
