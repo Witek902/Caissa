@@ -2,6 +2,9 @@
 
 #include "Common.hpp"
 
+#include <atomic>
+#include <cstring>
+
 // workaround for GCC
 template <class To, class From>
 inline

@@ -1,22 +1,10 @@
 #include "Playout.hpp"
-
 #include "../backend/Evaluate.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <condition_variable>
-#include <cstdio>
 #include <iostream>
-#include <mutex>
 #include <random>
-#include <string>
-#include <thread>
-#include <vector>
 
 static constexpr size_t c_transpositionTableSize = 8ull * 1024ull * 1024ull;
 static constexpr uint32_t c_reportIntervalSeconds = 5;

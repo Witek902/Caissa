@@ -2,7 +2,6 @@
 
 #include "Common.hpp"
 
-#include <cmath>
 #include <vector>
 
 #if defined(PLATFORM_WINDOWS)
@@ -74,7 +73,6 @@ namespace nn {
 #elif defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
     constexpr uint32_t OptimalRegisterCount = 8;
 #endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
-
 
 class NeuralNetwork;
 struct Accumulator;

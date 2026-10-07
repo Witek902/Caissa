@@ -3,6 +3,7 @@
 #include "Search.hpp"
 
 #include <fstream>
+#include <iostream>
 
 #if defined(CAISSA_EVALFILE)
 
@@ -158,6 +159,28 @@ bool LoadMainNeuralNetwork(const char* path)
     return false;
 }
 
+static std::string GetExecutablePath()
+{
+    std::string ret;
+#if defined(PLATFORM_WINDOWS)
+    char path[MAX_PATH];
+    HMODULE hModule = GetModuleHandle(NULL);
+    if (hModule != NULL)
+    {
+        // Use GetModuleFileName() with module handle to get the path
+        GetModuleFileNameA(hModule, path, (sizeof(path)));
+        ret = std::string(path);
+    }
+#elif defined(PLATFORM_LINUX)
+    if (char* execPath = realpath("/proc/self/exe", nullptr))
+    {
+        ret = execPath;
+        free(execPath);
+    }
+#endif
+    return ret;
+}
+
 static std::string GetDefaultEvalFilePath()
 {
     std::string path = GetExecutablePath();
@@ -246,7 +269,6 @@ bool CheckInsufficientMaterial(const Position& pos)
             return whiteBishopOnLightSquare == blackBishopOnLightSquare;
         }
     }
-
 
     // king and knight vs. king
     if (pos.Whites().bishops == 0 && pos.Blacks().bishops == 0)

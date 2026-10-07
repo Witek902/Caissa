@@ -1,6 +1,5 @@
 #include "GameCollection.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 
 #include <iostream>
 

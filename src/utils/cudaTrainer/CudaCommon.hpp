@@ -1,12 +1,6 @@
 #pragma once
 
 #include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
-#include <device_launch_parameters.h>
-#include <cuda_fp16.h>
-
-#include <vector>
-#include <memory>
 #include <iostream>
 
 #define CUDA_CHECK(call) \

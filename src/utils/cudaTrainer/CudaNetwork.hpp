@@ -1,6 +1,5 @@
 #pragma once
 
-#include "CudaCommon.hpp"
 #include "CudaWeightsStorage.hpp"
 #include "../TrainerCommon.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"

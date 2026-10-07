@@ -83,9 +83,7 @@ bool TimePoint::operator != (const TimePoint& rhs) const
     return mValue.QuadPart != rhs.mValue.QuadPart;
 }
 
-
 #elif defined(PLATFORM_LINUX)
-
 
 float TimePoint::ToSeconds() const
 {
@@ -142,4 +140,3 @@ bool TimePoint::operator != (const TimePoint& rhs) const
 }
 
 #endif // PLATFORM
-

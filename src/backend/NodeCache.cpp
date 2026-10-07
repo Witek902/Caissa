@@ -1,7 +1,7 @@
 #include "NodeCache.hpp"
 
-#include <algorithm>
 #include <iomanip>
+#include <iostream>
 
 void NodeCacheEntry::PrintMoves() const
 {
@@ -127,7 +127,6 @@ const NodeCacheEntry* NodeCache::TryGetEntry(const Position& pos) const
 
     return nullptr;
 }
-
 
 NodeCacheEntry* NodeCache::GetEntry(const Position& pos, uint32_t distanceFromRoot)
 {

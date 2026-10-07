@@ -1,13 +1,11 @@
-#include "Common.hpp"
-#include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
-
 #include "../backend/Math.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
 #include <filesystem>
+#include <iostream>
 
 static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 

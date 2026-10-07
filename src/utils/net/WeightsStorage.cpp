@@ -1,8 +1,7 @@
 #include "WeightsStorage.hpp"
-#include "../minitrace/minitrace.h"
 
-#include <algorithm>
 #include <random>
+#include <iostream>
 
 namespace nn {
 

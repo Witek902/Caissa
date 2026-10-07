@@ -1,13 +1,7 @@
 #pragma once
 
-#include "Common.hpp"
-
-#include <thread>
 #include <condition_variable>
 #include <functional>
-#include <atomic>
-#include <memory>
-#include <vector>
 #include <deque>
 
 class Waitable;
@@ -39,7 +33,6 @@ using TaskFunction = std::function<void(const TaskContext& context)>;
 // Parallel-for callback
 using ParallelForTaskFunction = std::function<void(const TaskContext& context, uint32_t arrayIndex)>;
 
-
 // Structure describing task, used during Task creation.
 struct TaskDesc
 {
@@ -67,7 +60,6 @@ struct TaskDesc
     TaskDesc() = default;
     TaskDesc(const TaskFunction& func) : function(func) { }
 };
-
 
 /**
  * @brief Internal task structure.
@@ -141,7 +133,6 @@ public:
 };
 
 using WorkerThreadPtr = std::unique_ptr<WorkerThread>;
-
 
 /**
  * @class ThreadPool

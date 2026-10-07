@@ -2,6 +2,7 @@
 #include "Time.hpp"
 #include "MoveGen.hpp"
 
+#include <iostream>
 
 static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
 

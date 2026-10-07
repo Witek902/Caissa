@@ -2,6 +2,8 @@
 #include "Game.hpp"
 #include "Tuning.hpp"
 
+#include <iostream>
+#include <cmath>
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 35, 25, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 219, 150, 260);

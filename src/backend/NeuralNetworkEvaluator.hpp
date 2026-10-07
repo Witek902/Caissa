@@ -1,11 +1,7 @@
 #pragma once
 
-#include "Common.hpp"
 #include "Accumulator.hpp"
-#include "Memory.hpp"
 #include "Position.hpp"
-
-#include <vector>
 
 //#define NN_ACCUMULATOR_STATS
 
@@ -130,7 +126,6 @@ public:
     static void ResetStats();
 #endif // NN_ACCUMULATOR_STATS
 };
-
 
 INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bucket)
 {

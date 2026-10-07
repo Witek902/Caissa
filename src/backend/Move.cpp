@@ -21,7 +21,6 @@ std::string PackedMove::ToString() const
     return str;
 }
 
-
 std::string Move::ToString() const
 {
     if (FromSquare() == ToSquare())

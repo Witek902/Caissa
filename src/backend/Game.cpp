@@ -1,7 +1,6 @@
 #include "Game.hpp"
 #include "Evaluate.hpp"
 
-
 Game::Game()
     : mInitPosition(Position::InitPositionFEN)
     , mPosition(Position::InitPositionFEN)

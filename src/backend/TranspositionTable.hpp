@@ -3,7 +3,6 @@
 #include "Move.hpp"
 #include "Math.hpp"
 
-
 class Position;
 
 struct TTEntry

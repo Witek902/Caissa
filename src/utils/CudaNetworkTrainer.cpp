@@ -1,36 +1,12 @@
-#include "Common.hpp"
 #include "ThreadPool.hpp"
-#include "TrainerCommon.hpp"
-
 #include "cudaTrainer/CudaNetwork.hpp"
-#include "cudaTrainer/CudaCommon.hpp"
-
-#include "../backend/Position.hpp"
-#include "../backend/PositionUtils.hpp"
-#include "../backend/Game.hpp"
-#include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Material.hpp"
-#include "../backend/Endgame.hpp"
-#include "../backend/Tablebase.hpp"
-#include "../backend/PackedNeuralNetwork.hpp"
 #include "../backend/Waitable.hpp"
-
 #include "minitrace/minitrace.h"
 
-#include <algorithm>
-#include <atomic>
-#include <iostream>
-#include <iomanip>
-#include <chrono>
-#include <random>
-#include <mutex>
 #include <fstream>
 #include <filesystem>
-#include <limits.h>
-#include <cmath>
 
 #define USE_PACKED_NET_VALIDATION
 // #define USE_EVAL_VALIDATION
@@ -641,7 +617,6 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx, size_t iteration)
         stats.nnPackedSubsetErrorSum = sqrt(stats.nnPackedSubsetErrorSum / cNumFloatReferenceVectors);
         stats.floatErrorSum = sqrt(stats.floatErrorSum / cNumFloatReferenceVectors);
 #endif // USE_PACKED_NET_VALIDATION
-
 
         const float trainingRmse = m_lastTrainingRmse;
 

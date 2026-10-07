@@ -1,6 +1,8 @@
 #include "Numa.hpp"
 #include "Memory.hpp"
 
+#include <iostream>
+
 #if defined(PLATFORM_WINDOWS)
 
 #define WIN32_LEAN_AND_MEAN
@@ -60,7 +62,6 @@ void FreeOnNode(void* ptr, size_t size)
 }
 
 } // namespace numa
-
 
 #elif defined(USE_LIBNUMA)
 
@@ -143,7 +144,6 @@ void FreeOnNode(void* ptr, size_t size)
 
 } // namespace numa
 
-
 #else
 
 namespace numa {
@@ -176,4 +176,3 @@ void FreeOnNode(void* ptr, size_t size)
 } // namespace numa
 
 #endif
-

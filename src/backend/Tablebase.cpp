@@ -2,6 +2,9 @@
 #include "Position.hpp"
 #include "Move.hpp"
 
+#include <iostream>
+#include <mutex>
+
 uint32_t g_syzygyProbeLimit = 6;
 
 #ifdef USE_SYZYGY_TABLEBASES
@@ -10,8 +13,6 @@ uint32_t g_syzygyProbeLimit = 6;
 
 #ifdef USE_GAVIOTA_TABLEBASES
 #endif
-
-#include <mutex>
 
 #ifdef USE_SYZYGY_TABLEBASES
 static std::mutex g_syzygyMutex;
@@ -41,7 +42,6 @@ void UnloadTablebase()
     }
 #endif // USE_GAVIOTA_TABLEBASES
 }
-
 
 #ifdef USE_SYZYGY_TABLEBASES
 
@@ -225,7 +225,6 @@ bool ProbeSyzygy_Root(const Position&, Move&, uint32_t*, int32_t*) { return fals
 bool ProbeSyzygy_WDL(const Position&, int32_t*) { return false; }
 
 #endif // USE_SYZYGY_TABLEBASES
-
 
 #ifdef USE_GAVIOTA_TABLEBASES
 

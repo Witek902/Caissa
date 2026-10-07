@@ -1,17 +1,12 @@
 #include "Common.hpp"
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
-#include "GameCollection.hpp"
-
-#include "../backend/Math.hpp"
-#include "../backend/Material.hpp"
 #include "../backend/Waitable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 
 #include <filesystem>
-#include <fstream>
+#include <iostream>
 
 using namespace threadpool;
 

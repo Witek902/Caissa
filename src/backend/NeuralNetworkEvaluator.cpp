@@ -1,10 +1,9 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
 
-#include <atomic>
-#include <mutex>
-#include <vector>
-#include <cstring>
+#ifdef USE_SSE
+    #include <immintrin.h>
+#endif
 
 // enable validation of NN output (check if incremental updates work correctly)
 //#define VALIDATE_NETWORK_OUTPUT

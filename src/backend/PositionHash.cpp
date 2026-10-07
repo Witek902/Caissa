@@ -8,7 +8,6 @@
 // Note: side-to-move hash is stored separately
 alignas(64) uint64_t s_ZobristHash[c_ZobristHashSize];
 
-
 static inline uint64_t rotl(const uint64_t x, int k)
 {
     return (x << k) | (x >> (64 - k));

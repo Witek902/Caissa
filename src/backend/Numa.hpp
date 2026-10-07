@@ -4,7 +4,6 @@
 
 #include <vector>
 
-
 namespace numa {
 
 // initialize NUMA subsystem, must be called before any other function in this namespace
@@ -61,6 +60,5 @@ public:
 private:
     std::vector<T*> m_nodeData;
 };
-
 
 } // namespace numa

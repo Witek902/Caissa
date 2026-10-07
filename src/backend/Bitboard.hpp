@@ -1,8 +1,7 @@
 #pragma once
 
-#include "Common.hpp"
+#include "BitUtils.hpp"
 
-#include <assert.h>
 #include <string>
 
 class Square;
@@ -201,7 +200,6 @@ struct Bitboard
         }
         return board;
     }
-
 
     INLINE static constexpr Bitboard ShiftLeft(Bitboard board, uint32_t num)
     {

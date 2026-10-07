@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Common.hpp"
 #include "Piece.hpp"
 #include "Square.hpp"
 

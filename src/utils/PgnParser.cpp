@@ -1,12 +1,7 @@
 #include "PgnParser.hpp"
-
 #include "../backend/Move.hpp"
-#include "../backend/Position.hpp"
-#include "../backend/Score.hpp"
 
 #include <fstream>
-#include <algorithm>
-#include <cstring>
 
 static constexpr size_t kPgnReadBufferSize = 65536;
 

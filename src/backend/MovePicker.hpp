@@ -1,7 +1,6 @@
 #pragma once
 
 #include "MoveList.hpp"
-#include "Position.hpp"
 
 class MoveOrderer;
 struct NodeInfo;

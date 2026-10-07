@@ -2,6 +2,7 @@
 #include "Position.hpp"
 
 #include <iomanip>
+#include <iostream>
 
 void PrintMoveList(const Position& pos, const MoveList& moves)
 {

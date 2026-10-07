@@ -2,13 +2,12 @@
 #include "SearchUtils.hpp"
 #include "MovePicker.hpp"
 #include "Game.hpp"
-#include "Material.hpp"
 #include "Evaluate.hpp"
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
-#include "Tuning.hpp"
 
-#include <algorithm>
+#include <iostream>
+#include <cinttypes>
 
 // silent warning C4127: conditional expression is constant
 #ifdef _MSC_VER
@@ -149,7 +148,6 @@ DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
 DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 2, 0, 6);
 DEFINE_PARAM(ThreadVoteScoreOffset, 10, 0, 30);
-
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
 {

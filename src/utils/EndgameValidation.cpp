@@ -1,25 +1,11 @@
-#include "Common.hpp"
-
-#include "../backend/Position.hpp"
 #include "../backend/Material.hpp"
-#include "../backend/Game.hpp"
-#include "../backend/Move.hpp"
-#include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Waitable.hpp"
-
 #include "ThreadPool.hpp"
 
 #include <iostream>
-#include <iomanip>
-#include <chrono>
-#include <random>
-#include <mutex>
-#include <fstream>
-#include <limits.h>
 
 struct EndgameValidationStats
 {

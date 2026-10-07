@@ -1,12 +1,10 @@
 #pragma once
 
 #include "Stream.hpp"
-
 #include "../backend/PositionUtils.hpp"
 #include "../backend/Move.hpp"
 #include "../backend/Game.hpp"
 
-#include <string>
 #include <mutex>
 
 namespace GameCollection

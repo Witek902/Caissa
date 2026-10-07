@@ -1,18 +1,22 @@
 #include "Common.hpp"
-
 #include "Memory.hpp"
 #include "Numa.hpp"
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
 #include "SearchUtils.hpp"
 
-#if defined(PLATFORM_WINDOWS)
-    #define WIN32_LEAN_AND_MEAN
-    #ifndef NOMINMAX
-    #define NOMINMAX
-    #endif // NOMINMAX
-    #include <Windows.h>
+#include <iostream>
+
+#ifdef USE_SSE
+    #include <immintrin.h>
 #endif
+
+#ifndef CONFIGURATION_FINAL
+NO_INLINE void AssertionFailed(const char* expression, const char* file, int line)
+{
+    std::cout << "Assertion failed: " << expression << " (" << file << ":" << line << ")" << std::endl;
+}
+#endif // CONFIGURATION_FINAL
 
 void InitEngine()
 {
@@ -29,26 +33,4 @@ void InitEngine()
     InitZobristHash();
     InitEndgame();
     SearchUtils::Init();
-}
-
-std::string GetExecutablePath()
-{
-    std::string ret;
-#if defined(PLATFORM_WINDOWS)
-    char path[MAX_PATH];
-    HMODULE hModule = GetModuleHandle(NULL);
-    if (hModule != NULL)
-    {
-        // Use GetModuleFileName() with module handle to get the path
-        GetModuleFileNameA(hModule, path, (sizeof(path)));
-        ret = std::string(path);
-    }
-#elif defined(PLATFORM_LINUX)
-    if (char* execPath = realpath("/proc/self/exe", nullptr))
-    {
-        ret = execPath;
-        free(execPath);
-    }
-#endif
-    return ret;
 }

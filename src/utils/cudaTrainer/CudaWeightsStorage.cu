@@ -1,8 +1,6 @@
 #include "CudaWeightsStorage.hpp"
+
 #include <random>
-#include <cmath>
-#include <iostream>
-#include <cstdlib>
 
 namespace nn {
 namespace cuda {

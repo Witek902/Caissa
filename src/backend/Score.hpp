@@ -3,7 +3,6 @@
 #include "Common.hpp"
 
 #include <sstream>
-#include <string>
 #include <iomanip>
 
 template<typename T>
@@ -62,7 +61,6 @@ struct TPieceScore
 };
 
 using PieceScore = TPieceScore<int16_t>;
-
 
 inline bool IsMate(const ScoreType score)
 {

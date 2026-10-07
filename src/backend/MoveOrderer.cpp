@@ -2,6 +2,8 @@
 #include "Search.hpp"
 #include "Tuning.hpp"
 
+#include <iostream>
+
 DEFINE_PARAM(QuietMoveHistoryClear, 802, -2000, 2000);
 DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
 DEFINE_PARAM(CapturesHistoryClear, 346, -2000, 2000);
@@ -52,7 +54,6 @@ DEFINE_PARAM(RookThreatEnterMalus, 8000, 3000, 16000);
 DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
 DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 8000);
-
 
 MoveOrderer::MoveOrderer()
 {

@@ -5,7 +5,6 @@
 struct NodeInfo;
 struct NodeCacheEntry;
 
-
 class MoveOrderer
 {
 public:

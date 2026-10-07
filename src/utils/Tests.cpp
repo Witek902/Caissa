@@ -1,31 +1,15 @@
 #include "ThreadPool.hpp"
-
-#include "../backend/Position.hpp"
-#include "../backend/MoveList.hpp"
 #include "../backend/MoveGen.hpp"
-#include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Tablebase.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Material.hpp"
 #include "../backend/MovePicker.hpp"
-#include "../backend/MoveOrderer.hpp"
 #include "../backend/Waitable.hpp"
-#include "../backend/Time.hpp"
 #include "../backend/TimeManager.hpp"
-#include "../backend/Score.hpp"
-#include "../backend/Endgame.hpp"
 
 #include <iostream>
-#include <chrono>
-#include <mutex>
 #include <fstream>
-#include <sstream>
 #include <iterator>
-#include <algorithm>
-#include <iomanip>
-#include <cmath>
 
 using namespace threadpool;
 

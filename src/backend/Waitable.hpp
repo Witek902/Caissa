@@ -3,8 +3,6 @@
 #include "Common.hpp"
 
 #include <condition_variable>
-#include <atomic>
-#include <mutex>
 
 // Helper class allowing for waiting for an event.
 class Waitable final

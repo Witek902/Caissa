@@ -3,9 +3,6 @@
 #include "Position.hpp"
 #include "Move.hpp"
 
-#include <vector>
-#include <atomic>
-
 struct NodeCacheEntry
 {
     struct MoveInfo

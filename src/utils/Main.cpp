@@ -1,11 +1,7 @@
-#include "Common.hpp"
-
 #include "../backend/Tablebase.hpp"
 #include "../backend/Evaluate.hpp"
 
 #include <iostream>
-#include <vector>
-#include <string>
 
 extern void RunUnitTests();
 extern bool RunPerformanceTests(const std::vector<std::string>& paths);
@@ -24,7 +20,6 @@ extern bool PermuteNet(const std::vector<std::string>& args);
 #ifdef USE_CUDA
 extern bool TrainCudaNetwork(const std::vector<std::string>& args);
 #endif // USE_CUDA
-
 
 int main(int argc, const char* argv[])
 {

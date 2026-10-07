@@ -1,26 +1,13 @@
 #include "Common.hpp"
 #include "GameCollection.hpp"
-
-#include "../backend/Position.hpp"
-#include "../backend/Game.hpp"
-#include "../backend/Score.hpp"
-#include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 
-#include <random>
-#include <mutex>
-#include <thread>
-#include <atomic>
-#include <chrono>
 #include <csignal>
-#include <cstdio>
 #include <fstream>
-#include <sstream>
-#include <string>
 #include <filesystem>
+#include <iostream>
 
 struct SelfPlayConfig
 {

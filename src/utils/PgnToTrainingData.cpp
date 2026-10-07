@@ -1,19 +1,12 @@
-#include "Common.hpp"
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
 #include "PgnParser.hpp"
-
-#include "../backend/Move.hpp"
-#include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Waitable.hpp"
 
 #include <filesystem>
 #include <fstream>
-#include <random>
-#include <atomic>
-#include <mutex>
+#include <iostream>
 
 using namespace threadpool;
 

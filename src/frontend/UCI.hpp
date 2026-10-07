@@ -2,13 +2,7 @@
 
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Waitable.hpp"
-
-#include <memory>
-#include <mutex>
-#include <vector>
-#include <thread>
 
 class PlayoutRunner;
 

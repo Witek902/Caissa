@@ -1,26 +1,14 @@
 #include "Common.hpp"
 #include "GameCollection.hpp"
 #include "ThreadPool.hpp"
-
-#include "../backend/Position.hpp"
-#include "../backend/Material.hpp"
-#include "../backend/Game.hpp"
-#include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/Waitable.hpp"
-#include "../backend/Time.hpp"
 
 #include <filesystem>
-#include <chrono>
-#include <random>
-#include <mutex>
 #include <fstream>
-#include <limits.h>
-#include <iomanip>
+#include <iostream>
 
 static const bool c_collectMaterialStats = false;
 static const bool c_dumpFortressPositions = false;

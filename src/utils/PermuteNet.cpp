@@ -1,20 +1,9 @@
-#include "Common.hpp"
 #include "TrainerCommon.hpp"
-
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
-#include "../backend/PackedNeuralNetwork.hpp"
-#include "../backend/Position.hpp"
-#include "../backend/PositionUtils.hpp"
 
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
 #include <iostream>
-#include <memory>
 #include <numeric>
-#include <string>
-#include <vector>
 
 // Reorders the accumulator so that pair slots which are rarely active end up in the same 4-input
 // group of the sparse L1 layer, which makes more groups entirely zero and lets the sparse path skip

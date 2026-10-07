@@ -1,9 +1,8 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
-#include "Memory.hpp"
 
-#include <algorithm>
 #include <thread>
+#include <iostream>
 
 uint32_t TranspositionTable::NumInitThreads = 1;
 
@@ -49,7 +48,6 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
 
     return v;
 }
-
 
 TranspositionTable::TranspositionTable(size_t initialSize)
     : clusters(nullptr)

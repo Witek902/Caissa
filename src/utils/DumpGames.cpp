@@ -1,8 +1,7 @@
-#include "Common.hpp"
 #include "GameCollection.hpp"
 
 #include <filesystem>
-#include <fstream>
+#include <iostream>
 
 static bool DumpGames(const std::string& path)
 {

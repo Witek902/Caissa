@@ -9,7 +9,6 @@
 // enable neural network last-layer tuning
 //#define ENABLE_NET_L3_TUNING
 
-
 #ifdef ENABLE_TUNING
 
 #include <string>

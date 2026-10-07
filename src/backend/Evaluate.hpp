@@ -6,8 +6,6 @@
 #include "Tuning.hpp"
 
 #include <math.h>
-#include <algorithm>
-#include <memory>
 
 namespace nn
 {

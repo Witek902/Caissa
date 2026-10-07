@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
-
 #include "Common.hpp"
+
+#include <vector>
 
 class SearchUtils
 {

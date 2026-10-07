@@ -1,12 +1,8 @@
 #include "PgnParser.hpp"
-
-#include "../backend/Position.hpp"
 #include "../backend/Move.hpp"
 
 #include <iostream>
-#include <fstream>
 #include <sstream>
-#include <vector>
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << " at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }

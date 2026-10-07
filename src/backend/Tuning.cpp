@@ -1,5 +1,7 @@
 #include "Tuning.hpp"
 
+#include <iostream>
+
 #ifdef ENABLE_TUNING
 
 std::vector<TunableParameter> g_TunableParameters;

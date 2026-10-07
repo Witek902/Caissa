@@ -2,9 +2,6 @@
 
 #include "Bitboard.hpp"
 
-#include <assert.h>
-#include <string>
-
 enum SquareName : uint32_t
 {
     Square_a1, Square_b1, Square_c1, Square_d1, Square_e1, Square_f1, Square_g1, Square_h1,

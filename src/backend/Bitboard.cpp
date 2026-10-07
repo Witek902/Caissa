@@ -1,6 +1,9 @@
 #include "Bitboard.hpp"
 #include "Square.hpp"
 
+#include <iostream>
+#include <cstring>
+
 static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
 static Bitboard gKnightAttacksBitboard[Square::NumSquares];
@@ -12,7 +15,6 @@ static Bitboard gBetweenBitboards[Square::NumSquares][Square::NumSquares];
 #ifdef USE_BMI2
 #define USE_PEXT_ATTACKS
 #endif // USE_BMI2
-
 
 #ifdef USE_PEXT_ATTACKS
 

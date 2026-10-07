@@ -1,5 +1,6 @@
 #include "Memory.hpp"
 
+#include <iostream>
 
 #if defined(PLATFORM_WINDOWS)
 
@@ -76,9 +77,7 @@ void Free(void* ptr)
     ::VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
-
 #elif defined(__GNUC__) || defined(__clang__)
-
 
 bool EnableLargePagesSupport()
 {
@@ -110,6 +109,5 @@ void Free(void* ptr)
 {
     free(ptr);
 }
-
 
 #endif

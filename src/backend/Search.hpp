@@ -1,19 +1,14 @@
 #pragma once
 
-#include "Position.hpp"
 #include "MoveList.hpp"
 #include "TranspositionTable.hpp"
 #include "MoveOrderer.hpp"
 #include "Time.hpp"
-#include "Memory.hpp"
 #include "Score.hpp"
 #include "NeuralNetworkEvaluator.hpp"
 #include "NodeCache.hpp"
 #include "Numa.hpp"
 
-#include <atomic>
-#include <memory>
-#include <thread>
 #include <condition_variable>
 #include <functional>
 
@@ -244,7 +239,6 @@ enum class NodeType
     PV,
     NonPV,
 };
-
 
 class Search
 {

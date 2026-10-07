@@ -1,17 +1,11 @@
-﻿#include "Common.hpp"
-#include "../backend/Bitboard.hpp"
-#include "../backend/Square.hpp"
+﻿#include "../backend/Square.hpp"
 
-#include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <random>
 #include <thread>
-#include <vector>
 
 // 0 - find magics for bishops
 // 1 - find magics for rooks
@@ -278,7 +272,6 @@ static void SearchWorker(uint32_t threadId)
 
     const SquareData& sd = gSquareData;
 
-
     while (true)
     {
         const uint64_t curState  = gBestState.load(std::memory_order_relaxed);
@@ -288,7 +281,6 @@ static void SearchWorker(uint32_t threadId)
         uint64_t candidate = rng();
         candidate &= ~0x00001e0000000000ULL;
         candidate |=  0x00000000000007f0ULL;
-
 
         // rook f2 (sq=13)
         //candidate &= ~0x00001ffc00000000ULL;

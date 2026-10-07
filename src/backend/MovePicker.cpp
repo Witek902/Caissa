@@ -2,7 +2,6 @@
 #include "MoveGen.hpp"
 #include "Search.hpp"
 
-
 bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore)
 {
     switch (m_stage)

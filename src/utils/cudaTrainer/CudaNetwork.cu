@@ -1,10 +1,5 @@
 #include "CudaNetwork.hpp"
 
-#include <algorithm>
-#include <cmath>
-#include <cstdio>
-#include <iostream>
-
 namespace nn {
 namespace cuda {
 
@@ -34,7 +29,6 @@ struct CheckpointLayerHeader
 };
 
 } // namespace
-
 
 // Number of slices the batch is split into when reducing dense weight gradients. Each slice is a
 // separate block, so the reduction has enough parallelism for the small output subnet layers.

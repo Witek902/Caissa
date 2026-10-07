@@ -1,26 +1,10 @@
-#include "Common.hpp"
-#include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
-
-#include "../backend/Position.hpp"
-#include "../backend/PositionUtils.hpp"
-#include "../backend/Game.hpp"
-#include "../backend/Move.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Material.hpp"
-#include "../backend/Endgame.hpp"
 #include "../backend/Tablebase.hpp"
-#include "../backend/PackedNeuralNetwork.hpp"
-#include "../backend/Waitable.hpp"
 
 #include <iostream>
-#include <iomanip>
-#include <random>
-#include <mutex>
 #include <fstream>
-#include <limits.h>
 
 void GenerateEndgamePositions()
 {

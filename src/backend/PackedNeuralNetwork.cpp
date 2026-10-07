@@ -1,22 +1,10 @@
 #include "PackedNeuralNetwork.hpp"
 #include "Accumulator.hpp"
-#include "Memory.hpp"
-#include "Math.hpp"
+#include "BitUtils.hpp"
 
-#include <cassert>
-#include <cmath>
 #include <cstring>
 #include <algorithm>
 #include <iostream>
-#include <vector>
-
-#if defined(PLATFORM_LINUX)
-    #include <fcntl.h>
-    #include <unistd.h>
-    #include <sys/mman.h>
-    #include <sys/stat.h>
-#endif // PLATFORM_LINUX
-
 
 namespace nn {
 

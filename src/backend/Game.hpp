@@ -2,8 +2,6 @@
 
 #include "Position.hpp"
 
-#include <vector>
-
 namespace std {
 
 template<>

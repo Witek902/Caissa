@@ -2,10 +2,11 @@
 #include "Playout.hpp"
 #include "../backend/MoveGen.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/NeuralNetworkEvaluator.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
-#include "../backend/Tuning.hpp"
+
+#include <iostream>
+#include <cinttypes>
 
 #ifndef CAISSA_VERSION
 #define CAISSA_VERSION "unknown"
@@ -57,7 +58,6 @@ static const uint32_t c_DefaultTTSize = 1024 * 1024 * c_DefaultTTSizeInMB;
 static const uint32_t c_DefaultGaviotaTbCacheInMB = 64;
 #endif // USE_GAVIOTA_TABLEBASES
 static const uint32_t c_MaxNumThreads = 1024;
-
 
 using UniqueLock = std::unique_lock<std::mutex>;
 
@@ -438,7 +438,6 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
             fenString += "1";
         }
 
-        
         if (!pos.FromFEN(fenString))
         {
             return false;
@@ -602,7 +601,6 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 
     // calculate time for move based on total remaining time and other heuristics
     {
-
 
         TimeManagerInitData data;
         data.moveTime = moveTime;
@@ -1049,7 +1047,6 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 
     return true;
 }
-
 
 bool UniversalChessInterface::Command_ScoreMoves()
 {

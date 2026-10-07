@@ -1,21 +1,10 @@
-#include "Common.hpp"
-
-#include "../backend/Position.hpp"
 #include "../backend/PositionUtils.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
-#include "../backend/TranspositionTable.hpp"
 #include "../backend/Evaluate.hpp"
-#include "../backend/Material.hpp"
 
 #include <iostream>
-#include <random>
-#include <mutex>
-#include <atomic>
-#include <thread>
 #include <fstream>
-#include <string>
-#include <vector>
 
 // Generates random, quiet, near-equal chess positions and writes them as a plain-FEN opening book
 // (one FEN per line, directly loadable by the selfplay tool). Positions are filtered by a fixed-depth

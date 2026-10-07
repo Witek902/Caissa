@@ -1,9 +1,8 @@
 #pragma once
 
 #include "PositionHash.hpp"
-#include "Bitboard.hpp"
+#include "Memory.hpp"
 
-#include <string>
 #include <vector>
 
 // class representing one side's pieces state

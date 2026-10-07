@@ -2,8 +2,6 @@
 
 #include "Common.hpp"
 
-#include <string>
-
 enum class Piece : uint8_t
 {
     None,
