@@ -1,4 +1,5 @@
 #include "ThreadPool.hpp"
+#include "TrainerCommon.hpp"
 #include "cudaTrainer/CudaNetwork.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/Evaluate.hpp"
@@ -7,6 +8,7 @@
 
 #include <fstream>
 #include <filesystem>
+#include <iostream>
 
 #define USE_PACKED_NET_VALIDATION
 // #define USE_EVAL_VALIDATION

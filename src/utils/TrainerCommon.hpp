@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameCollection.hpp"
+#include "TrainingEntry.hpp"
 
 #include <memory>
 
@@ -10,17 +11,6 @@ struct PositionEntry
     ScoreType score = InvalidValue;
     uint8_t wdlScore = 0xFF;
     uint8_t tbScore = 0xFF;
-};
-
-struct TrainingEntry
-{
-    uint8_t variant;
-    uint8_t numWhiteFeatures;
-    uint8_t numBlackFeatures;
-    uint8_t __padding;
-    uint16_t whiteFeatures[32];
-    uint16_t blackFeatures[32];
-    float targetOutput;
 };
 
 using TrainingDataSet = std::vector<TrainingEntry>;

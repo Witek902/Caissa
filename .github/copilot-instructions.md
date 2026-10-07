@@ -69,7 +69,8 @@ The project has three CMake targets:
 - `Search.cpp/.hpp` – negamax with alpha-beta, PVS, LMR, null-move pruning, singular extensions, correction history
 - `Position.cpp/.hpp` – board state; `SidePosition` holds per-color bitboards + piece array
 - `MoveGen.hpp`, `MoveList.hpp` – move generation; max 280 moves per position (`MaxAllowedMoves`)
-- `PackedNeuralNetwork.cpp/.hpp` – runtime NNUE inference (manually SIMD-vectorized)
+- `PackedNeuralNetwork.cpp/.hpp` – runtime NNUE inference (manually SIMD-vectorized). The header holds only the network sizes, quantization scales and types (the CUDA kernels include it too); the SIMD vector helpers (`Int16Vec*`, `NN_USE_*`) are in `Accumulator.hpp`
+- `Common.hpp` – platform macros, `ASSERT`/`VERIFY`, `INLINE`, basic types and constants; no STL. Bit utilities (`PopCount`, `FirstBitSet`, pdep/pext, …) are in `BitUtils.hpp`, `Prefetch`/`AlignedMemcpy64` in `Memory.hpp`
 - `NeuralNetworkEvaluator.cpp/.hpp` – incremental accumulator updates; `AccumulatorCache`
 - `TranspositionTable.cpp/.hpp` – shared TT with large-page support
 - `Evaluate.cpp/.hpp` – static eval entry point; piece values, WLD model
@@ -80,7 +81,7 @@ The project has three CMake targets:
 - `Tuning.cpp/.hpp` – `DEFINE_PARAM` macro for exposing search params to UCI (requires `ENABLE_TUNING` build flag)
 
 ### Neural network (runtime)
-Architecture: `(32×768 → 1024) × 2 → 1` (dual-perspective, one accumulator per king side, 32 king buckets, 768 = 12 piece types × 64 squares). The last layer has 8 variants selected by piece count. Network files use the `.pnn` extension.
+Architecture: `(32×768 → 1536) × 2 → pairwise CReLU → 16 → 32 → 1` (dual-perspective, one accumulator per king side, 32 king buckets, 768 = 12 piece types × 64 squares). The output subnet has 8 variants selected by piece count. Network files use the `.pnn` extension.
 
 ### utils – subcommands (invoked as `bin/utils <command>`)
 `unittest`, `perftest`, `selfplay`, `prepareTrainingData`, `plainTextToTrainingData`, `dumpGames`, `testNetwork`, `trainNetwork`, `trainCudaNetwork` (CUDA only), `validateEndgame`, `generateEndgamePositions`, `generateRandomPositions`, `analyzeGames`
@@ -153,5 +154,8 @@ Some LMR parameters have non-obvious sign semantics — verify the usage in code
 ### Compiler warnings
 Warnings are errors (`-Werror` / `/WX`). Do not introduce new warnings. Approved warning suppressions are listed in the root `CMakeLists.txt`.
 
+### Includes
+Project includes first, one blank line, then system includes. Include only what the file uses. `Common.hpp`, `PackedNeuralNetwork.hpp`, `CudaCommon.hpp` and `CudaKernels.hpp` stay free of the STL: they are included almost everywhere, and by nvcc.
+
 ### Namespace usage
-The neural network runtime lives in namespace `nn`. The trainer lives in `src/utils/cudaTrainer/` and `src/utils/CudaNetworkTrainer.cpp`. The thread pool utility is in namespace `threadpool`.
+The neural network runtime lives in namespace `nn`. The trainer lives in `src/utils/cudaTrainer/` and `src/utils/CudaNetworkTrainer.cpp`: kernels in `CudaForward.cu` / `CudaBackward.cu` / `CudaOptimizer.cu`, host code in the `.cpp` files, and `CudaKernels.hpp` as the STL-free interface between them (see `src/utils/cudaTrainer/README.md`). The thread pool utility is in namespace `threadpool`.

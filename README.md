@@ -271,7 +271,7 @@ Caissa has been written **from the ground up** since early 2021:
 - **Runtime evaluation**: [`PackedNeuralNetwork.cpp`](src/backend/PackedNeuralNetwork.cpp)
   - Inspired by [nnue.md](https://github.com/glinscott/nnue-pytorch/blob/master/docs/nnue.md)
   - Highly optimized with manual SIMD vectorization
-- **Network trainer**: [`CudaNetworkTrainer.cpp`](src/utils/CudaNetworkTrainer.cpp), [`CudaNetwork.cu`](src/utils/cudaTrainer/CudaNetwork.cu) — written completely from scratch
+- **Network trainer**: [`CudaNetworkTrainer.cpp`](src/utils/CudaNetworkTrainer.cpp), [`cudaTrainer/`](src/utils/cudaTrainer/) — written completely from scratch
 - **Self-play generator**: [`SelfPlay.cpp`](src/utils/SelfPlay.cpp)
   - Generates games with fixed nodes/depth
   - Custom binary format for efficient storage
@@ -296,7 +296,7 @@ src/
 │
 └── utils/       # Development and training tools executable (utils)
     ├── CudaNetworkTrainer.*     # Neural network training
-    ├── cudaTrainer/             # CUDA kernels
+    ├── cudaTrainer/             # CUDA trainer: kernels and GPU training state
     ├── SelfPlay.*               # Self-play game generation
     ├── Tests.*                  # Unit tests
     └── ...

@@ -724,22 +724,6 @@ INLINE static int32_t LastLayer(const IntermediateType* input, const LastLayerWe
 
 ///
 
-// Converts a hidden layer weight matrix from output-major to the grouped layout, in place
-// TODO remove this when version 13 is no longer supported
-static void RegroupHiddenWeights(HiddenLayerWeightType* weights, uint32_t numInputs, uint32_t numOutputs)
-{
-    const std::vector<HiddenLayerWeightType> outputMajor(weights, weights + numInputs * numOutputs);
-    for (uint32_t output = 0; output < numOutputs; ++output)
-    {
-        for (uint32_t input = 0; input < numInputs; ++input)
-        {
-            weights[HiddenWeightIndex(input, output, numOutputs)] = outputMajor[output * numInputs + input];
-        }
-    }
-}
-
-///
-
 PackedNeuralNetwork::PackedNeuralNetwork()
 {
     header.magic = MagicNumber;

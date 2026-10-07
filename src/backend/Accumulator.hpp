@@ -2,7 +2,67 @@
 
 #include "PackedNeuralNetwork.hpp"
 
+#ifdef USE_SSE
+    #include <immintrin.h>
+#endif // USE_SSE
+
+#ifdef USE_ARM_NEON
+    #include <arm_neon.h>
+#endif // USE_ARM_NEON
+
 namespace nn {
+
+#ifdef USE_VNNI
+#define NN_USE_VNNI
+#endif // USE_VNNI
+
+#if defined(USE_AVX512)
+    #define NN_USE_AVX512
+    using Int16VecType = __m512i;
+    constexpr const uint32_t VectorRegSize = 512;
+    #define Int16VecLoad(ptr) _mm512_load_si512(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm512_store_si512(reinterpret_cast<Int16VecType*>(ptr), (val))
+    #define Int16VecAdd _mm512_add_epi16
+    #define Int16VecSub _mm512_sub_epi16
+
+#elif defined(USE_AVX2)
+    #define NN_USE_AVX2
+    using Int16VecType = __m256i;
+    constexpr const uint32_t VectorRegSize = 256;
+    #define Int16VecLoad(ptr) _mm256_load_si256(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm256_store_si256(reinterpret_cast<Int16VecType*>(ptr), (val))
+    #define Int16VecAdd _mm256_add_epi16
+    #define Int16VecSub _mm256_sub_epi16
+
+#elif defined(USE_SSE2)
+    #define NN_USE_SSE2
+    using Int16VecType = __m128i;
+    constexpr const uint32_t VectorRegSize = 128;
+    #define Int16VecLoad(ptr) _mm_load_si128(reinterpret_cast<const Int16VecType*>(ptr))
+    #define Int16VecStore(ptr,val) _mm_store_si128(reinterpret_cast<Int16VecType*>(ptr), (val))
+    #define Int16VecAdd _mm_add_epi16
+    #define Int16VecSub _mm_sub_epi16
+
+#elif defined(USE_ARM_NEON)
+    #define NN_USE_ARM_NEON
+    using Int16VecType = int16x8_t;
+    constexpr const uint32_t VectorRegSize = 128;
+    #define Int16VecLoad(ptr) (*reinterpret_cast<const int16x8_t*>(ptr))
+    #define Int16VecStore(ptr,val) ((*reinterpret_cast<int16x8_t*>(ptr)) = (val))
+    #define Int16VecAdd vaddq_s16
+    #define Int16VecSub vsubq_s16
+
+#endif // USE_ARM_NEON
+
+#ifdef USE_SSE4
+    #define NN_USE_SSE4
+#endif // USE_SSE
+
+#if defined(NN_USE_AVX512)
+    constexpr uint32_t OptimalRegisterCount = 16;
+#elif defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+    constexpr uint32_t OptimalRegisterCount = 8;
+#endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
 
 using AccumulatorType = int16_t;
 
