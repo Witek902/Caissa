@@ -18,7 +18,13 @@ public:
 
     void Init(uint32_t numActiveInputs, float bias = 0.0f);
 
-    void PrintStats() const;
+    struct Stats
+    {
+        float minWeight, maxWeight, weightAvg, weightStdDev;
+        float minBias, maxBias, biasAvg, biasStdDev;
+    };
+
+    Stats ComputeStats() const;
 
     uint32_t m_inputSize = 0;
     uint32_t m_outputSize = 0;

@@ -4,15 +4,29 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 
 static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 
-bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingDataPath)
+// target share (%) of training positions per pair of piece counts, halfway between the selfplay data
+// and the piece counts where LTC games are decided; pairs smooth out the odd/even pattern left by exchanges
+static constexpr float c_PiecePairTargetShare[] =
+{
+    0.0f, 0.0f, 1.6f, 5.6f, 7.6f, 9.3f, 9.9f, 9.9f, 9.6f, 9.1f, 8.6f, 8.3f, 7.4f, 6.3f, 4.3f, 2.1f, 0.5f,
+};
+
+bool TrainingDataLoader::Init(std::mt19937& gen, const Options& options, const std::string& trainingDataPath)
 {
     uint64_t totalDataSize = 0;
 
+    mOptions = options;
+    mPiecePairKeepProb.fill(1.0f);
+
+    mDataPath = std::filesystem::absolute(trainingDataPath).string();
     mCDF.push_back(0.0);
 
     for (const auto& path : std::filesystem::directory_iterator(trainingDataPath))
@@ -65,7 +79,49 @@ bool TrainingDataLoader::Init(std::mt19937& gen, const std::string& trainingData
         }
     }
 
-    return !mContexts.empty();
+    if (mContexts.empty())
+        return false;
+
+    mTotalDataSize = totalDataSize;
+
+    if (mOptions.pieceCountTarget)
+        InitPiecePairKeepProb(gen);
+
+    return true;
+}
+
+void TrainingDataLoader::InitPiecePairKeepProb(std::mt19937& gen)
+{
+    static_assert(std::size(c_PiecePairTargetShare) == NumPiecePairs);
+
+    const uint32_t numSamples = 1000000;
+    uint32_t counts[NumPiecePairs] = {};
+    for (uint32_t i = 0; i < numSamples; ++i)
+    {
+        PositionEntry entry;
+        Position pos;
+        if (!FetchNextPosition(gen, entry, pos, UINT64_MAX))
+            return;
+        counts[entry.pos.occupied.Count() / 2]++;
+    }
+
+    float ratios[NumPiecePairs];
+    float maxRatio = 0.0f;
+    for (uint32_t i = 0; i < NumPiecePairs; ++i)
+    {
+        ratios[i] = counts[i] > 0 ? c_PiecePairTargetShare[i] / static_cast<float>(counts[i]) : 0.0f;
+        maxRatio = std::max(maxRatio, ratios[i]);
+    }
+
+    std::cout << "Piece count keep probability:";
+    for (uint32_t i = 0; i < NumPiecePairs; ++i)
+    {
+        if (counts[i] > 0)
+            mPiecePairKeepProb[i] = ratios[i] / maxRatio;
+        if (c_PiecePairTargetShare[i] > 0.0f)
+            std::cout << " " << 2 * i << "-" << 2 * i + 1 << ": " << mPiecePairKeepProb[i];
+    }
+    std::cout << std::endl;
 }
 
 uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
@@ -100,10 +156,10 @@ bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& out
     if (fileIndex >= mContexts.size())
         return false;
 
-    return mContexts[fileIndex].FetchNextPosition(gen, outEntry, outPosition, kingBucketMask);
+    return mContexts[fileIndex].FetchNextPosition(gen, mOptions, mPiecePairKeepProb, outEntry, outPosition, kingBucketMask);
 }
 
-bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, const Options& options, const PiecePairKeepProb& piecePairKeepProb, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
 {
     for (;;)
     {
@@ -115,7 +171,6 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
                 if (fileStream->GetPosition() > 0)
                 {
-                    std::cout << "Resetting stream " << fileName << std::endl;
                     fileStream->SetPosition(0);
                 }
                 else
@@ -142,6 +197,15 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
             (outEntry.score < -WdlSkippingThreshold && outEntry.wdlScore == 2))
             continue;
 
+        // partially skip decisive positions whose game result agrees with the score, the net learns little from them
+        if (options.decisiveSkip &&
+            ((outEntry.score > 0 && outEntry.wdlScore == 1) || (outEntry.score < 0 && outEntry.wdlScore == 2)))
+        {
+            const float decisiveSkipProb = std::clamp(static_cast<float>(std::abs(outEntry.score) - 400) / 800.0f, 0.0f, 0.75f);
+            if (decisiveSkipProb > 0.0f && std::bernoulli_distribution(decisiveSkipProb)(gen))
+                continue;
+        }
+
         // constant skipping
         {
             std::bernoulli_distribution skippingDistr(skippingProbability);
@@ -165,11 +229,12 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         }
         else
         {
-            // skip based on half-move counter
+            // results close to the 50-move rule depend on the half-move counter, which the net doesn't see
             {
-                const float hmcSkipProb = sqrtf((float)outEntry.pos.halfMoveCount / 100.0f);
-                std::bernoulli_distribution skippingDistr(hmcSkipProb);
-                if (skippingDistr(gen))
+                const float hmcSkipProb = options.hmcSkipFrom20 ?
+                    std::clamp(static_cast<float>(outEntry.pos.halfMoveCount - 20) / 80.0f, 0.0f, 1.0f) :
+                    sqrtf(static_cast<float>(outEntry.pos.halfMoveCount) / 100.0f);
+                if (hmcSkipProb > 0.0f && std::bernoulli_distribution(hmcSkipProb)(gen))
                     continue;
             }
 
@@ -192,8 +257,10 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
                 if (EvaluateEndgame(outPosition, endgameScore))
                     continue;
 
-                const float pieceCountSkipProb = Sqr(static_cast<float>(numPieces - 22) / 30.0f);
-                if (pieceCountSkipProb > 0.0f && std::bernoulli_distribution(pieceCountSkipProb)(gen))
+                const float keepProb = options.pieceCountTarget ?
+                    piecePairKeepProb[numPieces / 2] :
+                    1.0f - Sqr(static_cast<float>(numPieces - 22) / 30.0f);
+                if (keepProb < 1.0f && !std::bernoulli_distribution(keepProb)(gen))
                     continue;
             }
         }
