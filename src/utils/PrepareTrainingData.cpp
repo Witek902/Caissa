@@ -2,7 +2,6 @@
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
 #include "../backend/Waitable.hpp"
-#include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 
 #include <filesystem>
@@ -13,21 +12,6 @@ using namespace threadpool;
 // #define OUTPUT_TEXT_FILE
 
 static std::mutex g_mutex;
-
-static constexpr int32_t c_ScoreTreshold = 1600;
-static constexpr int32_t c_EvalTreshold = 800;
-
-static bool IsPositionImbalanced(const Position& pos, ScoreType moveScore)
-{
-    if (pos.GetSideToMove() == Black)
-    {
-        moveScore = -moveScore;
-    }
-
-    return
-        (moveScore > c_ScoreTreshold && Evaluate(pos) > c_EvalTreshold) ||
-        (moveScore < -c_ScoreTreshold && Evaluate(pos) < -c_EvalTreshold);
-}
 
 static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::string& outputPath)
 {
@@ -82,8 +66,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
 
             if (move.IsQuiet() &&                                               // best move must be quiet
                 pos.GetNumPieces() >= 4 &&                                      // skip known endgames
-                !pos.IsInCheck() /* &&                                             // skip check positions
-                !IsPositionImbalanced(pos, moveScore)*/)                          // skip imbalanced positions
+                !pos.IsInCheck())                                               // skip check positions
             {
                 PositionEntry entry{};
 
