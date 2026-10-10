@@ -19,9 +19,6 @@ public:
 
     // Replace the weights with a random initialization (training from scratch)
     void InitRandomWeights(uint32_t seed);
-    // Random initialization of the output subnets only, keeping the feature transformer
-    // (used when warm starting the feature transformer from an existing single-layer net)
-    void InitRandomOutputSubnetWeights(uint32_t seed);
 
     void Forward(CudaBatchData& batch);
     void Backward(CudaBatchData& batch, float learningRate);
@@ -71,6 +68,9 @@ public:
     static constexpr uint32_t c_l2Size = nn::L2Size;
 
 private:
+    // Random initialization of the output subnets, part of InitRandomWeights
+    void InitRandomOutputSubnetWeights(uint32_t seed);
+
     // CUDA weight storages. The feature transformer has a single variant; each output subnet
     // layer has one per output bucket.
     CudaWeightsStoragePtr m_featureTransformerWeights;

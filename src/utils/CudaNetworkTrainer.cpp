@@ -63,12 +63,19 @@ static const char* c_testPositions[] =
     "8/8/8/p7/K5R1/1n6/1k1r4/8 w - - 0 1", // should be 0
     "8/8/2k3N1/8/Nn2N3/4K3/8/7n w - - 0 1", // should be 1
     "8/8/8/8/3r4/6p1/1RP2k2/1K6 w - - 0 1", // should be 1
-    "8/8/8/8/3r4/6p1/1RP2k2/1K6 w - - 0 1", // should be 1
     "8/2p5/pp6/4P1p1/8/2k5/2P5/3K4 w - - 0 1", // should be 1
     "1Q6/5p2/4k3/6p1/1K6/8/4q3/8 w - - 0 1", // should be 1
     "8/8/k1K5/3Q4/8/8/4q2q/8 w - - 0 1", // should be 1
     "rnbqk1nr/3p1pbp/p1pPp1p1/PpP5/1P6/8/4PPPP/1NBQKBNR w kq - 1 9", // should be 1?
     "rn1qkbnr/pbp1p3/1p1pPp1p/5PpP/6P1/8/PPPP4/RNBQKBN1 w Qkq - 1 9", // should be 1?
+    // recaptures: the best move recaptures on the square just captured on
+    "rn1qr1k1/ppp2ppp/5n2/3pbb2/N7/2PN1PP1/PP1PB2P/R1BQK2R w KQ - 0 12", // should be 0, Nxe5, bishop, opening
+    "3r2k1/2br2p1/5q1p/1ppPpp2/2P5/1P2BnP1/5P1P/R2QR2K w - - 0 32", // should be 0, Qxf3, knight, middlegame
+    "r2q1rk1/pp3ppp/8/1N2P3/PP6/1Q1p4/R2bbPPP/4R1K1 w - - 0 22", // should be 0, Rxd2, bishop, middlegame
+    "8/1r3pk1/2nqpn1p/6p1/p2p4/P2B1PP1/1Q3PK1/4R3 w - - 0 35", // should be 0, Qxb7, rook
+    "8/4n3/4k1p1/8/7P/4q1NK/5P2/8 w - - 0 65", // should be 0, fxe3, queen, into a minor-piece ending
+    "3rk3/pp2p3/6p1/3P4/7p/3R2P1/PP6/6K1 w - - 0 32", // should be 0, gxh4, pawn, rook ending
+    "8/8/4k3/2n2p1p/1P5P/P2R4/6r1/2K5 w - - 0 56", // should be 0, bxc5, knight, rook ending
 };
 
 // AdamW decoupled weight decay of the output subnet (applied to weights only, not biases)
@@ -295,6 +302,10 @@ private:
     void Validate(const TaskContext& ctx);
 
     NetworkDetails CollectNetworkDetails() const;
+#ifdef USE_PACKED_NET_VALIDATION
+    void EvalTestPositions(int32_t* outEvals) const;
+    static std::string FormatTestPositions(const int32_t* evals, int indent);
+#endif // USE_PACKED_NET_VALIDATION
     void WriteNetworkDetails(const NetworkDetails& details, uint64_t numPositions);
     void PrintNetworkDetails(const NetworkDetails& details, int indent) const;
 
@@ -309,9 +320,8 @@ private:
 
     bool PackNetwork();
 
-    // Loads a packed net. Version 12 has no output subnet, so outHasOutputSubnet reports whether
-    // the caller still needs to initialize one.
-    bool UnpackNetwork(const char* path, bool& outHasOutputSubnet);
+    // Loads a packed net into the float weights
+    bool UnpackNetwork(const char* path);
 
     void ReviveDeadNeurons();
 
@@ -729,16 +739,38 @@ CudaNetworkTrainer::NetworkDetails CudaNetworkTrainer::CollectNetworkDetails() c
         details.layerStats[i] = layers[i]->ComputeStats();
 
 #ifdef USE_PACKED_NET_VALIDATION
-    for (size_t i = 0; i < std::size(c_testPositions); ++i)
-    {
-        TrainingEntry entry;
-        PositionToTrainingEntry(Position(c_testPositions[i]), entry);
-        details.testPositionEvals[i] = ExpectedGameScoreToInternalEval(EvalPackedNetwork(entry, *m_packedNet));
-    }
+    EvalTestPositions(details.testPositionEvals);
 #endif // USE_PACKED_NET_VALIDATION
 
     return details;
 }
+
+#ifdef USE_PACKED_NET_VALIDATION
+void CudaNetworkTrainer::EvalTestPositions(int32_t* outEvals) const
+{
+    for (size_t i = 0; i < std::size(c_testPositions); ++i)
+    {
+        TrainingEntry entry;
+        PositionToTrainingEntry(Position(c_testPositions[i]), entry);
+        outEvals[i] = ExpectedGameScoreToInternalEval(EvalPackedNetwork(entry, *m_packedNet));
+    }
+}
+
+std::string CudaNetworkTrainer::FormatTestPositions(const int32_t* evals, int indent)
+{
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%*stest positions (packed net eval):\n", indent, "");
+    std::string str = buf;
+
+    for (size_t i = 0; i < std::size(c_testPositions); ++i)
+    {
+        snprintf(buf, sizeof(buf), "%*s%6d  %s\n", indent, "", evals[i], c_testPositions[i]);
+        str += buf;
+    }
+
+    return str;
+}
+#endif // USE_PACKED_NET_VALIDATION
 
 void CudaNetworkTrainer::WriteNetworkDetails(const NetworkDetails& details, uint64_t numPositions)
 {
@@ -777,14 +809,7 @@ void CudaNetworkTrainer::PrintNetworkDetails(const NetworkDetails& details, int 
     }
 
 #ifdef USE_PACKED_NET_VALIDATION
-    snprintf(buf, sizeof(buf), "%*stest positions (packed net eval):\n", indent, "");
-    str += buf;
-
-    for (size_t i = 0; i < std::size(c_testPositions); ++i)
-    {
-        snprintf(buf, sizeof(buf), "%*s%6d  %s\n", indent, "", details.testPositionEvals[i], c_testPositions[i]);
-        str += buf;
-    }
+    str += FormatTestPositions(details.testPositionEvals, indent);
 #endif // USE_PACKED_NET_VALIDATION
 
     std::cout << str << std::flush;
@@ -1009,107 +1034,14 @@ bool CudaNetworkTrainer::PackNetwork()
     return true;
 }
 
-// Unpacks the feature transformer of a version 12 (single hidden layer) network. That format has
-// no counterpart for the output subnet, so the caller must initialize it separately.
-static bool UnpackNetworkV12(const char* path, nn::Values& featureTransformerWeights)
+bool CudaNetworkTrainer::UnpackNetwork(const char* path)
 {
-    constexpr uint32_t OldKingBuckets = 32;
-    constexpr float OldActivationRangeScaling = 255;
-    constexpr float OldInputLayerWeightQuantizationScale = OldActivationRangeScaling;
-    constexpr float OldInputLayerBiasQuantizationScale = OldActivationRangeScaling;
-
-    struct alignas(CACHELINE_SIZE) OldLastLayerVariant
-    {
-        nn::LastLayerWeightType weights[2 * nn::AccumulatorSize];
-        nn::LastLayerBiasType bias;
-        int32_t padding[15];
-    };
-
-    struct alignas(CACHELINE_SIZE) OldPackedNeuralNetwork
-    {
-        nn::PackedNeuralNetwork::Header header;
-        nn::FirstLayerWeightType accumulatorWeights[768u * OldKingBuckets * nn::AccumulatorSize];
-        nn::FirstLayerBiasType accumulatorBiases[nn::AccumulatorSize];
-        OldLastLayerVariant lastLayerVariants[nn::NumVariants];
-    };
-
-    FILE* file = fopen(path, "rb");
-    if (!file)
-    {
-        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
-        return false;
-    }
-
-    auto oldPackedNet = std::make_unique<OldPackedNeuralNetwork>();
-    if (1 != fread(oldPackedNet.get(), sizeof(OldPackedNeuralNetwork), 1, file))
-    {
-        fclose(file);
-        std::cerr << "Failed to load neural network: " << "cannot read header" << std::endl;
-        return false;
-    }
-
-    // feature transformer
-    {
-        nn::Values& weights = featureTransformerWeights;
-
-        UnpackWeights(
-            weights,
-            OldKingBuckets * 768,
-            nn::AccumulatorSize,
-            oldPackedNet->accumulatorWeights,
-            oldPackedNet->accumulatorBiases,
-            OldInputLayerWeightQuantizationScale,
-            OldInputLayerBiasQuantizationScale,
-            WeightLayout::InputMajor);
-
-#if USE_FACTORIZER
-        // a packed net has the factorizer already folded in: move the biases behind the (zeroed)
-        // factorizer rows
-        std::copy(
-            weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize,
-            weights.begin() + (nn::NumNetworkInputs + 1) * nn::AccumulatorSize,
-            weights.begin() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize);
-        std::fill(
-            weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize,
-            weights.begin() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize,
-            0.0f);
-#endif // USE_FACTORIZER
-    }
-
-    fclose(file);
-    return true;
-}
-
-bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubnet)
-{
-    nn::PackedNeuralNetwork::Header header{};
-    {
-        FILE* file = fopen(path, "rb");
-        if (!file)
-        {
-            std::cerr << "Failed to load neural network: cannot open " << path << std::endl;
-            return false;
-        }
-        const bool read = fread(&header, sizeof(header), 1, file) == 1;
-        fclose(file);
-
-        if (!read || header.magic != nn::MagicNumber)
-        {
-            std::cerr << "Failed to load neural network: " << path << " is not a network file" << std::endl;
-            return false;
-        }
-    }
-
-    if (header.version == 12)
-    {
-        outHasOutputSubnet = false;
-        return UnpackNetworkV12(path, m_featureTransformerWeights->m_variants.front().m_weights);
-    }
-
-    // loads the current version and upgrades version 13 in place
     auto packedNet = std::make_unique<nn::PackedNeuralNetwork>();
     if (!packedNet->LoadFromFile(path))
+    {
+        std::cerr << "Failed to load neural network: " << path << std::endl;
         return false;
+    }
 
     // feature transformer
     {
@@ -1166,7 +1098,6 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path, bool& outHasOutputSubne
             WeightLayout::OutputMajor);
     }
 
-    outHasOutputSubnet = true;
     return true;
 }
 
@@ -1272,20 +1203,12 @@ bool CudaNetworkTrainer::Train()
     }
     else
     {
-        bool hasOutputSubnet = false;
-        if (!UnpackNetwork(m_options.startNetPath.c_str(), hasOutputSubnet))
+        if (!UnpackNetwork(m_options.startNetPath.c_str()))
             return false;
 
-        std::cout << "Starting from net: " << m_options.startNetPath
-            << (hasOutputSubnet ? "" : " (feature transformer only)") << std::endl;
+        std::cout << "Starting from net: " << m_options.startNetPath << std::endl;
 
         m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights);
-
-        if (!hasOutputSubnet)
-        {
-            m_cudaNetwork.InitRandomOutputSubnetWeights(m_options.seed);
-            m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights);
-        }
     }
 
     if (m_options.reviveDeadNeurons)
@@ -1465,6 +1388,12 @@ bool CudaNetworkTrainer::Train()
                 taskPositionsPerSecond(gpuTimeMsSum) * 1.0e-6, taskPositionsPerSecond(trainTaskMsSum) * 1.0e-6,
                 taskPositionsPerSecond(loaderMsSum) * 1.0e-6, taskPositionsPerSecond(validationMsSum) * 1.0e-6, limit);
             str += buf;
+
+#ifdef USE_PACKED_NET_VALIDATION
+            int32_t testPositionEvals[std::size(c_testPositions)];
+            EvalTestPositions(testPositionEvals);
+            str += FormatTestPositions(testPositionEvals, indent);
+#endif // USE_PACKED_NET_VALIDATION
 
             std::cout << str << std::flush;
             m_progressFile.flush();

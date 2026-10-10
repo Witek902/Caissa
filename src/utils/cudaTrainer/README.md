@@ -44,7 +44,7 @@ the key for joining files and runs; `iteration` and `elapsed_s` restart from 0 i
 | `-settings.txt` | `key=value` run settings: full command line, start time, build, device, all options including the loader flags, data path/files/bytes, and with `--pieceCountTarget` the keep probabilities (one per pair of piece counts, from 0–1 pieces). A resumed run writes `-settings-resume-<N>B.txt` instead |
 | `-progress.tsv` | One row per iteration from the third on (columns below) |
 | `-weights.tsv` | Every 1B positions: `positions, layer (FT/L1/L2/L3), w_min, w_max, w_avg, w_std, b_min, b_max, b_avg, b_std` |
-| `-test-positions.tsv` | Every 1B positions: `positions, index, eval, fen` — packed-net eval of the fixed test positions in internal units; `index` is stable (one FEN is listed twice) |
+| `-test-positions.tsv` | Every 1B positions: `positions, index, eval, fen` — packed-net eval of the test positions in internal units; `index` is the position in `c_testPositions` and shifts when the list changes, so compare runs by `fen` |
 | `-<N>B.pnn`, `-<N>B.ckpt` | Packed net and full training state every 10B positions |
 | `.pnn` | Latest packed net, rewritten every 50 iterations |
 
@@ -59,9 +59,9 @@ the key for joining files and runs; `iteration` and `elapsed_s` restart from 0 i
 | `val_float_subset_rmse`, `val_pnn_subset_rmse` | Float and packed net on the first 4K validation positions; the gap is the quantization error |
 | `train_ms`, `gpu_ms`, `loader_ms`, `validation_ms` | Wall time of the training task (GPU work plus host copies), GPU time alone, training-set generation and validation. The three tasks run concurrently, so the largest one limits the speed |
 
-The console prints a three-line report every 10 seconds (progress and ETA; learning rate, lambda and
-validation; positions per second of each task and which one limits the speed) and, at every checkpoint, the
-weight statistics and test position evals.
+The console prints a report every 10 seconds (progress and ETA; learning rate, lambda and validation;
+positions per second of each task and which one limits the speed; the test position evals) and, at every
+checkpoint, the weight statistics and test position evals.
 
 ## Training
 
