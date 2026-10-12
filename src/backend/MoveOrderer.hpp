@@ -66,8 +66,8 @@ public:
 
 private:
 
-    // number of pawn structure buckets; must be a power of two
-    static constexpr uint32_t PawnHistorySize = 512;
+    // number of pawn structure buckets
+    static constexpr uint32_t PawnHistorySize = 2048;
 
     alignas(CACHELINE_SIZE)
 
