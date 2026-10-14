@@ -135,7 +135,9 @@ DEFINE_PARAM(EvalCorrectionNonPawnsScale, 65, 1, 128);
 DEFINE_PARAM(ContCorrectionScale, 76, 1, 128);
 DEFINE_PARAM(CorrHistMaxBonus, 249, 128, 512);
 DEFINE_PARAM(CorrHistGravity, 1024, 512, 2048);
-DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
+DEFINE_PARAM(CorrHistFailHighWeight, 32, 16, 64);
+DEFINE_PARAM(CorrHistFailLowWeight, 48, 16, 64);
+DEFINE_PARAM(CorrHistExactWeight, 32, 16, 64);
 
 DEFINE_PARAM(TTCutoffMargin, 80, 0, 200);
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
@@ -2300,7 +2302,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             ((bestValue < correctedEval && bestValue < beta) ||
              (bestValue > correctedEval && bestMove.IsValid())))
         {
-            const int32_t bonus = std::clamp<int32_t>((bestValue - correctedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
+            const int32_t boundWeight =
+                bounds == TTEntry::Bounds::Lower ? CorrHistFailHighWeight :
+                bounds == TTEntry::Bounds::Upper ? CorrHistFailLowWeight :
+                CorrHistExactWeight;
+
+            const int32_t bonus = std::clamp<int32_t>((bestValue - correctedEval) * node->depth * boundWeight / 128, -CorrHistMaxBonus, CorrHistMaxBonus);
             if (bonus != 0)
             {
                 const Color stm = position.GetSideToMove();
