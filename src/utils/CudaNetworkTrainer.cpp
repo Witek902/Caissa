@@ -133,6 +133,9 @@ struct Options
 
     TrainingDataLoader::Options loaderOptions;
 
+    // training data directories; empty = data/trainingData
+    std::vector<std::string> dataPaths;
+
     // AdamW
     float beta1 = 0.9f;
     float beta2 = 0.999f;
@@ -863,7 +866,10 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "checkpointInterval="         << cCheckpointInterval << "\n";
     f << "\n";
 
-    f << "dataPath="                   << m_dataLoader.GetDataPath() << "\n";
+    f << "dataPath=";
+    for (size_t i = 0; i < m_dataLoader.GetDataPaths().size(); ++i)
+        f << (i > 0 ? ";" : "") << m_dataLoader.GetDataPaths()[i];
+    f << "\n";
     f << "dataFiles="                  << m_dataLoader.GetNumFiles() << "\n";
     f << "dataBytes="                  << m_dataLoader.GetTotalDataSize() << "\n";
     f << "decisiveSkip="               << (m_options.loaderOptions.decisiveSkip ? "true" : "false") << "\n";
@@ -1230,7 +1236,7 @@ bool CudaNetworkTrainer::Train()
         << ", pieceCountTarget " << (m_options.loaderOptions.pieceCountTarget ? "on" : "off")
         << ", hmcSkipFrom20 " << (m_options.loaderOptions.hmcSkipFrom20 ? "on" : "off") << std::endl;
 
-    if (!m_dataLoader.Init(m_randomGenerators[0], m_options.loaderOptions))
+    if (!m_dataLoader.Init(m_randomGenerators[0], m_options.loaderOptions, m_options.dataPaths))
     {
         std::cout << "ERROR: Failed to initialize data loader" << std::endl;
         return false;
@@ -1479,6 +1485,8 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
         // every remaining option takes a value
         else if (args[i] == "--net")
             options.startNetPath = args[++i];
+        else if (args[i] == "--data")
+            options.dataPaths.push_back(args[++i]);
         else if (args[i] == "--iterations")
             options.maxIterations = std::stoull(args[++i]);
         else if (args[i] == "--seed")

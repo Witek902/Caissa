@@ -37,16 +37,16 @@ public:
         bool hmcSkipFrom20 = false;
     };
 
-    // initialize the loader at given directory
+    // initialize the loader with the .dat and .bin files of the given directories (data/trainingData if none)
     bool Init(
         std::mt19937& gen,
         const Options& options,
-        const std::string& trainingDataPath = "../../../data/trainingData");
+        const std::vector<std::string>& trainingDataPaths = {});
 
     // sample new position from the training set
     bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const;
 
-    const std::string& GetDataPath() const { return mDataPath; }
+    const std::vector<std::string>& GetDataPaths() const { return mDataPaths; }
     size_t GetNumFiles() const { return mContexts.size(); }
     uint64_t GetTotalDataSize() const { return mTotalDataSize; }
     const PiecePairKeepProb& GetPiecePairKeepProb() const { return mPiecePairKeepProb; }
@@ -68,7 +68,7 @@ private:
     void InitPiecePairKeepProb(std::mt19937& gen);
 
     Options mOptions;
-    std::string mDataPath;
+    std::vector<std::string> mDataPaths;
     uint64_t mTotalDataSize = 0;
 
     std::vector<InputFileContext> mContexts;

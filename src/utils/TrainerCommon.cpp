@@ -19,19 +19,58 @@ static constexpr float c_PiecePairTargetShare[] =
     0.0f, 0.0f, 1.6f, 5.6f, 7.6f, 9.3f, 9.9f, 9.9f, 9.6f, 9.1f, 8.6f, 8.3f, 7.4f, 6.3f, 4.3f, 2.1f, 0.5f,
 };
 
-bool TrainingDataLoader::Init(std::mt19937& gen, const Options& options, const std::string& trainingDataPath)
+static constexpr const char* c_DefaultTrainingDataPath = "../../../data/trainingData";
+
+bool TrainingDataLoader::Init(std::mt19937& gen, const Options& options, const std::vector<std::string>& trainingDataPaths)
 {
     uint64_t totalDataSize = 0;
 
     mOptions = options;
     mPiecePairKeepProb.fill(1.0f);
 
-    mDataPath = std::filesystem::absolute(trainingDataPath).string();
     mCDF.push_back(0.0);
 
-    for (const auto& path : std::filesystem::directory_iterator(trainingDataPath))
+    const std::vector<std::string> dataPaths = trainingDataPaths.empty() ? std::vector<std::string>{ c_DefaultTrainingDataPath } : trainingDataPaths;
+
+    std::vector<std::filesystem::path> files;
+    std::vector<std::pair<size_t, uint64_t>> directoryStats; // number of files and bytes per directory
+    for (const std::string& dataPath : dataPaths)
     {
-        const std::string& fileName = path.path().string();
+        if (!std::filesystem::is_directory(dataPath))
+        {
+            std::cout << "ERROR: Training data directory not found: " << dataPath << std::endl;
+            return false;
+        }
+        mDataPaths.push_back(std::filesystem::absolute(dataPath).string());
+
+        size_t numFiles = 0;
+        uint64_t numBytes = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(dataPath))
+        {
+            const std::string extension = entry.path().extension().string();
+            if (entry.is_regular_file() && (extension == ".dat" || extension == ".bin"))
+            {
+                files.push_back(entry.path());
+                numFiles++;
+                numBytes += entry.file_size();
+            }
+        }
+        directoryStats.emplace_back(numFiles, numBytes);
+    }
+
+    uint64_t allBytes = 0;
+    for (const auto& stats : directoryStats)
+        allBytes += stats.second;
+    for (size_t i = 0; i < mDataPaths.size(); ++i)
+    {
+        std::cout << "Training data: " << mDataPaths[i] << ": " << directoryStats[i].first << " files, "
+            << (double)directoryStats[i].second / 1.0e9 << " GB ("
+            << 100.0 * (double)directoryStats[i].second / (double)std::max<uint64_t>(allBytes, 1) << "%)" << std::endl;
+    }
+
+    for (const std::filesystem::path& path : files)
+    {
+        const std::string fileName = path.string();
         auto fileStream = std::make_unique<FileInputStream>(fileName.c_str());
 
         uint64_t fileSize = fileStream->GetSize();

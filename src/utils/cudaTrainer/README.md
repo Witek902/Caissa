@@ -14,6 +14,7 @@ bin/utils trainCudaNetwork [options]
 |---|---|---|
 | `--name <dir>` | `eval` | Output directory and file prefix, see [Output Files](#output-files) |
 | `--net <file.pnn>` | (from scratch) | Start from an existing packed net |
+| `--data <dir>` | `data/trainingData` | Training data directory; repeat the option to read several directories |
 | `--resume <file.ckpt>` | | Continue an interrupted run (weights, Adam moments, position count) |
 | `--restartSchedule` | off | With `--resume`: keep weights and optimizer state, restart the LR schedule |
 | `--LR`, `--endLR` | `1e-4`, `2.5e-6` | Cosine learning-rate schedule start and end |
@@ -28,7 +29,8 @@ bin/utils trainCudaNetwork [options]
 | `--pieceCountTarget` | off | Replace the fixed piece-count skip curve with a target distribution per pair of piece counts |
 | `--hmcSkipFrom20` | off | Skip by half-move counter only above 20 (`clamp((hmc − 20) / 80, 0, 1)`) instead of `sqrt(hmc / 100)` |
 
-Training data is read from `data/trainingData` (`TrainingDataLoader`). One iteration is 2M positions in
+Training data is read from the `.dat` and `.bin` files of the `--data` directories, `data/trainingData` by default
+(`TrainingDataLoader`); every file is sampled in proportion to its size. One iteration is 2M positions in
 32K batches, followed by validation on 256K positions; a packed net and a full checkpoint are written every
 10B positions.
 
@@ -41,7 +43,7 @@ the key for joining files and runs; `iteration` and `elapsed_s` restart from 0 i
 
 | File | Contents |
 |---|---|
-| `-settings.txt` | `key=value` run settings: full command line, start time, build, device, all options including the loader flags, data path/files/bytes, and with `--pieceCountTarget` the keep probabilities (one per pair of piece counts, from 0–1 pieces). A resumed run writes `-settings-resume-<N>B.txt` instead |
+| `-settings.txt` | `key=value` run settings: full command line, start time, build, device, all options including the loader flags, data paths (`;`-separated)/files/bytes, and with `--pieceCountTarget` the keep probabilities (one per pair of piece counts, from 0–1 pieces). A resumed run writes `-settings-resume-<N>B.txt` instead |
 | `-progress.tsv` | One row per iteration from the third on (columns below) |
 | `-weights.tsv` | Every 1B positions: `positions, layer (FT/L1/L2/L3), w_min, w_max, w_avg, w_std, b_min, b_max, b_avg, b_std` |
 | `-test-positions.tsv` | Every 1B positions: `positions, index, eval, fen` — packed-net eval of the test positions in internal units; `index` is the position in `c_testPositions` and shifts when the list changes, so compare runs by `fen` |
