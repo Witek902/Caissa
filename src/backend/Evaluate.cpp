@@ -2,6 +2,7 @@
 #include "Endgame.hpp"
 #include "Search.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 
@@ -28,6 +29,11 @@ static constexpr int32_t c_evalSaturationTreshold   = 8000;
 static constexpr ScoreType c_castlingRightsBonus = 5;
 
 } // namespace
+
+// side-to-move bonus at 4, 16 and 28 pieces besides kings, quadratic in between and constant outside
+DEFINE_PARAM(TempoBonusAt4, 7, -30, 60);
+DEFINE_PARAM(TempoBonusAt16, 18, -30, 60);
+DEFINE_PARAM(TempoBonusAt28, 3, -30, 60);
 
 const nn::PackedNeuralNetwork* g_mainNeuralNetwork = nullptr;
 static bool g_usingEmbeddedNeuralNetwork = false;
@@ -296,6 +302,18 @@ ScoreType Evaluate(const Position& pos)
     return Evaluate(dummyNode, dummyCache);
 }
 
+// indexed by the number of pieces besides kings, sized for a full board
+static int16_t s_tempoBonus[64];
+
+void BuildTempoBonusTable()
+{
+    for (int32_t n = 0; n < 64; ++n)
+    {
+        const int32_t x = std::clamp(n, 4, 28);
+        s_tempoBonus[n] = static_cast<int16_t>((TempoBonusAt4 * (x - 16) * (x - 28) - 2 * TempoBonusAt16 * (x - 4) * (x - 28) + TempoBonusAt28 * (x - 4) * (x - 16)) / 288);
+    }
+}
+
 ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 {
     const Position& pos = node.position;
@@ -323,6 +341,11 @@ ScoreType Evaluate(NodeInfo& node, AccumulatorCache& cache)
 
     // convert to centipawn range
     value /= nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
+
+    // search evaluates mostly positions reached by a non-best move, where the side to move is better off than in the
+    // training positions, which were all reached by best moves
+    ASSERT(pieceCount < 64);
+    value += s_tempoBonus[pieceCount];
 
     // apply scaling based on game phase (0 - endgame, 24 - opening)
     const int32_t gamePhase = bishopsAndKnights + 2 * rooks + 4 * queens;

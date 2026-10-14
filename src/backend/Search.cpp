@@ -409,6 +409,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
 #ifdef ENABLE_TUNING
     BuildMoveReductionTable();
+    BuildTempoBonusTable();
 #ifdef ENABLE_NET_L3_TUNING
     ApplyNeuralNetTunables();
 #endif // ENABLE_NET_L3_TUNING

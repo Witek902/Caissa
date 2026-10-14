@@ -3,6 +3,7 @@
 #include "Numa.hpp"
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
+#include "Evaluate.hpp"
 #include "SearchUtils.hpp"
 
 #include <iostream>
@@ -32,5 +33,6 @@ void InitEngine()
     InitBitboards();
     InitZobristHash();
     InitEndgame();
+    BuildTempoBonusTable();
     SearchUtils::Init();
 }

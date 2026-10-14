@@ -40,6 +40,9 @@ static constexpr PieceScore c_pieceValues[] =
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
 
+// fill the side-to-move bonus table from its tunable parameters
+void BuildTempoBonusTable();
+
 #ifdef ENABLE_NET_L3_TUNING
 // copy the tunable last-layer values into the loaded network
 void ApplyNeuralNetTunables();
