@@ -19,6 +19,7 @@ DEFINE_PARAM(TM_OverheadReserveFrac, 750, 400, 800);
 DEFINE_PARAM(TM_ComplexityBase, 700, 400, 1000);
 DEFINE_PARAM(TM_ComplexityScale, 500, 0, 1000);
 DEFINE_PARAM(TM_ComplexityCap, 250, 100, 600);
+DEFINE_PARAM(TM_ClockDisadvantageScale, 750, 0, 1000);
 
 static float EstimateMovesLeft(const uint32_t moves)
 {
@@ -55,6 +56,14 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
 
         maxTime = std::clamp(maxTime, 0.0f, hardTimeLimit);
         idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * remainingTime));
+
+        // spend less time when behind on the clock
+        if (data.theirRemainingTime != INT32_MAX && data.movesToGo != 1)
+        {
+            const float theirRemainingTime = (float)data.theirRemainingTime;
+            const float clockAdvantage = (remainingTime - theirRemainingTime) / (1.0f + remainingTime + theirRemainingTime);
+            idealTime *= 1.0f + static_cast<float>(TM_ClockDisadvantageScale) / 1000.0f * std::min(clockAdvantage, 0.0f);
+        }
 
         // reduce time if opponent played a move predicted by the previous search, increase otherwise
         if (data.previousSearchHint == PreviousSearchHint::Hit)
