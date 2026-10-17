@@ -4,10 +4,10 @@
 EXE                = caissa
 VERSION            := $(strip $(file < ../version.txt))
 EXE_NAME           = $(EXE)-$(VERSION)
-DEFAULT_EVALFILE   = ../data/neuralNets/eval-ml-8-152B-spsa.pnn
+NET_VERSION        = eval-ml-8-152B-spsa
+DEFAULT_EVALFILE   = ../data/neuralNets/$(NET_VERSION).pnn
 EVALFILE           = $(DEFAULT_EVALFILE)
-NET_VERSION        = $(basename $(notdir $(DEFAULT_EVALFILE)))
-NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(notdir $(DEFAULT_EVALFILE))
+NET_DOWNLOAD_URL   = https://github.com/Witek902/Caissa-Nets/releases/download/$(NET_VERSION)/$(NET_VERSION).pnn
 NET_TMP            = $(DEFAULT_EVALFILE).tmp
 # IPv4 + HTTP/1.1: a broken IPv6 route stalls the connect, and old HTTP/2 stacks
 # hit "stream not closed cleanly (PROTOCOL_ERROR)" on the GitHub CDN

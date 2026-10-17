@@ -49,7 +49,7 @@ Neural network files (`.pnn`) are **not stored in this repository**. They are ho
 - **Makefile**: automatically downloads the net to `data/neuralNets/` via `curl` before compilation (required for INCBIN embedding). No manual steps needed.
 - **`data/neuralNets/*.pnn` is in `.gitignore`** — never commit net files to this repo.
 
-To update to a new net version, change `DEFAULT_NEURAL_NET_FILE_NAME` / `NET_VERSION` in `CMakeLists.txt`, `DEFAULT_EVALFILE` in `src/makefile`, and `c_DefaultEvalFile` in `src/backend/Evaluate.cpp`.
+To update to a new net version, change `NET_VERSION` in `CMakeLists.txt` and in `src/makefile`. CMake passes the file name to `Evaluate.cpp` as `CAISSA_DEFAULT_EVALFILE`; makefile builds embed the net instead.
 
 ---
 
