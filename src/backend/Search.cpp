@@ -122,7 +122,6 @@ DEFINE_PARAM(SSEPruningMultiplier_Captures, 120, 60, 180);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 49, 10, 100);
 DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 134, 64, 256);
 
-DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 158, 100, 200);
 DEFINE_PARAM(RazoringMarginBias, 22, 10, 50);
 DEFINE_PARAM(RazoringWinGuard, 1200, 1000, 3000);
@@ -1691,8 +1690,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // Razoring: prune if quiescence search on current position can't beat beta.
             // Guard against the "winning" range: dropping to qsearch when we're already
             // clearly winning can throw away a findable forced mate.
-            if (node->depth <= RazoringStartDepth &&
-                beta < RazoringWinGuard &&
+            if (beta < RazoringWinGuard &&
                 eval + RazoringMarginBias + RazoringMarginMultiplier * node->depth < beta)
             {
                 const ScoreType qScore = QuiescenceNegaMax<qsNodeType>(thread, node, ctx);
