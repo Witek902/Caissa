@@ -121,6 +121,7 @@ DEFINE_PARAM(SSEPruningDepth_NonCaptures, 9, 1, 12);
 DEFINE_PARAM(SSEPruningMultiplier_Captures, 120, 60, 180);
 DEFINE_PARAM(SSEPruningMultiplier_NonCaptures, 49, 10, 100);
 DEFINE_PARAM(SSEPruningMoveStatDivNonCaptures, 134, 64, 256);
+DEFINE_PARAM(SSEPruningCaptureHistDiv, 32, 8, 128);
 
 DEFINE_PARAM(RazoringStartDepth, 4, 1, 6);
 DEFINE_PARAM(RazoringMarginMultiplier, 158, 100, 200);
@@ -1909,7 +1910,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     if (node->depth <= SSEPruningDepth_Captures &&
                         moveScore < MoveOrderer::GoodCaptureValue &&
-                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth)) continue;
+                        !position.StaticExchangeEvaluation(move, -SSEPruningMultiplier_Captures * node->depth -
+                            thread.moveOrderer.GetCaptureHistoryScore(*node, move) / SSEPruningCaptureHistDiv)) continue;
                 }
                 else
                 {
