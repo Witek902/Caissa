@@ -2,8 +2,15 @@
 #include "Endgame.hpp"
 #include "Search.hpp"
 
-#include <fstream>
-#include <iostream>
+#include <stdio.h>
+
+#if defined(PLATFORM_WINDOWS)
+    #define WIN32_LEAN_AND_MEAN
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif // NOMINMAX
+    #include <Windows.h>
+#endif // PLATFORM_WINDOWS
 
 #if defined(CAISSA_EVALFILE)
 
@@ -62,20 +69,23 @@ static void RegisterNeuralNetTunables(nn::PackedNeuralNetwork* network)
     // weights: 1 unit is 1/2064 of a float weight (median |w| ~1000); biases: ~1500 units per centipawn
     constexpr int32_t c_weightRange = 1000;
     constexpr int32_t c_biasRange = 30000;
-    constexpr int32_t c_weightMin = std::numeric_limits<nn::LastLayerWeightType>::min();
-    constexpr int32_t c_weightMax = std::numeric_limits<nn::LastLayerWeightType>::max();
+    static_assert(IsSame<nn::LastLayerWeightType, int16_t>::Value);
+    constexpr int32_t c_weightMin = INT16_MIN;
+    constexpr int32_t c_weightMax = INT16_MAX;
 
     for (uint32_t v = c_firstTunableVariant; v < nn::NumVariants; ++v)
     {
-        const std::string prefix = "NN_L3_B" + std::to_string(v) + "_";
         for (uint32_t i = 0; i < nn::L2Size; ++i)
         {
             int32_t& value = s_l3WeightShadow[v][i];
-            const std::string name = prefix + "W" + (i < 10 ? "0" : "") + std::to_string(i);
-            g_TunableParameters.emplace_back(name, value, std::max(c_weightMin, value - c_weightRange), std::min(c_weightMax, value + c_weightRange));
+            FixedString<64> name;
+            name.AppendFormat("NN_L3_B%u_W%02u", v, i);
+            g_TunableParameters.EmplaceBack(name, value, Max(c_weightMin, value - c_weightRange), Min(c_weightMax, value + c_weightRange));
         }
         int32_t& bias = s_l3BiasShadow[v];
-        g_TunableParameters.emplace_back(prefix + "Bias", bias, bias - c_biasRange, bias + c_biasRange);
+        FixedString<64> name;
+        name.AppendFormat("NN_L3_B%u_Bias", v);
+        g_TunableParameters.EmplaceBack(name, bias, bias - c_biasRange, bias + c_biasRange);
     }
 }
 
@@ -114,7 +124,7 @@ bool LoadMainNeuralNetwork(const char* path)
         // the embedded data is read-only, so an older format cannot be converted in place
         if (embeddedNetwork->header.version != nn::CurrentVersion)
         {
-            std::cout << "info string Embedded neural network has unsupported version " << embeddedNetwork->header.version << std::endl;
+            printf("info string Embedded neural network has unsupported version %u\n", (uint32_t)embeddedNetwork->header.version);
             return false;
         }
 #ifdef ENABLE_NET_L3_TUNING
@@ -128,10 +138,10 @@ bool LoadMainNeuralNetwork(const char* path)
         g_mainNeuralNetwork = embeddedNetwork;
         g_usingEmbeddedNeuralNetwork = true;
 #endif // ENABLE_NET_L3_TUNING
-        std::cout << "info string Using embedded neural network" << std::endl;
+        printf("info string Using embedded neural network\n");
         return true;
 #else
-        std::cout << "info string disabled neural network evaluation" << std::endl;
+        printf("info string disabled neural network evaluation\n");
         g_mainNeuralNetwork = nullptr;
         g_usingEmbeddedNeuralNetwork = false;
         return true;
@@ -146,7 +156,7 @@ bool LoadMainNeuralNetwork(const char* path)
 #ifdef ENABLE_NET_L3_TUNING
         RegisterNeuralNetTunables(newNetwork);
 #endif // ENABLE_NET_L3_TUNING
-        std::cout << "info string Loaded neural network: " << path << std::endl;
+        printf("info string Loaded neural network: %s\n", path);
         return true;
     }
     else
@@ -159,9 +169,9 @@ bool LoadMainNeuralNetwork(const char* path)
     return false;
 }
 
-static std::string GetExecutablePath()
+static String GetExecutablePath()
 {
-    std::string ret;
+    String ret;
 #if defined(PLATFORM_WINDOWS)
     char path[MAX_PATH];
     HMODULE hModule = GetModuleHandle(NULL);
@@ -169,7 +179,7 @@ static std::string GetExecutablePath()
     {
         // Use GetModuleFileName() with module handle to get the path
         GetModuleFileNameA(hModule, path, (sizeof(path)));
-        ret = std::string(path);
+        ret = path;
     }
 #elif defined(PLATFORM_LINUX)
     if (char* execPath = realpath("/proc/self/exe", nullptr))
@@ -181,17 +191,33 @@ static std::string GetExecutablePath()
     return ret;
 }
 
-static std::string GetDefaultEvalFilePath()
+static String GetDefaultEvalFilePath()
 {
-    std::string path = GetExecutablePath();
-
-    if (!path.empty())
+    const String path = GetExecutablePath();
+    if (path.Empty())
     {
-        path = path.substr(0, path.find_last_of("/\\")); // remove exec name
-        path += "/";
+        return path;
     }
 
-    return path;
+    // remove exec name
+    uint32_t end = path.Length();
+    while (end > 0 && path[end - 1] != '/' && path[end - 1] != '\\') --end;
+
+    String dir;
+    dir.Append(path.CStr(), end > 0 ? end - 1 : path.Length());
+    dir.Append('/');
+    return dir;
+}
+
+static bool FileExists(const char* path)
+{
+    FILE* f = fopen(path, "rb");
+    if (f)
+    {
+        fclose(f);
+        return true;
+    }
+    return false;
 }
 
 bool TryLoadingDefaultEvalFile()
@@ -205,16 +231,11 @@ bool TryLoadingDefaultEvalFile()
 
     // check if there's eval file in same directory as executable
     {
-        std::string path = GetDefaultEvalFilePath() + c_DefaultEvalFile;
-        if (!path.empty())
+        String path = GetDefaultEvalFilePath();
+        path.Append(c_DefaultEvalFile);
+        if (!path.Empty())
         {
-            bool fileExists = false;
-            {
-                std::ifstream f(path.c_str());
-                fileExists = f.good();
-            }
-
-            if (fileExists && LoadMainNeuralNetwork(path.c_str()))
+            if (FileExists(path) && LoadMainNeuralNetwork(path))
             {
                 return true;
             }
@@ -223,19 +244,13 @@ bool TryLoadingDefaultEvalFile()
 
     // try working directory
     {
-        bool fileExists = false;
-        {
-            std::ifstream f(c_DefaultEvalFile);
-            fileExists = f.good();
-        }
-
-        if (fileExists && LoadMainNeuralNetwork(c_DefaultEvalFile))
+        if (FileExists(c_DefaultEvalFile) && LoadMainNeuralNetwork(c_DefaultEvalFile))
         {
             return true;
         }
     }
 
-    std::cout << "info string Failed to load default neural network " << c_DefaultEvalFile << std::endl;
+    printf("info string Failed to load default neural network %s\n", c_DefaultEvalFile);
     return false;
 
 #endif // defined(CAISSA_EVALFILE)

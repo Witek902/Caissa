@@ -1,6 +1,8 @@
 #include "CudaNetwork.hpp"
 
 #include <iostream>
+#include <memory>
+#include <vector>
 
 namespace nn {
 namespace cuda {

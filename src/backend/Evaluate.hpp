@@ -24,7 +24,7 @@ static constexpr PieceScore c_knightValue   = {  455, 371 };
 static constexpr PieceScore c_bishopValue   = {  494, 385 };
 static constexpr PieceScore c_rookValue     = {  607, 656 };
 static constexpr PieceScore c_queenValue    = { 1427,1086 };
-static constexpr PieceScore c_kingValue     = { std::numeric_limits<int16_t>::max(), std::numeric_limits<int16_t>::max() };
+static constexpr PieceScore c_kingValue     = { INT16_MAX, INT16_MAX };
 
 static constexpr PieceScore c_pieceValues[] =
 {
@@ -70,7 +70,7 @@ inline int32_t NormalizeEval(int32_t eval)
 inline float EvalToWinProbability(float eval, uint32_t ply)
 {
     using namespace wld;
-    const double m = std::min(240u, ply) / 64.0;
+    const double m = Min(240u, ply) / 64.0;
     const double a = ((as[0] * m + as[1]) * m + as[2]) * m + as[3];
     const double b = ((bs[0] * m + bs[1]) * m + bs[2]) * m + bs[3];
     return static_cast<float>(1.0 / (1.0 + exp((a - 100.0 * eval) / b)));
@@ -100,7 +100,7 @@ inline float InternalEvalToExpectedGameScore(int32_t eval)
 inline float ExpectedGameScoreToEval(float score)
 {
     ASSERT(score >= 0.0f && score <= 1.0f);
-    score = std::clamp(score, 0.0f, 1.0f);
+    score = Clamp(score, 0.0f, 1.0f);
     return 4.0f * log10f(score / (1.0f - score));
 }
 
@@ -112,7 +112,7 @@ inline ScoreType ExpectedGameScoreToInternalEval(float score)
     else if (score < 0.00001f)
         return -KnownWinValue + 1;
     else
-        return (ScoreType)std::clamp((int32_t)std::round(100.0f * ExpectedGameScoreToEval(score)),
+        return (ScoreType)Clamp((int32_t)roundf(100.0f * ExpectedGameScoreToEval(score)),
             -KnownWinValue + 1, KnownWinValue - 1);
 }
 

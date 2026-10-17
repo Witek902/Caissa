@@ -1,19 +1,7 @@
 #pragma once
 
 #include "Position.hpp"
-
-namespace std {
-
-template<>
-struct hash<Position>
-{
-    size_t operator()(const Position& k) const
-    {
-        return static_cast<size_t>(k.GetHash());
-    }
-};
-
-} // std
+#include "containers/DynArray.hpp"
 
 struct GameMetadata
 {
@@ -43,8 +31,8 @@ public:
     bool operator == (const Game& rhs) const;
     bool operator != (const Game& rhs) const;
 
-    const std::vector<Move>& GetMoves() const { return mMoves; }
-    const std::vector<ScoreType>& GetMoveScores() const { return mMoveScores; }
+    const DynArray<Move>& GetMoves() const { return mMoves; }
+    const DynArray<ScoreType>& GetMoveScores() const { return mMoveScores; }
     Score GetForcedScore() const { return mForcedScore; }
 
     void Reset(const Position& pos);
@@ -59,10 +47,10 @@ public:
     bool IsDrawn() const;
 
     // convert moves list to PGN string
-    std::string ToPGNMoveList(bool includeScores = false) const;
+    String ToPGNMoveList(bool includeScores = false) const;
 
     // print whole game as PNG string
-    std::string ToPGN(bool includeScores = false) const;
+    String ToPGN(bool includeScores = false) const;
 
 private:
 
@@ -75,9 +63,15 @@ private:
     Position mInitPosition;
     Position mPosition;
     Score mForcedScore;
-    std::vector<Move> mMoves;
-    std::vector<ScoreType> mMoveScores;
+    DynArray<Move> mMoves;
+    DynArray<ScoreType> mMoveScores;
+
+    struct HistoryPosition
+    {
+        Position position;
+        uint32_t count;
+    };
 
     static constexpr uint32_t GameHistoryBuckets = 32;
-    std::vector<std::pair<Position, uint32_t>> mHistoryGamePositions[GameHistoryBuckets];
+    DynArray<HistoryPosition> mHistoryGamePositions[GameHistoryBuckets];
 };

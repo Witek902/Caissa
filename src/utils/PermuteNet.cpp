@@ -2,8 +2,12 @@
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <memory>
+#include <string>
+#include <vector>
 
 // Reorders the accumulator so that pair slots which are rarely active end up in the same 4-input
 // group of the sparse L1 layer, which makes more groups entirely zero and lets the sparse path skip

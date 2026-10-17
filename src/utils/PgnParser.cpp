@@ -2,6 +2,11 @@
 #include "../backend/Move.hpp"
 
 #include <fstream>
+#include <limits>
+#include <algorithm>
+#include <functional>
+#include <istream>
+#include <string>
 
 static constexpr size_t kPgnReadBufferSize = 65536;
 
@@ -413,7 +418,7 @@ private:
 
         // Parse the new move against current board position
         const bool isWhite = (currentPos.GetSideToMove() == White);
-        const Move move = currentPos.MoveFromString(moveStr, MoveNotation::SAN);
+        const Move move = currentPos.MoveFromString(moveStr.c_str(), MoveNotation::SAN);
         if (!move.IsValid())
         {
             gameError = true;

@@ -3,7 +3,7 @@
 #include "Common.hpp"
 
 #include <atomic>
-#include <cstring>
+#include <string.h>
 
 // workaround for GCC
 template <class To, class From>
@@ -19,7 +19,7 @@ BitCast(const From& src) noexcept
         "This implementation additionally requires destination type to be trivially constructible");
 
     To dst;
-    std::memcpy(&dst, &src, sizeof(To));
+    memcpy(&dst, &src, sizeof(To));
     return dst;
 }
 

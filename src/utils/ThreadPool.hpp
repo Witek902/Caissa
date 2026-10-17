@@ -3,6 +3,11 @@
 #include <condition_variable>
 #include <functional>
 #include <deque>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 class Waitable;
 

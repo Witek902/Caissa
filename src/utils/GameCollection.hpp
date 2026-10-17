@@ -6,6 +6,7 @@
 #include "../backend/Game.hpp"
 
 #include <mutex>
+#include <vector>
 
 namespace GameCollection
 {

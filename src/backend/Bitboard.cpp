@@ -1,8 +1,8 @@
 #include "Bitboard.hpp"
 #include "Square.hpp"
 
-#include <iostream>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 
 static Bitboard gPawnAttacksBitboard[Square::NumSquares][2];
 static Bitboard gKingAttacksBitboard[Square::NumSquares];
@@ -401,41 +401,35 @@ Bitboard Bitboard::GenerateBishopAttacks_Slow(const Square square, const Bitboar
     return bitboardNW | bitboardNE | bitboardSE | bitboardSW;
 }
 
-std::string Bitboard::Print() const
+void Bitboard::Print(char* outBuffer) const
 {
-    std::string str;
+    char* str = outBuffer;
 
     // reverse, because first are printed higher ranks
     for (uint8_t rank = 8u; rank-- > 0u; )
     {
-        str += '1' + rank;
-        str += " ";
+        *str++ = char('1' + rank);
+        *str++ = ' ';
 
         for (uint8_t file = 0; file < 8u; ++file)
         {
             const uint32_t offset = rank * 8u + file;
 
-            if ((value >> offset) & 1ull)
-            {
-                str += "X";
-            }
-            else
-            {
-                str += ".";
-            }
+            *str++ = ((value >> offset) & 1ull) ? 'X' : '.';
 
             if (file < 7u)
             {
-                str += " ";
+                *str++ = ' ';
             }
         }
 
-        str += "\n";
+        *str++ = '\n';
     }
 
-    str += "  a b c d e f g h\n";
+    const char filesRow[] = "  a b c d e f g h\n";
+    memcpy(str, filesRow, sizeof(filesRow));
 
-    return str;
+    ASSERT(str + sizeof(filesRow) == outBuffer + PrintBufferSize);
 }
 
 static void InitRays()
@@ -624,7 +618,7 @@ static void InitRookAttacks()
     }
 
 #ifndef CONFIGURATION_FINAL
-    std::cout << "Rook attack table size: " << tableSize << " entries (" << (tableSize * sizeof(Bitboard)) / 1024 << " KB)" << std::endl;
+    printf("Rook attack table size: %u entries (%u KB)\n", (uint32_t)tableSize, (uint32_t)((tableSize * sizeof(Bitboard)) / 1024));
 #endif // CONFIGURATION_FINAL
 
     ASSERT(tableSize == cRookAttackTableSize);
@@ -700,7 +694,7 @@ static void InitBishopAttacks()
     }
 
 #ifndef CONFIGURATION_FINAL
-    std::cout << "Bishop attack table size: " << tableSize << " entries (" << (tableSize * sizeof(Bitboard)) / 1024 << " KB)" << std::endl;
+    printf("Bishop attack table size: %u entries (%u KB)\n", (uint32_t)tableSize, (uint32_t)((tableSize * sizeof(Bitboard)) / 1024));
 #endif // CONFIGURATION_FINAL
 
     ASSERT(tableSize == cBishopAttackTableSize);

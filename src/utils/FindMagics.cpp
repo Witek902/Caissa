@@ -6,6 +6,11 @@
 #include <mutex>
 #include <random>
 #include <thread>
+#include <algorithm>
+#include <atomic>
+#include <iomanip>
+#include <string>
+#include <vector>
 
 // 0 - find magics for bishops
 // 1 - find magics for rooks

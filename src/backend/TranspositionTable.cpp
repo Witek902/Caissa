@@ -1,8 +1,11 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
 
+#include "containers/DynArray.hpp"
+
+#include <inttypes.h>
+#include <stdio.h>
 #include <thread>
-#include <iostream>
 
 uint32_t TranspositionTable::NumInitThreads = 1;
 
@@ -33,7 +36,7 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
             // do not return a potentially false mate score
             return CheckmateValue - MaxSearchDepth - 1;
         }
-        return std::min<ScoreType>(ScoreType(v - height), CheckmateValue - 1);
+        return Min<ScoreType>(ScoreType(v - height), CheckmateValue - 1);
     }
 
     if (v <= -TablebaseWinValue + MaxSearchDepth) // TB loss or worse
@@ -43,7 +46,7 @@ ScoreType ScoreFromTT(ScoreType v, int32_t height, int32_t fiftyMoveRuleCount)
             // do not return a potentially false mate score
             return -CheckmateValue + MaxSearchDepth + 1;
         }
-        return std::max<ScoreType>(ScoreType(v + height), -CheckmateValue + 1);
+        return Max<ScoreType>(ScoreType(v + height), -CheckmateValue + 1);
     }
 
     return v;
@@ -92,33 +95,35 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
 void TranspositionTable::Clear()
 {
-    const uint32_t maxThreads = std::max(1u, std::thread::hardware_concurrency() / 2u);
-    const size_t numThreads = std::clamp(NumInitThreads, 1u, maxThreads);
+    const uint32_t maxThreads = Max(1u, std::thread::hardware_concurrency() / 2u);
+    const size_t numThreads = Clamp(NumInitThreads, 1u, maxThreads);
 
     if (numClusters * sizeof(TTCluster) <= 256 * 1024 * 1024 || numThreads == 1)
     {
-        std::fill(clusters, clusters + numClusters, TTCluster{});
+        const TTCluster emptyCluster{};
+        for (size_t i = 0; i < numClusters; ++i) clusters[i] = emptyCluster;
     }
     else // clear using multiple threads
     {
         const size_t numClustersPerThread = numClusters / numThreads;
 
-        std::vector<std::thread> threads;
-        threads.reserve(numThreads);
+        DynArray<std::thread> threads;
+        threads.Reserve((uint32_t)numThreads);
 
         for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
         {
-            threads.emplace_back([this, threadIndex, numClustersPerThread]()
+            threads.EmplaceBack([this, threadIndex, numClustersPerThread]()
             {
                 const size_t start = threadIndex * numClustersPerThread;
                 const size_t end = start + numClustersPerThread;
-                std::fill(clusters + start, clusters + end, TTCluster{});
+                const TTCluster emptyCluster{};
+                for (size_t i = start; i < end; ++i) clusters[i] = emptyCluster;
             });
         }
 
         for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
         {
-            threads[threadIndex].join();
+            threads[(uint32_t)threadIndex].join();
         }
     }
 
@@ -154,7 +159,7 @@ void TranspositionTable::Resize(size_t newSizeInBytes)
     if (!clusters)
     {
         numClusters = 0;
-        std::cerr << "Failed to allocate transposition table" << std::endl;
+        fprintf(stderr, "Failed to allocate transposition table\n");
         return;
     }
 
@@ -238,7 +243,7 @@ void TranspositionTable::Write(const Position& position, ScoreType score, ScoreT
 
     InternalEntry& entry = cluster.entries[replaceIndex];
     const bool sameKey = positionKey == entry.key;
-    const uint8_t newDepth = (uint8_t)std::min<uint32_t>(depth, UINT8_MAX);
+    const uint8_t newDepth = (uint8_t)Min<uint32_t>(depth, UINT8_MAX);
 
     // don't overwrite entries with worse depth if the bounds are not exact, unless the entry is from an older search
     if (bounds != TTEntry::Bounds::Exact &&
@@ -295,11 +300,11 @@ void TranspositionTable::PrintInfo() const
         }
     }
 
-    std::cout << "=== TT statistics ===" << std::endl;
-    std::cout << "Entries in use:      " << totalCount << " (" << (100.0f * (float)totalCount / (float)GetSize()) << "%)" << std::endl;
-    std::cout << "Exact entries:       " << exactCount << " (" << (100.0f * (float)exactCount / (float)totalCount) << "%)" << std::endl;
-    std::cout << "Lower-bound entries: " << lowerBoundCount << " (" << (100.0f * (float)lowerBoundCount / (float)totalCount) << "%)" << std::endl;
-    std::cout << "Upper-bound entries: " << upperBoundCount << " (" << (100.0f * (float)upperBoundCount / (float)totalCount) << "%)" << std::endl;
+    printf("=== TT statistics ===\n");
+    printf("Entries in use:      %" PRIu64 " (%g%%)\n", (uint64_t)totalCount, 100.0f * (float)totalCount / (float)GetSize());
+    printf("Exact entries:       %" PRIu64 " (%g%%)\n", (uint64_t)exactCount, 100.0f * (float)exactCount / (float)totalCount);
+    printf("Lower-bound entries: %" PRIu64 " (%g%%)\n", (uint64_t)lowerBoundCount, 100.0f * (float)lowerBoundCount / (float)totalCount);
+    printf("Upper-bound entries: %" PRIu64 " (%g%%)\n", (uint64_t)upperBoundCount, 100.0f * (float)upperBoundCount / (float)totalCount);
 }
 
 uint32_t TranspositionTable::GetHashFull() const

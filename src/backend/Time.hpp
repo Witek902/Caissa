@@ -2,16 +2,6 @@
 
 #include "Common.hpp"
 
-#if defined(PLATFORM_WINDOWS)
-    #define WIN32_LEAN_AND_MEAN
-    #ifndef NOMINMAX
-    #define NOMINMAX
-    #endif // NOMINMAX
-    #include <Windows.h>
-#elif defined(PLATFORM_LINUX)
-    #include <time.h>
-#endif
-
 class TimePoint
 {
 public:
@@ -19,7 +9,7 @@ public:
     TimePoint() = default;
 
 #if defined(PLATFORM_WINDOWS)
-    TimePoint(LARGE_INTEGER value) : mValue(value) { }
+    TimePoint(int64_t value) : mValue(value) { }
 #elif defined(PLATFORM_LINUX)
     TimePoint(uint64_t value) : mValue(value) { }
 #endif // PLATFORM
@@ -43,8 +33,8 @@ public:
 private:
 
 #ifdef PLATFORM_WINDOWS
-    LARGE_INTEGER mValue;
-    static const LARGE_INTEGER sFreq;
+    int64_t mValue; // performance counter ticks
+    static const int64_t sFreq;
     static const float sPeriod;
 #elif defined(PLATFORM_LINUX)
     uint64_t mValue; // nanoseconds

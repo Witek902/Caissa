@@ -1,6 +1,5 @@
 #include "SearchUtils.hpp"
 #include "Search.hpp"
-#include "Game.hpp"
 
 // Upcoming repetition detection algorithm base on Stockfish implementation
 // Algorithm by Marcel van Kervinck:
@@ -22,10 +21,12 @@ void SearchUtils::Init()
     memset(gCuckooMoves, 0, sizeof(gCuckooMoves));
 
     uint32_t count = 0;
-    for (const Color color : {White, Black})
+    constexpr Color colors[] = { White, Black };
+    for (const Color color : colors)
     {
         // Note: pawn moves not included as they are not reversible
-        for (const Piece piece : {Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King})
+        constexpr Piece pieces[] = { Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King };
+        for (const Piece piece : pieces)
         {
             for (uint32_t squareA = 0; squareA < 64; ++squareA)
             {
@@ -49,8 +50,8 @@ void SearchUtils::Init()
                         uint32_t index = CuckooIndex1(key);
                         for (;;)
                         {
-                            std::swap(gCuckooTable[index], key);
-                            std::swap(gCuckooMoves[index], move);
+                            Swap(gCuckooTable[index], key);
+                            Swap(gCuckooMoves[index], move);
                             if (!move.IsValid()) break;
                             index = (index == CuckooIndex1(key)) ? CuckooIndex2(key) : CuckooIndex1(key);
                         }
@@ -112,73 +113,27 @@ bool SearchUtils::CanReachGameCycle(const NodeInfo& node)
     return false;
 }
 
-void SearchUtils::GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, std::vector<Move>& outLine)
+uint32_t SearchUtils::GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, Move* outLine)
 {
-    outLine.clear();
+    uint32_t length = 0;
 
     if (maxLength > 0)
     {
         Position iteratedPosition = rootNode.position;
 
-        uint32_t i = 0;
-
         // reconstruct PV line using PV array
-        for (; i < std::min<uint32_t>(maxLength, rootNode.pvLength); ++i)
+        for (; length < Min<uint32_t>(maxLength, rootNode.pvLength); ++length)
         {
-            ASSERT(rootNode.pvLine[i].IsValid());
-            const Move move = iteratedPosition.MoveFromPacked(rootNode.pvLine[i]);
+            ASSERT(rootNode.pvLine[length].IsValid());
+            const Move move = iteratedPosition.MoveFromPacked(rootNode.pvLine[length]);
 
             ASSERT(move.IsValid());
             if (!move.IsValid()) break;
             if (!iteratedPosition.DoMove(move)) break;
 
-            outLine.push_back(move);
-        }
-    }
-}
-
-bool SearchUtils::IsRepetition(const NodeInfo& node, const Game& game, bool isPvNode)
-{
-    const NodeInfo* prevNode = &node;
-    uint32_t repCount = 0;
-
-    for (uint32_t ply = 1; ; ++ply)
-    {
-        // don't need to check more moves if reached pawn push or capture,
-        // because these moves are irreversible
-        if (prevNode->previousMove.IsValid())
-        {
-            if (prevNode->previousMove.GetPiece() == Piece::Pawn || prevNode->previousMove.IsCapture())
-            {
-                return false;
-            }
-        }
-
-        // reached end of the stack
-        if (prevNode->ply == 0)
-            break;
-
-        --prevNode;
-
-        // only check every second previous node, because side to move must be the same
-        if (ply % 2 != 0)
-            continue;
-
-        ASSERT(prevNode->position.GetSideToMove() == node.position.GetSideToMove());
-
-        if (prevNode->position.GetHash() == node.position.GetHash() &&
-            prevNode->position == node.position)
-        {
-            // twofold repetition within search tree in non-PV nodes
-            if (!isPvNode && prevNode->ply > 0)
-                return true;
-
-            // threefold repetition
-            if (repCount++ >= 1)
-                return true;
+            outLine[length] = move;
         }
     }
 
-    // threefold repetition
-    return repCount + game.GetRepetitionCount(node.position) >= 2;
+    return length;
 }

@@ -6,6 +6,9 @@
 #include "ThreadPool.hpp"
 
 #include <iostream>
+#include <cmath>
+#include <iomanip>
+#include <mutex>
 
 struct EndgameValidationStats
 {

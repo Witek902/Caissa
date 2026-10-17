@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Move.hpp"
-
-#include <algorithm>
+#include "containers/Sort.hpp"
 
 struct MoveListEntry
 {
@@ -47,7 +46,7 @@ public:
     template<typename MoveType>
     INLINE void RemoveMove(const MoveType move)
     {
-        static_assert(std::is_same_v<MoveType, Move> || std::is_same_v<MoveType, PackedMove>, "Invalid move type");
+        static_assert(IsSame<MoveType, Move>::Value || IsSame<MoveType, PackedMove>::Value, "Invalid move type");
 
         if (!move.IsValid()) return;
 
@@ -123,7 +122,7 @@ public:
 
     void Sort()
     {
-        std::sort(entries, entries + numMoves, [](const Entry& a, const Entry& b) { return a.score > b.score; });
+        ::Sort(entries, entries + numMoves, [](const Entry& a, const Entry& b) { return a.score > b.score; });
     }
 
     INLINE BatchWriter BeginBatch() { return { entries, numMoves }; }

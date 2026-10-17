@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <vector>
 
 namespace nn {
 namespace cuda {

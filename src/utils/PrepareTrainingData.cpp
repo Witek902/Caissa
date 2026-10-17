@@ -6,6 +6,11 @@
 
 #include <filesystem>
 #include <iostream>
+#include <algorithm>
+#include <mutex>
+#include <random>
+#include <string>
+#include <vector>
 
 using namespace threadpool;
 
@@ -49,7 +54,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
     {
         Game::Score gameScore = game.GetScore();
 
-        ASSERT(game.GetMoves().size() == game.GetMoveScores().size());
+        ASSERT(game.GetMoves().Size() == game.GetMoveScores().Size());
 
         if (game.GetScore() == Game::Score::Unknown)
         {
@@ -59,7 +64,7 @@ static bool ConvertGamesToTrainingData(const std::string& inputPath, const std::
         Position pos = game.GetInitialPosition();
 
         // replay the game
-        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        for (size_t i = 0; i < game.GetMoves().Size(); ++i)
         {
             const Move move = moves[i];
             const ScoreType moveScore = game.GetMoveScores()[i];

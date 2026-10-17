@@ -5,6 +5,10 @@
 
 #include <array>
 #include <memory>
+#include <mutex>
+#include <random>
+#include <string>
+#include <vector>
 
 struct PositionEntry
 {
@@ -81,3 +85,5 @@ private:
 
     uint32_t SampleInputFileIndex(double u) const;
 };
+
+void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition);

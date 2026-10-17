@@ -144,8 +144,9 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
             for (uint32_t i = 0; i < AccumulatorSize; ++i)
             {
-                ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) <= std::numeric_limits<AccumulatorType>::max());
-                ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) >= std::numeric_limits<AccumulatorType>::min());
+                static_assert(sizeof(AccumulatorType) == sizeof(int16_t) && AccumulatorType(-1) < 0);
+                ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) <= INT16_MAX);
+                ASSERT(int32_t(regs[i]) + int32_t(weights[weightsDataOffset + i]) >= INT16_MIN);
 
                 regs[i] += weights[weightsDataOffset + i];
             }

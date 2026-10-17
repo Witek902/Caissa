@@ -1,6 +1,7 @@
 #include "Stream.hpp"
 
 #include <cstring>
+#include <vector>
 
 MemoryInputStream::MemoryInputStream(const std::vector<uint8_t>& buffer)
     : mBuffer(buffer)

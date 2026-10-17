@@ -2,8 +2,6 @@
 
 #include "../backend/Position.hpp"
 
-#include <memory>
-
 // Plays self-play games from a fixed root position in order to measure search quality
 // at a given nodes-per-move limit. Games are played to a real terminal state, without
 // any eval- or tablebase-based adjudication.
@@ -26,5 +24,5 @@ private:
     PlayoutRunner& operator = (const PlayoutRunner&) = delete;
 
     struct Impl;
-    std::unique_ptr<Impl> mImpl;
+    Impl* mImpl;
 };

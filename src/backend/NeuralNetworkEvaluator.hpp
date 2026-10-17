@@ -2,6 +2,7 @@
 
 #include "Accumulator.hpp"
 #include "Position.hpp"
+#include "containers/DynArray.hpp"
 
 //#define NN_ACCUMULATOR_STATS
 
@@ -109,11 +110,13 @@ public:
     // enabling/disabling has (almost) zero overhead on the search hot path when disabled
     static void SetStatsCollectionEnabled(bool enabled);
     static bool IsStatsCollectionEnabled();
+    // allocate the calling thread's buffer if collection is enabled (call at search start, never during the search)
+    static void PrepareThreadStats();
     // zero all per-thread counters (call only when no search is running)
     static void ResetStatsCollection();
     // merge all per-thread buffers into a single result (call only when no search is running)
     // optionally returns the per-thread position counts
-    static void GetMergedStats(NNAccumulatorStats& outMerged, std::vector<uint64_t>* outPerThreadPositions = nullptr);
+    static void GetMergedStats(NNAccumulatorStats& outMerged, DynArray<uint64_t>* outPerThreadPositions = nullptr);
 
     // incrementally update and evaluate
     static int32_t Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache);
@@ -148,7 +151,7 @@ INLINE void GetKingSideAndBucket(Square kingSquare, uint32_t& side, uint32_t& bu
 INLINE uint8_t GetNetworkVariant(const Position& pos)
 {
     const uint32_t numPieces = pos.GetNumPiecesExcludingKing();
-    return static_cast<uint8_t>(std::min(numPieces / 4u, nn::NumVariants - 1u));
+    return static_cast<uint8_t>(Min(numPieces / 4u, nn::NumVariants - 1u));
 }
 
 template<bool IncludePieceFeatures = false>

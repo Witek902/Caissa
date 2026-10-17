@@ -3,6 +3,9 @@
 #include "CudaCommon.hpp"
 #include "../net/WeightsStorage.hpp"
 
+#include <memory>
+#include <vector>
+
 namespace nn {
 namespace cuda {
 

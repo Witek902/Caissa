@@ -3,8 +3,11 @@
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/Waitable.hpp"
+#include "../backend/containers/String.hpp"
 
 class PlayoutRunner;
+
+using CommandArgs = DynArray<String>;
 
 struct Options
 {
@@ -36,22 +39,22 @@ public:
     ~UniversalChessInterface();
 
     void Loop(int argc, const char* argv[]);
-    bool ExecuteCommand(const std::string& commandString);
+    bool ExecuteCommand(const char* commandString);
 
 private:
-    bool Command_Position(const std::vector<std::string>& args);
-    bool Command_Go(const std::vector<std::string>& args);
+    bool Command_Position(const CommandArgs& args);
+    bool Command_Go(const CommandArgs& args);
     bool Command_Stop();
     bool Command_PonderHit();
-    bool Command_Perft(const std::vector<std::string>& args);
-    bool Command_SetOption(const std::string& name, const std::string& value);
+    bool Command_Perft(const CommandArgs& args);
+    bool Command_SetOption(const String& name, const char* value);
     bool Command_NodeCacheProbe();
     bool Command_TranspositionTableProbe();
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
-    bool Command_EvalDetailed(const std::vector<std::string>& args);
+    bool Command_EvalDetailed(const CommandArgs& args);
     bool Command_Benchmark(uint32_t depth);
-    bool Command_Playout(const std::vector<std::string>& args);
+    bool Command_Playout(const CommandArgs& args);
 
     void StopSearchThread();
     void DoSearch();
@@ -64,18 +67,18 @@ private:
     Options mOptions;
 
     Position mPrevSearchPosition;
-    std::vector<Move> mPrevSearchPvLine;
+    DynArray<Move> mPrevSearchPvLine;
 
-    std::thread mSearchThread;
+    // search thread with its mutex and condition variable, defined in UCI.cpp
+    struct SearchThread;
+    SearchThread* mSearchThread = nullptr;
 
-    std::mutex mSearchThreadMutex;
-    std::condition_variable mNewSearchConditionVariable;
     std::atomic<bool> mStopSearchThread = false;
     SearchTaskContext* mNewSearchContext = nullptr;
 
-    std::unique_ptr<SearchTaskContext> mSearchCtx;
+    // owned
+    SearchTaskContext* mSearchCtx = nullptr;
+    PlayoutRunner* mPlayout = nullptr;
 
-    std::unique_ptr<PlayoutRunner> mPlayout;
-
-    std::vector<std::string> mCommandArgs;
+    CommandArgs mCommandArgs;
 };

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <algorithm>
 
 namespace nn {
 

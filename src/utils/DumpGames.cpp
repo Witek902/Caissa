@@ -2,6 +2,8 @@
 
 #include <filesystem>
 #include <iostream>
+#include <string>
+#include <vector>
 
 static bool DumpGames(const std::string& path)
 {

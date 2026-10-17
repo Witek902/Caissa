@@ -9,6 +9,21 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <iomanip>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+template<>
+struct std::hash<MaterialKey>
+{
+    size_t operator()(const MaterialKey& k) const
+    {
+        return std::hash<uint64_t>{}(k.value);
+    }
+};
 
 static const bool c_collectMaterialStats = false;
 static const bool c_dumpFortressPositions = false;
@@ -73,9 +88,9 @@ void AnalyzeGames(const char* path, GamesStats& outStats)
 
         if (game.GetScore() == Game::Score::Unknown) continue;
 
-        ASSERT(game.GetMoves().size() == game.GetMoveScores().size());
+        ASSERT(game.GetMoves().Size() == game.GetMoveScores().Size());
 
-        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        for (size_t i = 0; i < game.GetMoves().Size(); ++i)
         {
             const Move move = pos.MoveFromPacked(game.GetMoves()[i]);
             const ScoreType moveScore = game.GetMoveScores()[i];

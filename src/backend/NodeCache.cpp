@@ -1,32 +1,34 @@
 #include "NodeCache.hpp"
 
-#include <iomanip>
-#include <iostream>
+#include "containers/DynArray.hpp"
+#include "containers/Sort.hpp"
+
+#include <inttypes.h>
+#include <stdio.h>
 
 void NodeCacheEntry::PrintMoves() const
 {
-    std::vector<MoveInfo> sortedMoves;
+    DynArray<MoveInfo> sortedMoves;
 
     uint64_t totalNodesSearched = 0;
     for (const MoveInfo& info : moves)
     {
         if (!info.move.IsValid()) continue;
-        sortedMoves.push_back(info);
+        sortedMoves.PushBack(info);
         totalNodesSearched += info.nodesSearched;
     }
 
-    std::sort(sortedMoves.begin(), sortedMoves.end(), [](const MoveInfo& a, const MoveInfo& b)
+    Sort(sortedMoves.begin(), sortedMoves.end(), [](const MoveInfo& a, const MoveInfo& b)
     {
-        return a.nodesSearched >= b.nodesSearched;
+        return a.nodesSearched > b.nodesSearched;
     });
 
     for (const MoveInfo& info : sortedMoves)
     {
-        std::cout
-            << info.move.ToString() << " "
-            << std::setw(10) << info.nodesSearched
-            << " (" << std::setprecision(4) << (100.0f * static_cast<float>(info.nodesSearched) / static_cast<float>(totalNodesSearched)) << "%)"
-            << std::endl;
+        printf("%s %10" PRIu64 " (%.4g%%)\n",
+            info.move.ToString().CStr(),
+            (uint64_t)info.nodesSearched,
+            100.0f * static_cast<float>(info.nodesSearched) / static_cast<float>(totalNodesSearched));
     }
 }
 

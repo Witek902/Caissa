@@ -8,6 +8,16 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <random>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <vector>
 
 struct SelfPlayConfig
 {
@@ -61,7 +71,7 @@ static bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosi
             continue;
 
         Position pos;
-        if (!pos.FromFEN(line))
+        if (!pos.FromFEN(line.c_str()))
         {
             std::cout << "Invalid FEN string: " << line << "\n";
             continue;
@@ -83,23 +93,29 @@ static bool LoadOpeningPositions(const std::string& path, std::vector<PackedPosi
 
 static Move GetRandomMove(std::mt19937& randomGenerator, const Position& pos)
 {
-    std::vector<Move> moves;
+    MoveList moves;
     pos.GetNumLegalMoves(&moves);
 
     // don't play losing moves (according to SEE)
-    moves.erase(std::remove_if(moves.begin(),
-        moves.end(),
-        [&](const Move& move) { return !pos.StaticExchangeEvaluation(move); }),
-        moves.end());
+    Move safeMoves[MoveList::MaxMoves];
+    uint32_t numSafeMoves = 0;
+    for (uint32_t i = 0; i < moves.Size(); ++i)
+    {
+        const Move move = moves.GetMove(i);
+        if (pos.StaticExchangeEvaluation(move))
+        {
+            safeMoves[numSafeMoves++] = move;
+        }
+    }
 
-    if (moves.empty())
+    if (numSafeMoves == 0)
         return Move::Invalid();
 
-    Move move = moves.front();
-    if (moves.size() > 1)
+    Move move = safeMoves[0];
+    if (numSafeMoves > 1)
     {
-        std::uniform_int_distribution<size_t> distr(0, moves.size() - 1);
-        move = moves[distr(randomGenerator)];
+        std::uniform_int_distribution<size_t> distr(0, numSafeMoves - 1);
+        move = safeMoves[distr(randomGenerator)];
     }
 
     return move;
@@ -315,12 +331,12 @@ static bool SelfPlayThreadFunc(
             if (halfMoveNumber < 10) searchParam.limits.maxNodesSoft *= 2; // more nodes in the first moves
             searchParam.limits.maxNodes = 5 * searchParam.limits.maxNodesSoft;
 
-            searchResult.clear();
+            searchResult.Clear();
             tt.NextGeneration();
             search.DoSearch(game, searchParam, searchResult, &searchStats);
             gameNodes += searchStats.nodes;
 
-            ASSERT(!searchResult.empty());
+            ASSERT(!searchResult.Empty());
 
             // skip game if starting position is unbalanced
             if (halfMoveNumber == 0 && std::abs(searchResult.begin()->score) * 100 / wld::NormalizeToPawnValue > config.openingMaxEval)
@@ -329,10 +345,10 @@ static bool SelfPlayThreadFunc(
                 break;
             }
 
-            ASSERT(!searchResult.front().moves.empty());
-            Move move = searchResult.front().moves.front();
+            ASSERT(!searchResult.Front().moves.Empty());
+            Move move = searchResult.Front().moves.Front();
 
-            ScoreType moveScore = searchResult.front().score;
+            ScoreType moveScore = searchResult.Front().score;
             ScoreType eval = Evaluate(game.GetPosition());
 
             if (game.GetSideToMove() == Black)
@@ -420,13 +436,13 @@ static bool SelfPlayThreadFunc(
             if (game.GetScore() == Game::Score::WhiteWins) stats.numWhiteWins++;
             if (game.GetScore() == Game::Score::BlackWins) stats.numBlackWins++;
             if (game.GetScore() == Game::Score::Draw) stats.numDraws++;
-            stats.numPositions += game.GetMoves().size();
+            stats.numPositions += game.GetMoves().Size();
             stats.numTerminations[(size_t)termination]++;
 
             const bool writeSample = sampleFile && config.samplePgnFrequency != 0 && (index % config.samplePgnFrequency == 0);
             if (pgnFile || writeSample)
             {
-                const std::string pgn = game.ToPGN(true);
+                const std::string pgn = game.ToPGN(true).CStr();
 
                 if (pgnFile)
                 {

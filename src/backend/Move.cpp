@@ -1,34 +1,34 @@
 #include "Move.hpp"
 #include "Position.hpp"
 
-std::string PackedMove::ToString() const
+MoveString PackedMove::ToString() const
 {
     if (FromSquare() == ToSquare())
     {
         return "0000";
     }
 
-    std::string str;
+    MoveString str;
 
-    str += FromSquare().ToString();
-    str += ToSquare().ToString();
+    str.Append(FromSquare().ToString());
+    str.Append(ToSquare().ToString());
 
     if (GetPromoteTo() != Piece::None)
     {
-        str += PieceToChar(GetPromoteTo(), false);
+        str.Append(PieceToChar(GetPromoteTo(), false));
     }
 
     return str;
 }
 
-std::string Move::ToString() const
+MoveString Move::ToString() const
 {
     if (FromSquare() == ToSquare())
     {
         return "0000";
     }
 
-    std::string str;
+    MoveString str;
 
     Square toSquare = ToSquare();
 
@@ -40,12 +40,12 @@ std::string Move::ToString() const
         if (IsLongCastle() && toSquare == Square_a8)    toSquare = Square_c8;
     }
 
-    str += FromSquare().ToString();
-    str += toSquare.ToString();
+    str.Append(FromSquare().ToString());
+    str.Append(toSquare.ToString());
 
     if (GetPromoteTo() != Piece::None)
     {
-        str += PieceToChar(GetPromoteTo(), false);
+        str.Append(PieceToChar(GetPromoteTo(), false));
     }
 
     return str;

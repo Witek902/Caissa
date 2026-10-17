@@ -373,10 +373,15 @@ bool Position::GivesCheck_Approx(const Move move) const
     return false;
 }
 
-uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
+uint32_t Position::GetNumLegalMoves(MoveList* outMoves) const
 {
     MoveList moves;
     GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moves);
+
+    if (outMoves)
+    {
+        outMoves->Clear();
+    }
 
     if (moves.Size() == 0)
     {
@@ -396,7 +401,7 @@ uint32_t Position::GetNumLegalMoves(std::vector<Move>* outMoves) const
 
             if (outMoves)
             {
-                outMoves->push_back(move);
+                outMoves->Push(move);
             }
         }
     }
@@ -836,16 +841,16 @@ int32_t Position::BestPossibleMoveValue() const
     const SidePosition& side = GetOpponentSide();
 
     // can capture most valuable piece
-         if (side.queens)   value = std::max(c_queenValue.mg, c_queenValue.eg);
-    else if (side.rooks)    value = std::max(c_rookValue.mg, c_rookValue.eg);
-    else if (side.knights)  value = std::max(c_knightValue.mg, c_knightValue.eg);
-    else if (side.bishops)  value = std::max(c_bishopValue.mg, c_bishopValue.eg);
-    else if (side.pawns)    value = std::max(c_pawnValue.mg, c_pawnValue.eg);
+         if (side.queens)   value = Max(c_queenValue.mg, c_queenValue.eg);
+    else if (side.rooks)    value = Max(c_rookValue.mg, c_rookValue.eg);
+    else if (side.knights)  value = Max(c_knightValue.mg, c_knightValue.eg);
+    else if (side.bishops)  value = Max(c_bishopValue.mg, c_bishopValue.eg);
+    else if (side.pawns)    value = Max(c_pawnValue.mg, c_pawnValue.eg);
 
     // can promote to queen
     if (GetCurrentSide().pawns & (mSideToMove == White ? Bitboard::RankBitboard<6>() : Bitboard::RankBitboard<1>()))
     {
-        value += std::max(c_queenValue.mg, c_queenValue.eg) - std::min(c_pawnValue.mg, c_pawnValue.eg);
+        value += Max(c_queenValue.mg, c_queenValue.eg) - Min(c_pawnValue.mg, c_pawnValue.eg);
     }
 
     return value;

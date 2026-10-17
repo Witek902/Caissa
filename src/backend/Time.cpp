@@ -2,13 +2,19 @@
 
 #if defined(PLATFORM_WINDOWS)
 
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif // NOMINMAX
+#include <Windows.h>
+
 namespace
 {
-    static LARGE_INTEGER GetCounterFrequency()
+    static int64_t GetCounterFrequency()
     {
         LARGE_INTEGER freq;
         QueryPerformanceFrequency(&freq);
-        return freq;
+        return freq.QuadPart;
     }
 
     static float GetCounterPeriod()
@@ -19,71 +25,65 @@ namespace
     }
 }
 
-const LARGE_INTEGER TimePoint::sFreq = GetCounterFrequency();
+const int64_t TimePoint::sFreq = GetCounterFrequency();
 const float TimePoint::sPeriod = GetCounterPeriod();
 
 float TimePoint::ToSeconds() const
 {
-    return static_cast<float>(mValue.QuadPart) * sPeriod;
+    return static_cast<float>(mValue) * sPeriod;
 }
 
 bool TimePoint::IsValid() const
 {
-    return mValue.QuadPart >= 0;
+    return mValue >= 0;
 }
 
 TimePoint TimePoint::Invalid()
 {
-    LARGE_INTEGER value = {};
-    value.QuadPart = -1;
-    return { value };
+    return { -1 };
 }
 
 TimePoint TimePoint::GetCurrent()
 {
     LARGE_INTEGER value = {};
     QueryPerformanceCounter(&value);
-    return { value };
+    return { value.QuadPart };
 }
 
 TimePoint TimePoint::FromSeconds(float t)
 {
-    LARGE_INTEGER value = {};
-    value.QuadPart = static_cast<LONGLONG>(sFreq.QuadPart * t);
-    return { value };
+    return { static_cast<int64_t>(sFreq * t) };
 }
 
 TimePoint TimePoint::operator - (const TimePoint& rhs) const
 {
-    LARGE_INTEGER p = {};
-    p.QuadPart = mValue.QuadPart - rhs.mValue.QuadPart;
-    return { p };
+    return { mValue - rhs.mValue };
 }
 
 TimePoint TimePoint::operator + (const TimePoint& rhs) const
 {
-    LARGE_INTEGER p = {};
-    p.QuadPart = mValue.QuadPart + rhs.mValue.QuadPart;
-    return { p };
+    return { mValue + rhs.mValue };
 }
 
 TimePoint& TimePoint::operator *= (const double rhs)
 {
-    mValue.QuadPart = (LONGLONG)(mValue.QuadPart * rhs);
+    mValue = (int64_t)(mValue * rhs);
     return *this;
 }
 
 bool TimePoint::operator >= (const TimePoint& rhs) const
 {
-    return mValue.QuadPart >= rhs.mValue.QuadPart;
+    return mValue >= rhs.mValue;
 }
 
 bool TimePoint::operator != (const TimePoint& rhs) const
 {
-    return mValue.QuadPart != rhs.mValue.QuadPart;
+    return mValue != rhs.mValue;
 }
 
 #elif defined(PLATFORM_LINUX)
+
+#include <time.h>
 
 float TimePoint::ToSeconds() const
 {

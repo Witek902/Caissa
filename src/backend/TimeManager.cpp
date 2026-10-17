@@ -2,8 +2,8 @@
 #include "Game.hpp"
 #include "Tuning.hpp"
 
-#include <iostream>
-#include <cmath>
+#include <math.h>
+#include <stdio.h>
 
 DEFINE_PARAM(TM_MovesLeftMidpoint, 35, 25, 60);
 DEFINE_PARAM(TM_MovesLeftSteepness, 219, 150, 260);
@@ -26,7 +26,7 @@ static float EstimateMovesLeft(const uint32_t moves)
     // based on LeelaChessZero
     const float midpoint = static_cast<float>(TM_MovesLeftMidpoint);
     const float steepness = static_cast<float>(TM_MovesLeftSteepness) / 100.0f;
-    return midpoint * std::pow(1.0f + 1.5f * std::pow((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
+    return midpoint * powf(1.0f + 1.5f * powf((float)moves / midpoint, steepness), 1.0f / steepness) - (float)moves;
 }
 
 void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLimits& limits)
@@ -51,11 +51,11 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         // exhausted clock must still leave a budget the search can do something with.
         // The soft limit is left alone.
         const float reserveFrac = static_cast<float>(TM_OverheadReserveFrac) / 1000.0f;
-        const float overheadReserve = std::min((float)moveOverhead, reserveFrac * remainingTime);
-        const float hardTimeLimit = std::max(minMoveTime, std::min(timeMargin * remainingTime, remainingTime - overheadReserve));
+        const float overheadReserve = Min((float)moveOverhead, reserveFrac * remainingTime);
+        const float hardTimeLimit = Max(minMoveTime, Min(timeMargin * remainingTime, remainingTime - overheadReserve));
 
-        maxTime = std::clamp(maxTime, 0.0f, hardTimeLimit);
-        idealTime = std::clamp(idealTime, 0.0f, std::max(minMoveTime, timeMargin * remainingTime));
+        maxTime = Clamp(maxTime, 0.0f, hardTimeLimit);
+        idealTime = Clamp(idealTime, 0.0f, Max(minMoveTime, timeMargin * remainingTime));
 
         // spend less time when behind on the clock
         if (data.theirRemainingTime != INT32_MAX && data.movesToGo != 1)
@@ -72,7 +72,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
             idealTime *= static_cast<float>(TM_PredictedMoveMissScale) / 1000.0f;
 
 #ifndef CONFIGURATION_FINAL
-        std::cout << "info string idealTime=" << idealTime << "ms maxTime=" << maxTime << "ms" << std::endl;
+        printf("info string idealTime=%gms maxTime=%gms\n", idealTime, maxTime);
 #endif // CONFIGURATION_FINAL
 
         limits.idealTimeBase = limits.idealTimeCurrent = TimePoint::FromSeconds(0.001f * idealTime);
@@ -94,10 +94,10 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
 
 void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, TimeManagerState& state)
 {
-    ASSERT(!data.currResult.empty());
-    ASSERT(!data.currResult[0].moves.empty());
+    ASSERT(!data.currResult.Empty());
+    ASSERT(!data.currResult[0].moves.Empty());
 
-    if (!limits.idealTimeBase.IsValid() || data.prevResult.empty() || data.prevResult[0].moves.empty())
+    if (!limits.idealTimeBase.IsValid() || data.prevResult.Empty() || data.prevResult[0].moves.Empty())
         return;
     
     // don't update TM at low depths
@@ -109,14 +109,14 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
     // decrease time if PV move is stable
     {
         // update PV move stability counter
-        if (data.prevResult[0].moves.front() == data.currResult[0].moves.front())
+        if (data.prevResult[0].moves.Front() == data.currResult[0].moves.Front())
             state.stabilityCounter++;
         else
             state.stabilityCounter = 0;
 
         const double stabilityFactor = static_cast<double>(TM_StabilityScale) / 1000.0;
         const double stabilityOffset = static_cast<double>(TM_StabilityOffset) / 1000.0;
-        const double stabilityTimeFactor = stabilityOffset - stabilityFactor * std::min(10u, state.stabilityCounter);
+        const double stabilityTimeFactor = stabilityOffset - stabilityFactor * Min(10u, state.stabilityCounter);
         limits.idealTimeCurrent *= stabilityTimeFactor;
     }
 
@@ -131,15 +131,15 @@ void UpdateTimeManager(const TimeManagerUpdateData& data, SearchLimits& limits, 
 
     // more time when the search score disagrees with the root static eval, less otherwise (averages ~1.0)
     const ScoreType score = data.currResult[0].score;
-    if (data.rootStaticEval != InvalidValue && std::abs(score) < KnownWinValue)
+    if (data.rootStaticEval != InvalidValue && Abs(score) < KnownWinValue)
     {
         const double cap = static_cast<double>(TM_ComplexityCap);
-        const double complexity = std::min(std::abs(score - data.rootStaticEval) * std::log(static_cast<double>(data.depth)), cap);
+        const double complexity = Min(Abs(score - data.rootStaticEval) * log(static_cast<double>(data.depth)), cap);
         const double complexityFactor = static_cast<double>(TM_ComplexityBase) / 1000.0 + static_cast<double>(TM_ComplexityScale) / 1000.0 * complexity / cap;
         limits.idealTimeCurrent *= complexityFactor;
     }
 
 #ifndef CONFIGURATION_FINAL
-    std::cout << "info string ideal time " << limits.idealTimeCurrent.ToSeconds() * 1000.0f << " ms" << std::endl;
+    printf("info string ideal time %g ms\n", limits.idealTimeCurrent.ToSeconds() * 1000.0f);
 #endif // CONFIGURATION_FINAL
 }

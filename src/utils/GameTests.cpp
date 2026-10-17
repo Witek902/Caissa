@@ -2,6 +2,7 @@
 #include "../backend/Search.hpp"
 
 #include <iostream>
+#include <vector>
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
@@ -48,7 +49,7 @@ void RunGameTests()
         TEST_EXPECT(game.DoMove(Move::Make(Square_g2, Square_g4, Piece::Pawn)));
         TEST_EXPECT(game.DoMove(Move::Make(Square_d8, Square_h4, Piece::Queen)));
         TEST_EXPECT(game.GetScore() == Game::Score::BlackWins);
-        TEST_EXPECT(game.GetMoves().size() == 4);
+        TEST_EXPECT(game.GetMoves().Size() == 4);
 
         TestGameSerialization(game);
     }
@@ -87,8 +88,8 @@ void RunGameTests()
         SearchResult result;
         search.DoSearch(game, param, result);
 
-        TEST_EXPECT(result.size() == 1);
-        TEST_EXPECT(result[0].moves.front() == Move::Make(Square_d4, Square_e5, Piece::Pawn, Piece::None, true));
+        TEST_EXPECT(result.Size() == 1);
+        TEST_EXPECT(result[0].moves.Front() == Move::Make(Square_d4, Square_e5, Piece::Pawn, Piece::None, true));
         TEST_EXPECT(result[0].score > 0);
     }
 }

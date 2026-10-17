@@ -1,8 +1,6 @@
 #pragma once
 
-#include "Common.hpp"
-
-#include <string>
+#include "containers/String.hpp"
 
 union MaterialKey
 {
@@ -94,7 +92,7 @@ union MaterialKey
     uint32_t GetNeuralNetworkInputsNumber() const;
 
     void FromString(const char* str);
-    std::string ToString() const;
+    String ToString() const;
 };
 
 ///
@@ -131,26 +129,3 @@ INLINE MaterialMask FlipColor(const MaterialMask mask)
 {
     return MaterialMask((mask >> 5) | ((mask & 0x1F) << 5));
 }
-
-///
-
-namespace std
-{
-
-template <>
-struct hash<MaterialKey>
-{
-    INLINE std::size_t operator()(const MaterialKey& k) const
-    {
-        if constexpr (sizeof(std::size_t) == sizeof(MaterialKey))
-        {
-            return k.value;
-        }
-        else
-        {
-            return std::hash<uint64_t>{}(k.value);
-        }
-    }
-};
-
-} // namespace std
