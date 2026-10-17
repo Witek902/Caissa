@@ -1,6 +1,8 @@
 #include "GameCollection.hpp"
 
 #include <iostream>
+#include <mutex>
+#include <vector>
 
 namespace GameCollection
 {
@@ -82,12 +84,12 @@ namespace GameCollection
 
     bool Writer::WriteGame(const Game& game)
     {
-        ASSERT(game.GetMoves().size() <= UINT16_MAX);
+        ASSERT(game.GetMoves().Size() <= UINT16_MAX);
 
         GameHeader header{};
         header.forcedScore = game.GetForcedScore();
-        header.numMoves = (uint16_t)game.GetMoves().size();
-        header.hasMoveScores = game.GetMoves().size() == game.GetMoveScores().size();
+        header.numMoves = (uint16_t)game.GetMoves().Size();
+        header.hasMoveScores = game.GetMoves().Size() == game.GetMoveScores().Size();
 
         if (!PackPosition(game.GetInitialPosition(), header.initialPosition))
         {
@@ -95,9 +97,9 @@ namespace GameCollection
         }
 
         std::vector<MoveAndScore> moves;
-        moves.reserve(game.GetMoves().size());
+        moves.reserve(game.GetMoves().Size());
 
-        for (size_t i = 0; i < game.GetMoves().size(); ++i)
+        for (size_t i = 0; i < game.GetMoves().Size(); ++i)
         {
             const int16_t moveScore = header.hasMoveScores ? game.GetMoveScores()[i] : 0;
             moves.push_back({ game.GetMoves()[i], moveScore });
@@ -112,7 +114,7 @@ namespace GameCollection
                 return false;
             }
 
-            if (!mStream.Write(moves.data(), sizeof(MoveAndScore) * game.GetMoves().size()))
+            if (!mStream.Write(moves.data(), sizeof(MoveAndScore) * game.GetMoves().Size()))
             {
                 std::cout << "Failed to write games collection stream" << std::endl;
                 return false;

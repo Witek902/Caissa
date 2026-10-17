@@ -11,27 +11,27 @@
 
 #ifdef ENABLE_TUNING
 
-#include <string>
-#include <vector>
+#include "containers/DynArray.hpp"
+#include "containers/FixedString.hpp"
 
 struct TunableParameter
 {
     using Type = int32_t;
 
-    TunableParameter(const std::string& name, Type& v, Type minValue, Type maxValue)
+    TunableParameter(const char* name, Type& v, Type minValue, Type maxValue)
         : m_name(name)
         , m_value(v)
         , m_min(minValue)
         , m_max(maxValue)
     { }
 
-    std::string m_name;
+    FixedString<64> m_name;
     Type& m_value;
     Type m_min = 0;
     Type m_max = 0;
 };
 
-extern std::vector<TunableParameter> g_TunableParameters;
+extern DynArray<TunableParameter> g_TunableParameters;
 
 void PrintParametersForTuning();
 
@@ -41,7 +41,7 @@ struct TunableParameterWrapper
     explicit TunableParameterWrapper(const char* name, const Type value, const Type minValue, const Type maxValue)
         : m_value(value)
     {
-        g_TunableParameters.emplace_back(name, m_value, minValue, maxValue);
+        g_TunableParameters.EmplaceBack(name, m_value, minValue, maxValue);
     }
 
     INLINE operator Type () const { return m_value; }

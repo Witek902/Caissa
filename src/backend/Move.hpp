@@ -3,6 +3,10 @@
 #include "Square.hpp"
 #include "Piece.hpp"
 
+#include "containers/FixedString.hpp"
+
+using MoveString = FixedString<16>;
+
 struct PackedMove
 {
     // data layout is following:
@@ -56,7 +60,7 @@ struct PackedMove
         return value != rhs.value;
     }
 
-    std::string ToString() const;
+    MoveString ToString() const;
 };
 
 static_assert(sizeof(PackedMove) == 2, "Invalid PackedMove size");
@@ -174,7 +178,7 @@ struct Move
         return IsCapture() || GetPiece() == Piece::Pawn;
     }
 
-    std::string ToString() const;
+    MoveString ToString() const;
 };
 
 INLINE PackedMove::PackedMove(const Move rhs)

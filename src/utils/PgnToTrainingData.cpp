@@ -7,6 +7,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <random>
+#include <string>
+#include <vector>
 
 using namespace threadpool;
 
@@ -45,16 +51,16 @@ static void ProcessPgnFile(const std::string& path, SharedState& shared)
 
         const auto& moves     = game.GetMoves();
         const auto& scores    = game.GetMoveScores();
-        const bool hasScores  = !scores.empty();
+        const bool hasScores  = !scores.Empty();
 
         Position pos = game.GetInitialPosition();
 
-        for (size_t i = 0; i < moves.size(); ++i)
+        for (size_t i = 0; i < moves.Size(); ++i)
         {
             const Move move = moves[i];
 
             // Skip if the move has no score annotation
-            const bool hasScore = hasScores && (i < scores.size());
+            const bool hasScore = hasScores && (i < scores.Size());
 
             if (hasScore &&
                 move.IsQuiet() &&

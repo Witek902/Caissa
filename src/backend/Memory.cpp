@@ -1,6 +1,6 @@
 #include "Memory.hpp"
 
-#include <iostream>
+#include <stdio.h>
 
 #if defined(PLATFORM_WINDOWS)
 
@@ -45,7 +45,7 @@ bool EnableLargePagesSupport()
 
     ::CloseHandle(hToken);
 
-    std::cout << "info string Large page support enabled. Minimum page size: " << (GetLargePageMinimum() / 1024u) << " KB" << std::endl;
+    printf("info string Large page support enabled. Minimum page size: %u KB\n", (uint32_t)(GetLargePageMinimum() / 1024u));
 
     return true;
 }

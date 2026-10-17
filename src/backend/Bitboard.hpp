@@ -2,8 +2,6 @@
 
 #include "BitUtils.hpp"
 
-#include <string>
-
 class Square;
 
 enum class Direction
@@ -35,8 +33,11 @@ struct Bitboard
     INLINE constexpr operator uint64_t() const { return value; }
     INLINE constexpr Bitboard operator ~() const { return ~value; }
 
+    // 8 rows of "r X . . . . . . .\n", files row and null terminator
+    static constexpr uint32_t PrintBufferSize = 9 * 18 + 1;
+
     // debug print
-    std::string Print() const;
+    void Print(char* outBuffer) const;
 
     template<typename Func>
     INLINE void Iterate(const Func func) const

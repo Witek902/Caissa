@@ -1,8 +1,7 @@
 #include "MoveList.hpp"
 #include "Position.hpp"
 
-#include <iomanip>
-#include <iostream>
+#include <stdio.h>
 
 void PrintMoveList(const Position& pos, const MoveList& moves)
 {
@@ -10,25 +9,22 @@ void PrintMoveList(const Position& pos, const MoveList& moves)
     {
         const Move move = moves.entries[i].move;
 
-        std::cout << std::right << std::setw(3) << (i + 1) << ". ";
+        printf("%3u. ", i + 1);
 
         if (!pos.IsMoveLegal(move))
         {
-            std::cout << move.ToString() << "\t[illegal move generated]";
+            printf("%s\t[illegal move generated]", move.ToString().CStr());
         }
         else
         {
-            std::cout
-                << move.ToString() << "\t("
-                << pos.MoveToString(move, MoveNotation::SAN) << ")\t"
-                << moves.entries[i].score;
+            printf("%s\t(%s)\t%d", move.ToString().CStr(), pos.MoveToString(move, MoveNotation::SAN).CStr(), moves.entries[i].score);
 
             if (!pos.StaticExchangeEvaluation(move))
             {
-                std::cout << " [negative SSE]";
+                printf(" [negative SSE]");
             }
         }
 
-        std::cout << std::endl;
+        printf("\n");
     }
 }

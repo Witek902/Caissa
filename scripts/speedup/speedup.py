@@ -269,6 +269,9 @@ def parse_args():
     p.add_argument("--depth", type=int, default=12, help="bench depth (default: 12)")
     p.add_argument("--warmup", type=int, default=1, metavar="N",
                    help="discard the first N rounds so clocks and caches settle (default: 1)")
+    p.add_argument("--rounds", type=int, default=0, metavar="N",
+                   help="stop after N counted rounds, or 2*N rounds in total if many are rejected "
+                        "(default: 0, run until Ctrl+C)")
     p.add_argument("--confidence", type=int, choices=(90, 95, 99), default=95,
                    help="confidence level for the reported interval (default: 95)")
     p.add_argument("--timeout", type=float, default=600.0,
@@ -303,6 +306,8 @@ def parse_args():
             p.error(f"engine not found: {path}")
     if args.warmup < 0:
         p.error("--warmup must be >= 0")
+    if args.rounds < 0:
+        p.error("--rounds must be >= 0")
     if args.outlier_threshold < 0:
         p.error("--outlier-threshold must be >= 0")
     return args
@@ -341,7 +346,7 @@ def main():
     rnd = 0
 
     try:
-        while True:
+        while not args.rounds or (ratio.n < args.rounds and rnd < args.warmup + 2 * args.rounds):
             rnd += 1
             try:
                 n_nodes, n_nps = run_bench(new_engine, args.depth, not args.no_priority, args.timeout)

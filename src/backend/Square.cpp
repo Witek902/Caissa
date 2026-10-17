@@ -2,9 +2,9 @@
 
 alignas(CACHELINE_SIZE) uint8_t Square::sDistances[Square::NumSquares * Square::NumSquares];
 
-Square Square::FromString(const std::string& str)
+Square Square::FromString(const char* str)
 {
-    if (str.length() != 2 || str[0] < 'a' || str[0] > 'h' || str[1] < '1' || str[1] > '8')
+    if (str[0] < 'a' || str[0] > 'h' || str[1] < '1' || str[1] > '8' || str[2] != 0)
     {
         return {};
     }
@@ -12,11 +12,11 @@ Square Square::FromString(const std::string& str)
     return Square(str[0] - 'a', str[1] - '1');
 }
 
-std::string Square::ToString() const
+SquareString Square::ToString() const
 {
-    std::string str;
-    str += 'a' + File();
-    str += '1' + Rank();
+    SquareString str;
+    str.Append(char('a' + File()));
+    str.Append(char('1' + Rank()));
     return str;
 }
 

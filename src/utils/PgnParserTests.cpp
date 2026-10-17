@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << " at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
@@ -29,7 +31,7 @@ static void TestBasicGame()
 
     auto games = ParseAll(pgn);
     TEST_EXPECT(games.size() == 1);
-    TEST_EXPECT(games[0].GetMoves().size() == 4);
+    TEST_EXPECT(games[0].GetMoves().Size() == 4);
     TEST_EXPECT(games[0].GetScore() == Game::Score::BlackWins);
 }
 
@@ -46,7 +48,7 @@ static void TestNonStandardStart()
 
     auto games = ParseAll(pgn);
     TEST_EXPECT(games.size() == 1);
-    TEST_EXPECT(games[0].GetMoves().size() == 3);
+    TEST_EXPECT(games[0].GetMoves().Size() == 3);
     TEST_EXPECT(games[0].GetInitialPosition().GetSideToMove() == Black);
 }
 
@@ -63,7 +65,7 @@ static void TestMoveScores()
     TEST_EXPECT(games.size() == 1);
 
     const auto& scores = games[0].GetMoveScores();
-    TEST_EXPECT(scores.size() == 3);
+    TEST_EXPECT(scores.Size() == 3);
     // White's move e4: +0.25 from White's POV → stored as +25
     TEST_EXPECT_EQ(scores[0], 25);
     // Black's move e5: -0.30 from Black's POV → stored as +30 (White's POV = negated)
@@ -87,10 +89,10 @@ static void TestOpenBenchFormat()
 
     auto games = ParseAll(pgnWithFen);
     TEST_EXPECT(games.size() == 1);
-    TEST_EXPECT(games[0].GetMoves().size() == 2);
+    TEST_EXPECT(games[0].GetMoves().Size() == 2);
 
     const auto& scores = games[0].GetMoveScores();
-    TEST_EXPECT(scores.size() == 2);
+    TEST_EXPECT(scores.Size() == 2);
     // Nge2 is White's move: -1.08 from White's POV → -108
     TEST_EXPECT_EQ(scores[0], -108);
     // Nxe4 is Black's move: +1.24 from Black's POV → negated to -124 (White's POV)
@@ -109,7 +111,7 @@ static void TestMateScore()
     TEST_EXPECT(games.size() == 1);
 
     const auto& scores = games[0].GetMoveScores();
-    TEST_EXPECT(scores.size() == 4);
+    TEST_EXPECT(scores.Size() == 4);
     // g4 is White's move: +M2 from White's POV
     TEST_EXPECT_EQ(scores[2], CheckmateValue - 2 * 2 + 1);
     // Qh4# is Black's move: -M1 from Black's POV → negated to +M1 in White's POV
@@ -133,9 +135,9 @@ static void TestMultipleGames()
 
     auto games = ParseAll(pgn);
     TEST_EXPECT_EQ(games.size(), 2u);
-    TEST_EXPECT(games[0].GetMoves().size() == 4);
+    TEST_EXPECT(games[0].GetMoves().Size() == 4);
     TEST_EXPECT(games[0].GetScore() == Game::Score::BlackWins);
-    TEST_EXPECT(games[1].GetMoves().size() == 7);
+    TEST_EXPECT(games[1].GetMoves().Size() == 7);
     TEST_EXPECT(games[1].GetScore() == Game::Score::WhiteWins);
 }
 
@@ -189,7 +191,7 @@ static void TestCastling()
 
     auto games = ParseAll(pgn);
     TEST_EXPECT(games.size() == 1);
-    TEST_EXPECT_EQ(games[0].GetMoves().size(), 14u);
+    TEST_EXPECT_EQ(games[0].GetMoves().Size(), 14u);
 }
 
 static void TestEarlyStop()
@@ -214,19 +216,19 @@ static void TestRoundTrip()
     original.DoMove(Move::Make(Square_e7, Square_e5, Piece::Pawn), -30);
     original.DoMove(Move::Make(Square_g1, Square_f3, Piece::Knight), 20);
 
-    const std::string pgnStr = original.ToPGN(true);
+    const std::string pgnStr = original.ToPGN(true).CStr();
 
     std::istringstream ss(pgnStr);
     std::vector<Game> games;
     ParsePgn(ss, [&](Game& g) { games.push_back(g); return true; });
 
     TEST_EXPECT(games.size() == 1);
-    TEST_EXPECT_EQ(games[0].GetMoves().size(), original.GetMoves().size());
+    TEST_EXPECT_EQ(games[0].GetMoves().Size(), original.GetMoves().Size());
 
     const auto& origScores = original.GetMoveScores();
     const auto& parsedScores = games[0].GetMoveScores();
-    TEST_EXPECT_EQ(origScores.size(), parsedScores.size());
-    for (size_t i = 0; i < origScores.size(); ++i)
+    TEST_EXPECT_EQ(origScores.Size(), parsedScores.Size());
+    for (size_t i = 0; i < origScores.Size(); ++i)
         TEST_EXPECT_EQ(origScores[i], parsedScores[i]);
 }
 

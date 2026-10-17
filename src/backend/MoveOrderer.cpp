@@ -2,7 +2,7 @@
 #include "Search.hpp"
 #include "Tuning.hpp"
 
-#include <iostream>
+#include <stdio.h>
 
 DEFINE_PARAM(QuietMoveHistoryClear, 802, -2000, 2000);
 DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
@@ -66,7 +66,7 @@ MoveOrderer::MoveOrderer()
 void MoveOrderer::DebugPrint() const
 {
 #ifndef CONFIGURATION_FINAL
-    std::cout << "=== QUIET MOVES HISTORY HEURISTICS ===" << std::endl;
+    printf("=== QUIET MOVES HISTORY HEURISTICS ===\n");
     /*
     for (uint32_t fromIndex = 0; fromIndex < 64; ++fromIndex)
     {
@@ -78,16 +78,15 @@ void MoveOrderer::DebugPrint() const
 
                 if (count)
                 {
-                    std::cout
-                        << Square(fromIndex).ToString() << Square(toIndex).ToString()
-                        << (color > 0 ? " (black)" : " (white)")
-                        << " ==> " << count << '\n';
+                    printf("%s%s%s ==> %d\n",
+                        Square(fromIndex).ToString().CStr(), Square(toIndex).ToString().CStr(),
+                        color > 0 ? " (black)" : " (white)", count);
                 }
             }
         }
     }*/
 
-    std::cout << "=== QUIET MOVES CONTINUATION HISTORY HEURISTICS ===" << std::endl;
+    printf("=== QUIET MOVES CONTINUATION HISTORY HEURISTICS ===\n");
 
     for (uint32_t prevPiece = 0; prevPiece < 6; ++prevPiece)
     {
@@ -102,46 +101,41 @@ void MoveOrderer::DebugPrint() const
 
                     if (count)
                     {
-                        std::cout
-                            << PieceToChar(Piece(prevPiece + 1)) << Square(prevToIndex).ToString()
-                            << ", "
-                            << PieceToChar(Piece(piece + 1)) << Square(toIndex).ToString()
-                            << " ==> " << count << '\n';
+                        printf("%c%s, %c%s ==> %d\n",
+                            PieceToChar(Piece(prevPiece + 1)), Square(prevToIndex).ToString().CStr(),
+                            PieceToChar(Piece(piece + 1)), Square(toIndex).ToString().CStr(),
+                            count);
                     }
                 }
             }
         }
     }
 
-    std::cout << std::endl;
-    std::cout << "=== KILLER MOVE HEURISTICS ===" << std::endl;
+    printf("\n=== KILLER MOVE HEURISTICS ===\n");
     {
         uint32_t lastValidDepth = 0;
         for (uint32_t d = 0; d < MaxSearchDepth; ++d)
         {
             if (killerMoves[d].IsValid())
             {
-                lastValidDepth = std::max(lastValidDepth, d);
+                lastValidDepth = Max(lastValidDepth, d);
             }
         }
 
         for (uint32_t d = 0; d < lastValidDepth; ++d)
         {
-            std::cout << d;
-            std::cout << "\t" << killerMoves[d].ToString() << " ";
-            std::cout << std::endl;
+            printf("%u\t%s \n", d, killerMoves[d].ToString().CStr());
         }
-        std::cout << std::endl;
+        printf("\n");
     }
 
-    std::cout << std::endl;
-    std::cout << "=== CAPTURE HISTORY ===" << std::endl;
+    printf("\n=== CAPTURE HISTORY ===\n");
 
     for (uint32_t piece = 0; piece < 6; ++piece)
     {
         for (uint32_t capturedPiece = 0; capturedPiece < 5; ++capturedPiece)
         {
-            std::cout << PieceToChar(Piece(piece + 1)) << 'x' << PieceToChar(Piece(capturedPiece + 1)) << std::endl;
+            printf("%cx%c\n", PieceToChar(Piece(piece + 1)), PieceToChar(Piece(capturedPiece + 1)));
 
             for (uint32_t rank = 0; rank < 8; ++rank)
             {
@@ -149,15 +143,15 @@ void MoveOrderer::DebugPrint() const
                 {
                     const uint32_t square = 8 * (7 - rank) + file;
                     const CounterType count = capturesHistory[0][piece][capturedPiece][square];
-                    std::cout << std::fixed << std::setw(8) << count;
+                    printf("%8d", count);
                 }
-                std::cout << std::endl;
+                printf("\n");
             }
-            std::cout << std::endl;
+            printf("\n");
         }
     }
 
-    std::cout << std::endl;
+    printf("\n");
 
 #endif // CONFIGURATION_FINAL
 }
@@ -250,11 +244,12 @@ Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
 
 INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
 {
-    int32_t newValue = (int32_t)counter + delta - (int32_t)counter * std::abs(delta) / 16384;
+    int32_t newValue = (int32_t)counter + delta - (int32_t)counter * Abs(delta) / 16384;
 
     // there should be no saturation
-    ASSERT(newValue > std::numeric_limits<MoveOrderer::CounterType>::min());
-    ASSERT(newValue < std::numeric_limits<MoveOrderer::CounterType>::max());
+    static_assert(IsSame<MoveOrderer::CounterType, int16_t>::Value);
+    ASSERT(newValue > INT16_MIN);
+    ASSERT(newValue < INT16_MAX);
 
     counter = static_cast<MoveOrderer::CounterType>(newValue);
 }
@@ -293,10 +288,10 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         return;
     }
 
-    const int32_t histBonus = std::min<int32_t>(HistBonusOffset + HistBonusLinear * node.depth + HistBonusScoreDiff * scoreDiff / 64, HistBonusLimit);
-    const int32_t histMalus = -std::min<int32_t>(HistMalusOffset + HistMalusLinear * node.depth + HistMalusScoreDiff * scoreDiff / 64, HistMalusLimit);
-    const int32_t contBonus = std::min<int32_t>(ContBonusOffset + ContBonusLinear * node.depth + ContBonusScoreDiff * scoreDiff / 64, ContBonusLimit);
-    const int32_t contMalus = -std::min<int32_t>(ContMalusOffset + ContMalusLinear * node.depth + ContMalusScoreDiff * scoreDiff / 64, ContMalusLimit);
+    const int32_t histBonus = Min<int32_t>(HistBonusOffset + HistBonusLinear * node.depth + HistBonusScoreDiff * scoreDiff / 64, HistBonusLimit);
+    const int32_t histMalus = -Min<int32_t>(HistMalusOffset + HistMalusLinear * node.depth + HistMalusScoreDiff * scoreDiff / 64, HistMalusLimit);
+    const int32_t contBonus = Min<int32_t>(ContBonusOffset + ContBonusLinear * node.depth + ContBonusScoreDiff * scoreDiff / 64, ContBonusLimit);
+    const int32_t contMalus = -Min<int32_t>(ContMalusOffset + ContMalusLinear * node.depth + ContMalusScoreDiff * scoreDiff / 64, ContMalusLimit);
 
     const Bitboard threats = node.threats.allThreats;
     PieceSquareHistory& pawnHist = pawnHistory[color][node.position.GetPawnsHash() % PawnHistorySize];
@@ -326,7 +321,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
 void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves, uint32_t numMoves, const Move bestMove)
 {
     // depth can be negative in QSearch
-    int32_t depth = std::max<int32_t>(0, node.depth);
+    int32_t depth = Max<int32_t>(0, node.depth);
 
     // don't update uncertain moves
     if (numMoves <= 1)
@@ -336,8 +331,8 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
 
     const uint32_t color = (uint32_t)node.position.GetSideToMove();
 
-    const int32_t bonus = std::min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
-    const int32_t malus = -std::min<int32_t>(CaptureMalusOffset + CaptureMalusLinear * depth, CaptureMalusLimit);
+    const int32_t bonus = Min<int32_t>(CaptureBonusOffset + CaptureBonusLinear * depth, CaptureBonusLimit);
+    const int32_t malus = -Min<int32_t>(CaptureMalusOffset + CaptureMalusLinear * depth, CaptureMalusLimit);
 
     const auto updateCapture = [&](const Move move, const int32_t delta) INLINE_LAMBDA
     {

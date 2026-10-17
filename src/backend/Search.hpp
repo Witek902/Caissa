@@ -8,9 +8,9 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "NodeCache.hpp"
 #include "Numa.hpp"
+#include "containers/DynArray.hpp"
 
-#include <condition_variable>
-#include <functional>
+#include <atomic>
 
 #ifndef CONFIGURATION_FINAL
 #define COLLECT_SEARCH_STATS
@@ -67,7 +67,7 @@ struct SearchParam
     uint32_t seed = 0;
 
     // exclude this root moves from the search
-    std::vector<Move> excludedMoves;
+    DynArray<Move> excludedMoves;
 
     // in pondering we don't care about limits
     std::atomic<bool> isPonder = false;
@@ -96,12 +96,12 @@ struct SearchParam
 
 struct PvLine
 {
-    std::vector<Move> moves;
+    DynArray<Move> moves;
     ScoreType score = InvalidValue;
     ScoreType tbScore = InvalidValue;
 };
 
-using SearchResult = std::vector<PvLine>;
+using SearchResult = DynArray<PvLine>;
 
 struct NodeInfo
 {
@@ -275,7 +275,7 @@ private:
         const Game& game;
         SearchParam& searchParam;
         SearchStats& stats;
-        std::vector<Move> excludedRootMoves;
+        DynArray<Move> excludedRootMoves;
     };
 
     struct AspirationWindowSearchParam
@@ -311,24 +311,19 @@ private:
 
     //
 
+    // worker thread and its task synchronization, defined in Search.cpp
+    struct ThreadSync;
+
     struct alignas(64) ThreadData
     {
-        std::atomic<bool> stopThread = false;
-
-        std::condition_variable taskFinishedCV;
-        std::mutex taskFinishedMutex;
-        bool taskFinished = false;
-
-        std::condition_variable newTaskCV;
-        std::mutex newTaskMutex;
-        std::function<void()> callback;
+        ThreadSync* sync = nullptr;
 
         bool isMainThread = false;
 
         uint16_t rootDepth = 0;             // search depth at the root node in current iterative deepening step
         uint16_t depthCompleted = 0;        // recently completed search depth
         SearchResult pvLines;               // principal variation lines from recently completed search iteration
-        std::vector<ScoreType> avgScores;   // average scores for each PV line (used for aspiration windows)
+        DynArray<ScoreType> avgScores;      // average scores for each PV line (used for aspiration windows)
         SearchThreadStats stats;            // per-thread search stats
 
         // per-thread move orderer
@@ -340,12 +335,12 @@ private:
         NodeInfo searchStack[MaxSearchDepth + 2];
 
         ThreadData();
+        ~ThreadData();
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
     };
 
-    std::vector<ThreadData*> mThreadData;
-    std::vector<std::thread> mWorkerThreads;
+    DynArray<ThreadData*> mThreadData;
 
     //
 
@@ -356,11 +351,11 @@ private:
 
     INLINE uint16_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
-        return mMoveReductionTable_Quiets[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+        return mMoveReductionTable_Quiets[Min(depth, LMRTableSize - 1)][Min(moveIndex, LMRTableSize - 1)];
     }
     INLINE uint16_t GetCapturesDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {
-        return mMoveReductionTable_Captures[std::min(depth, LMRTableSize - 1)][std::min(moveIndex, LMRTableSize - 1)];
+        return mMoveReductionTable_Captures[Min(depth, LMRTableSize - 1)][Min(moveIndex, LMRTableSize - 1)];
     }
 
     //

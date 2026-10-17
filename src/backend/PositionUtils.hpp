@@ -3,8 +3,6 @@
 #include "Bitboard.hpp"
 #include "Material.hpp"
 
-#include <random>
-
 #pragma pack(push, 1)
 struct PackedPosition
 {
@@ -39,4 +37,3 @@ struct RandomPosDesc
     Bitboard allowedBlackQueens = Bitboard::Full();
 };
 
-void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition);

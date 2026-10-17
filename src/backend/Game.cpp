@@ -12,9 +12,9 @@ void Game::Reset(const Position& pos)
     mInitPosition = pos;
     mPosition = pos;
     mForcedScore = Score::Unknown;
-    mMoves.clear();
-    mMoveScores.clear();
-    for (auto& history : mHistoryGamePositions) history.clear();
+    mMoves.Clear();
+    mMoveScores.Clear();
+    for (auto& history : mHistoryGamePositions) history.Clear();
 
     RecordBoardPosition(pos);
 }
@@ -28,7 +28,7 @@ bool Game::DoMove(const Move& move)
 {
     if (mPosition.DoMove(move))
     {
-        mMoves.push_back(move);
+        mMoves.PushBack(move);
 
         RecordBoardPosition(mPosition);
 
@@ -44,8 +44,8 @@ bool Game::DoMove(const Move& move, ScoreType score)
 
     if (mPosition.DoMove(move))
     {
-        mMoves.push_back(move);
-        mMoveScores.push_back(score);
+        mMoves.PushBack(move);
+        mMoveScores.PushBack(score);
 
         RecordBoardPosition(mPosition);
 
@@ -60,13 +60,13 @@ void Game::RecordBoardPosition(const Position& position)
     auto& historyPositions = mHistoryGamePositions[position.GetHash() % GameHistoryBuckets];
     for (auto& iter : historyPositions)
     {
-        if (iter.first == position)
+        if (iter.position == position)
         {
-            iter.second++;
+            iter.count++;
             return;
         }
     }
-    historyPositions.emplace_back(position, 1);
+    historyPositions.PushBack({ position, 1 });
 }
 
 uint32_t Game::GetRepetitionCount(const Position& position) const
@@ -74,8 +74,8 @@ uint32_t Game::GetRepetitionCount(const Position& position) const
     const auto& historyPositions = mHistoryGamePositions[position.GetHash() % GameHistoryBuckets];
     for (const auto& iter : historyPositions)
     {
-        if (iter.first == position)
-            return iter.second;
+        if (iter.position == position)
+            return iter.count;
     }
     return 0;
 }
@@ -150,38 +150,39 @@ bool Game::operator != (const Game& rhs) const
         mMoveScores != rhs.mMoveScores;
 }
 
-std::string Game::ToPGNMoveList(bool includeScores) const
+String Game::ToPGNMoveList(bool includeScores) const
 {
-    std::stringstream str;
+    String str;
 
     Position pos = mInitPosition;
 
-    for (size_t i = 0; i < mMoves.size(); ++i)
+    for (uint32_t i = 0; i < mMoves.Size(); ++i)
     {
         const bool isWhiteMove = pos.GetSideToMove() == White;
 
         if (isWhiteMove)
         {
             // White moves always get a move number indication: "N. "
-            str << pos.GetMoveCount() << ". ";
+            str.AppendFormat("%u. ", (uint32_t)pos.GetMoveCount());
         }
         else if (i == 0 || includeScores)
         {
             // Black move number indication required when:
             // - game starts with black to move (i == 0, no preceding white move)
             // - commentary preceded this black move (every white move has {score})
-            str << pos.GetMoveCount() << "... ";
+            str.AppendFormat("%u... ", (uint32_t)pos.GetMoveCount());
         }
 
-        str << pos.MoveToString(mMoves[i]) << ' ';
+        str.Append(pos.MoveToString(mMoves[i]));
+        str.Append(' ');
 
-        if (includeScores && i < mMoveScores.size())
+        if (includeScores && i < mMoveScores.Size())
         {
             // Scores are stored from white's perspective; negate for black's moves
             // so the comment reflects the side-to-move's perspective.
             // Format: {score/0} — fishtest/scoreWDLstat-compatible
             const ScoreType score = isWhiteMove ? mMoveScores[i] : ScoreType(-mMoveScores[i]);
-            str << '{' << ScoreToStr(score) << "/0} ";
+            str.AppendFormat("{%s/0} ", ScoreToStr(score).CStr());
         }
 
         const bool moveResult = pos.DoMove(mMoves[i]);
@@ -191,15 +192,15 @@ std::string Game::ToPGNMoveList(bool includeScores) const
 
     ASSERT(pos == mPosition);
 
-    return str.str();
+    return str;
 }
 
-std::string Game::ToPGN(bool includeScores) const
+String Game::ToPGN(bool includeScores) const
 {
-    std::stringstream str;
+    String str;
 
-    std::string resultStr;
-    std::string terminationStr;
+    const char* resultStr = "";
+    const char* terminationStr = "";
 
     const Game::Score gameScore = GetScore();
     if (gameScore == Game::Score::WhiteWins)
@@ -228,22 +229,23 @@ std::string Game::ToPGN(bool includeScores) const
 
     const bool isNonStandardStart = mInitPosition.ToFEN() != Position::InitPositionFEN;
 
-    str << "[Event \"?\"]" << std::endl;
-    str << "[Site \"?\"]" << std::endl;
-    str << "[Date \"????.??.??\"]" << std::endl;
-    str << "[Round \"" << mMetadata.roundNumber << "\"]" << std::endl;
-    str << "[White \"Caissa\"]" << std::endl;
-    str << "[Black \"Caissa\"]" << std::endl;
-    str << "[Result \"" << resultStr << "\"]" << std::endl;
+    str.Append("[Event \"?\"]\n");
+    str.Append("[Site \"?\"]\n");
+    str.Append("[Date \"????.??.??\"]\n");
+    str.AppendFormat("[Round \"%u\"]\n", mMetadata.roundNumber);
+    str.Append("[White \"Caissa\"]\n");
+    str.Append("[Black \"Caissa\"]\n");
+    str.AppendFormat("[Result \"%s\"]\n", resultStr);
     // Supplemental tags in ASCII order (§8.1.1): FEN(F=70) < SetUp(S=83) < Termination(T=84)
     if (isNonStandardStart)
     {
-        str << "[FEN \"" << mInitPosition.ToFEN() << "\"]" << std::endl;
-        str << "[SetUp \"1\"]" << std::endl;
+        str.AppendFormat("[FEN \"%s\"]\n", mInitPosition.ToFEN().CStr());
+        str.Append("[SetUp \"1\"]\n");
     }
-    str << "[Termination \"" << terminationStr << "\"]" << std::endl;
-    str << std::endl;
-    str << ToPGNMoveList(includeScores) << resultStr;
+    str.AppendFormat("[Termination \"%s\"]\n", terminationStr);
+    str.Append('\n');
+    str.Append(ToPGNMoveList(includeScores));
+    str.Append(resultStr);
 
-    return str.str();
+    return str;
 }

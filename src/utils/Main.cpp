@@ -2,6 +2,8 @@
 #include "../backend/Evaluate.hpp"
 
 #include <iostream>
+#include <vector>
+#include <string>
 
 extern void RunUnitTests();
 extern bool RunPerformanceTests(const std::vector<std::string>& paths);

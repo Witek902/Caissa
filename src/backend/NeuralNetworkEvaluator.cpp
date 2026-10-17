@@ -1,6 +1,8 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
 
+#include <mutex>
+
 #ifdef USE_SSE
     #include <immintrin.h>
 #endif
@@ -15,7 +17,7 @@ static std::mutex s_statsRegistryMutex;
 // per-thread statistics buffers, owned here for the lifetime of the process.
 // each buffer is tied to an OS thread (which outlives any individual Search), so collected
 // data persists across transient Search instances (e.g. 'bench') without any retire logic.
-static std::vector<NNAccumulatorStats*> s_statsRegistry;
+static DynArray<NNAccumulatorStats*> s_statsRegistry;
 static thread_local NNAccumulatorStats* t_statsBuffer = nullptr;
 
 void NNAccumulatorStats::Reset()
@@ -81,11 +83,11 @@ void NNEvaluator::ResetStatsCollection()
         buffer->Reset();
 }
 
-void NNEvaluator::GetMergedStats(NNAccumulatorStats& outMerged, std::vector<uint64_t>* outPerThreadPositions)
+void NNEvaluator::GetMergedStats(NNAccumulatorStats& outMerged, DynArray<uint64_t>* outPerThreadPositions)
 {
     outMerged.Reset();
     if (outPerThreadPositions)
-        outPerThreadPositions->clear();
+        outPerThreadPositions->Clear();
 
     std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
     for (NNAccumulatorStats* buffer : s_statsRegistry)
@@ -93,20 +95,18 @@ void NNEvaluator::GetMergedStats(NNAccumulatorStats& outMerged, std::vector<uint
         buffer->Flush(); // fold pending working counters into the masters (safe: called when no search is running)
         outMerged.Accumulate(*buffer);
         if (outPerThreadPositions)
-            outPerThreadPositions->push_back(buffer->numPositions);
+            outPerThreadPositions->PushBack(buffer->numPositions);
     }
 }
 
-// get (lazily allocating) the calling thread's statistics buffer
-static NNAccumulatorStats* AcquireThreadStatsBuffer()
+void NNEvaluator::PrepareThreadStats()
 {
-    if (!t_statsBuffer)
+    if (s_collectAccumulatorStats.load(std::memory_order_relaxed) && !t_statsBuffer)
     {
         t_statsBuffer = new NNAccumulatorStats();
         std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
-        s_statsRegistry.push_back(t_statsBuffer);
+        s_statsRegistry.PushBack(t_statsBuffer);
     }
-    return t_statsBuffer;
 }
 
 // fold working counters into the masters before they could overflow uint32:
@@ -604,7 +604,9 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     // search-time statistics collection (disabled by default: single relaxed load + predicted-not-taken branch)
     if (s_collectAccumulatorStats.load(std::memory_order_relaxed)) [[unlikely]]
     {
-        CollectAccumulatorStats(*AcquireThreadStatsBuffer(), ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+        // the buffer is allocated at search start, so collection enabled during a search starts with the next one
+        if (t_statsBuffer)
+            CollectAccumulatorStats(*t_statsBuffer, ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
     }
 
     return nnOutput;

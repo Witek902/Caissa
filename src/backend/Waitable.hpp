@@ -2,7 +2,7 @@
 
 #include "Common.hpp"
 
-#include <condition_variable>
+#include <atomic>
 
 // Helper class allowing for waiting for an event.
 class Waitable final
@@ -27,7 +27,8 @@ private:
     Waitable(const Waitable&) = delete;
     Waitable(Waitable&&) = delete;
 
-    std::mutex mMutex;
-    std::condition_variable mConditionVariable;
+    // mutex and condition variable, defined in Waitable.cpp
+    struct Sync;
+    Sync* mSync;
     std::atomic<bool> mFinished;
 };

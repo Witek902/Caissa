@@ -3,6 +3,13 @@
 #include "minitrace/minitrace.h"
 
 #include <assert.h>
+#include <algorithm>
+#include <atomic>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace threadpool {
 

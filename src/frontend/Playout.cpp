@@ -2,9 +2,17 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
+#include "../backend/containers/DynArray.hpp"
+#include "../backend/containers/FixedString.hpp"
+#include "../backend/containers/Sort.hpp"
 
-#include <iostream>
-#include <random>
+#include <chrono>
+#include <condition_variable>
+#include <math.h>
+#include <mutex>
+#include <stdio.h>
+#include <string.h>
+#include <thread>
 
 static constexpr size_t c_transpositionTableSize = 8ull * 1024ull * 1024ull;
 static constexpr uint32_t c_reportIntervalSeconds = 5;
@@ -55,12 +63,12 @@ struct PlayoutStats
     uint32_t minPlies = UINT32_MAX;
     uint32_t maxPlies = 0;
 
-    std::vector<uint32_t> gameLengths;
+    DynArray<uint32_t> gameLengths;
 };
 
 static constexpr size_t c_reportWidth = 62;
 
-static std::string FormatDuration(double seconds)
+static FixedString<32> FormatDuration(double seconds)
 {
     char buffer[32];
     const uint32_t total = static_cast<uint32_t>(seconds);
@@ -73,6 +81,14 @@ static std::string FormatDuration(double seconds)
         snprintf(buffer, sizeof(buffer), "%uh %02um", total / 3600, (total / 60) % 60);
 
     return buffer;
+}
+
+static uint64_t SplitMix64(uint64_t& state)
+{
+    uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+    return z ^ (z >> 31);
 }
 
 struct WorkerContext
@@ -89,7 +105,8 @@ struct PlayoutRunner::Impl
     uint64_t softNodeLimit = 0;
     uint64_t maxGames = 0; // 0 = unlimited
 
-    std::vector<std::unique_ptr<WorkerContext>> workers;
+    // owned
+    DynArray<WorkerContext*> workers;
     std::thread reporterThread;
 
     std::atomic<bool> stopRequested = false;
@@ -102,7 +119,13 @@ struct PlayoutRunner::Impl
     std::mutex reporterMutex;
     std::condition_variable reporterCV;
 
-    std::chrono::steady_clock::time_point startTime;
+    TimePoint startTime;
+
+    ~Impl()
+    {
+        for (WorkerContext* worker : workers)
+            delete worker;
+    }
 
     void WorkerFunc(WorkerContext& ctx);
     void ReporterFunc();
@@ -111,8 +134,8 @@ struct PlayoutRunner::Impl
 
 void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
 {
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    // differs between workers and runs
+    uint64_t seedState = reinterpret_cast<uintptr_t>(&ctx) ^ static_cast<uint64_t>(1.0e6 * TimePoint::GetCurrent().ToSeconds());
 
     SearchResult searchResult;
     SearchStats searchStats;
@@ -138,7 +161,7 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
         ctx.search.Clear();
 
         // a fresh seed per game is the only source of variation between games
-        ctx.param.seed = gen();
+        ctx.param.seed = static_cast<uint32_t>(SplitMix64(seedState));
 
         uint32_t numPlies = 0;
         uint64_t numNodes = 0;
@@ -148,7 +171,7 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
         while (!ClassifyGameEnd(game, gameEnd))
         {
             ctx.param.stopSearch = false;
-            searchResult.clear();
+            searchResult.Clear();
             ctx.tt.NextGeneration();
             ctx.search.DoSearch(game, ctx.param, searchResult, &searchStats);
 
@@ -158,13 +181,13 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
                 break;
             }
 
-            ASSERT(!searchResult.empty());
-            ASSERT(!searchResult.front().moves.empty());
+            ASSERT(!searchResult.Empty());
+            ASSERT(!searchResult.Front().moves.Empty());
 
             numNodes += searchStats.nodes;
             numPlies++;
 
-            const bool moveSuccess = game.DoMove(searchResult.front().moves.front());
+            const bool moveSuccess = game.DoMove(searchResult.Front().moves.Front());
             ASSERT(moveSuccess);
             (void)moveSuccess;
         }
@@ -177,9 +200,9 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
         stats.numGames++;
         stats.totalPlies += numPlies;
         stats.totalNodes += numNodes;
-        stats.minPlies = std::min(stats.minPlies, numPlies);
-        stats.maxPlies = std::max(stats.maxPlies, numPlies);
-        stats.gameLengths.push_back(numPlies);
+        stats.minPlies = Min(stats.minPlies, numPlies);
+        stats.maxPlies = Max(stats.maxPlies, numPlies);
+        stats.gameLengths.PushBack(numPlies);
 
         switch (gameEnd)
         {
@@ -221,21 +244,27 @@ void PlayoutRunner::Impl::PrintReport(bool isFinal)
         snapshot = stats;
     }
 
-    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
+    const double elapsed = (TimePoint::GetCurrent() - startTime).ToSeconds();
 
-    std::string header = std::string("=== playout ") + (isFinal ? "(final) " : "");
-    header.resize(c_reportWidth, '=');
-    printf("\n%s\n", header.c_str());
+    char separator[c_reportWidth + 1];
+    memset(separator, '=', c_reportWidth);
+    separator[c_reportWidth] = 0;
+
+    char header[c_reportWidth + 1];
+    const int headerLength = snprintf(header, sizeof(header), "=== playout %s", isFinal ? "(final) " : "");
+    memset(header + headerLength, '=', c_reportWidth - headerLength);
+    header[c_reportWidth] = 0;
+    printf("\n%s\n", header);
 
     printf("  setup    %llu nodes/move   %u threads   %s to move\n",
         (unsigned long long)softNodeLimit,
-        (uint32_t)workers.size(),
+        workers.Size(),
         rootPosition.GetSideToMove() == White ? "white" : "black");
 
     if (snapshot.numGames == 0)
     {
-        printf("  games    none completed yet (%s)\n", FormatDuration(elapsed).c_str());
-        printf("%s\n", std::string(c_reportWidth, '=').c_str());
+        printf("  games    none completed yet (%s)\n", FormatDuration(elapsed).CStr());
+        printf("%s\n", separator);
         fflush(stdout);
         return;
     }
@@ -245,10 +274,10 @@ void PlayoutRunner::Impl::PrintReport(bool isFinal)
     // a single game scores 0, 0.5 or 1, so the score variance follows from the outcome counts alone
     const double score = (snapshot.numWins + 0.5 * snapshot.numDraws) / numGames;
     const double secondMoment = (snapshot.numWins + 0.25 * snapshot.numDraws) / numGames;
-    const double scoreStdError = std::sqrt(std::max(0.0, secondMoment - score * score) / numGames);
+    const double scoreStdError = sqrt(Max(0.0, secondMoment - score * score) / numGames);
 
-    const size_t middle = snapshot.gameLengths.size() / 2;
-    std::nth_element(snapshot.gameLengths.begin(), snapshot.gameLengths.begin() + middle, snapshot.gameLengths.end());
+    const uint32_t middle = snapshot.gameLengths.Size() / 2;
+    Sort(snapshot.gameLengths.begin(), snapshot.gameLengths.end(), [](uint32_t a, uint32_t b) { return a < b; });
     const uint32_t medianPlies = snapshot.gameLengths[middle];
 
     // outcome and draw-reason columns are printed side by side, all percentages relative to the total game count
@@ -268,7 +297,7 @@ void PlayoutRunner::Impl::PrintReport(bool isFinal)
     }
 
     printf("\n  games    %llu in %s   (%.1f games/s)\n",
-        (unsigned long long)snapshot.numGames, FormatDuration(elapsed).c_str(), numGames / elapsed);
+        (unsigned long long)snapshot.numGames, FormatDuration(elapsed).CStr(), numGames / elapsed);
     printf("  length   avg %.1f   median %u   min %u   max %u plies\n",
         (double)snapshot.totalPlies / numGames, medianPlies, snapshot.minPlies, snapshot.maxPlies);
     printf("  search   %.1f Mnps total   avg %.0f nodes/move\n",
@@ -320,12 +349,13 @@ void PlayoutRunner::Impl::ReporterFunc()
 }
 
 PlayoutRunner::PlayoutRunner()
-    : mImpl(std::make_unique<Impl>())
+    : mImpl(new Impl)
 {}
 
 PlayoutRunner::~PlayoutRunner()
 {
     Stop();
+    delete mImpl;
 }
 
 bool PlayoutRunner::Start(const Position& rootPosition, uint64_t softNodeLimit, uint64_t maxGames)
@@ -336,36 +366,35 @@ bool PlayoutRunner::Start(const Position& rootPosition, uint64_t softNodeLimit, 
     GameEnd gameEnd;
     if (ClassifyGameEnd(game, gameEnd))
     {
-        std::cout << "Root position is already a finished game" << std::endl;
+        printf("Root position is already a finished game\n");
         return false;
     }
 
-    const uint32_t numThreads = std::max(1u, std::thread::hardware_concurrency());
+    const uint32_t numThreads = Max(1u, std::thread::hardware_concurrency());
 
     mImpl->rootPosition = rootPosition;
     mImpl->softNodeLimit = softNodeLimit;
     mImpl->maxGames = maxGames;
     mImpl->numActiveWorkers = numThreads;
-    mImpl->startTime = std::chrono::steady_clock::now();
+    mImpl->startTime = TimePoint::GetCurrent();
 
-    mImpl->workers.reserve(numThreads);
+    mImpl->workers.Reserve(numThreads);
     for (uint32_t i = 0; i < numThreads; ++i)
-        mImpl->workers.push_back(std::make_unique<WorkerContext>());
+        mImpl->workers.PushBack(new WorkerContext);
 
-    for (auto& worker : mImpl->workers)
+    for (WorkerContext* ctx : mImpl->workers)
     {
-        WorkerContext* ctx = worker.get();
-        worker->thread = std::thread([this, ctx]() { mImpl->WorkerFunc(*ctx); });
+        ctx->thread = std::thread([this, ctx]() { mImpl->WorkerFunc(*ctx); });
     }
 
     mImpl->reporterThread = std::thread([this]() { mImpl->ReporterFunc(); });
 
-    std::cout << "Playing games from the current position at " << softNodeLimit << " nodes/move on " << numThreads << " threads";
+    printf("Playing games from the current position at %llu nodes/move on %u threads", (unsigned long long)softNodeLimit, numThreads);
     if (maxGames > 0)
-        std::cout << ", " << maxGames << " games";
+        printf(", %llu games", (unsigned long long)maxGames);
     else
-        std::cout << ", use 'stop' to finish";
-    std::cout << std::endl;
+        printf(", use 'stop' to finish");
+    printf("\n");
 
     return true;
 }

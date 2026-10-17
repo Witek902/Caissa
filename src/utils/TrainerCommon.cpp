@@ -9,6 +9,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
 
 static_assert(sizeof(PositionEntry) == 32, "Invalid PositionEntry size");
 
@@ -306,4 +312,166 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
 
         return true;
     }
+}
+
+void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition)
+{
+    const auto genLegalSquare = [&randomGenerator](const Bitboard mask) -> Square
+    {
+        std::uniform_int_distribution<uint32_t> distr;
+
+        if (!mask) return Square::Invalid();
+
+        const uint32_t numLegalSquares = mask.Count();
+        const uint32_t maskedSquareIndex = distr(randomGenerator) % numLegalSquares;
+
+        const uint64_t squareMask = ParallelBitsDeposit(1ull << maskedSquareIndex, mask);
+        ASSERT(squareMask);
+
+        return Square(FirstBitSet(squareMask));
+    };
+
+    std::uniform_int_distribution<uint32_t> distr;
+    
+    constexpr const Bitboard pawnMask = ~Bitboard::RankBitboard<0>() & ~Bitboard::RankBitboard<7>();
+
+    for (;;)
+    {
+        outPosition = Position();
+
+        Bitboard occupied = 0;
+
+        // generate white king square
+        Square whiteKingSq;
+        {
+            const Bitboard mask = desc.allowedWhiteKing;
+            ASSERT(mask);
+            whiteKingSq = genLegalSquare(mask);
+            ASSERT(whiteKingSq.IsValid());
+            occupied |= whiteKingSq.GetBitboard();
+            outPosition.SetPiece(whiteKingSq, Piece::King, White);
+        }
+
+        // generate black king square
+        Square blackKingSq;
+        {
+            const Bitboard mask = ~whiteKingSq.GetBitboard() & ~Bitboard::GetKingAttacks(whiteKingSq) & desc.allowedBlackKing;
+            ASSERT(mask);
+            blackKingSq = genLegalSquare(mask);
+            ASSERT(blackKingSq.IsValid());
+            occupied |= blackKingSq.GetBitboard();
+            outPosition.SetPiece(blackKingSq, Piece::King, Black);
+        }
+
+        // generate white pawns on ranks 1-7, they cannot attack black king
+        for (uint32_t i = 0; i < desc.materialKey.numWhitePawns; ++i)
+        {
+            const Bitboard mask = ~occupied & pawnMask & ~Bitboard::GetPawnAttacks(blackKingSq, Black) & desc.allowedWhitePawns;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Pawn, White);
+        }
+
+        // TODO generate en-passant square if possible
+
+        // generate black pawns on ranks 1-7
+        for (uint32_t i = 0; i < desc.materialKey.numBlackPawns; ++i)
+        {
+            const Bitboard mask = ~occupied & pawnMask & desc.allowedBlackPawns;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Pawn, Black);
+        }
+
+        // generate white queens, they cannot attack black king
+        for (uint32_t i = 0; i < desc.materialKey.numWhiteQueens; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateQueenAttacks(blackKingSq, occupied) & desc.allowedWhiteQueens;
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Queen, White);
+        }
+
+        // generate black queens
+        for (uint32_t i = 0; i < desc.materialKey.numBlackQueens; ++i)
+        {
+            const Bitboard mask = ~occupied & desc.allowedBlackQueens;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Queen, Black);
+        }
+
+        // generate white rooks, they cannot attack black king
+        for (uint32_t i = 0; i < desc.materialKey.numWhiteRooks; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateRookAttacks(blackKingSq, occupied) & desc.allowedWhiteRooks;
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Rook, White);
+        }
+
+        // generate black rooks
+        for (uint32_t i = 0; i < desc.materialKey.numBlackRooks; ++i)
+        {
+            const Bitboard mask = ~occupied & desc.allowedBlackRooks;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Rook, Black);
+        }
+
+        // generate white bishops, they cannot attack black king
+        for (uint32_t i = 0; i < desc.materialKey.numWhiteBishops; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GenerateBishopAttacks(blackKingSq, occupied) & desc.allowedWhiteBishops;
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Bishop, White);
+        }
+
+        // generate black bishops
+        for (uint32_t i = 0; i < desc.materialKey.numBlackBishops; ++i)
+        {
+            const Bitboard mask = ~occupied & desc.allowedBlackBishops;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Bishop, Black);
+        }
+
+        // generate white knights, they cannot attack black king
+        for (uint32_t i = 0; i < desc.materialKey.numWhiteKnights; ++i)
+        {
+            const Bitboard mask = ~occupied & ~Bitboard::GetKnightAttacks(blackKingSq) & desc.allowedWhiteKnights;
+            if (!mask) continue;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Knight, White);
+        }
+
+        // generate black knights
+        for (uint32_t i = 0; i < desc.materialKey.numBlackKnights; ++i)
+        {
+            const Bitboard mask = ~occupied & desc.allowedBlackKnights;
+            const Square sq = genLegalSquare(mask);
+            ASSERT(sq.IsValid());
+            occupied |= sq.GetBitboard();
+            outPosition.SetPiece(sq, Piece::Knight, Black);
+        }
+
+        break;
+    }
+
+    ASSERT(outPosition.IsValid());
+    ASSERT(!outPosition.IsInCheck(Black));
 }

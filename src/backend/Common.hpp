@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <stdlib.h>
 
 #if defined(_WIN32)
     #define PLATFORM_WINDOWS
@@ -9,13 +10,13 @@
 #endif
 
 #if defined(PLATFORM_LINUX)
-    #include <csignal>
+    #include <signal.h>
 #endif
 
 #if defined(PLATFORM_WINDOWS)
     #define DEBUG_BREAK() __debugbreak()
 #elif defined(PLATFORM_LINUX)
-    #define DEBUG_BREAK() std::raise(SIGINT)
+    #define DEBUG_BREAK() raise(SIGINT)
 #endif
 
 #define UNUSED(x) (void)(x)
@@ -103,6 +104,35 @@ static constexpr ScoreType KnownWinValue        = 20000;
 static constexpr uint16_t MaxSearchDepth    = 256;
 
 static constexpr ScoreType DrawScoreRandomness = 2;
+
+// Written exactly like the standard library's versions (libstdc++ for GCC/Clang, the MSVC STL for MSVC):
+// GCC predicts if/return branches differently from ?:, and the changed block frequency estimates make it
+// compile other hot blocks for size (e.g. idiv for constant divisions in NegaMax).
+#if defined(_MSC_VER) && !defined(__clang__)
+template<typename T> constexpr const T& Min(const T& a, const T& b) { return b < a ? b : a; }
+template<typename T> constexpr const T& Max(const T& a, const T& b) { return a < b ? b : a; }
+template<typename T> constexpr const T& Clamp(const T& x, const T& lo, const T& hi) { return x < lo ? lo : hi < x ? hi : x; }
+#else
+template<typename T> constexpr const T& Min(const T& a, const T& b) { if (b < a) return b; return a; }
+template<typename T> constexpr const T& Max(const T& a, const T& b) { if (a < b) return b; return a; }
+template<typename T> constexpr const T& Clamp(const T& x, const T& lo, const T& hi) { return Min(Max(x, lo), hi); }
+#endif
+
+inline int Abs(int a) { return abs(a); }
+
+template<typename T> struct RemoveReference { using Type = T; };
+template<typename T> struct RemoveReference<T&> { using Type = T; };
+template<typename T> struct RemoveReference<T&&> { using Type = T; };
+
+// equivalents of std::move and std::forward
+template<typename T> INLINE constexpr typename RemoveReference<T>::Type&& MoveTemp(T&& x) { return static_cast<typename RemoveReference<T>::Type&&>(x); }
+template<typename T> INLINE constexpr T&& Forward(typename RemoveReference<T>::Type& x) { return static_cast<T&&>(x); }
+template<typename T> INLINE constexpr T&& Forward(typename RemoveReference<T>::Type&& x) { return static_cast<T&&>(x); }
+
+template<typename T> INLINE constexpr void Swap(T& a, T& b) { T tmp = MoveTemp(a); a = MoveTemp(b); b = MoveTemp(tmp); }
+
+template<typename A, typename B> struct IsSame { static constexpr bool Value = false; };
+template<typename A> struct IsSame<A, A> { static constexpr bool Value = true; };
 
 // initialize all engine subsystems
 EXPORT void InitEngine();

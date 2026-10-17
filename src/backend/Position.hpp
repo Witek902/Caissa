@@ -2,8 +2,10 @@
 
 #include "PositionHash.hpp"
 #include "Memory.hpp"
+#include "Move.hpp"
+#include "containers/String.hpp"
 
-#include <vector>
+using FenString = FixedString<128>;
 
 // class representing one side's pieces state
 struct alignas(16) SidePosition
@@ -131,26 +133,26 @@ public:
         return *this;
     }
 
-    explicit Position(const std::string& fenString);
+    explicit Position(const char* fenString);
 
     // compare position (not hash)
     bool operator == (const Position& rhs) const;
     bool operator != (const Position& rhs) const;
 
     // load position from Forsyth-Edwards Notation
-    bool FromFEN(const std::string& fenString);
+    bool FromFEN(const char* fenString);
 
     // save position to Forsyth-Edwards Notation
-    std::string ToFEN(bool skipMoveCounts = false) const;
+    FenString ToFEN(bool skipMoveCounts = false) const;
 
     // print board as ASCI art
-    std::string Print() const;
+    String Print() const;
 
     // convert move to string
-    std::string MoveToString(const Move& move, MoveNotation notation = MoveNotation::SAN) const;
+    MoveString MoveToString(const Move& move, MoveNotation notation = MoveNotation::SAN) const;
 
     // parse move from string
-    Move MoveFromString(const std::string& str, MoveNotation notation = MoveNotation::LAN) const;
+    Move MoveFromString(const char* str, MoveNotation notation = MoveNotation::LAN) const;
 
     // parse move from packed move
     Move MoveFromPacked(const PackedMove& packedMove) const;
@@ -188,8 +190,8 @@ public:
     // approximate, does not handle discovered checks, check by castling, etc.
     bool GivesCheck_Approx(const Move move) const;
 
-    // get number of legal moves
-    uint32_t GetNumLegalMoves(std::vector<Move>* outMoves = nullptr) const;
+    // get number of legal moves, optionally fill outMoves with all legal moves
+    uint32_t GetNumLegalMoves(MoveList* outMoves = nullptr) const;
 
     // check if side to move is checkmated
     bool IsMate() const;

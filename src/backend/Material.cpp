@@ -3,23 +3,31 @@
 
 static_assert(sizeof(MaterialKey) == sizeof(uint64_t), "Invalid material key size");
 
-std::string MaterialKey::ToString() const
+static void AppendRepeated(String& str, char c, uint32_t count)
 {
-    std::string str = "K";
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        str.Append(c);
+    }
+}
 
-    if (numWhiteQueens)     str += std::string(numWhiteQueens, 'Q');
-    if (numWhiteRooks)      str += std::string(numWhiteRooks, 'R');
-    if (numWhiteBishops)    str += std::string(numWhiteBishops, 'B');
-    if (numWhiteKnights)    str += std::string(numWhiteKnights, 'N');
-    if (numWhitePawns)      str += std::string(numWhitePawns, 'P');
+String MaterialKey::ToString() const
+{
+    String str = "K";
 
-    str += "vK";
+    AppendRepeated(str, 'Q', (uint32_t)numWhiteQueens);
+    AppendRepeated(str, 'R', (uint32_t)numWhiteRooks);
+    AppendRepeated(str, 'B', (uint32_t)numWhiteBishops);
+    AppendRepeated(str, 'N', (uint32_t)numWhiteKnights);
+    AppendRepeated(str, 'P', (uint32_t)numWhitePawns);
 
-    if (numBlackQueens)     str += std::string(numBlackQueens, 'Q');
-    if (numBlackRooks)      str += std::string(numBlackRooks, 'R');
-    if (numBlackBishops)    str += std::string(numBlackBishops, 'B');
-    if (numBlackKnights)    str += std::string(numBlackKnights, 'N');
-    if (numBlackPawns)      str += std::string(numBlackPawns, 'P');
+    str.Append("vK");
+
+    AppendRepeated(str, 'Q', (uint32_t)numBlackQueens);
+    AppendRepeated(str, 'R', (uint32_t)numBlackRooks);
+    AppendRepeated(str, 'B', (uint32_t)numBlackBishops);
+    AppendRepeated(str, 'N', (uint32_t)numBlackKnights);
+    AppendRepeated(str, 'P', (uint32_t)numBlackPawns);
 
     return str;
 }

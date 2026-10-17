@@ -5,7 +5,7 @@
 #include "Endgame.hpp"
 #include "SearchUtils.hpp"
 
-#include <iostream>
+#include <stdio.h>
 
 #ifdef USE_SSE
     #include <immintrin.h>
@@ -14,7 +14,7 @@
 #ifndef CONFIGURATION_FINAL
 NO_INLINE void AssertionFailed(const char* expression, const char* file, int line)
 {
-    std::cout << "Assertion failed: " << expression << " (" << file << ":" << line << ")" << std::endl;
+    fprintf(stderr, "Assertion failed: %s (%s:%d)\n", expression, file, line);
 }
 #endif // CONFIGURATION_FINAL
 

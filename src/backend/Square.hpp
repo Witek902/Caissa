@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Bitboard.hpp"
+#include "containers/FixedString.hpp"
 
 enum SquareName : uint32_t
 {
@@ -13,6 +14,8 @@ enum SquareName : uint32_t
     Square_a7, Square_b7, Square_c7, Square_d7, Square_e7, Square_f7, Square_g7, Square_h7,
     Square_a8, Square_b8, Square_c8, Square_d8, Square_e8, Square_f8, Square_g8, Square_h8,
 };
+
+using SquareString = FixedString<4>;
 
 class Square
 {
@@ -168,25 +171,25 @@ public:
     {
         const int32_t r = Rank();
         const int32_t f = File();
-        const int32_t rd = std::min(r, 7 - r);
-        const int32_t fd = std::min(f, 7 - f);
-        return std::min(rd, fd);
+        const int32_t rd = Min(r, 7 - r);
+        const int32_t fd = Min(f, 7 - f);
+        return Min(rd, fd);
     }
 
     int32_t DarkCornerDistance() const
     {
-        return 7 - std::abs(7 - (int32_t)Rank() - (int32_t)File());
+        return 7 - Abs(7 - (int32_t)Rank() - (int32_t)File());
     }
 
     int32_t AnyCornerDistance() const
     {
         const int32_t r = Rank();
         const int32_t f = File();
-        const int32_t a1 = std::max(r, f);
-        const int32_t a8 = std::max(7 - r, f);
-        const int32_t h1 = std::max(r, 7 - f);
-        const int32_t h8 = std::max(7 - r, 7 - f);
-        return std::min(std::min(a1, a8), std::min(h1, h8));
+        const int32_t a1 = Max(r, f);
+        const int32_t a8 = Max(7 - r, f);
+        const int32_t h1 = Max(r, 7 - f);
+        const int32_t h8 = Max(7 - r, 7 - f);
+        return Min(Min(a1, a8), Min(h1, h8));
     }
 
     INLINE static int32_t Distance(const Square a, const Square b)
@@ -198,14 +201,14 @@ public:
     {
         ASSERT(a.IsValid());
         ASSERT(b.IsValid());
-        const int32_t r = std::abs((int32_t)a.Rank() - (int32_t)b.Rank());
-        const int32_t f = std::abs((int32_t)a.File() - (int32_t)b.File());
-        return std::max(r, f);
+        const int32_t r = Abs((int32_t)a.Rank() - (int32_t)b.Rank());
+        const int32_t f = Abs((int32_t)a.File() - (int32_t)b.File());
+        return Max(r, f);
     }
 
-    static Square FromString(const std::string& str);
+    static Square FromString(const char* str);
 
-    std::string ToString() const;
+    SquareString ToString() const;
 
     INLINE bool IsValid() const
     {

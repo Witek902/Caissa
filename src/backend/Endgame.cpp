@@ -3,8 +3,7 @@
 #include "Material.hpp"
 #include "MoveGen.hpp"
 #include "Math.hpp"
-
-#include <bitset>
+#include "containers/DynArray.hpp"
 
 // KPK evaluation is based on Stockfish bitbase:
 // https://github.com/official-stockfish/Stockfish/blob/master/src/bitbase.cpp
@@ -16,7 +15,7 @@ namespace KPKEndgame {
 // 64 - black king position
 constexpr uint32_t MaxIndex = 2 * 24 * 64 * 64;
 
-static std::bitset<MaxIndex> lookupTable;
+static uint64_t lookupTable[MaxIndex / 64];
 
 // encode bitbase index
 uint32_t EncodeIndex(Color sideToMove, Square blackKingSq, Square whiteKingSq, Square pawnSq)
@@ -50,7 +49,7 @@ struct KPKPosition
     KPKPosition() = default;
     explicit KPKPosition(uint32_t idx);
     operator Result() const { return result; }
-    Result Classify(const std::vector<KPKPosition>& db);
+    Result Classify(const DynArray<KPKPosition>& db);
 
     Color sideToMove : 1;
     Result result : 3;
@@ -74,12 +73,12 @@ bool Probe(Square whiteKingSq, Square pawnSq, Square blackKingSq, Color sideToMo
     const uint32_t index = EncodeIndex(sideToMove, blackKingSq, whiteKingSq, pawnSq);
     ASSERT(index < MaxIndex);
 
-    return lookupTable[index];
+    return (lookupTable[index / 64] >> (index % 64)) & 1;
 }
 
 void Init()
 {
-    std::vector<KPKPosition> db(MaxIndex);
+    DynArray<KPKPosition> db(MaxIndex);
 
     for (uint32_t i = 0; i < MaxIndex; ++i)
     {
@@ -106,7 +105,7 @@ void Init()
     {
         if (db[i] == WIN)
         {
-            lookupTable.set(i);
+            lookupTable[i / 64] |= 1ull << (i % 64);
             numWinPositions++;
         }
     }
@@ -157,7 +156,7 @@ KPKPosition::KPKPosition(uint32_t idx)
     }
 }
 
-Result KPKPosition::Classify(const std::vector<KPKPosition>& db)
+Result KPKPosition::Classify(const DynArray<KPKPosition>& db)
 {
     const Result Good = sideToMove == White ? WIN : DRAW;
     const Result Bad = sideToMove == White ? DRAW : WIN;
@@ -282,7 +281,7 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
         // penalty for lack of mobility
         const Bitboard attacks = Bitboard::GetKnightAttacks(Square(square)) & ~occupied;
         const uint32_t mobility = attacks.Count();
-        outScore += std::min(4u, mobility);
+        outScore += Min(4u, mobility);
 
         outScore -= Square::Distance(weakKing, Square(square)); // push knight towards weak king
     });
@@ -293,10 +292,10 @@ static bool EvaluateEndgame_KXvK(const Position& pos, int32_t& outScore)
         const Bitboard attacks = Bitboard::GenerateRookAttacks(Square(square), occupied) & ~occupied;
         const uint32_t mobility = attacks.Count();
         if (mobility == 0) outScore -= 512;
-        outScore += std::min(8u, mobility);
+        outScore += Min(8u, mobility);
     });
 
-    outScore = std::clamp(outScore, 0, TablebaseWinValue - 1);
+    outScore = Clamp(outScore, 0, TablebaseWinValue - 1);
 
     return true;
 }
@@ -486,7 +485,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
         }
 
         // losing side can't capture both pawns
-        if (std::abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) == 2 &&
+        if (Abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) == 2 &&
             Square::Distance(pawnSquare, weakKing) > 2 + blackToMove &&
             Square::Distance(secondPawnSquare, weakKing) > 2 + blackToMove)
         {
@@ -494,7 +493,7 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
         }
 
         // losing side can't capture both pawns
-        if (std::abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) >= 3 &&
+        if (Abs(int32_t(pawnSquare.File()) - int32_t(secondPawnSquare.File())) >= 3 &&
             Square::Distance(pawnSquare, weakKing) > 3 + blackToMove &&
             Square::Distance(secondPawnSquare, weakKing) > 3 + blackToMove)
         {
@@ -521,8 +520,8 @@ static bool EvaluateEndgame_KPvK(const Position& pos, int32_t& outScore)
             outScore = KnownWinValue + 2 * c_pawnValue.eg;
             outScore += 8 * pawnSquare.Rank();
             outScore += 6 * secondPawnSquare.Rank();
-            outScore += 7 - std::max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
-            outScore += std::max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
+            outScore += 7 - Max(0, (int32_t)Square::Distance(pawnSquare, strongKingSq) - 1); // push kings close to pawn
+            outScore += Max(0, (int32_t)Square::Distance(pawnSquare, weakKingSq) - 1); // push kings close to pawn
             return true;
         }
     }
@@ -927,7 +926,7 @@ static bool EvaluateEndgame_KRvKP(const Position& pos, int32_t& outScore)
         }
         // win if strong king is in front of pawn
         if (weakPawn.Rank() > 2 && strongKing.Rank() < weakPawn.Rank() &&
-            std::abs((int32_t)strongKing.File() - (int32_t)weakPawn.File()) <= 1)
+            Abs((int32_t)strongKing.File() - (int32_t)weakPawn.File()) <= 1)
         {
             win = true;
         }
@@ -1132,11 +1131,6 @@ void InitEndgame()
     RegisterEndgame(MaterialMask_WhiteQueen|MaterialMask_BlackRook|MaterialMask_BlackPawn, EvaluateEndgame_KQvKRP);
 }
 
-#ifdef COLLECT_ENDGAME_STATISTICS
-static std::mutex s_matKeyOccurencesMutex;
-static std::unordered_map<MaterialKey, uint64_t> s_matKeyOccurences;
-#endif // COLLECT_ENDGAME_STATISTICS
-
 bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 {
     MaterialMask materialMask = BuildMaterialMask(pos);
@@ -1148,14 +1142,6 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
         outScore = 0;
         return true;
     }
-
-#ifdef COLLECT_ENDGAME_STATISTICS
-    if (pos.GetNumPieces() <= 6)
-    {
-        std::unique_lock<std::mutex> lock(s_matKeyOccurencesMutex);
-        s_matKeyOccurences[pos.GetMaterialKey()]++;
-    }
-#endif // COLLECT_ENDGAME_STATISTICS
 
     // find registered function (regular)
     uint8_t evaluationFuncIndex = s_endgameEvaluationMap[materialMask];
@@ -1182,14 +1168,3 @@ bool EvaluateEndgame(const Position& pos, int32_t& outScore)
 
     return false;
 }
-
-#ifdef COLLECT_ENDGAME_STATISTICS
-void PrintEndgameStatistics()
-{
-    std::unique_lock<std::mutex> lock(s_matKeyOccurencesMutex);
-    for (const auto& iter : s_matKeyOccurences)
-    {
-        std::cout << iter.first.ToString() << " " << iter.second << std::endl;
-    }
-}
-#endif // COLLECT_ENDGAME_STATISTICS

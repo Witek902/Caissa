@@ -1,9 +1,6 @@
 #pragma once
 
-#include "Common.hpp"
-
-#include <sstream>
-#include <iomanip>
+#include "containers/FixedString.hpp"
 
 template<typename T>
 struct TPieceScore
@@ -67,29 +64,31 @@ inline bool IsMate(const ScoreType score)
     return score > CheckmateValue - (int32_t)MaxSearchDepth || score < -CheckmateValue + (int32_t)MaxSearchDepth;
 }
 
-inline std::string ScoreToStr(const ScoreType score)
+using ScoreString = FixedString<16>;
+
+inline ScoreString ScoreToStr(const ScoreType score)
 {
-    std::stringstream ss;
+    ScoreString str;
 
     if (score > CheckmateValue - MaxSearchDepth)
     {
-        ss << "+M" << ((CheckmateValue - score + 1) / 2);
+        str.AppendFormat("+M%d", (CheckmateValue - score + 1) / 2);
     }
     else if (score < -CheckmateValue + MaxSearchDepth)
     {
-        ss << "-M" << ((CheckmateValue + score + 1) / 2);
+        str.AppendFormat("-M%d", (CheckmateValue + score + 1) / 2);
     }
     else
     {
         if (score < 0)
         {
-            ss << std::fixed << std::setprecision(2) << (float(score) / 100.0f);
+            str.AppendFormat("%.2f", float(score) / 100.0f);
         }
         else
         {
-            ss << '+' << std::fixed << std::setprecision(2) << (float(score) / 100.0f);
+            str.AppendFormat("+%.2f", float(score) / 100.0f);
         }
     }
 
-    return ss.str();
+    return str;
 }

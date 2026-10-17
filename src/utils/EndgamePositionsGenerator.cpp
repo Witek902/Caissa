@@ -5,6 +5,11 @@
 
 #include <iostream>
 #include <fstream>
+#include <mutex>
+#include <random>
+#include <string>
+#include <thread>
+#include <vector>
 
 void GenerateEndgamePositions()
 {

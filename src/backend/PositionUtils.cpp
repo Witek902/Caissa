@@ -2,7 +2,10 @@
 #include "Time.hpp"
 #include "MoveGen.hpp"
 
-#include <iostream>
+#include <ctype.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
 
 static_assert(sizeof(PackedPosition) == 28, "Invalid packed position size");
 
@@ -122,7 +125,7 @@ bool UnpackPosition(const PackedPosition& inPos, Position& outPos, bool computeH
     return success;
 }
 
-Position::Position(const std::string& fenString)
+Position::Position(const char* fenString)
     : Position()
 {
     FromFEN(fenString);
@@ -202,11 +205,12 @@ bool Position::IsValid(bool strict) const
     return true;
 }
 
-static bool ParseFenCounter(const std::string& str, uint16_t& outValue)
+static bool ParseFenCounter(const char* str, uint16_t& outValue)
 {
     uint32_t v = 0;
-    for (const char ch : str)
+    for (; *str; ++str)
     {
+        const char ch = *str;
         if (ch < '0' || ch > '9')
             return false;
 
@@ -220,14 +224,17 @@ static bool ParseFenCounter(const std::string& str, uint16_t& outValue)
     return true;
 }
 
-bool Position::FromFEN(const std::string& fenString)
+bool Position::FromFEN(const char* fenString)
 {
     *this = Position();
 
+    const size_t fenLength = strlen(fenString);
+
     int numSpaces = 0;
     int numRows = 1;
-    for (const char p : fenString)
+    for (size_t i = 0; i < fenLength; ++i)
     {
+        const char p = fenString[i];
         if (p == ' ')
         {
             ++numSpaces;
@@ -256,7 +263,7 @@ bool Position::FromFEN(const std::string& fenString)
     {
         uint8_t rank = 7;
         uint8_t file = 0;
-        for (; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
+        for (; loc < fenLength && !isspace(fenString[loc]); ++loc)
         {
             const char ch = fenString[loc];
 
@@ -322,10 +329,10 @@ bool Position::FromFEN(const std::string& fenString)
     }
 
     // next to move
-    if (++loc < fenString.length())
+    if (++loc < fenLength)
     {
         const char nextToMove = (char)tolower(fenString[loc]);
-        if (loc + 1 < fenString.length() && !isspace(fenString[loc + 1]))
+        if (loc + 1 < fenLength && !isspace(fenString[loc + 1]))
         {
             fprintf(stderr, "Invalid FEN: invalid next to move\n");
             return false;
@@ -361,7 +368,7 @@ bool Position::FromFEN(const std::string& fenString)
 
         mCastlingRights[0] = 0;
         mCastlingRights[1] = 0;
-        for (loc += 2; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
+        for (loc += 2; loc < fenLength && !isspace(fenString[loc]); ++loc)
         {
             const char c = fenString[loc];
             if (c >= 'A' && c <= 'H')
@@ -430,10 +437,10 @@ bool Position::FromFEN(const std::string& fenString)
         return false;
     }
 
-    std::string enPassantSquare;
-    for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
+    FixedString<16> enPassantSquare;
+    for (++loc; loc < fenLength && !isspace(fenString[loc]); ++loc)
     {
-        enPassantSquare += fenString[loc];
+        enPassantSquare.Append(fenString[loc]);
     }
 
     if (enPassantSquare != "-")
@@ -489,13 +496,13 @@ bool Position::FromFEN(const std::string& fenString)
 
     // parse half-moves counter
     {
-        std::string halfMovesStr;
-        for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
+        FixedString<16> halfMovesStr;
+        for (++loc; loc < fenLength && !isspace(fenString[loc]); ++loc)
         {
-            halfMovesStr += fenString[loc];
+            halfMovesStr.Append(fenString[loc]);
         }
 
-        if (!halfMovesStr.empty())
+        if (!halfMovesStr.Empty())
         {
             if (!ParseFenCounter(halfMovesStr, mHalfMoveCount))
             {
@@ -511,20 +518,20 @@ bool Position::FromFEN(const std::string& fenString)
 
     // parse moves number
     {
-        std::string moveNumberStr;
-        for (++loc; loc < fenString.length() && !isspace(fenString[loc]); ++loc)
+        FixedString<16> moveNumberStr;
+        for (++loc; loc < fenLength && !isspace(fenString[loc]); ++loc)
         {
-            moveNumberStr += fenString[loc];
+            moveNumberStr.Append(fenString[loc]);
         }
 
-        if (!moveNumberStr.empty())
+        if (!moveNumberStr.Empty())
         {
             if (!ParseFenCounter(moveNumberStr, mMoveCount))
             {
                 fprintf(stderr, "Invalid FEN: invalid move number\n");
                 return false;
             }
-            mMoveCount = std::max<uint16_t>(1, mMoveCount);
+            mMoveCount = Max<uint16_t>(1, mMoveCount);
         }
         else
         {
@@ -549,9 +556,9 @@ bool Position::FromFEN(const std::string& fenString)
     return true;
 }
 
-std::string Position::ToFEN(bool skipMoveCounts) const
+FenString Position::ToFEN(bool skipMoveCounts) const
 {
-    std::string str;
+    FenString str;
 
     for (uint8_t rank = 8u; rank-- > 0u; )
     {
@@ -567,19 +574,19 @@ std::string Position::ToFEN(bool skipMoveCounts) const
             {
                 if (numEmptySquares)
                 {
-                    str += std::to_string(numEmptySquares);
+                    str.AppendFormat("%u", numEmptySquares);
                     numEmptySquares = 0;
                 }
-                str += PieceToChar(whitePiece);
+                str.Append(PieceToChar(whitePiece));
             }
             else if (blackPiece != Piece::None)
             {
                 if (numEmptySquares)
                 {
-                    str += std::to_string(numEmptySquares);
+                    str.AppendFormat("%u", numEmptySquares);
                     numEmptySquares = 0;
                 }
-                str += PieceToChar(blackPiece, false);
+                str.Append(PieceToChar(blackPiece, false));
             }
             else // empty square
             {
@@ -589,86 +596,87 @@ std::string Position::ToFEN(bool skipMoveCounts) const
 
         if (numEmptySquares)
         {
-            str += std::to_string(numEmptySquares);
+            str.AppendFormat("%u", numEmptySquares);
             numEmptySquares = 0;
         }
 
         if (rank > 0)
         {
-            str += '/';
+            str.Append('/');
         }
     }
     
     // side to move
     {
-        str += ' ';
-        str += mSideToMove == White ? 'w' : 'b';
+        str.Append(' ');
+        str.Append(mSideToMove == White ? 'w' : 'b');
     }
 
     // castling rights
     {
-        str += ' ';
+        str.Append(' ');
 
         const Square whiteKingSq(FirstBitSet(Whites().king));
         const Square blackKingSq(FirstBitSet(Blacks().king));
 
         if (!s_enableChess960)
         {
-            if (GetShortCastleRookSquare(Whites().GetKingSquare(), GetWhitesCastlingRights()).IsValid())  str += 'K';
-            if (GetLongCastleRookSquare(Whites().GetKingSquare(), GetWhitesCastlingRights()).IsValid())   str += 'Q';
-            if (GetShortCastleRookSquare(Blacks().GetKingSquare(), GetBlacksCastlingRights()).IsValid())  str += 'k';
-            if (GetLongCastleRookSquare(Blacks().GetKingSquare(), GetBlacksCastlingRights()).IsValid())   str += 'q';
+            if (GetShortCastleRookSquare(Whites().GetKingSquare(), GetWhitesCastlingRights()).IsValid())  str.Append('K');
+            if (GetLongCastleRookSquare(Whites().GetKingSquare(), GetWhitesCastlingRights()).IsValid())   str.Append('Q');
+            if (GetShortCastleRookSquare(Blacks().GetKingSquare(), GetBlacksCastlingRights()).IsValid())  str.Append('k');
+            if (GetLongCastleRookSquare(Blacks().GetKingSquare(), GetBlacksCastlingRights()).IsValid())   str.Append('q');
         }
         else
         {
             for (uint8_t i = 0; i < 8; ++i)
             {
-                if (GetWhitesCastlingRights() & (1 << i))  str += ('A' + i);
+                if (GetWhitesCastlingRights() & (1 << i))  str.Append(char('A' + i));
             }
             for (uint8_t i = 0; i < 8; ++i)
             {
-                if (GetBlacksCastlingRights() & (1 << i))  str += ('a' + i);
+                if (GetBlacksCastlingRights() & (1 << i))  str.Append(char('a' + i));
             }
         }
 
-        if (GetWhitesCastlingRights() == 0 && GetBlacksCastlingRights() == 0) str += '-';
+        if (GetWhitesCastlingRights() == 0 && GetBlacksCastlingRights() == 0) str.Append('-');
     }
 
     // en passant square
     {
-        str += ' ';
-        str += mEnPassantSquare.IsValid() ? mEnPassantSquare.ToString() : "-";
+        str.Append(' ');
+        if (mEnPassantSquare.IsValid())
+            str.Append(mEnPassantSquare.ToString());
+        else
+            str.Append('-');
     }
 
     if (!skipMoveCounts)
     {
         // half-moves since last pawn move/capture
         {
-            str += ' ';
-            str += std::to_string(mHalfMoveCount);
+            str.AppendFormat(" %u", (uint32_t)mHalfMoveCount);
         }
 
         // full moves
         {
-            str += ' ';
-            str += std::to_string(mMoveCount);
+            str.AppendFormat(" %u", (uint32_t)mMoveCount);
         }
     }
 
     return str;
 }
 
-std::string Position::Print() const
+String Position::Print() const
 {
-    std::string str;
+    String str;
 
-    str += "   ---------------\n";
+    str.Append("   ---------------\n");
 
     // reverse, because first are printed higher ranks
     for (uint8_t rank = 8u; rank-- > 0u; )
     {
-        str += '1' + rank;
-        str += " |";
+        str.Append(char('1' + rank));
+        str.Append(" |");
 
         for (uint8_t file = 0; file < 8u; ++file)
         {
@@ -679,32 +687,32 @@ std::string Position::Print() const
 
             if (whitePiece != Piece::None)
             {
-                str += PieceToChar(whitePiece);
+                str.Append(PieceToChar(whitePiece));
             }
             else if (blackPiece != Piece::None)
             {
-                str += PieceToChar(blackPiece, false);
+                str.Append(PieceToChar(blackPiece, false));
             }
             else // empty square
             {
-                str += '.';
+                str.Append('.');
             }
 
             if (file < 7u)
             {
-                str += " ";
+                str.Append(' ');
             }
         }
 
-        str += "|\n";
+        str.Append("|\n");
     }
-    str += "   ---------------\n";
-    str += "   a b c d e f g h\n";
+    str.Append("   ---------------\n");
+    str.Append("   a b c d e f g h\n");
 
     return str;
 }
 
-std::string Position::MoveToString(const Move& move, MoveNotation notation) const
+MoveString Position::MoveToString(const Move& move, MoveNotation notation) const
 {
     ASSERT(move.GetPiece() != Piece::None);
 
@@ -714,7 +722,7 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
         return "illegal move";
     }
 
-    std::string str;
+    MoveString str;
 
     if (notation == MoveNotation::LAN)
     {
@@ -726,15 +734,15 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
         {
             if (move.IsCapture())
             {
-                str += 'a' + move.FromSquare().File();
-                str += 'x';
+                str.Append(char('a' + move.FromSquare().File()));
+                str.Append('x');
             }
 
-            str += move.ToSquare().ToString();
+            str.Append(move.ToSquare().ToString());
             if (move.GetPromoteTo() != Piece::None)
             {
-                str += "=";
-                str += PieceToChar(move.GetPromoteTo());
+                str.Append('=');
+                str.Append(PieceToChar(move.GetPromoteTo()));
             }
         }
         else
@@ -749,7 +757,7 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
             }
             else
             {
-                str = PieceToChar(move.GetPiece());
+                str.Append(PieceToChar(move.GetPiece()));
 
                 {
                     bool ambiguousFile = false;
@@ -782,34 +790,34 @@ std::string Position::MoveToString(const Move& move, MoveNotation notation) cons
                     {
                         if (ambiguousFile && ambiguousRank)
                         {
-                            str += move.FromSquare().ToString();
+                            str.Append(move.FromSquare().ToString());
                         }
                         else if (ambiguousFile)
                         {
-                            str += '1' + move.FromSquare().Rank();
+                            str.Append(char('1' + move.FromSquare().Rank()));
                         }
                         else
                         {
-                            str += 'a' + move.FromSquare().File();
+                            str.Append(char('a' + move.FromSquare().File()));
                         }
                     }
                 }
 
                 if (move.IsCapture())
                 {
-                    str += 'x';
+                    str.Append('x');
                 }
-                str += move.ToSquare().ToString();
+                str.Append(move.ToSquare().ToString());
             }
         }
 
         if (afterMove.IsMate())
         {
-            str += '#';
+            str.Append('#');
         }
         else if (afterMove.IsInCheck(afterMove.GetSideToMove()))
         {
-            str += '+';
+            str.Append('+');
         }
 
         ASSERT(move == MoveFromString(str, MoveNotation::SAN));
@@ -940,18 +948,22 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
     return Move();
 }
 
-Move Position::MoveFromString(const std::string& moveString, MoveNotation notation) const
+Move Position::MoveFromString(const char* moveString, MoveNotation notation) const
 {
+    const size_t moveStringLength = strlen(moveString);
+
     if (notation == MoveNotation::LAN)
     {
-        if (moveString.length() < 4)
+        if (moveStringLength < 4)
         {
             fprintf(stderr, "MoveFromString: Move string too short\n");
             return {};
         }
 
-        Square fromSquare = Square::FromString(moveString.substr(0, 2));
-        Square toSquare = Square::FromString(moveString.substr(2, 2));
+        const char fromSquareStr[3] = { moveString[0], moveString[1], 0 };
+        const char toSquareStr[3] = { moveString[2], moveString[3], 0 };
+        Square fromSquare = Square::FromString(fromSquareStr);
+        Square toSquare = Square::FromString(toSquareStr);
 
         if (!fromSquare.IsValid() || !toSquare.IsValid())
         {
@@ -1019,7 +1031,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
         }
 
         Piece promoteTo = Piece::None;
-        if (moveString.length() > 4)
+        if (moveStringLength > 4)
         {
             if (!CharToPiece(moveString[4], promoteTo))
             {
@@ -1033,9 +1045,24 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
     else if (notation == MoveNotation::SAN)
     {
         // trim suffixes such as "!?", "+"
-        const std::string str = moveString.substr(0, moveString.find_last_not_of("?!#+") + 1);
+        size_t length = moveStringLength;
+        while (length > 0 && strchr("?!#+", moveString[length - 1]))
+        {
+            --length;
+        }
 
-        if (str.length() < 2)
+        FixedString<32> str;
+        if (length >= 32)
+        {
+            fprintf(stderr, "MoveFromString: Move string too long\n");
+            return {};
+        }
+        for (size_t i = 0; i < length; ++i)
+        {
+            str.Append(moveString[i]);
+        }
+
+        if (str.Length() < 2)
         {
             fprintf(stderr, "MoveFromString: Move string too short\n");
             return {};
@@ -1102,7 +1129,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
 
         const auto isFile = [](const char c) { return c >= 'a' && c <= 'h'; };
 
-        if (str.length() >= offset + 5 && isFile(str[offset]) && isdigit(str[offset + 1]) && str[offset + 2] == 'x' && isFile(str[offset + 3]) && isdigit(str[offset + 4]))
+        if (str.Length() >= offset + 5 && isFile(str[offset]) && isdigit(str[offset + 1]) && str[offset + 2] == 'x' && isFile(str[offset + 3]) && isdigit(str[offset + 4]))
         {
             fromFile = str[offset + 0] - 'a';
             fromRank = str[offset + 1] - '1';
@@ -1110,7 +1137,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
             toRank = str[offset + 4] - '1';
             offset += 5;
         }
-        else if (str.length() >= offset + 4 && isFile(str[offset]) && isdigit(str[offset + 1]) && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.Length() >= offset + 4 && isFile(str[offset]) && isdigit(str[offset + 1]) && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromFile = str[offset + 0] - 'a';
             fromRank = str[offset + 1] - '1';
@@ -1118,41 +1145,41 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
             toRank = str[offset + 3] - '1';
             offset += 4;
         }
-        else if (str.length() >= offset + 4 && isFile(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.Length() >= offset + 4 && isFile(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromFile = str[offset + 0] - 'a';
             toFile = str[offset + 2] - 'a';
             toRank = str[offset + 3] - '1';
             offset += 4;
         }
-        else if (str.length() >= offset + 3 && isFile(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.Length() >= offset + 3 && isFile(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             fromFile = str[offset + 0] - 'a';
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             offset += 3;
         }
-        else if (str.length() >= offset + 4 && isdigit(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
+        else if (str.Length() >= offset + 4 && isdigit(str[offset]) && str[offset + 1] == 'x' && isFile(str[offset + 2]) && isdigit(str[offset + 3]))
         {
             fromRank = str[offset + 0] - '1';
             toFile = str[offset + 2] - 'a';
             toRank = str[offset + 3] - '1';
             offset += 4;
         }
-        else if (str.length() >= offset + 3 && isdigit(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.Length() >= offset + 3 && isdigit(str[offset]) && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             fromRank = str[offset + 0] - '1';
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             offset += 3;
         }
-        else if (str.length() >= offset + 3 && str[offset] == 'x' && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
+        else if (str.Length() >= offset + 3 && str[offset] == 'x' && isFile(str[offset + 1]) && isdigit(str[offset + 2]))
         {
             toFile = str[offset + 1] - 'a';
             toRank = str[offset + 2] - '1';
             offset += 3;
         }
-        else if (str.length() >= offset + 2 && isFile(str[offset]) && isdigit(str[offset + 1]))
+        else if (str.Length() >= offset + 2 && isFile(str[offset]) && isdigit(str[offset + 1]))
         {
             toFile = str[offset + 0] - 'a';
             toRank = str[offset + 1] - '1';
@@ -1177,7 +1204,7 @@ Move Position::MoveFromString(const std::string& moveString, MoveNotation notati
 
         if (movedPiece == Piece::Pawn && ((mSideToMove == White && toRank == 7) || (mSideToMove == Black && toRank == 0)))
         {
-            if (str.length() >= offset + 2 && str[offset] == '=' && CharToPiece(str[offset + 1], promoteTo))
+            if (str.Length() >= offset + 2 && str[offset] == '=' && CharToPiece(str[offset + 1], promoteTo))
             {
                 offset += 2;
             }
@@ -1224,7 +1251,7 @@ bool Position::IsMoveValid(const Move& move) const
 #ifndef CONFIGURATION_FINAL
     if (!move.IsValid())
     {
-        std::cout << "Invalid move for position: " << ToFEN() << std::endl;
+        printf("Invalid move for position: %s\n", ToFEN().CStr());
         DEBUG_BREAK();
     }
 #endif // CONFIGURATION_FINAL
@@ -1338,7 +1365,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
 
     if (print)
     {
-        std::cout << "Running Perft... depth=" << depth << std::endl;
+        printf("Running Perft... depth=%u\n", depth);
         startTime = TimePoint::GetCurrent();
     }
 
@@ -1362,7 +1389,7 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
 
         if (print)
         {
-            std::cout << move.ToString() << ": " << numChildNodes << std::endl;
+            printf("%s: %" PRIu64 "\n", move.ToString().CStr(), numChildNodes);
         }
 
         nodes += numChildNodes;
@@ -1374,172 +1401,10 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     {
         const float t = (endTime - startTime).ToSeconds();
 
-        std::cout << "Total nodes:      " << nodes << std::endl;
-        std::cout << "Time:             " << t << " seconds" << std::endl;
-        std::cout << "Nodes per second: " << 1.0e-6f * (nodes / t) << "M" << std::endl;
+        printf("Total nodes:      %" PRIu64 "\n", nodes);
+        printf("Time:             %g seconds\n", t);
+        printf("Nodes per second: %gM\n", 1.0e-6f * (nodes / t));
     }
 
     return nodes;
-}
-
-void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition)
-{
-    const auto genLegalSquare = [&randomGenerator](const Bitboard mask) -> Square
-    {
-        std::uniform_int_distribution<uint32_t> distr;
-
-        if (!mask) return Square::Invalid();
-
-        const uint32_t numLegalSquares = mask.Count();
-        const uint32_t maskedSquareIndex = distr(randomGenerator) % numLegalSquares;
-
-        const uint64_t squareMask = ParallelBitsDeposit(1ull << maskedSquareIndex, mask);
-        ASSERT(squareMask);
-
-        return Square(FirstBitSet(squareMask));
-    };
-
-    std::uniform_int_distribution<uint32_t> distr;
-    
-    constexpr const Bitboard pawnMask = ~Bitboard::RankBitboard<0>() & ~Bitboard::RankBitboard<7>();
-
-    for (;;)
-    {
-        outPosition = Position();
-
-        Bitboard occupied = 0;
-
-        // generate white king square
-        Square whiteKingSq;
-        {
-            const Bitboard mask = desc.allowedWhiteKing;
-            ASSERT(mask);
-            whiteKingSq = genLegalSquare(mask);
-            ASSERT(whiteKingSq.IsValid());
-            occupied |= whiteKingSq.GetBitboard();
-            outPosition.SetPiece(whiteKingSq, Piece::King, White);
-        }
-
-        // generate black king square
-        Square blackKingSq;
-        {
-            const Bitboard mask = ~whiteKingSq.GetBitboard() & ~Bitboard::GetKingAttacks(whiteKingSq) & desc.allowedBlackKing;
-            ASSERT(mask);
-            blackKingSq = genLegalSquare(mask);
-            ASSERT(blackKingSq.IsValid());
-            occupied |= blackKingSq.GetBitboard();
-            outPosition.SetPiece(blackKingSq, Piece::King, Black);
-        }
-
-        // generate white pawns on ranks 1-7, they cannot attack black king
-        for (uint32_t i = 0; i < desc.materialKey.numWhitePawns; ++i)
-        {
-            const Bitboard mask = ~occupied & pawnMask & ~Bitboard::GetPawnAttacks(blackKingSq, Black) & desc.allowedWhitePawns;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Pawn, White);
-        }
-
-        // TODO generate en-passant square if possible
-
-        // generate black pawns on ranks 1-7
-        for (uint32_t i = 0; i < desc.materialKey.numBlackPawns; ++i)
-        {
-            const Bitboard mask = ~occupied & pawnMask & desc.allowedBlackPawns;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Pawn, Black);
-        }
-
-        // generate white queens, they cannot attack black king
-        for (uint32_t i = 0; i < desc.materialKey.numWhiteQueens; ++i)
-        {
-            const Bitboard mask = ~occupied & ~Bitboard::GenerateQueenAttacks(blackKingSq, occupied) & desc.allowedWhiteQueens;
-            if (!mask) continue;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Queen, White);
-        }
-
-        // generate black queens
-        for (uint32_t i = 0; i < desc.materialKey.numBlackQueens; ++i)
-        {
-            const Bitboard mask = ~occupied & desc.allowedBlackQueens;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Queen, Black);
-        }
-
-        // generate white rooks, they cannot attack black king
-        for (uint32_t i = 0; i < desc.materialKey.numWhiteRooks; ++i)
-        {
-            const Bitboard mask = ~occupied & ~Bitboard::GenerateRookAttacks(blackKingSq, occupied) & desc.allowedWhiteRooks;
-            if (!mask) continue;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Rook, White);
-        }
-
-        // generate black rooks
-        for (uint32_t i = 0; i < desc.materialKey.numBlackRooks; ++i)
-        {
-            const Bitboard mask = ~occupied & desc.allowedBlackRooks;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Rook, Black);
-        }
-
-        // generate white bishops, they cannot attack black king
-        for (uint32_t i = 0; i < desc.materialKey.numWhiteBishops; ++i)
-        {
-            const Bitboard mask = ~occupied & ~Bitboard::GenerateBishopAttacks(blackKingSq, occupied) & desc.allowedWhiteBishops;
-            if (!mask) continue;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Bishop, White);
-        }
-
-        // generate black bishops
-        for (uint32_t i = 0; i < desc.materialKey.numBlackBishops; ++i)
-        {
-            const Bitboard mask = ~occupied & desc.allowedBlackBishops;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Bishop, Black);
-        }
-
-        // generate white knights, they cannot attack black king
-        for (uint32_t i = 0; i < desc.materialKey.numWhiteKnights; ++i)
-        {
-            const Bitboard mask = ~occupied & ~Bitboard::GetKnightAttacks(blackKingSq) & desc.allowedWhiteKnights;
-            if (!mask) continue;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Knight, White);
-        }
-
-        // generate black knights
-        for (uint32_t i = 0; i < desc.materialKey.numBlackKnights; ++i)
-        {
-            const Bitboard mask = ~occupied & desc.allowedBlackKnights;
-            const Square sq = genLegalSquare(mask);
-            ASSERT(sq.IsValid());
-            occupied |= sq.GetBitboard();
-            outPosition.SetPiece(sq, Piece::Knight, Black);
-        }
-
-        break;
-    }
-
-    ASSERT(outPosition.IsValid());
-    ASSERT(!outPosition.IsInCheck(Black));
 }

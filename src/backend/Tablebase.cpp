@@ -1,9 +1,10 @@
 #include "Tablebase.hpp"
 #include "Position.hpp"
 #include "Move.hpp"
+#include "containers/String.hpp"
 
-#include <iostream>
 #include <mutex>
+#include <stdio.h>
 
 uint32_t g_syzygyProbeLimit = 6;
 
@@ -16,7 +17,7 @@ uint32_t g_syzygyProbeLimit = 6;
 
 #ifdef USE_SYZYGY_TABLEBASES
 static std::mutex g_syzygyMutex;
-static std::string g_syzygyPath;
+static String g_syzygyPath;
 #endif // USE_SYZYGY_TABLEBASES
 
 #ifdef USE_GAVIOTA_TABLEBASES
@@ -49,19 +50,19 @@ void LoadSyzygyTablebase(const char* path)
 {
     std::unique_lock lock(g_syzygyMutex);
     if (syzygy_tb_init(path))
-        std::cout << "info string Syzygy tablebase loaded successfully. Size = " << TB_LARGEST << std::endl;
+        printf("info string Syzygy tablebase loaded successfully. Size = %u\n", (uint32_t)TB_LARGEST);
     else
-        std::cout << "info string Failed to load Syzygy tablebase" << std::endl;
+        printf("info string Failed to load Syzygy tablebase\n");
     g_syzygyPath = path;
 }
 
 void ReleoadTablebase()
 {
     std::unique_lock lock(g_syzygyMutex);
-    if (!g_syzygyPath.empty())
+    if (!g_syzygyPath.Empty())
     {
         tb_free();
-        syzygy_tb_init(g_syzygyPath.c_str());
+        syzygy_tb_init(g_syzygyPath.CStr());
     }
 }
 
@@ -241,11 +242,11 @@ void LoadGaviotaTablebase(const char* path)
 
     if (!ret)
     {
-        std::cout << "info string Gaviota tablebases loaded successfully. Availability = " << tb_availability() << std::endl;
+        printf("info string Gaviota tablebases loaded successfully. Availability = %u\n", (uint32_t)tb_availability());
     }
     else
     {
-        std::cout << "info string Failed to load Gaviota tablebase: " << ret << std::endl;
+        printf("info string Failed to load Gaviota tablebase: %s\n", ret);
     }
 
     if (g_gaviotaPendingCacheSize)

@@ -1,8 +1,12 @@
 #include "TrainerCommon.hpp"
 #include "../backend/Tablebase.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <random>
+#include <string>
+#include <vector>
 
 // converts games in plain text format <FEN> [game result] <eval>
 // to binary format
@@ -71,7 +75,7 @@ void PlainTextToTrainingData(const std::vector<std::string>& args)
             // parse FEN
             const std::string fen = line.substr(0, resultStart);
             Position pos;
-            if (!pos.FromFEN(fen))
+            if (!pos.FromFEN(fen.c_str()))
             {
                 std::cout << "Failed to parse FEN: " << fen << std::endl;
                 continue;

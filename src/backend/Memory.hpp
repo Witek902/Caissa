@@ -2,9 +2,12 @@
 
 #include "Common.hpp"
 
-#include <algorithm>
-#include <cstring>
-#include <limits>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(PLATFORM_WINDOWS)
+    #include <malloc.h>
+#endif
 
 #ifdef USE_SSE
     #include <immintrin.h>
@@ -16,7 +19,7 @@ inline void* AlignedMalloc(size_t size, size_t alignment)
 #if defined(PLATFORM_WINDOWS)
     ptr = _aligned_malloc(size, alignment);
 #elif defined(PLATFORM_LINUX)
-    alignment = std::max(alignment, sizeof(void*));
+    alignment = Max(alignment, sizeof(void*));
     int ret = posix_memalign(&ptr, alignment, size);
     if (ret != 0) ptr = nullptr;
 #endif
@@ -32,76 +35,16 @@ inline void AlignedFree(void* ptr)
 #endif
 }
 
+// placement new without the <new> header: PLACEMENT_NEW(ptr) Type(args...)
+struct PlacementNewTag { };
+INLINE void* operator new(size_t, void* ptr, PlacementNewTag) noexcept { return ptr; }
+INLINE void operator delete(void*, void*, PlacementNewTag) noexcept { }
+#define PLACEMENT_NEW(ptr) new (ptr, PlacementNewTag{})
+
 bool EnableLargePagesSupport();
 
 [[nodiscard]] void* Malloc(size_t size);
 void Free(void* ptr);
-
-// https://stackoverflow.com/a/8545389
-template <typename T, std::size_t N = 16>
-class AlignmentAllocator
-{
-public:
-    typedef T value_type;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    typedef T& reference;
-    typedef const T& const_reference;
-
-public:
-    AlignmentAllocator() throw () { }
-
-    template <typename T2>
-    AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw () { }
-
-    ~AlignmentAllocator() throw () { }
-
-    pointer address(reference r) { return &r; }
-    const_pointer address(const_reference r) const { return &r; }
-    pointer allocate(size_type n) { return (pointer)AlignedMalloc(n * sizeof(value_type), N); }
-
-    void deallocate(pointer p, size_type) { AlignedFree(p); }
-    void construct(pointer p, const value_type& wert) { new (p) value_type(wert); }
-    void destroy(pointer p) { p->~value_type(); }
-    size_type max_size() const throw () { return size_type(-1) / sizeof(value_type); }
-
-    template <typename T2>
-    struct rebind { typedef AlignmentAllocator<T2, N> other; };
-
-    bool operator != (const AlignmentAllocator<T, N>& other) const { return !(*this == other); }
-    bool operator == (const AlignmentAllocator<T, N>&) const { return true; }
-};
-
-template <class T>
-struct Allocator
-{
-    typedef T value_type;
-
-    Allocator() = default;
-    template <class U> constexpr Allocator(const Allocator <U>&) noexcept { }
-
-    [[nodiscard]] T* allocate(std::size_t n)
-    {
-        if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
-        {
-            throw std::bad_array_new_length();
-        }
-
-        if (auto p = static_cast<T*>(Malloc(n * sizeof(T))))
-        {
-            return p;
-        }
-
-        throw std::bad_alloc();
-    }
-
-    void deallocate(T* p, std::size_t) noexcept
-    {
-        Free(p);
-    }
-};
 
 template<typename T>
 INLINE void AlignedMemcpy64(T* dst, const T* src)
@@ -131,7 +74,7 @@ INLINE void AlignedMemcpy64(T* dst, const T* src)
         _mm_store_si128(dst128 + i, _mm_load_si128(src128 + i));
     }
 #else
-    std::memcpy(dst, src, size);
+    memcpy(dst, src, size);
 #endif
 }
 

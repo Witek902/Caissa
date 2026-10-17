@@ -2,9 +2,8 @@
 #include "Accumulator.hpp"
 #include "BitUtils.hpp"
 
-#include <cstring>
-#include <algorithm>
-#include <iostream>
+#include <stdio.h>
+#include <string.h>
 
 namespace nn {
 
@@ -664,8 +663,8 @@ INLINE static void FT_PairwiseCReLU(IntermediateType* output, const AccumulatorT
 
     for (uint32_t i = 0; i < halfSize; ++i)
     {
-        const int32_t a = std::clamp<int32_t>(accumulator[i], 0, ActivationRangeScaling);
-        const int32_t b = std::clamp<int32_t>(accumulator[i + halfSize], 0, ActivationRangeScaling);
+        const int32_t a = Clamp<int32_t>(accumulator[i], 0, ActivationRangeScaling);
+        const int32_t b = Clamp<int32_t>(accumulator[i + halfSize], 0, ActivationRangeScaling);
         output[i] = (IntermediateType)((a * b) >> PairwiseShift);
     }
 }
@@ -705,7 +704,7 @@ INLINE static void HiddenLayer(
     for (uint32_t i = 0; i < OutputSize; ++i)
     {
         const int32_t sum = biases[i] + partials[4 * i] + partials[4 * i + 1] + partials[4 * i + 2] + partials[4 * i + 3];
-        output[i] = (IntermediateType)std::clamp(sum >> HiddenWeightScaleShift, 0, HiddenActivationMax);
+        output[i] = (IntermediateType)Clamp(sum >> HiddenWeightScaleShift, 0, HiddenActivationMax);
     }
 }
 
@@ -735,14 +734,14 @@ bool PackedNeuralNetwork::SaveToFile(const char* filePath) const
     FILE* file = fopen(filePath, "wb");
     if (!file)
     {
-        std::cerr << "Failed to save neural network: " << "cannot open file" << std::endl;
+        fprintf(stderr, "Failed to save neural network: cannot open file\n");
         return false;
     }
 
     if (1 != fwrite(this, sizeof(PackedNeuralNetwork), 1, file))
     {
         fclose(file);
-        std::cerr << "Failed to save neural network: " << "cannot write header" << std::endl;
+        fprintf(stderr, "Failed to save neural network: cannot write header\n");
         return false;
     }
 
@@ -755,14 +754,14 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
     FILE* file = fopen(filePath, "rb");
     if (!file)
     {
-        std::cerr << "Failed to load neural network: " << "cannot open file" << std::endl;
+        fprintf(stderr, "Failed to load neural network: cannot open file\n");
         return false;
     }
 
     if (1 != fread(this, sizeof(PackedNeuralNetwork), 1, file))
     {
         fclose(file);
-        std::cerr << "Failed to load neural network: " << "cannot read header" << std::endl;
+        fprintf(stderr, "Failed to load neural network: cannot read header\n");
         return false;
     }
 
@@ -770,13 +769,13 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
 
     if (header.magic != MagicNumber)
     {
-        std::cerr << "Failed to load neural network: " << "not a network file" << std::endl;
+        fprintf(stderr, "Failed to load neural network: not a network file\n");
         return false;
     }
 
     if (header.version != CurrentVersion)
     {
-        std::cerr << "Failed to load neural network: " << "unsupported version " << header.version << std::endl;
+        fprintf(stderr, "Failed to load neural network: unsupported version %u\n", (uint32_t)header.version);
         return false;
     }
 

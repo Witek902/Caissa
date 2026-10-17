@@ -4,9 +4,16 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
+#include "../backend/containers/Sort.hpp"
 
-#include <iostream>
-#include <cinttypes>
+#include <condition_variable>
+#include <ctype.h>
+#include <inttypes.h>
+#include <mutex>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <thread>
 
 #ifndef CAISSA_VERSION
 #define CAISSA_VERSION "unknown"
@@ -59,11 +66,40 @@ static const uint32_t c_DefaultGaviotaTbCacheInMB = 64;
 #endif // USE_GAVIOTA_TABLEBASES
 static const uint32_t c_MaxNumThreads = 1024;
 
-using UniqueLock = std::unique_lock<std::mutex>;
+struct UniversalChessInterface::SearchThread
+{
+    std::thread thread;
+    std::mutex mutex;
+    std::condition_variable newSearchConditionVariable;
+};
+
+// reads a line from stdin without the line terminator, returns false at the end of input
+static bool ReadLine(String& outLine)
+{
+    // stdout is fully buffered when a GUI reads it through a pipe: send the replies before waiting for a command
+    fflush(stdout);
+
+    outLine.Clear();
+
+    char buffer[4096];
+    bool readAnything = false;
+    while (fgets(buffer, sizeof(buffer), stdin))
+    {
+        readAnything = true;
+        uint32_t length = (uint32_t)strlen(buffer);
+        const bool endOfLine = length > 0 && buffer[length - 1] == '\n';
+        if (endOfLine) --length;
+        outLine.Append(buffer, length);
+        if (endOfLine) return true;
+    }
+
+    return readAnything;
+}
 
 UniversalChessInterface::UniversalChessInterface()
 {
-    mSearchThread = std::thread(&UniversalChessInterface::SearchThreadEntryFunc, this);
+    mSearchThread = new SearchThread;
+    mSearchThread->thread = std::thread(&UniversalChessInterface::SearchThreadEntryFunc, this);
 
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
@@ -79,6 +115,9 @@ UniversalChessInterface::UniversalChessInterface()
 UniversalChessInterface::~UniversalChessInterface()
 {
     StopSearchThread();
+    delete mPlayout;
+    delete mSearchCtx;
+    delete mSearchThread;
 }
 
 void UniversalChessInterface::Loop(int argc, const char* argv[])
@@ -87,16 +126,16 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
     {
         if (argv[i])
         {
-            std::string cmd = argv[i];
+            String cmd = argv[i];
 
             // combine "bench"/"benchmark" with the next argument (depth) if present
             if ((cmd == "bench" || cmd == "benchmark") && i + 1 < argc && argv[i + 1])
             {
-                cmd += " ";
-                cmd += argv[++i];
+                cmd.Append(' ');
+                cmd.Append(argv[++i]);
             }
 
-            std::cout << "CommandLine: " << cmd << std::endl;
+            printf("CommandLine: %s\n", cmd.CStr());
 
             if (!ExecuteCommand(cmd))
             {
@@ -105,16 +144,16 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
 
             // "bench" command is used to run benchmark and exit immediately to comply with OpenBench
             if (cmd == "bench" || cmd == "benchmark" ||
-                cmd.find("bench ") == 0 || cmd.find("benchmark ") == 0)
+                strncmp(cmd, "bench ", 6) == 0 || strncmp(cmd, "benchmark ", 10) == 0)
             {
                 return;
             }
         }
     }
 
-    std::string str;
+    String str;
 
-    while (std::getline(std::cin, str))
+    while (ReadLine(str))
     {
         if (!ExecuteCommand(str))
         {
@@ -125,112 +164,114 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
     UnloadTablebase();
 }
 
-static void ParseCommandString(const std::string& str, std::vector<std::string>& outArgList)
+static void ParseCommandString(const char* str, CommandArgs& outArgList)
 {
-    std::string tmp;
+    String tmp;
 
     // tokenize command string, keep string in quotes as a single string
-    for (size_t i = 0; i < str.length(); i++)
+    for (size_t i = 0; str[i]; i++)
     {
         char c = str[i];
         if (c == ' ')
         {
-            outArgList.push_back(std::move(tmp));
+            outArgList.PushBack(MoveTemp(tmp));
+            tmp.Clear();
         }
         else if (c == '\"')
         {
             i++;
-            while (str[i] != '\"')
+            while (str[i] && str[i] != '\"')
             {
-                tmp += str[i];
+                tmp.Append(str[i]);
                 i++;
             }
+            if (!str[i]) break;
         }
         else
         {
-            tmp += c;
+            tmp.Append(c);
         }
     }
 
-    if (!tmp.empty())
+    if (!tmp.Empty())
     {
-        outArgList.push_back(std::move(tmp));
+        outArgList.PushBack(MoveTemp(tmp));
     }
 }
 
-bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
+bool UniversalChessInterface::ExecuteCommand(const char* commandString)
 {
-    std::vector<std::string>& args = mCommandArgs;
-    args.clear();
+    CommandArgs& args = mCommandArgs;
+    args.Clear();
     ParseCommandString(commandString, args);
 
-    if (args.empty())
+    if (args.Empty())
     {
-        std::cout << "Invalid command" << std::endl;
+        printf("Invalid command\n");
         return true;
     }
 
-    const std::string& command = args[0];
+    const String& command = args[0];
 
     if (command == "uci")
     {
-        std::cout << "id name " << c_EngineName << "\n";
-        std::cout << "id author " << c_Author << "\n";
-        std::cout << "option name Hash type spin default " << c_DefaultTTSizeInMB  << " min 1 max 1048576\n";
-        std::cout << "option name MultiPV type spin default 1 min 1 max " << MaxAllowedMoves << "\n";
-        std::cout << "option name MoveOverhead type spin default " << mOptions.moveOverhead << " min 0 max 10000\n";
-        std::cout << "option name Threads type spin default 1 min 1 max " << c_MaxNumThreads << "\n";
-        std::cout << "option name Ponder type check default false\n";
-        std::cout << "option name EvalFile type string default " << c_DefaultEvalFile << "\n";
-        std::cout << "option name EvalRandomization type spin default 0 min 0 max 100\n";
+        printf("id name %s\n", c_EngineName);
+        printf("id author %s\n", c_Author);
+        printf("option name Hash type spin default %u min 1 max 1048576\n", c_DefaultTTSizeInMB);
+        printf("option name MultiPV type spin default 1 min 1 max %u\n", MaxAllowedMoves);
+        printf("option name MoveOverhead type spin default %d min 0 max 10000\n", mOptions.moveOverhead);
+        printf("option name Threads type spin default 1 min 1 max %u\n", c_MaxNumThreads);
+        printf("option name Ponder type check default false\n");
+        printf("option name EvalFile type string default %s\n", c_DefaultEvalFile);
+        printf("option name EvalRandomization type spin default 0 min 0 max 100\n");
 #ifdef USE_SYZYGY_TABLEBASES
-        std::cout << "option name SyzygyPath type string default <empty>\n";
-        std::cout << "option name SyzygyProbeLimit type spin default 6 min 4 max 7\n";
+        printf("option name SyzygyPath type string default <empty>\n");
+        printf("option name SyzygyProbeLimit type spin default 6 min 4 max 7\n");
 #endif // USE_SYZYGY_TABLEBASES
 #ifdef USE_GAVIOTA_TABLEBASES
-        std::cout << "option name GaviotaTbPath type string default <empty>\n";
-        std::cout << "option name GaviotaTbCache type spin default " << c_DefaultGaviotaTbCacheInMB << " min 1 max 1048576\n";
+        printf("option name GaviotaTbPath type string default <empty>\n");
+        printf("option name GaviotaTbCache type spin default %u min 1 max 1048576\n", c_DefaultGaviotaTbCacheInMB);
 #endif // USE_GAVIOTA_TABLEBASES
-        std::cout << "option name UCI_Chess960 type check default false\n";
-        std::cout << "option name UCI_ShowWDL type check default false\n";
-        std::cout << "option name UseSAN type check default false\n";
-        std::cout << "option name ColorConsoleOutput type check default false\n";
+        printf("option name UCI_Chess960 type check default false\n");
+        printf("option name UCI_ShowWDL type check default false\n");
+        printf("option name UseSAN type check default false\n");
+        printf("option name ColorConsoleOutput type check default false\n");
 #ifdef ENABLE_TUNING
         for (const TunableParameter& param : g_TunableParameters)
         {
-            std::cout << "option name " << param.m_name << " type spin default " << param.m_value << " min " << param.m_min << " max " << param.m_max << "\n";
+            printf("option name %s type spin default %d min %d max %d\n", param.m_name.CStr(), param.m_value, param.m_min, param.m_max);
         }
 #endif // ENABLE_TUNING
-        std::cout << "uciok" << std::endl;
+        printf("uciok\n");
     }
     else if (command == "isready")
     {
-        std::cout << "readyok" << std::endl;
+        printf("readyok\n");
     }
     else if (command == "ucinewgame")
     {
         mTranspositionTable.Clear();
         mSearch.Clear();
         mPrevSearchPosition = Position();
-        mPrevSearchPvLine.clear();
+        mPrevSearchPvLine.Clear();
     }
     else if (command == "setoption")
     {
-        if (args.size() >= 4 && args[1] == "name" && args[3] == "value")
+        if (args.Size() >= 4 && args[1] == "name" && args[3] == "value")
         {
-            size_t offset = commandString.find("value");
-            offset += 5; // skip "value" string
-            while (offset < commandString.size() && isspace(commandString[offset]))
+            const char* value = strstr(commandString, "value");
+            value += 5; // skip "value" string
+            while (*value && isspace((unsigned char)*value))
             {
-                offset++;
+                value++;
             }
 
             Command_Stop();
-            Command_SetOption(args[2], commandString.substr(offset));
+            Command_SetOption(args[2], value);
         }
         else
         {
-            std::cout << "Invalid command" << std::endl;
+            printf("Invalid command\n");
         }
     }
     else if (command == "position")
@@ -262,26 +303,26 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     }
     else if (command == "print")
     {
-        std::cout << "Init:    " << mGame.GetInitialPosition().ToFEN() << std::endl; 
-        std::cout << "Moves:   " << mGame.ToPGNMoveList() << std::endl;
-        std::cout << "Current: " << mGame.GetPosition().ToFEN() << std::endl << mGame.ToPGNMoveList() << std::endl;
-        std::cout << mGame.GetPosition().Print() << std::endl;
+        printf("Init:    %s\n", mGame.GetInitialPosition().ToFEN().CStr());
+        printf("Moves:   %s\n", mGame.ToPGNMoveList().CStr());
+        printf("Current: %s\n%s\n", mGame.GetPosition().ToFEN().CStr(), mGame.ToPGNMoveList().CStr());
+        printf("%s\n", mGame.GetPosition().Print().CStr());
     }
     else if (command == "eval")
     {
-        if (args.size() >= 2 && (args[1] == "detail" || args[1] == "detailed"))
+        if (args.Size() >= 2 && (args[1] == "detail" || args[1] == "detailed"))
         {
             Command_EvalDetailed(args);
         }
         else
         {
             const ScoreType eval = Evaluate(mGame.GetPosition());
-            std::cout << "Evaluation: " << eval << std::endl;
+            printf("Evaluation: %d\n", (int32_t)eval);
             const uint32_t ply = mGame.GetPosition().GetMoveCount();
             const float w = EvalToWinProbability(eval / 100.0f, ply);
             const float l = EvalToWinProbability(-eval / 100.0f, ply);
             const float d = 1.0f - w - l;
-            std::cout<< "W: " << w << ", D: " << d << ", L: " << l << std::endl;
+            printf("W: %g, D: %g, L: %g\n", w, d, l);
         }
     }
     else if (command == "scoremoves")
@@ -292,10 +333,16 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     {
         Threats threats;
         mGame.GetPosition().ComputeThreats(threats);
-        std::cout << "Attacked by pawns" << std::endl << threats.attackedByPawns.Print() << std::endl;
-        std::cout << "Attacked by minors" << std::endl << threats.attackedByMinors.Print() << std::endl;
-        std::cout << "Attacked by rooks" << std::endl << threats.attackedByRooks.Print() << std::endl;
-        std::cout << "All threats:" << std::endl << threats.allThreats.Print() << std::endl;
+        const auto printBitboard = [](const char* title, const Bitboard bitboard)
+        {
+            char buffer[Bitboard::PrintBufferSize];
+            bitboard.Print(buffer);
+            printf("%s\n%s\n", title, buffer);
+        };
+        printBitboard("Attacked by pawns", threats.attackedByPawns);
+        printBitboard("Attacked by minors", threats.attackedByMinors);
+        printBitboard("Attacked by rooks", threats.attackedByRooks);
+        printBitboard("All threats:", threats.allThreats);
     }
     else if (command == "ttinfo")
     {
@@ -321,9 +368,9 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
     else if (command == "bench" || command == "benchmark")
     {
         uint32_t depth = 12;
-        if (args.size() >= 2)
+        if (args.Size() >= 2)
         {
-            depth = std::max(1u, static_cast<uint32_t>(std::atoi(args[1].c_str())));
+            depth = Max(1u, static_cast<uint32_t>(atoi(args[1])));
         }
         Command_Benchmark(depth);
     }
@@ -339,67 +386,61 @@ bool UniversalChessInterface::ExecuteCommand(const std::string& commandString)
         mSearch.GetMoveOrderer().DebugPrint();
     }
 #endif // CONFIGURATION_FINAL
-#ifdef COLLECT_ENDGAME_STATISTICS
-    else if (command == "endgamestats")
-    {
-        PrintEndgameStatistics();
-    }
-#endif // COLLECT_ENDGAME_STATISTICS
     else if (command == "help")
     {
         // print all available commands
-        std::cout << "Available UCI commands:" << std::endl;
-        std::cout << " * uci - print available UCI options list" << std::endl;
-        std::cout << " * isready - print 'readyok' when the engine is ready" << std::endl;
-        std::cout << " * ucinewgame - prepare for new game by clearing transposition table and search data" << std::endl;
-        std::cout << " * setoption name <name> value <value> - set an UCI option" << std::endl;
-        std::cout << " * position [startpos | fen <fenstring> ] moves <move1> ... <movei> - set position" << std::endl;
-        std::cout << " * go [depth <depth> | movetime <time> | wtime <time> | btime <time> | winc <time> | binc <time> | movestogo <moves> | infinite] - start search" << std::endl;
-        std::cout << " * ponderhit - start searching in pondering mode" << std::endl;
-        std::cout << " * stop - stop searching" << std::endl;
-        std::cout << " * quit|exit - quit the engine" << std::endl;
-        std::cout << " * perft <depth> - run perft test on current position" << std::endl;
-        std::cout << " * print - print current position" << std::endl;
-        std::cout << " * eval [detailed [start|stop|reset]] - evaluate current position;" << std::endl;
-        std::cout << "       'detailed' prints NNUE accumulator stats for the current position," << std::endl;
-        std::cout << "       'detailed start' begins gathering stats over a search ('go'); then 'eval detailed' prints aggregated stats" << std::endl;
-        std::cout << " * scoremoves - print all legal moves with their move orderer scores" << std::endl;
-        std::cout << " * ttinfo - print transposition table info" << std::endl;
-        std::cout << " * ttprobe - probe transposition table with current position" << std::endl;
-        std::cout << " * tbprobe - probe tablebases with current position" << std::endl;
-        std::cout << " * cacheprobe - probe node cache" << std::endl;
-        std::cout << " * bench|benchmark - run benchmark" << std::endl;
-        std::cout << " * playout nodes <N> [games <M>] - play self-play games from the current position at N nodes per move" << std::endl;
-        std::cout << "       and report win/draw/loss statistics; runs until 'stop' if no game count is given" << std::endl;
+        printf("Available UCI commands:\n");
+        printf(" * uci - print available UCI options list\n");
+        printf(" * isready - print 'readyok' when the engine is ready\n");
+        printf(" * ucinewgame - prepare for new game by clearing transposition table and search data\n");
+        printf(" * setoption name <name> value <value> - set an UCI option\n");
+        printf(" * position [startpos | fen <fenstring> ] moves <move1> ... <movei> - set position\n");
+        printf(" * go [depth <depth> | movetime <time> | wtime <time> | btime <time> | winc <time> | binc <time> | movestogo <moves> | infinite] - start search\n");
+        printf(" * ponderhit - start searching in pondering mode\n");
+        printf(" * stop - stop searching\n");
+        printf(" * quit|exit - quit the engine\n");
+        printf(" * perft <depth> - run perft test on current position\n");
+        printf(" * print - print current position\n");
+        printf(" * eval [detailed [start|stop|reset]] - evaluate current position;\n");
+        printf("       'detailed' prints NNUE accumulator stats for the current position,\n");
+        printf("       'detailed start' begins gathering stats over a search ('go'); then 'eval detailed' prints aggregated stats\n");
+        printf(" * scoremoves - print all legal moves with their move orderer scores\n");
+        printf(" * ttinfo - print transposition table info\n");
+        printf(" * ttprobe - probe transposition table with current position\n");
+        printf(" * tbprobe - probe tablebases with current position\n");
+        printf(" * cacheprobe - probe node cache\n");
+        printf(" * bench|benchmark - run benchmark\n");
+        printf(" * playout nodes <N> [games <M>] - play self-play games from the current position at N nodes per move\n");
+        printf("       and report win/draw/loss statistics; runs until 'stop' if no game count is given\n");
     }
     else
     {
-        std::cout << "Invalid command" << std::endl;
+        printf("Invalid command\n");
     }
 
     return true;
 }
 
-bool UniversalChessInterface::Command_Position(const std::vector<std::string>& args)
+bool UniversalChessInterface::Command_Position(const CommandArgs& args)
 {
-    size_t extraMovesStart = 0;
+    uint32_t extraMovesStart = 0;
 
     Position pos;
 
-    if (args.size() >= 2 && args[1] == "startpos")
+    if (args.Size() >= 2 && args[1] == "startpos")
     {
         pos.FromFEN(Position::InitPositionFEN);
 
-        if (args.size() >= 4 && args[2] == "moves")
+        if (args.Size() >= 4 && args[2] == "moves")
         {
             extraMovesStart = 2;
         }
     }
-    else if (args.size() > 2 && args[1] == "fen")
+    else if (args.Size() > 2 && args[1] == "fen")
     {
-        size_t numFenElements = 0;
+        uint32_t numFenElements = 0;
 
-        for (size_t i = 2; i < args.size(); ++i)
+        for (uint32_t i = 2; i < args.Size(); ++i)
         {
             if (args[i] == "moves")
             {
@@ -410,32 +451,32 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
         }
 
         // [board] [sideToMove] [castling] [enPassant] [halfMoves] [fullmove]
-        std::string fenString;
-        for (size_t i = 0; i < numFenElements; ++i)
+        String fenString;
+        for (uint32_t i = 0; i < numFenElements; ++i)
         {
-            fenString += args[2 + i];
-            if (i < 5) fenString += ' ';
+            fenString.Append(args[2 + i]);
+            if (i < 5) fenString.Append(' ');
         }
 
         if (numFenElements < 3)
         {
-            std::cout << "Invalid FEN" << std::endl;
+            printf("Invalid FEN\n");
             return false;
         }
 
         if (numFenElements < 4)
         {
-            fenString += "- ";
+            fenString.Append("- ");
         }
 
         if (numFenElements < 5)
         {
-            fenString += "0 ";
+            fenString.Append("0 ");
         }
 
         if (numFenElements < 6)
         {
-            fenString += "1";
+            fenString.Append("1");
         }
 
         if (!pos.FromFEN(fenString))
@@ -454,19 +495,19 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
 
     if (extraMovesStart > 0)
     {
-        for (size_t i = extraMovesStart + 1; i < args.size(); ++i)
+        for (uint32_t i = extraMovesStart + 1; i < args.Size(); ++i)
         {
             const Move move = mGame.GetPosition().MoveFromString(args[i]);
 
             if (!move.IsValid() || !mGame.GetPosition().IsMoveValid(move))
             {
-                std::cout << "Invalid move" << std::endl;
+                printf("Invalid move\n");
                 return false;
             }
 
             if (!mGame.DoMove(move))
             {
-                std::cout << "Invalid move" << std::endl;
+                printf("Invalid move\n");
                 return false;
             }
         }
@@ -475,7 +516,7 @@ bool UniversalChessInterface::Command_Position(const std::vector<std::string>& a
     return true;
 }
 
-bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
+bool UniversalChessInterface::Command_Go(const CommandArgs& args)
 {
     Command_Stop();
 
@@ -496,17 +537,17 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     uint32_t movesToGo = UINT32_MAX;
     uint32_t mateSearchDepth = 0;
 
-    std::vector<Move> excludedMoves;
+    DynArray<Move> excludedMoves;
 
-    for (size_t i = 1; i < args.size(); ++i)
+    for (uint32_t i = 1; i < args.Size(); ++i)
     {
-        if (args[i] == "depth" && i + 1 < args.size())
+        if (args[i] == "depth" && i + 1 < args.Size())
         {
-            maxDepth = atoi(args[i + 1].c_str());
+            maxDepth = atoi(args[i + 1]);
         }
-        if (args[i] == "mate" && i + 1 < args.size())
+        if (args[i] == "mate" && i + 1 < args.Size())
         {
-            mateSearchDepth = atoi(args[i + 1].c_str());
+            mateSearchDepth = atoi(args[i + 1]);
         }
         else if (args[i] == "infinite")
         {
@@ -524,78 +565,85 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         {
             verboseStats = true;
         }
-        else if (args[i] == "nodes" && i + 1 < args.size())
+        else if (args[i] == "nodes" && i + 1 < args.Size())
         {
-            maxNodes = std::stoull(args[i + 1].c_str());
+            maxNodes = strtoull(args[i + 1], nullptr, 10);
         }
-        else if (args[i] == "nodes_soft" && i + 1 < args.size())
+        else if (args[i] == "nodes_soft" && i + 1 < args.Size())
         {
-            maxNodesSoft = std::stoull(args[i + 1].c_str());
+            maxNodesSoft = strtoull(args[i + 1], nullptr, 10);
         }
-        else if (args[i] == "movetime" && i + 1 < args.size())
+        else if (args[i] == "movetime" && i + 1 < args.Size())
         {
-            moveTime = atoi(args[i + 1].c_str());
+            moveTime = atoi(args[i + 1]);
         }
-        else if (args[i] == "wtime" && i + 1 < args.size())
+        else if (args[i] == "wtime" && i + 1 < args.Size())
         {
-            whiteRemainingTime = atoi(args[i + 1].c_str());
+            whiteRemainingTime = atoi(args[i + 1]);
         }
-        else if (args[i] == "btime" && i + 1 < args.size())
+        else if (args[i] == "btime" && i + 1 < args.Size())
         {
-            blacksRemainingTime = atoi(args[i + 1].c_str());
+            blacksRemainingTime = atoi(args[i + 1]);
         }
-        else if (args[i] == "winc" && i + 1 < args.size())
+        else if (args[i] == "winc" && i + 1 < args.Size())
         {
-            whiteTimeIncrement = atoi(args[i + 1].c_str());
+            whiteTimeIncrement = atoi(args[i + 1]);
         }
-        else if (args[i] == "binc" && i + 1 < args.size())
+        else if (args[i] == "binc" && i + 1 < args.Size())
         {
-            blacksTimeIncrement = atoi(args[i + 1].c_str());
+            blacksTimeIncrement = atoi(args[i + 1]);
         }
-        else if (args[i] == "searchmoves" && i + 1 < args.size())
+        else if (args[i] == "searchmoves" && i + 1 < args.Size())
         {
-            mGame.GetPosition().GetNumLegalMoves(&excludedMoves);
+            MoveList legalMoves;
+            mGame.GetPosition().GetNumLegalMoves(&legalMoves);
+            for (uint32_t j = 0; j < legalMoves.Size(); ++j)
+            {
+                excludedMoves.PushBack(legalMoves.GetMove(j));
+            }
 
-            for (size_t j = i + 1; j < args.size(); ++j)
+            for (uint32_t j = i + 1; j < args.Size(); ++j)
             {
                 const Move move = mGame.GetPosition().MoveFromString(args[j]);
                 if (move.IsValid())
                 {
-                    excludedMoves.erase(
-                        remove(excludedMoves.begin(), excludedMoves.end(), move),
-                        excludedMoves.end());
+                    for (uint32_t k = excludedMoves.Size(); k-- > 0; )
+                    {
+                        if (excludedMoves[k] == move) excludedMoves.Erase(k);
+                    }
                 }
                 else
                 {
-                    std::cout << "Invalid move: " << args[j] << std::endl;
+                    printf("Invalid move: %s\n", args[j].CStr());
                     return false;
                 }
             }
         }
-        else if (args[i] == "excludemoves" && i + 1 < args.size())
+        else if (args[i] == "excludemoves" && i + 1 < args.Size())
         {
             // exclude moves from search
-            for (size_t j = i + 1; j < args.size(); ++j)
+            for (uint32_t j = i + 1; j < args.Size(); ++j)
             {
                 const Move move = mGame.GetPosition().MoveFromString(args[j]);
                 if (move.IsValid())
                 {
-                    excludedMoves.push_back(move);
+                    excludedMoves.PushBack(move);
                 }
                 else
                 {
-                    std::cout << "Invalid move: " << args[j] << std::endl;
+                    printf("Invalid move: %s\n", args[j].CStr());
                     return false;
                 }
             }
         }
-        else if (args[i] == "movestogo" && i + 1 < args.size())
+        else if (args[i] == "movestogo" && i + 1 < args.Size())
         {
-            movesToGo = atoi(args[i + 1].c_str());
+            movesToGo = atoi(args[i + 1]);
         }
     }
 
-    mSearchCtx = std::make_unique<SearchTaskContext>(mTranspositionTable);
+    ASSERT(!mSearchCtx);
+    mSearchCtx = new SearchTaskContext(mTranspositionTable);
 
     mSearchCtx->searchParam.limits.startTimePoint = startTimePoint;
 
@@ -612,7 +660,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
         data.moveOverhead = mOptions.moveOverhead;
 
         // check if opponent played a move predicted by the previous search
-        if (mPrevSearchPvLine.size() >= 2)
+        if (mPrevSearchPvLine.Size() >= 2)
         {
             Position pos = mPrevSearchPosition;
             if (pos.DoMove(mPrevSearchPvLine[0]))
@@ -635,7 +683,7 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.isPonder = isPonder;
     mSearchCtx->startedAsPondering = isPonder;
 
-    mSearchCtx->searchParam.limits.maxDepth = (uint8_t)std::min<uint32_t>(maxDepth, UINT8_MAX);
+    mSearchCtx->searchParam.limits.maxDepth = (uint8_t)Min<uint32_t>(maxDepth, UINT8_MAX);
     mSearchCtx->searchParam.limits.maxNodes = maxNodes;
     mSearchCtx->searchParam.limits.maxNodesSoft = maxNodesSoft;
     mSearchCtx->searchParam.limits.mateSearch = mateSearchDepth > 0;
@@ -643,16 +691,16 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
     mSearchCtx->searchParam.numPvLines = mOptions.multiPV;
     mSearchCtx->searchParam.numThreads = mOptions.threads;
     mSearchCtx->searchParam.evalRandomization = mOptions.evalRandomization;
-    mSearchCtx->searchParam.excludedMoves = std::move(excludedMoves);
+    mSearchCtx->searchParam.excludedMoves = MoveTemp(excludedMoves);
     mSearchCtx->searchParam.verboseStats = verboseStats;
     mSearchCtx->searchParam.moveNotation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
     mSearchCtx->searchParam.colorConsoleOutput = mOptions.colorConsoleOutput;
     mSearchCtx->searchParam.showWDL = mOptions.showWDL;
 
     {
-        std::unique_lock<std::mutex> lock(mSearchThreadMutex);
-        mNewSearchContext = mSearchCtx.get();
-        mNewSearchConditionVariable.notify_one();
+        std::unique_lock<std::mutex> lock(mSearchThread->mutex);
+        mNewSearchContext = mSearchCtx;
+        mSearchThread->newSearchConditionVariable.notify_one();
     }
 
     // make sure search thread actually started running before exiting from this function
@@ -670,11 +718,11 @@ bool UniversalChessInterface::Command_Go(const std::vector<std::string>& args)
 void UniversalChessInterface::StopSearchThread()
 {
     {
-        std::unique_lock<std::mutex> lock(mSearchThreadMutex);
+        std::unique_lock<std::mutex> lock(mSearchThread->mutex);
         mStopSearchThread = true;
-        mNewSearchConditionVariable.notify_one();
+        mSearchThread->newSearchConditionVariable.notify_one();
     }
-    mSearchThread.join();
+    mSearchThread->thread.join();
 }
 
 void UniversalChessInterface::SearchThreadEntryFunc()
@@ -685,10 +733,10 @@ void UniversalChessInterface::SearchThreadEntryFunc()
     {
         {
             // wait for a new search or a request to stop the thread
-            std::unique_lock<std::mutex> lock(mSearchThreadMutex);
+            std::unique_lock<std::mutex> lock(mSearchThread->mutex);
             while (!mNewSearchContext && !mStopSearchThread)
             {
-                mNewSearchConditionVariable.wait(lock);
+                mSearchThread->newSearchConditionVariable.wait(lock);
             }
             mNewSearchContext = nullptr;
         }
@@ -707,8 +755,8 @@ static void PrintNNEvaluatorStats()
 {
     uint64_t numUpdates = 0, numRefreshes = 0;
     NNEvaluator::GetStats(numUpdates, numRefreshes);
-    std::cout << "NN accumulator updates: " << numUpdates << std::endl;
-    std::cout << "NN accumulator refreshes: " << numRefreshes << std::endl;
+    printf("NN accumulator updates: %" PRIu64 "\n", numUpdates);
+    printf("NN accumulator refreshes: %" PRIu64 "\n", numRefreshes);
 }
 #endif // NN_ACCUMULATOR_STATS
 
@@ -727,22 +775,22 @@ void UniversalChessInterface::DoSearch()
     // report best move
     {
         Move bestMove = Move::Invalid();
-        if (!mSearchCtx->searchResult.empty())
+        if (!mSearchCtx->searchResult.Empty())
         {
             const auto& bestLine = mSearchCtx->searchResult[0].moves;
             const MoveNotation notation = mOptions.useStandardAlgebraicNotation ? MoveNotation::SAN : MoveNotation::LAN;
 
-            if (!bestLine.empty())
+            if (!bestLine.Empty())
             {
                 bestMove = bestLine[0];
 
-                std::cout << "bestmove " << mGame.GetPosition().MoveToString(bestMove, notation);
+                printf("bestmove %s", mGame.GetPosition().MoveToString(bestMove, notation).CStr());
 
-                if (bestLine.size() > 1)
+                if (bestLine.Size() > 1)
                 {
                     Position posAfterBestMove = mGame.GetPosition();
                     posAfterBestMove.DoMove(bestMove);
-                    std::cout << " ponder " << posAfterBestMove.MoveToString(bestLine[1], notation);
+                    printf(" ponder %s", posAfterBestMove.MoveToString(bestLine[1], notation).CStr());
                 }
             }
         }
@@ -750,15 +798,16 @@ void UniversalChessInterface::DoSearch()
         if (mSearchCtx->searchParam.verboseStats)
         {
             const float elapsedTime = (TimePoint::GetCurrent() - mSearchCtx->searchParam.limits.startTimePoint).ToSeconds();
-            std::cout << std::endl << "info string total time " << elapsedTime << " seconds";
+            printf("\ninfo string total time %g seconds", elapsedTime);
         }
 
         if (!bestMove.IsValid()) // null move
         {
-            std::cout << "bestmove 0000";
+            printf("bestmove 0000");
         }
 
-        std::cout << std::endl;
+        printf("\n");
+        fflush(stdout);
 
 #ifdef NN_ACCUMULATOR_STATS
         PrintNNEvaluatorStats();
@@ -767,10 +816,10 @@ void UniversalChessInterface::DoSearch()
 
     // remember search result
     mPrevSearchPosition = mGame.GetPosition();
-    if (!mSearchCtx->searchResult.empty())
-        mPrevSearchPvLine = std::move(mSearchCtx->searchResult[0].moves);
+    if (!mSearchCtx->searchResult.Empty())
+        mPrevSearchPvLine = MoveTemp(mSearchCtx->searchResult[0].moves);
     else
-        mPrevSearchPvLine.clear();
+        mPrevSearchPvLine.Clear();
     
     mSearchCtx->waitable.OnFinished();
 }
@@ -780,7 +829,8 @@ bool UniversalChessInterface::Command_Stop()
     if (mPlayout)
     {
         mPlayout->Stop();
-        mPlayout.reset();
+        delete mPlayout;
+        mPlayout = nullptr;
     }
 
     if (mSearchCtx)
@@ -791,7 +841,8 @@ bool UniversalChessInterface::Command_Stop()
         mSearchCtx->waitable.Wait();
     }
 
-    mSearchCtx.reset();
+    delete mSearchCtx;
+    mSearchCtx = nullptr;
 
     return true;
 }
@@ -807,35 +858,37 @@ bool UniversalChessInterface::Command_PonderHit()
     return true;
 }
 
-bool UniversalChessInterface::Command_Perft(const std::vector<std::string>& args)
+bool UniversalChessInterface::Command_Perft(const CommandArgs& args)
 {
-    if (args.size() != 2)
+    if (args.Size() != 2)
     {
-        std::cout << "Invalid perft arguments" << std::endl;
+        printf("Invalid perft arguments\n");
         return false;
     }
 
-    uint32_t maxDepth = atoi(args[1].c_str());
+    uint32_t maxDepth = atoi(args[1]);
 
     mGame.GetPosition().Perft(maxDepth, true);
 
     return true;
 }
 
-static std::string ToLower(const std::string& str)
+static String ToLower(const char* str)
 {
-    std::string result = str;
-    for (char& c : result)
+    String result;
+    for (; *str; ++str)
     {
+        char c = *str;
         if (c <= 'Z' && c >= 'A')
         {
             c = (c - ('Z' - 'z'));
         }
+        result.Append(c);
     }
     return result;
 }
 
-static bool ParseBool(const std::string& str, bool& outValue)
+static bool ParseBool(const String& str, bool& outValue)
 {
     if (str == "true" || str == "1")
     {
@@ -850,19 +903,19 @@ static bool ParseBool(const std::string& str, bool& outValue)
     return false;
 }
 
-bool UniversalChessInterface::Command_SetOption(const std::string& name, const std::string& value)
+bool UniversalChessInterface::Command_SetOption(const String& name, const char* value)
 {
-    std::string lowerCaseName = ToLower(name);
-    std::string lowerCaseValue = ToLower(value);
+    const String lowerCaseName = ToLower(name);
+    const String lowerCaseValue = ToLower(value);
 
     if (lowerCaseName == "multipv")
     {
-        mOptions.multiPV = std::clamp((uint32_t)atoi(value.c_str()), 1u, MaxAllowedMoves);
+        mOptions.multiPV = Clamp((uint32_t)atoi(value), 1u, MaxAllowedMoves);
     }
     else if (lowerCaseName == "threads")
     {
-        uint32_t newNumThreads = atoi(value.c_str());
-        newNumThreads = std::max(1u, std::min(c_MaxNumThreads, newNumThreads));
+        uint32_t newNumThreads = atoi(value);
+        newNumThreads = Max(1u, Min(c_MaxNumThreads, newNumThreads));
 
         if (mOptions.threads != newNumThreads)
         {
@@ -873,22 +926,22 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     }
     else if (lowerCaseName == "moveoverhead")
     {
-        mOptions.moveOverhead = std::clamp(atoi(value.c_str()), 0, 10000);
+        mOptions.moveOverhead = Clamp(atoi(value), 0, 10000);
     }
     else if (lowerCaseName == "evalrandomization")
     {
-        mOptions.evalRandomization = std::clamp(atoi(value.c_str()), 0, 100);
+        mOptions.evalRandomization = Clamp(atoi(value), 0, 100);
     }
     else if (lowerCaseName == "hash" || lowerCaseName == "hashsize")
     {
-        size_t hashSize = 1024 * 1024 * static_cast<size_t>(std::max(1, atoi(value.c_str())));
+        size_t hashSize = 1024 * 1024 * static_cast<size_t>(Max(1, atoi(value)));
         mTranspositionTable.Resize(hashSize);
     }
     else if (lowerCaseName == "usesan" || lowerCaseName == "usestandardalgebraicnotation")
     {
         if (!ParseBool(lowerCaseValue, mOptions.useStandardAlgebraicNotation))
         {
-            std::cout << "Invalid value" << std::endl;
+            printf("Invalid value\n");
             return false;
         }
     }
@@ -896,7 +949,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         if (!ParseBool(lowerCaseValue, Position::s_enableChess960))
         {
-            std::cout << "Invalid value" << std::endl;
+            printf("Invalid value\n");
             return false;
         }
     }
@@ -904,34 +957,34 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         if (!ParseBool(lowerCaseValue, mOptions.showWDL))
         {
-            std::cout << "Invalid value" << std::endl;
+            printf("Invalid value\n");
             return false;
         }
     }
 #ifdef USE_SYZYGY_TABLEBASES
     else if (lowerCaseName == "syzygypath")
     {
-        LoadSyzygyTablebase(value.c_str());
+        LoadSyzygyTablebase(value);
     }
     else if (lowerCaseName == "syzygyprobelimit")
     {
-        g_syzygyProbeLimit = std::clamp(atoi(value.c_str()), 4, 7);
+        g_syzygyProbeLimit = Clamp(atoi(value), 4, 7);
     }
 #endif // USE_SYZYGY_TABLEBASES
 #ifdef USE_GAVIOTA_TABLEBASES
     else if (lowerCaseName == "gaviotatbpath")
     {
-        LoadGaviotaTablebase(value.c_str());
+        LoadGaviotaTablebase(value);
     }
     else if (lowerCaseName == "gaviotatbcache")
     {
-        const size_t cacheSize = 1024 * 1024 * static_cast<size_t>(std::max(1, atoi(value.c_str())));
+        const size_t cacheSize = 1024 * 1024 * static_cast<size_t>(Max(1, atoi(value)));
         SetGaviotaCacheSize(cacheSize);
     }
 #endif // USE_GAVIOTA_TABLEBASES
     else if (lowerCaseName == "evalfile")
     {
-        LoadMainNeuralNetwork(value.c_str());
+        LoadMainNeuralNetwork(value);
     }
     else if (lowerCaseName == "ponder")
     {
@@ -941,7 +994,7 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
     {
         if (!ParseBool(lowerCaseValue, mOptions.colorConsoleOutput))
         {
-            std::cout << "Invalid value" << std::endl;
+            printf("Invalid value\n");
             return false;
         }
     }
@@ -950,15 +1003,15 @@ bool UniversalChessInterface::Command_SetOption(const std::string& name, const s
 #ifdef ENABLE_TUNING
         for (const TunableParameter& param : g_TunableParameters)
         {
-            if (name == param.m_name)
+            if (strcmp(name, param.m_name) == 0)
             {
-                param.m_value = std::clamp(atoi(value.c_str()), param.m_min, param.m_max);
+                param.m_value = Clamp(atoi(value), param.m_min, param.m_max);
                 return true;
             }
         }
 #endif // ENABLE_TUNING
 
-        std::cout << "Invalid option: " << name << std::endl;
+        printf("Invalid option: %s\n", name.CStr());
         return false;
     }
 
@@ -969,10 +1022,10 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
 {
     TTEntry ttEntry;
 
-    std::cout << "Hash:       " << mGame.GetPosition().GetHash() << std::endl;
-    std::cout << "PawnHash:   " << mGame.GetPosition().GetPawnsHash() << std::endl;
-    std::cout << "Non-Pawn Hash (Whites): " << mGame.GetPosition().GetNonPawnsHash(White) << std::endl;
-    std::cout << "Non-Pawn Hash (Blacks): " << mGame.GetPosition().GetNonPawnsHash(Black) << std::endl;
+    printf("Hash:       %" PRIu64 "\n", mGame.GetPosition().GetHash());
+    printf("PawnHash:   %" PRIu64 "\n", mGame.GetPosition().GetPawnsHash());
+    printf("Non-Pawn Hash (Whites): %u\n", mGame.GetPosition().GetNonPawnsHash(White));
+    printf("Non-Pawn Hash (Blacks): %u\n", mGame.GetPosition().GetNonPawnsHash(Black));
 
     if (mTranspositionTable.Read(mGame.GetPosition(), ttEntry))
     {
@@ -982,16 +1035,16 @@ bool UniversalChessInterface::Command_TranspositionTableProbe()
             ttEntry.bounds == TTEntry::Bounds::Lower ? "lower" :
             "invalid";
 
-        std::cout << "Score:      " << ttEntry.score << std::endl;
-        std::cout << "StaticEval: " << ttEntry.staticEval << std::endl;
-        std::cout << "Depth:      " << (uint32_t)ttEntry.depth << std::endl;
-        std::cout << "Bounds:     " << boundsStr << std::endl;
-        std::cout << "Generation: " << (uint32_t)ttEntry.generation << std::endl;
-        std::cout << "Moves:      " << ttEntry.move.ToString() << std::endl;
+        printf("Score:      %d\n", (int32_t)ttEntry.score);
+        printf("StaticEval: %d\n", (int32_t)ttEntry.staticEval);
+        printf("Depth:      %u\n", (uint32_t)ttEntry.depth);
+        printf("Bounds:     %s\n", boundsStr);
+        printf("Generation: %u\n", (uint32_t)ttEntry.generation);
+        printf("Moves:      %s\n", ttEntry.move.ToString().CStr());
     }
     else
     {
-        std::cout << "(no entry found)" << std::endl;
+        printf("(no entry found)\n");
     }
 
     return true;
@@ -1005,15 +1058,15 @@ bool UniversalChessInterface::Command_TablebaseProbe()
         uint32_t dtz = 0;
         if (ProbeSyzygy_Root(mGame.GetPosition(), tbMove, &dtz, &wdl))
         {
-            std::cout << "Syzygy tablebase entry found!" << std::endl;
-            std::cout << "Score:            " << wdl << std::endl;
-            std::cout << "Distance to zero: " << dtz << std::endl;
-            std::cout << "Move:             " << tbMove.ToString() << std::endl;
+            printf("Syzygy tablebase entry found!\n");
+            printf("Score:            %d\n", wdl);
+            printf("Distance to zero: %u\n", dtz);
+            printf("Move:             %s\n", tbMove.ToString().CStr());
         }
         else if (ProbeSyzygy_WDL(mGame.GetPosition(), &wdl))
         {
-            std::cout << "Syzygy tablebase entry found!" << std::endl;
-            std::cout << "Score: " << wdl << std::endl;
+            printf("Syzygy tablebase entry found!\n");
+            printf("Score: %d\n", wdl);
         }
     }
 
@@ -1022,9 +1075,9 @@ bool UniversalChessInterface::Command_TablebaseProbe()
         uint32_t dtm = 0;
         if (ProbeGaviota(mGame.GetPosition(), &dtm, &wdl))
         {
-            std::cout << "Gaviota tablebase entry found!" << std::endl;
-            std::cout << "Score:            " << wdl << std::endl;
-            std::cout << "Distance to mate: " << dtm << std::endl;
+            printf("Gaviota tablebase entry found!\n");
+            printf("Score:            %d\n", wdl);
+            printf("Distance to mate: %u\n", dtm);
         }
     }
 
@@ -1037,12 +1090,12 @@ bool UniversalChessInterface::Command_NodeCacheProbe()
 
     if (entry)
     {
-        std::cout << "Node Cache entry found!" << std::endl;
+        printf("Node Cache entry found!\n");
         entry->PrintMoves();
     }
     else
     {
-        std::cout << "Node Cache not found" << std::endl;
+        printf("Node Cache not found\n");
     }
 
     return true;
@@ -1086,8 +1139,7 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
     // raw pre-activation accumulator values
     for (uint32_t p = 0; p < 2; ++p)
     {
-        std::cout << "\nRaw accumulator values (pre-activation) - perspective " << p
-                  << " (" << perspectiveName[p] << "):\n";
+        printf("\nRaw accumulator values (pre-activation) - perspective %u (%s):\n", p, perspectiveName[p]);
         const int16_t* vals = trace.rawAccumulator[p];
         for (uint32_t r = 0; r < rows; ++r)
         {
@@ -1095,43 +1147,42 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
             int off = snprintf(line, sizeof(line), "[%4u] ", r * columns);
             for (uint32_t c = 0; c < columns; ++c)
                 off += snprintf(line + off, sizeof(line) - off, "%6d ", (int)vals[r * columns + c]);
-            std::cout << line << "\n";
+            printf("%s\n", line);
         }
     }
 
     // post-activation values (clamped to [0,255]); zeros blanked, saturated highlighted
     for (uint32_t p = 0; p < 2; ++p)
     {
-        std::cout << "\nPost-activation values (clamp[0,255]; '.' = 0, "
-                  << satOn << "red" << satOff << " = saturated 255) - perspective " << p
-                  << " (" << perspectiveName[p] << "):\n";
+        printf("\nPost-activation values (clamp[0,255]; '.' = 0, %sred%s = saturated 255) - perspective %u (%s):\n",
+            satOn, satOff, p, perspectiveName[p]);
         const int16_t* vals = trace.rawAccumulator[p];
         for (uint32_t r = 0; r < rows; ++r)
         {
-            std::string line;
+            String line;
             char buf[64];
             snprintf(buf, sizeof(buf), "[%4u] ", r * columns);
-            line += buf;
+            line.Append(buf);
             for (uint32_t c = 0; c < columns; ++c)
             {
-                const int act = std::clamp<int>(vals[r * columns + c], 0, nn::ActivationRangeScaling);
+                const int act = Clamp<int>(vals[r * columns + c], 0, nn::ActivationRangeScaling);
                 if (act == 0)
                 {
-                    line += "     . ";
+                    line.Append("     . ");
                 }
                 else
                 {
                     snprintf(buf, sizeof(buf), "%6d ", act);
-                    if (act >= nn::ActivationRangeScaling) { line += satOn; line += buf; line += satOff; }
-                    else { line += buf; }
+                    if (act >= nn::ActivationRangeScaling) { line.Append(satOn); line.Append(buf); line.Append(satOff); }
+                    else { line.Append(buf); }
                 }
             }
-            std::cout << line << "\n";
+            printf("%s\n", line.CStr());
         }
     }
 
     // statistics
-    std::cout << "\nStatistics:\n";
+    printf("\nStatistics:\n");
     double totalActSum = 0.0;
     uint32_t totalNonAct = 0, totalSat = 0;
     for (uint32_t p = 0; p < 2; ++p)
@@ -1141,7 +1192,7 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
         double sum = 0.0;
         for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
         {
-            sum += std::clamp<int>(vals[i], 0, nn::ActivationRangeScaling);
+            sum += Clamp<int>(vals[i], 0, nn::ActivationRangeScaling);
             if (vals[i] <= 0) nonAct++;
             if (vals[i] >= nn::ActivationRangeScaling) sat++;
         }
@@ -1150,7 +1201,7 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
         snprintf(buf, sizeof(buf),
             "  perspective %u: non-activated (<=0): %4u (%5.1f%%), saturated (>=255): %4u (%5.1f%%), mean activation: %6.2f\n",
             p, nonAct, 100.0 * nonAct / nn::AccumulatorSize, sat, 100.0 * sat / nn::AccumulatorSize, sum / nn::AccumulatorSize);
-        std::cout << buf;
+        printf("%s", buf);
     }
     {
         const uint32_t total = 2 * nn::AccumulatorSize;
@@ -1158,31 +1209,31 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
         snprintf(buf, sizeof(buf),
             "  combined:      non-activated (<=0): %4u (%5.1f%%), saturated (>=255): %4u (%5.1f%%), mean activation: %6.2f\n",
             totalNonAct, 100.0 * totalNonAct / total, totalSat, 100.0 * totalSat / total, totalActSum / total);
-        std::cout << buf;
+        printf("%s", buf);
     }
 
     // output buckets (last layer evaluated for every variant)
     const int32_t cpDivisor = nn::OutputScale * nn::WeightScale / c_nnOutputToCentiPawns;
-    std::cout << "\nOutput buckets (last layer evaluated for every variant):\n";
+    printf("\nOutput buckets (last layer evaluated for every variant):\n");
     for (uint32_t v = 0; v < nn::NumVariants; ++v)
     {
         const int32_t internal = trace.bucketOutput[v];
         char buf[160];
         snprintf(buf, sizeof(buf), "  bucket %u: internal = %9d, eval = %+5d cp%s\n",
             v, internal, internal / cpDivisor, v == trace.selectedVariant ? "   <-- selected" : "");
-        std::cout << buf;
+        printf("%s", buf);
     }
-    std::cout << "  (eval is side-to-move relative, raw NN output before game-phase scaling)\n";
+    printf("  (eval is side-to-move relative, raw NN output before game-phase scaling)\n");
 
     // per-piece saliency map (NNUE derived piece values)
-    std::cout << "\nNNUE derived piece values (eval delta in pawns when each piece is removed, White's perspective):\n";
+    printf("\nNNUE derived piece values (eval delta in pawns when each piece is removed, White's perspective):\n");
     const ScoreType baseEvalStm = Evaluate(pos);
     const int32_t baseEvalWhite = (pos.GetSideToMove() == White) ? baseEvalStm : -baseEvalStm;
 
     const char* border = "  +-------+-------+-------+-------+-------+-------+-------+-------+\n";
     for (int rank = 7; rank >= 0; --rank)
     {
-        std::cout << border;
+        printf("%s", border);
         char l1[128], l2[128];
         int o1 = snprintf(l1, sizeof(l1), "%d |", rank + 1); // piece line carries the rank label
         int o2 = snprintf(l2, sizeof(l2), "  |");            // value line
@@ -1215,28 +1266,28 @@ static void PrintSinglePositionDetailedEval(const Position& pos, bool color)
                 }
             }
         }
-        std::cout << l1 << "\n" << l2 << "\n";
+        printf("%s\n%s\n", l1, l2);
     }
-    std::cout << border;
+    printf("%s", border);
     {
-        std::string header = "  ";
-        for (int file = 0; file < 8; ++file) { char b[16]; snprintf(b, sizeof(b), "    %c   ", 'a' + file); header += b; }
-        std::cout << header << "\n";
+        String header = "  ";
+        for (int file = 0; file < 8; ++file) { char b[16]; snprintf(b, sizeof(b), "    %c   ", 'a' + file); header.Append(b); }
+        printf("%s\n", header.CStr());
     }
-    std::cout << "  base eval (White's perspective): " << baseEvalWhite << " cp\n";
-    std::cout << "  (positive value = the piece favors White; removing it lowers White's eval)\n";
+    printf("  base eval (White's perspective): %d cp\n", baseEvalWhite);
+    printf("  (positive value = the piece favors White; removing it lowers White's eval)\n");
 }
 
 // print aggregated NNUE accumulator statistics collected over a search
 static void PrintAggregatedNNStats(bool color)
 {
     NNAccumulatorStats stats;
-    std::vector<uint64_t> perThreadPositions;
+    DynArray<uint64_t> perThreadPositions;
     NNEvaluator::GetMergedStats(stats, &perThreadPositions);
 
     if (stats.numPositions == 0)
     {
-        std::cout << "No positions collected yet. Use 'eval detailed start', run 'go', then 'eval detailed'." << std::endl;
+        printf("No positions collected yet. Use 'eval detailed start', run 'go', then 'eval detailed'.\n");
         return;
     }
 
@@ -1248,41 +1299,41 @@ static void PrintAggregatedNNStats(bool color)
     constexpr uint32_t rows = nn::AccumulatorSize / columns;
     const char* perspectiveName[2] = { "side to move", "opponent" };
 
-    std::cout << "\nAggregated NNUE accumulator statistics over " << stats.numPositions << " evaluated positions.\n";
+    printf("\nAggregated NNUE accumulator statistics over %" PRIu64 " evaluated positions.\n", (uint64_t)stats.numPositions);
 
     // per-neuron activation frequency grid
     for (uint32_t p = 0; p < 2; ++p)
     {
-        std::cout << "\nActivation frequency % (value > 0; '.' = never, " << satOn << "red" << satOff
-                  << " = saturated in >=50% of positions) - perspective " << p << " (" << perspectiveName[p] << "):\n";
+        printf("\nActivation frequency %% (value > 0; '.' = never, %sred%s = saturated in >=50%% of positions) - perspective %u (%s):\n",
+            satOn, satOff, p, perspectiveName[p]);
         for (uint32_t r = 0; r < rows; ++r)
         {
-            std::string line;
+            String line;
             char buf[64];
             snprintf(buf, sizeof(buf), "[%4u] ", r * columns);
-            line += buf;
+            line.Append(buf);
             for (uint32_t c = 0; c < columns; ++c)
             {
                 const uint32_t i = r * columns + c;
                 if (stats.activationCount[p][i] == 0)
                 {
-                    line += "     . ";
+                    line.Append("     . ");
                 }
                 else
                 {
                     snprintf(buf, sizeof(buf), "%6.1f ", 100.0 * stats.activationCount[p][i] / N);
-                    if (100.0 * stats.saturationCount[p][i] / N >= 50.0) { line += satOn; line += buf; line += satOff; }
-                    else { line += buf; }
+                    if (100.0 * stats.saturationCount[p][i] / N >= 50.0) { line.Append(satOn); line.Append(buf); line.Append(satOff); }
+                    else { line.Append(buf); }
                 }
             }
-            std::cout << line << "\n";
+            printf("%s\n", line.CStr());
         }
     }
 
     // collect per-neuron references for ranking / outliers
     struct NeuronRef { uint32_t p, i; uint64_t act, sat; };
-    std::vector<NeuronRef> neurons;
-    neurons.reserve(2 * nn::AccumulatorSize);
+    DynArray<NeuronRef> neurons;
+    neurons.Reserve(2 * nn::AccumulatorSize);
     uint64_t totalAct = 0, totalSat = 0;
     double totalSum = 0.0;
     uint32_t deadCount = 0, alwaysSatCount = 0;
@@ -1292,7 +1343,7 @@ static void PrintAggregatedNNStats(bool color)
         {
             const uint64_t a = stats.activationCount[p][i];
             const uint64_t s = stats.saturationCount[p][i];
-            neurons.push_back({ p, i, a, s });
+            neurons.PushBack({ p, i, a, s });
             totalAct += a;
             totalSat += s;
             totalSum += (double)stats.sumActivation[p][i];
@@ -1303,28 +1354,26 @@ static void PrintAggregatedNNStats(bool color)
 
     // global summary
     const double totalObs = N * 2.0 * nn::AccumulatorSize;
-    std::cout << "\nGlobal summary:\n";
+    printf("\nGlobal summary:\n");
     {
         char buf[256];
         snprintf(buf, sizeof(buf), "  positions evaluated: %llu\n", (unsigned long long)stats.numPositions);
-        std::cout << buf;
+        printf("%s", buf);
         snprintf(buf, sizeof(buf), "  mean non-activated (<=0): %5.1f%%, mean saturated (>=255): %5.1f%%, mean activation: %6.2f\n",
             100.0 * (1.0 - (double)totalAct / totalObs), 100.0 * (double)totalSat / totalObs, totalSum / totalObs);
-        std::cout << buf;
+        printf("%s", buf);
         snprintf(buf, sizeof(buf), "  dead neurons (never activated): %u / %u, always-saturated neurons: %u / %u\n",
             deadCount, 2 * nn::AccumulatorSize, alwaysSatCount, 2 * nn::AccumulatorSize);
-        std::cout << buf;
+        printf("%s", buf);
     }
-    if (perThreadPositions.size() > 1)
+    if (perThreadPositions.Size() > 1)
     {
-        std::cout << "  per-thread positions:";
-        for (size_t t = 0; t < perThreadPositions.size(); ++t)
+        printf("  per-thread positions:");
+        for (uint32_t t = 0; t < perThreadPositions.Size(); ++t)
         {
-            char buf[48];
-            snprintf(buf, sizeof(buf), " [%zu]=%llu", t, (unsigned long long)perThreadPositions[t]);
-            std::cout << buf;
+            printf(" [%u]=%" PRIu64, t, perThreadPositions[t]);
         }
-        std::cout << "\n";
+        printf("\n");
     }
 
     // top-N and outliers
@@ -1334,58 +1383,58 @@ static void PrintAggregatedNNStats(bool color)
         char buf[128];
         snprintf(buf, sizeof(buf), "    p%u[%4u]: activated %6.2f%%, saturated %6.2f%%, mean act %6.1f\n",
             n.p, n.i, 100.0 * n.act / N, 100.0 * n.sat / N, (double)stats.sumActivation[n.p][n.i] / N);
-        std::cout << buf;
+        printf("%s", buf);
     };
 
-    std::sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.act > b.act; });
-    std::cout << "\nMost frequently activated neurons:\n";
+    Sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.act > b.act; });
+    printf("\nMost frequently activated neurons:\n");
     for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[k]);
-    std::cout << "Least frequently activated neurons:\n";
-    for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[neurons.size() - 1 - k]);
+    printf("Least frequently activated neurons:\n");
+    for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[neurons.Size() - 1 - k]);
 
-    std::sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.sat > b.sat; });
-    std::cout << "Most frequently saturated neurons:\n";
+    Sort(neurons.begin(), neurons.end(), [](const NeuronRef& a, const NeuronRef& b) { return a.sat > b.sat; });
+    printf("Most frequently saturated neurons:\n");
     for (uint32_t k = 0; k < topN; ++k) neuronLine(neurons[k]);
 
     // output bucket usage
-    std::cout << "\nOutput bucket usage:\n";
+    printf("\nOutput bucket usage:\n");
     for (uint32_t v = 0; v < nn::NumVariants; ++v)
     {
         char buf[96];
         snprintf(buf, sizeof(buf), "  bucket %u: %12llu  (%5.1f%%)\n",
             v, (unsigned long long)stats.bucketUsage[v], 100.0 * stats.bucketUsage[v] / N);
-        std::cout << buf;
+        printf("%s", buf);
     }
 }
 
-bool UniversalChessInterface::Command_EvalDetailed(const std::vector<std::string>& args)
+bool UniversalChessInterface::Command_EvalDetailed(const CommandArgs& args)
 {
-    const std::string sub = args.size() >= 3 ? ToLower(args[2]) : std::string();
+    const String sub = args.Size() >= 3 ? ToLower(args[2]) : String();
 
     if (sub == "start")
     {
         NNEvaluator::ResetStatsCollection();
         NNEvaluator::SetStatsCollectionEnabled(true);
-        std::cout << "NNUE accumulator statistics collection started. Run 'go', then 'eval detailed' to print aggregated stats." << std::endl;
+        printf("NNUE accumulator statistics collection started. Run 'go', then 'eval detailed' to print aggregated stats.\n");
         return true;
     }
     if (sub == "stop")
     {
         NNEvaluator::SetStatsCollectionEnabled(false);
         NNEvaluator::ResetStatsCollection();
-        std::cout << "NNUE accumulator statistics collection stopped and cleared." << std::endl;
+        printf("NNUE accumulator statistics collection stopped and cleared.\n");
         return true;
     }
     if (sub == "reset")
     {
         NNEvaluator::ResetStatsCollection();
-        std::cout << "NNUE accumulator statistics cleared." << std::endl;
+        printf("NNUE accumulator statistics cleared.\n");
         return true;
     }
 
     if (!g_mainNeuralNetwork)
     {
-        std::cout << "No neural network loaded" << std::endl;
+        printf("No neural network loaded\n");
         return true;
     }
 
@@ -1571,13 +1620,13 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
 
         // print best move and stats
         printf(" Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
-            searchResult[0].moves.front().ToString().c_str(),
+            searchResult[0].moves.Front().ToString().CStr(),
             stats.nodes,
             (endTimePoint - startTimePoint).ToSeconds(),
             stats.nodes / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
     }
 
-    std::cout << totalNodes << " nodes " << static_cast<int64_t>(totalNodes / totalTime) << " nps" << std::endl;
+    printf("%" PRIu64 " nodes %" PRId64 " nps\n", totalNodes, static_cast<int64_t>(totalNodes / totalTime));
 
 #ifdef NN_ACCUMULATOR_STATS
     PrintNNEvaluatorStats();
@@ -1586,39 +1635,43 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
     return true;
 }
 
-bool UniversalChessInterface::Command_Playout(const std::vector<std::string>& args)
+bool UniversalChessInterface::Command_Playout(const CommandArgs& args)
 {
     uint64_t softNodeLimit = 0;
     uint64_t maxGames = 0;
     bool validArgs = true;
 
-    for (size_t i = 1; i < args.size(); ++i)
+    for (uint32_t i = 1; i < args.Size(); ++i)
     {
-        if (args[i] == "nodes" && i + 1 < args.size())
-            softNodeLimit = std::stoull(args[++i]);
-        else if (args[i] == "games" && i + 1 < args.size())
-            maxGames = std::stoull(args[++i]);
+        if (args[i] == "nodes" && i + 1 < args.Size())
+            softNodeLimit = strtoull(args[++i], nullptr, 10);
+        else if (args[i] == "games" && i + 1 < args.Size())
+            maxGames = strtoull(args[++i], nullptr, 10);
         else
             validArgs = false;
     }
 
     if (!validArgs || softNodeLimit == 0)
     {
-        std::cout << "Usage: playout nodes <N> [games <M>]" << std::endl;
+        printf("Usage: playout nodes <N> [games <M>]\n");
         return true;
     }
 
-    mPlayout = std::make_unique<PlayoutRunner>();
+    ASSERT(!mPlayout);
+    mPlayout = new PlayoutRunner();
 
     if (!mPlayout->Start(mGame.GetPosition(), softNodeLimit, maxGames))
-        mPlayout.reset();
+    {
+        delete mPlayout;
+        mPlayout = nullptr;
+    }
 
     return true;
 }
 
 int main(int argc, const char* argv[])
 {
-    std::cout << c_EngineName << " by " << c_Author << std::endl;
+    printf("%s by %s\n", c_EngineName, c_Author);
 
     InitEngine();
 

@@ -1,8 +1,6 @@
 ﻿#pragma once
 
-#include "Common.hpp"
-
-#include <vector>
+#include "Memory.hpp"
 
 namespace numa {
 
@@ -28,37 +26,42 @@ class PerNodeAllocation
 {
 public:
     PerNodeAllocation()
+        : m_numNodes(GetNumNodes())
+        , m_nodeData(new T*[m_numNodes])
     {
-        const uint32_t numNodes = GetNumNodes();
-        m_nodeData.resize(numNodes);
-        for (uint32_t i = 0; i < numNodes; ++i)
+        for (uint32_t i = 0; i < m_numNodes; ++i)
         {
             void* ptr = AllocateOnNode(sizeof(T), i);
-            m_nodeData[i] = new (ptr) T();
+            m_nodeData[i] = PLACEMENT_NEW(ptr) T();
         }
     }
 
+    PerNodeAllocation(const PerNodeAllocation&) = delete;
+    PerNodeAllocation& operator = (const PerNodeAllocation&) = delete;
+
     ~PerNodeAllocation()
     {
-        for (T* data : m_nodeData)
+        for (uint32_t i = 0; i < m_numNodes; ++i)
         {
-            if (data)
+            if (T* data = m_nodeData[i])
             {
                 data->~T();
                 FreeOnNode(data, sizeof(T));
             }
         }
+        delete[] m_nodeData;
     }
 
     // access the copy of T allocated on the specified NUMA node
     [[nodiscard]] T* Get(uint32_t node) const
     {
-        ASSERT(node < m_nodeData.size());
+        ASSERT(node < m_numNodes);
         return m_nodeData[node];
     }
 
 private:
-    std::vector<T*> m_nodeData;
+    uint32_t m_numNodes;
+    T** m_nodeData;
 };
 
 } // namespace numa

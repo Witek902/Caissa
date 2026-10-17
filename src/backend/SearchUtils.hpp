@@ -2,20 +2,15 @@
 
 #include "Common.hpp"
 
-#include <vector>
-
 class SearchUtils
 {
 public:
     static void Init();
 
-    // check for repetition in the searched node
-    static bool IsRepetition(const NodeInfo& node, const Game& game, bool isPvNode);
-
     // check if the search node has a move that draws by repetition
     // or a past position could directly reach the current position
     static bool CanReachGameCycle(const NodeInfo& node);
 
-    // reconstruct PV line from cache
-    static void GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, std::vector<Move>& outLine);
+    // reconstruct PV line from cache, outLine must have space for MaxSearchDepth moves, returns PV length
+    static uint32_t GetPvLine(const NodeInfo& rootNode, uint32_t maxLength, Move* outLine);
 };

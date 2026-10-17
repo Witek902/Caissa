@@ -1,3 +1,4 @@
+#include "TrainerCommon.hpp"
 #include "../backend/PositionUtils.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
@@ -5,6 +6,13 @@
 
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <random>
+#include <string>
+#include <thread>
+#include <vector>
 
 // Generates random, quiet, near-equal chess positions and writes them as a plain-FEN opening book
 // (one FEN per line, directly loadable by the selfplay tool). Positions are filtered by a fixed-depth
@@ -211,10 +219,10 @@ void GenerateRandomPositions(const std::vector<std::string>& args)
                 SearchResult searchResult;
                 search.DoSearch(game, searchParam, searchResult);
 
-                if (searchResult.empty())
+                if (searchResult.Empty())
                     return InvalidValue;
 
-                return NormalizeEval(searchResult.front().score);
+                return NormalizeEval(searchResult.Front().score);
             };
 
             tt.Clear();

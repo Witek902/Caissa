@@ -1,7 +1,10 @@
 #include "../backend/Position.hpp"
+#include "TrainerCommon.hpp"
 #include "../backend/PositionUtils.hpp"
 
 #include <iostream>
+#include <random>
+#include <string>
 
 #define TEST_EXPECT(x) \
     if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
@@ -53,7 +56,7 @@ void RunPackedPositionTests()
         if (i & 8) fen += 'q';
         fen += " - 0 1";
 
-        const Position originalPos(fen);
+        const Position originalPos(fen.c_str());
         PackedPosition packedPos;
         Position unpackedPos;
 
