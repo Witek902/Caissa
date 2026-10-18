@@ -2,7 +2,7 @@
 
 #include "Common.hpp"
 
-#include <atomic>
+#include <type_traits>
 #include <string.h>
 
 // workaround for GCC
@@ -63,39 +63,6 @@ INLINE uint64_t MulHi64(uint64_t a, uint64_t b)
     uint64_t c3 = aLow * bHi + (uint32_t)c2;
     return aHi * bHi + (c2 >> 32) + (c3 >> 32);
 #endif
-}
-
-template<typename T, T multiple>
-INLINE constexpr const T RoundUp(const T x)
-{
-    return ((x + (multiple - 1)) / multiple) * multiple;
-}
-
-template<typename T>
-INLINE constexpr T DivFloor(const T a, const T b)
-{
-    const T res = a / b;
-    const T rem = a % b;
-    // Correct division result downwards if up-rounding happened,
-    // (for non-zero remainder of sign different than the divisor).
-    return res - (rem != 0 && ((rem < 0) != (b < 0)));
-}
-
-// divide with rounding up
-template<typename T>
-INLINE constexpr T DivRoundNearest(T x, T y)
-{
-    if (x >= 0)
-        return (x + y / 2) / y;
-    else
-        return (x - y / 2) / y;
-}
-
-template<typename T>
-INLINE void AtomicMax(std::atomic<T>& outMax, T const& value) noexcept
-{
-    T prev = outMax;
-    while (prev < value && !outMax.compare_exchange_weak(prev, value)) { }
 }
 
 inline float Log(float x)
