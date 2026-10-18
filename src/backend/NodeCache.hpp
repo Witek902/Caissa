@@ -14,7 +14,6 @@ struct NodeCacheEntry
     static constexpr uint32_t MaxMoves = 32;
 
     uint32_t generation = 0;
-    uint32_t distanceFromRoot = 0;
     uint64_t nodesSum = 0;
 
     Position position;
@@ -35,7 +34,7 @@ public:
     void OnNewSearch();
 
     const NodeCacheEntry* TryGetEntry(const Position& pos) const;
-    NodeCacheEntry* GetEntry(const Position& pos, uint32_t distanceFromRoot);
+    NodeCacheEntry* GetEntry(const Position& pos);
 
 private:
 

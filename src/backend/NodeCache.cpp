@@ -130,7 +130,7 @@ const NodeCacheEntry* NodeCache::TryGetEntry(const Position& pos) const
     return nullptr;
 }
 
-NodeCacheEntry* NodeCache::GetEntry(const Position& pos, uint32_t distanceFromRoot)
+NodeCacheEntry* NodeCache::GetEntry(const Position& pos)
 {
     const uint32_t index = pos.GetHash() % Size;
     NodeCacheEntry* entry = entries + index;
@@ -139,8 +139,6 @@ NodeCacheEntry* NodeCache::GetEntry(const Position& pos, uint32_t distanceFromRo
     if (entry->position == pos)
     {
         entry->generation = generation;
-        entry->distanceFromRoot = distanceFromRoot;
-
         return entry;
     }
 
@@ -150,8 +148,6 @@ NodeCacheEntry* NodeCache::GetEntry(const Position& pos, uint32_t distanceFromRo
         *entry = NodeCacheEntry{};
         entry->position = pos;
         entry->generation = generation;
-        entry->distanceFromRoot = distanceFromRoot;
-
         return entry;
     }
 

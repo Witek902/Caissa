@@ -149,17 +149,6 @@ bool Position::operator == (const Position& rhs) const
     return result;
 }
 
-bool Position::operator != (const Position& rhs) const
-{
-    return
-        Whites() != rhs.Whites() ||
-        Blacks() != rhs.Blacks() ||
-        mSideToMove != rhs.mSideToMove ||
-        mEnPassantSquare != rhs.mEnPassantSquare ||
-        GetWhitesCastlingRights() != rhs.GetWhitesCastlingRights() ||
-        GetBlacksCastlingRights() != rhs.GetBlacksCastlingRights();
-}
-
 bool Position::IsValid(bool strict) const
 {
     // validate piece counts
@@ -1313,42 +1302,6 @@ bool Position::IsMoveValid(const Move& move) const
     }
 
     return MoveFromPacked(PackedMove(move)).IsValid();
-}
-
-bool Position::IsMoveValid_Fast(const PackedMove& move) const
-{
-    ASSERT(move.IsValid());
-    ASSERT(move.FromSquare() != move.ToSquare());
-
-    const SidePosition& currentSide = GetCurrentSide();
-    const SidePosition& opponentSide = GetOpponentSide();
-
-    const Piece movedPiece = currentSide.GetPieceAtSquare(move.FromSquare());
-    const Piece targetPiece = opponentSide.GetPieceAtSquare(move.ToSquare());
-
-    if (movedPiece == Piece::None)
-    {
-        return false;
-    }
-
-    if (opponentSide.GetPieceAtSquare(move.FromSquare()) != Piece::None)
-    {
-        return false;
-    }
-
-    if (currentSide.GetPieceAtSquare(move.ToSquare()) != Piece::None)
-    {
-        // cannot capture own piece
-        return false;
-    }
-
-    if (targetPiece == Piece::King)
-    {
-        // cannot capture king
-        return false;
-    }
-
-    return true;
 }
 
 bool Position::IsCapture(const PackedMove& move) const
