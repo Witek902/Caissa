@@ -69,6 +69,8 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
     $<$<CONFIG:Debug>:CONFIGURATION_DEBUG>
     $<$<CONFIG:Release>:CONFIGURATION_RELEASE>
     $<$<CONFIG:Final>:CONFIGURATION_FINAL>
+    # CMake adds NDEBUG only to Release, Final needs it too to disable assert() in third-party code
+    $<$<CONFIG:Final>:NDEBUG>
 )
 
 # detect target architecture if not defined
