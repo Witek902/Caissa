@@ -39,7 +39,6 @@ public:
     bool PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore);
 
     INLINE Stage GetStage() const { return m_stage; }
-    INLINE uint32_t GetNumMoves() const { return m_moves.Size(); }
 
     INLINE void SkipQuiets()
     {
@@ -57,7 +56,6 @@ private:
     bool m_generateQuiets;
 
     const MoveOrderer& m_moveOrderer;
-    uint32_t m_moveIndex;
     Stage m_stage = Stage::TTMove;
     PackedMove m_killerMove;
     PackedMove m_counterMove;

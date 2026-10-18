@@ -21,7 +21,6 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
 
         case Stage::GenerateCaptures:
         {
-            m_moveIndex = 0;
             m_stage = Stage::Captures;
             m_killerMove = Move::Invalid();
             m_counterMove = Move::Invalid();

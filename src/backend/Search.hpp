@@ -111,8 +111,6 @@ struct NodeInfo
     // ignore given moves in search, used for singular extensions
     PackedMove filteredMove = PackedMove::Invalid();
 
-    uint16_t pvIndex = 0;
-
     // remaining depth
     int16_t depth = 0;
 
@@ -125,7 +123,6 @@ struct NodeInfo
     ScoreType staticEval = InvalidValue;
 
     Move previousMove = Move::Invalid();
-    int32_t moveStatScore = 0;
 
     // number of beta cutoffs that occurred at this ply since the grandparent node cleared it
     int32_t cutoffCount = 0;
@@ -148,11 +145,9 @@ struct NodeInfo
 
     INLINE void Clear()
     {
-        pvIndex = 0;
         filteredMove = PackedMove::Invalid();
         staticEval = InvalidValue;
         previousMove = Move::Invalid();
-        moveStatScore = 0;
         isInCheck = false;
         isNullMove = false;
         isCutNode = false;
@@ -202,7 +197,6 @@ struct SearchThreadStats
 struct SearchStats
 {
     uint64_t nodes = 0;
-    uint64_t quiescenceNodes = 0;
     uint32_t maxDepth = 0;
     uint64_t tbHits = 0;
 

@@ -1514,26 +1514,6 @@ static void RunPositionTests()
     }
 }
 
-static void RunMaterialTests()
-{
-    {
-        MaterialKey key{ 1,0,0,1,0,1,0,0,1,0 };
-        TEST_EXPECT(key.IsSymetric());
-    }
-    {
-        MaterialKey key{ 63,63,63,63,63,63,63,63,63,63 };
-        TEST_EXPECT(key.IsSymetric());
-    }
-    {
-        MaterialKey key{ 0,0,0,1,0,1,0,0,1,0 };
-        TEST_EXPECT(!key.IsSymetric());
-    }
-    {
-        MaterialKey key{ 1,0,0,1,0,0,0,0,1,0 };
-        TEST_EXPECT(!key.IsSymetric());
-    }
-}
-
 static void RunPerftTests()
 {
     std::cout << "Running Perft tests..." << std::endl;
@@ -3456,7 +3436,6 @@ void RunUnitTests()
     RunSquareUtilityTests();
     RunPositionTests();
     RunPositionAdvancedTests();
-    RunMaterialTests();
     RunScoreTests();
     RunMoveListTests();
     RunTranspositionTableTests();

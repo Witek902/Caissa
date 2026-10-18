@@ -16,3 +16,4 @@ CMakeSettings.json
 selfplayGames/
 trainingData/
 data/neuralNets/*.pnn
+data/knowledge/

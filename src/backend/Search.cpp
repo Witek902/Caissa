@@ -907,7 +907,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             data.rootStaticEval = thread.searchStack[0].staticEval;
 
             // compute fraction of nodes spent on searching best move
-            if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition(), 0))
+            if (const NodeCacheEntry* nodeCacheEntry = thread.nodeCache.GetEntry(game.GetPosition()))
             {
                 if (const NodeCacheEntry::MoveInfo* moveInfo = nodeCacheEntry->GetMove(primaryMove))
                 {
@@ -982,7 +982,6 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             rootNode.alpha = singularBeta - 1;
             rootNode.beta = singularBeta;
             rootNode.filteredMove = primaryMove;
-            rootNode.nnContext.MarkAsDirty();
 
             ScoreType score = NegaMax<NodeType::NonPV>(thread, &rootNode, searchContext);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
@@ -1029,8 +1028,6 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
     rootNode.position.ComputeThreats(rootNode.threats);
-    rootNode.pvIndex = static_cast<uint16_t>(param.pvIndex);
-    rootNode.nnContext.MarkAsDirty();
 
     thread.accumulatorCache.Init(g_mainNeuralNetwork);
 
@@ -1334,10 +1331,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
 
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
-    childNode.pvIndex = node->pvIndex;
     childNode.depth = node->depth - 1;
     childNode.ply = node->ply + 1;
-    childNode.nnContext.MarkAsDirty();
 
     const Square prevSquare = node->previousMove.IsValid() ? node->previousMove.ToSquare() : Square::Invalid();
 
@@ -1463,8 +1458,6 @@ NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchCo
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.ply = node->ply + 1;
-    childNode.pvIndex = node->pvIndex;
-    childNode.nnContext.MarkAsDirty();
     childNode.alpha = -probBeta;
     childNode.beta = -probBeta + 1;
     childNode.isCutNode = !node->isCutNode;
@@ -1802,14 +1795,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();
-                    childNode.pvIndex = node->pvIndex;
                     childNode.position = position;
                     childNode.alpha = -beta;
                     childNode.beta = -beta + 1;
                     childNode.isNullMove = true;
                     childNode.ply = node->ply + 1;
                     childNode.depth = static_cast<int16_t>(node->depth - r);
-                    childNode.nnContext.MarkAsDirty();
 
                     childNode.position.DoNullMove();
                     childNode.position.ComputeThreats(childNode.threats);
@@ -1861,15 +1852,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     NodeInfo& childNode = *(node + 1);
     childNode.Clear();
     childNode.ply = node->ply + 1;
-    childNode.pvIndex = node->pvIndex;
-    childNode.nnContext.MarkAsDirty();
 
     thread.moveOrderer.InitContinuationHistoryPointers(*node);
 
     NodeCacheEntry* nodeCacheEntry = nullptr;
     if (node->ply < 3)
     {
-        nodeCacheEntry = thread.nodeCache.GetEntry(position, node->ply);
+        nodeCacheEntry = thread.nodeCache.GetEntry(position);
     }
 
     MovePicker movePicker(position, thread.moveOrderer, nodeCacheEntry, ttMove, true);
@@ -2081,7 +2070,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         childNode.position.ComputeThreats(childNode.threats);
         childNode.isInCheck = childNode.threats.allThreats & childNode.position.GetCurrentSideKingSquare();
         childNode.previousMove = move;
-        childNode.moveStatScore = moveStatScore;
 
         const uint64_t nodesSearchedBefore = thread.stats.nodes;
 

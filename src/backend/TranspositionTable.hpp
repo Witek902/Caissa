@@ -38,12 +38,6 @@ struct TTEntry
     {
         return bounds != Bounds::Invalid;
     }
-
-    INLINE uint32_t GetHash() const
-    {
-        const uint32_t* t = reinterpret_cast<const uint32_t*>(this);
-        return t[0] ^ t[1];
-    }
 };
 
 class TranspositionTable

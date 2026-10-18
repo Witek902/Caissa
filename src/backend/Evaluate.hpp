@@ -24,18 +24,6 @@ static constexpr PieceScore c_knightValue   = {  455, 371 };
 static constexpr PieceScore c_bishopValue   = {  494, 385 };
 static constexpr PieceScore c_rookValue     = {  607, 656 };
 static constexpr PieceScore c_queenValue    = { 1427,1086 };
-static constexpr PieceScore c_kingValue     = { INT16_MAX, INT16_MAX };
-
-static constexpr PieceScore c_pieceValues[] =
-{
-    {0,0},
-    c_pawnValue,
-    c_knightValue,
-    c_bishopValue,
-    c_rookValue,
-    c_queenValue,
-    c_kingValue,
-};
 
 bool TryLoadingDefaultEvalFile();
 bool LoadMainNeuralNetwork(const char* path);
