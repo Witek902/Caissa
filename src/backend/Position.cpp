@@ -72,7 +72,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
     ASSERT((pos.rooks & mask) == 0);
     ASSERT((pos.queens & mask) == 0);
     ASSERT((pos.king & mask) == 0);
-    ASSERT(pos.pieces[square.Index()] == Piece::None);
 
     const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
     mHash ^= pieceHash;
@@ -84,7 +83,6 @@ void Position::SetPiece(const Square square, const Piece piece, const Color colo
         mNonPawnsHash[Black] ^= (uint32_t)pieceHash;
 
     pos.GetPieceBitBoard(piece) |= mask;
-    pos.pieces[square.Index()] = piece;
 }
 
 void Position::RemovePiece(const Square square, const Piece piece, const Color color)
@@ -95,9 +93,6 @@ void Position::RemovePiece(const Square square, const Piece piece, const Color c
 
     ASSERT((targetBitboard & mask) == mask);
     targetBitboard &= ~mask;
-
-    ASSERT(pos.pieces[square.Index()] == piece);
-    pos.pieces[square.Index()] = Piece::None;
 
     const uint64_t pieceHash = GetPieceZobristHash(color, piece, square.Index());
     mHash ^= pieceHash;
@@ -684,16 +679,6 @@ Position Position::SwappedColors() const
     result.mColors[1].bishops       = mColors[0].bishops.MirroredVertically();
     result.mColors[1].knights       = mColors[0].knights.MirroredVertically();
     result.mColors[1].pawns         = mColors[0].pawns.MirroredVertically();
-
-    // flip pieces
-    for (uint32_t rank = 0; rank < 8; ++rank)
-    {
-        for (uint32_t file = 0; file < 8; ++file)
-        {
-            result.mColors[1].pieces[rank * 8 + file] = mColors[0].pieces[(7 - rank) * 8 + file];
-            result.mColors[0].pieces[rank * 8 + file] = mColors[1].pieces[(7 - rank) * 8 + file];
-        }
-    }
 
     result.mCastlingRights[0]       = mCastlingRights[1];
     result.mCastlingRights[1]       = mCastlingRights[0];

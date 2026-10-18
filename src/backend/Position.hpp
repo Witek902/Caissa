@@ -13,12 +13,12 @@ struct alignas(16) SidePosition
     INLINE Piece GetPieceAtSquare(const Square square) const
     {
         ASSERT(square.IsValid());
-        const Piece piece = pieces[square.mIndex];
 
-        if (piece != Piece::None)
-            ASSERT(GetPieceBitBoard(piece).IsBitSet(square.mIndex));
-
-        return piece;
+        // each bit of the Piece value is the union of the bitboards of pieces that have it set
+        const uint32_t bit0 = (uint32_t)(((pawns | bishops | queens) >> square.mIndex) & 1);
+        const uint32_t bit1 = (uint32_t)(((knights | bishops | king) >> square.mIndex) & 1);
+        const uint32_t bit2 = (uint32_t)(((rooks | queens | king) >> square.mIndex) & 1);
+        return (Piece)(bit0 | (bit1 << 1) | (bit2 << 2));
     }
 
     Bitboard& GetPieceBitBoard(Piece piece);
@@ -68,7 +68,6 @@ struct alignas(16) SidePosition
     Bitboard rooks = 0;
     Bitboard queens = 0;
     Bitboard king = 0;
-    Piece pieces[64] = {};
 };
 
 INLINE Bitboard& SidePosition::GetPieceBitBoard(Piece piece)
@@ -341,7 +340,7 @@ private:
     uint32_t mNonPawnsHash[2];
 };
 
-static_assert(sizeof(Position) <= 256, "Invalid position size");
+static_assert(sizeof(Position) <= 128, "Invalid position size");
 
 static constexpr uint8_t c_shortCastleMask = (1 << 7);
 static constexpr uint8_t c_longCastleMask = (1 << 0);

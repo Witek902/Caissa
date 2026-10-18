@@ -1355,8 +1355,8 @@ bool Position::IsCapture(const PackedMove& move) const
 {
     // a capture needs our piece on the from-square and an enemy piece on the to-square
     return
-        (GetCurrentSide().pieces[move.FromSquare().Index()] != Piece::None) &&
-        (GetOpponentSide().pieces[move.ToSquare().Index()] != Piece::None);
+        GetCurrentSide().Occupied().IsBitSet(move.FromSquare().Index()) &&
+        GetOpponentSide().Occupied().IsBitSet(move.ToSquare().Index());
 }
 
 uint64_t Position::Perft(uint32_t depth, bool print) const
