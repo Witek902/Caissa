@@ -114,6 +114,7 @@ DEFINE_PARAM(RfpDepthScaleLinear, 83, 40, 180);
 DEFINE_PARAM(RfpDepthScaleQuad, 0, 0, 30);
 DEFINE_PARAM(RfpImprovingScale, 145, 50, 200);
 DEFINE_PARAM(RfpOppWorseningScale, 32, 10, 80);
+DEFINE_PARAM(RfpNoTTScale, 26, 0, 60);
 DEFINE_PARAM(OppWorseningMargin, 75, 0, 200);
 DEFINE_PARAM(RfpTreshold, 16, 0, 20);
 DEFINE_PARAM(RfpAdjBetaScale, 525, 1, 1024);
@@ -1749,7 +1750,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 RfpDepthScaleLinear * node->depth
                 + RfpDepthScaleQuad * (node->depth * node->depth)
                 - RfpImprovingScale * (isImproving && !OppCanWinMaterial(position, node->threats))
-                - RfpOppWorseningScale * isOppWorsening;
+                - RfpOppWorseningScale * isOppWorsening
+                - RfpNoTTScale * node->depth * !ttEntry.IsValid();
             if (node->depth <= RfpDepth &&
                 eval <= KnownWinValue &&
                 eval >= beta + Max<int32_t>(rfpMargin, RfpTreshold))
