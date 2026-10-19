@@ -52,7 +52,6 @@ DEFINE_PARAM(ProbcutBetaOffsetInCheck, 329, 100, 500);
 DEFINE_PARAM(ProbcutTTDepthMargin, 3, 1, 6);
 DEFINE_PARAM(InCheckProbcutTTDepthMargin, 4, 2, 8);
 
-DEFINE_PARAM(FutilityPruningDepth, 9, 6, 15);
 DEFINE_PARAM(FutilityPruningScale, 32, 16, 64);
 DEFINE_PARAM(FutilityPruningStatscoreDiv, 383, 128, 1024);
 
@@ -1893,7 +1892,6 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // Futility Pruning
                 // skip quiet move that have low chance to beat alpha
                 if (!node->isInCheck &&
-                    node->depth < FutilityPruningDepth &&
                     correctedEval + FutilityPruningScale * lmrDepth * lmrDepth + moveStatScore / FutilityPruningStatscoreDiv < alpha)
                 {
                     movePicker.SkipQuiets();
