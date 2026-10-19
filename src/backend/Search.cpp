@@ -1807,6 +1807,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     bool searchAborted = false;
     bool filteredSomeMove = false;
 
+    // an expected cut node whose TT move failed low is most likely an all-node
+    bool cutNodeDemoted = false;
+
     constexpr uint32_t maxMovesTried = 32;
     Move quietMovesTried[maxMovesTried];
     Move captureMovesTried[maxMovesTried];
@@ -2030,7 +2033,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce less based on move stat score
                 r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
 
-                if (node->isCutNode) r += LmrQuietCutNode;
+                if (node->isCutNode && !cutNodeDemoted) r += LmrQuietCutNode;
 
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrQuietImproving;
@@ -2048,7 +2051,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 // reduce bad captures more
                 if (moveScore < MoveOrderer::GoodCaptureValue) r += LmrCaptureBad;
 
-                if (node->isCutNode) r += LmrCaptureCutNode;
+                if (node->isCutNode && !cutNodeDemoted) r += LmrCaptureCutNode;
 
                 // reduce more if eval is not improving
                 if (!isImproving) r += LmrCaptureImproving;
@@ -2133,6 +2136,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 score = -NegaMax<NodeType::PV>(thread, &childNode, ctx);
             }
         }
+
+        if (move == ttMove && score < beta)
+            cutNodeDemoted = true;
 
         // update node cache after searching a move
         if (nodeCacheEntry) [[unlikely]]
