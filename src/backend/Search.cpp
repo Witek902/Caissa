@@ -2290,22 +2290,25 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         return bestValue;
     }
 
-    // update move orderer
-    if (bestValue >= beta)
+    if (!filteredSomeMove) // do not update move ordering if some moves were filtered
     {
-        if (bestMove.IsQuiet())
+        // update move orderer
+        if (bestValue >= beta)
         {
-            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, Min(bestValue - beta, (int)QuietHistMaxScoreDiff));
-            thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
+            if (bestMove.IsQuiet())
+            {
+                thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, Min(bestValue - beta, (int)QuietHistMaxScoreDiff));
+                thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
+            }
+            thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
         }
-        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
-    }
 
-    // Prior counter-move history update
-    if (!isRootNode && bestValue <= oldAlpha && node->previousMove.IsValid() && node->previousMove.IsQuiet())
-    {
-        const int32_t bonus = Min<int32_t>(PriorCMHBonusCap, node->depth * PriorCMHBonusScale - PriorCMHBonusBias);
-        thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bonus);
+        // Prior counter-move history update
+        if (!isRootNode && bestValue <= oldAlpha && node->previousMove.IsValid() && node->previousMove.IsQuiet())
+        {
+            const int32_t bonus = Min<int32_t>(PriorCMHBonusCap, node->depth * PriorCMHBonusScale - PriorCMHBonusBias);
+            thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bonus);
+        }
     }
 
 #ifdef COLLECT_SEARCH_STATS
