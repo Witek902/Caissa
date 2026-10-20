@@ -62,7 +62,7 @@ void InitTimeManager(const Game& game, const TimeManagerInitData& data, SearchLi
         {
             const float theirRemainingTime = (float)data.theirRemainingTime;
             const float clockAdvantage = (remainingTime - theirRemainingTime) / (1.0f + remainingTime + theirRemainingTime);
-            idealTime *= 1.0f + static_cast<float>(TM_ClockDisadvantageScale) / 1000.0f * std::min(clockAdvantage, 0.0f);
+            idealTime *= 1.0f + static_cast<float>(TM_ClockDisadvantageScale) / 1000.0f * Min(clockAdvantage, 0.0f);
         }
 
         // reduce time if opponent played a move predicted by the previous search, increase otherwise
