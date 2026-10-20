@@ -58,6 +58,8 @@ DEFINE_PARAM(QueenThreatEnterMalus, 12000, 4000, 20000);
 
 DEFINE_PARAM(NodeCacheBonus, 4096, 1000, 8000);
 
+DEFINE_PARAM(PointlessUndoMalus, 10000, 0, 30000);
+
 MoveOrderer::MoveOrderer()
 {
     Clear();
@@ -377,6 +379,15 @@ void MoveOrderer::ScoreMoves(
     // pawn structure bucket is constant for the whole move list
     const PieceSquareHistory* pawnHist = withQuiets ? &pawnHistory[color][pos.GetPawnsHash() % PawnHistorySize] : nullptr;
 
+    // our own previous move, if it was quiet
+    Move ourPrevMove = Move::Invalid();
+    if (withQuiets && node.ply >= 2)
+    {
+        const Move prevMove = (&node - 1)->previousMove;
+        if (prevMove.IsValid() && !prevMove.IsCapture())
+            ourPrevMove = prevMove;
+    }
+
     for (uint32_t i = 0; i < moves.Size(); ++i)
     {
         const Move move = moves.GetMove(i);
@@ -454,6 +465,10 @@ void MoveOrderer::ScoreMoves(
                 default:
                     break;
             }
+
+            // taking back our previous move wastes tempo, unless the piece is escaping a threat
+            if (move.FromSquare() == ourPrevMove.ToSquare() && move.ToSquare() == ourPrevMove.FromSquare() && !threats.IsBitSet(from))
+                score -= PointlessUndoMalus;
 
             // use node cache for scoring moves near the root
             if (nodeCacheEntry && nodeCacheEntry->nodesSum > 256)
