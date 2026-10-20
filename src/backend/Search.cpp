@@ -2247,7 +2247,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ASSERT(moveIndex > 0);
                 ASSERT(moveIndex <= MoveList::MaxMoves);
 
-                node->cutoffCount++;
+                // a null-move child cutting means the null move failed, and singular verification cutoffs come from a skewed window
+                if (!node->isNullMove && !node->filteredMove.IsValid()) node->cutoffCount++;
 
 #ifdef COLLECT_SEARCH_STATS
                 ctx.stats.totalBetaCutoffs++;
