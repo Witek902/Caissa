@@ -30,7 +30,7 @@ public:
 
     void InitContinuationHistoryPointers(NodeInfo& node);
 
-    CounterType GetHistoryScore(const NodeInfo& node, const Move move) const;
+    int32_t GetHistoryScore(const NodeInfo& node, const Move move) const;
 
     Move GetCounterMove(const NodeInfo& node) const;
 
@@ -72,6 +72,7 @@ private:
     alignas(CACHELINE_SIZE)
 
     CounterType quietMoveHistory[2][2][2][64*64];           // stm, from-threated, to-threated, from-square, to-square
+    CounterType quietMoveFactorizer[2][64*64];              // stm, from-square, to-square (shared by all threat buckets)
     PieceSquareHistory continuationHistory[2][2][2][6][64]; // prev is capture, prev stm, current stm, piece, to-square
     CounterType capturesHistory[2][6][5][64];               // stm, capturing piece, captured piece, to-square
     PieceSquareHistory pawnHistory[2][PawnHistorySize];     // stm, pawn structure hash, piece, to-square

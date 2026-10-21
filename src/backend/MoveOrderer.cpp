@@ -9,6 +9,9 @@ DEFINE_PARAM(ContinuationHistoryClear, 762, -2000, 2000);
 DEFINE_PARAM(CapturesHistoryClear, 346, -2000, 2000);
 DEFINE_PARAM(PawnHistoryClear, 0, -2000, 2000);
 
+DEFINE_PARAM(QuietHistoryBucketMax, 12288, 8192, 16384);
+DEFINE_PARAM(QuietHistoryFactorizerMax, 4096, 2048, 8192);
+
 DEFINE_PARAM(HistBonusOffset, -113, -200, 0);
 DEFINE_PARAM(HistBonusLinear, 164, 100, 250);
 DEFINE_PARAM(HistBonusScoreDiff, 148, 0, 400);
@@ -186,6 +189,9 @@ void MoveOrderer::NewSearch()
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(quietMoveHistory)[i]);
 
+    for (uint32_t i = 0; i < sizeof(quietMoveFactorizer) / sizeof(CounterType); ++i)
+        ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(quietMoveFactorizer)[i]);
+
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(capturesHistory)[i]);
 
@@ -215,19 +221,21 @@ void MoveOrderer::Clear()
     ClearHistoryTable(reinterpret_cast<CounterType*>(pawnHistory),
         static_cast<CounterType>(PawnHistoryClear), sizeof(pawnHistory) / sizeof(CounterType));
 
+    memset(quietMoveFactorizer, 0, sizeof(quietMoveFactorizer));
     memset(counterMoves, 0, sizeof(counterMoves));
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
-MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
+int32_t MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
 {
     ASSERT(move.IsValid());
     const Bitboard threats = node.threats.allThreats;
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
     const uint32_t from = move.FromSquare().Index();
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
     ASSERT(to < 64);
-    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+    return quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()] + quietMoveFactorizer[color][move.FromTo()];
 }
 
 Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
@@ -242,9 +250,9 @@ Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
     return Move::Invalid();
 }
 
-INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta)
+INLINE static void UpdateHistoryCounter(MoveOrderer::CounterType& counter, int32_t delta, int32_t limit = 16384)
 {
-    int32_t newValue = (int32_t)counter + delta - (int32_t)counter * Abs(delta) / 16384;
+    int32_t newValue = (int32_t)counter + delta - (int32_t)counter * Abs(delta) / limit;
 
     // there should be no saturation
     static_assert(IsSame<MoveOrderer::CounterType, int16_t>::Value);
@@ -301,7 +309,8 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
 
-        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
+        UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta, QuietHistoryBucketMax);
+        UpdateHistoryCounter(quietMoveFactorizer[color][move.FromTo()], histDelta, QuietHistoryFactorizerMax);
         UpdateHistoryCounter(pawnHist[move.PieceTo()], histDelta);
 
         UpdateContinuationHistory(node, move, contDelta);
@@ -426,6 +435,7 @@ void MoveOrderer::ScoreMoves(
 
             // history heuristics
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+            score += quietMoveFactorizer[color][move.FromTo()];
 
             // pawn structure history
             score += (*pawnHist)[pieceTo] * PawnHistWeight / 1024;
