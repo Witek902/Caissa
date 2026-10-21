@@ -2294,11 +2294,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     if (bestValue >= beta)
     {
         if (bestMove.IsQuiet())
-        {
-            thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, Min(bestValue - beta, (int)QuietHistMaxScoreDiff));
             thread.moveOrderer.UpdateKillerMove(node->ply, bestMove);
+
+        // null-move refutations are usually threats, not good moves in real positions
+        if (!node->isNullMove)
+        {
+            if (bestMove.IsQuiet())
+                thread.moveOrderer.UpdateQuietMovesHistory(*node, quietMovesTried, numQuietMovesTried, bestMove, Min(bestValue - beta, (int)QuietHistMaxScoreDiff));
+            thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
         }
-        thread.moveOrderer.UpdateCapturesHistory(*node, captureMovesTried, numCaptureMovesTried, bestMove);
     }
 
     // Prior counter-move history update
