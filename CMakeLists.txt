@@ -163,6 +163,10 @@ endif()
 # linker flags
 if (MSVC)
 	add_link_options(/DEBUG:FULL /OPT:ICF $<$<CONFIG:Final>:/LTCG>)
+	# with the static runtime, link the UCRT from Windows (ucrtbase.dll) instead: the exe stays standalone and is much smaller
+	if (CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreaded")
+		add_link_options(/NODEFAULTLIB:libucrt.lib ucrt.lib)
+	endif()
 endif()
 
 
