@@ -71,16 +71,6 @@ typedef HANDLE map_t;
 
 // Threading support
 #ifndef TB_NO_THREADS
-#if defined(__cplusplus) && (__cplusplus >= 201103L)
-
-#include <mutex>
-#define LOCK_T std::mutex
-#define LOCK_INIT(x)
-#define LOCK_DESTROY(x)
-#define LOCK(x) x.lock()
-#define UNLOCK(x) x.unlock()
-
-#else
 #ifndef _WIN32
 #define LOCK_T pthread_mutex_t
 #define LOCK_INIT(x) pthread_mutex_init(&(x), NULL)
@@ -88,13 +78,11 @@ typedef HANDLE map_t;
 #define LOCK(x) pthread_mutex_lock(&(x))
 #define UNLOCK(x) pthread_mutex_unlock(&(x))
 #else
-#define LOCK_T HANDLE
-#define LOCK_INIT(x) do { x = CreateMutex(NULL, FALSE, NULL); } while (0)
-#define LOCK_DESTROY(x) CloseHandle(x)
-#define LOCK(x) WaitForSingleObject(x, INFINITE)
-#define UNLOCK(x) ReleaseMutex(x)
-#endif
-
+#define LOCK_T SRWLOCK
+#define LOCK_INIT(x) InitializeSRWLock(&(x))
+#define LOCK_DESTROY(x)
+#define LOCK(x) AcquireSRWLockExclusive(&(x))
+#define UNLOCK(x) ReleaseSRWLockExclusive(&(x))
 #endif
 #else /* TB_NO_THREADS */
 #define LOCK_T          int
