@@ -33,6 +33,10 @@ struct TimeManagerUpdateData
 struct TimeManagerState
 {
     uint32_t stabilityCounter = 0;
+    uint32_t bestMoveChanges = 0;
+    uint32_t rootLegalMoves = 0;
+    uint32_t rootPieces = 0;
+    ScoreType iterationScores[MaxSearchDepth + 1] = {};
 };
 
 // init time limits at the beginning of a search

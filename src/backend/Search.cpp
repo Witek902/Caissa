@@ -799,6 +799,8 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
 
     uint32_t mateCounter = 0;
     TimeManagerState timeManagerState;
+    timeManagerState.rootLegalMoves = game.GetPosition().GetNumLegalMoves();
+    timeManagerState.rootPieces = game.GetPosition().GetNumPieces();
 
     SearchContext searchContext{ game, param, outStats };
     searchContext.excludedRootMoves.Reserve(param.excludedMoves.Size() + numPvLines);
