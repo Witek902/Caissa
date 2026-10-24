@@ -31,7 +31,7 @@ endforeach()
 
 add_executable(utils ${CAISSA_UTILS_SOURCES})
 
-set_property(TARGET utils PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+set_property(TARGET utils PROPERTY INTERPROCEDURAL_OPTIMIZATION_FINAL TRUE)
 
 add_dependencies(utils backend)
 

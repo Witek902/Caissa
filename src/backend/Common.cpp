@@ -11,10 +11,23 @@
     #include <immintrin.h>
 #endif
 
+#if defined(PLATFORM_WINDOWS) && !defined(CONFIGURATION_FINAL)
+    #define WIN32_LEAN_AND_MEAN
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif // NOMINMAX
+    #include <Windows.h>
+#endif
+
 #ifndef CONFIGURATION_FINAL
-NO_INLINE void AssertionFailed(const char* expression, const char* file, int line)
+NO_INLINE bool AssertionFailed(const char* expression, const char* file, int line)
 {
     fprintf(stderr, "Assertion failed: %s (%s:%d)\n", expression, file, line);
+#if defined(PLATFORM_WINDOWS)
+    return IsDebuggerPresent() != FALSE;
+#else
+    return true;
+#endif // PLATFORM_WINDOWS
 }
 #endif // CONFIGURATION_FINAL
 

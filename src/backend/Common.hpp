@@ -22,9 +22,10 @@
 #define UNUSED(x) (void)(x)
 
 #ifndef CONFIGURATION_FINAL
-    void AssertionFailed(const char* expression, const char* file, int line);
-    #define ASSERT(x) do { if (!(x)) [[unlikely]] { AssertionFailed(#x, __FILE__, __LINE__); DEBUG_BREAK(); } } while (0)
-    #define VERIFY(x) do { if (!(x)) [[unlikely]] { AssertionFailed(#x, __FILE__, __LINE__); DEBUG_BREAK(); } } while (0)
+    // prints the expression, returns true if the caller should break into the debugger (on Windows only when one is attached)
+    bool AssertionFailed(const char* expression, const char* file, int line);
+    #define ASSERT(x) do { if (!(x)) [[unlikely]] { if (AssertionFailed(#x, __FILE__, __LINE__)) DEBUG_BREAK(); abort(); } } while (0)
+    #define VERIFY(x) do { if (!(x)) [[unlikely]] { if (AssertionFailed(#x, __FILE__, __LINE__)) DEBUG_BREAK(); abort(); } } while (0)
 #else
     #define ASSERT(x) do { } while (0)
     #define VERIFY(x) (x)

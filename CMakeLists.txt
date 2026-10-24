@@ -152,7 +152,7 @@ endif()
 
 # linker flags
 if (MSVC)
-	add_link_options(/DEBUG:FULL /OPT:ICF /LTCG)
+	add_link_options(/DEBUG:FULL /OPT:ICF $<$<CONFIG:Final>:/LTCG>)
 endif()
 
 

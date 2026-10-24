@@ -32,7 +32,7 @@ void SearchUtils::Init()
             {
                 for (uint32_t squareB = squareA + 1; squareB < 64; ++squareB)
                 {
-                    Bitboard attacks;
+                    Bitboard attacks = 0;
                     switch (piece)
                     {
                     case Piece::Pawn:   attacks = Bitboard::GetPawnAttacks(Square(squareA), color);     break;
