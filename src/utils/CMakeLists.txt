@@ -31,6 +31,11 @@ add_executable(utils ${CAISSA_UTILS_SOURCES})
 
 set_property(TARGET utils PROPERTY INTERPROCEDURAL_OPTIMIZATION_FINAL TRUE)
 
+# utils uses the STL, which needs exceptions
+if (MSVC)
+	target_compile_options(utils PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
 add_dependencies(utils backend)
 
 target_link_libraries(utils PRIVATE backend)

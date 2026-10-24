@@ -188,6 +188,12 @@ else()
 endif()
 
 
+# C++ exceptions are disabled per target: backend and frontend do not use them, utils and trainer enable them for the STL
+if (MSVC)
+	string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+endif()
+
+
 # enable multiprocess compilation
 if(MSVC AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
