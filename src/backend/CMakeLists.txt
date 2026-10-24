@@ -13,3 +13,9 @@ add_library(backend ${CHESS_BACKEND_SOURCES} ${CHESS_BACKEND_HEADERS})
 target_compile_definitions(backend PRIVATE CAISSA_DEFAULT_EVALFILE="${DEFAULT_NEURAL_NET_FILE_NAME}")
 
 set_property(TARGET backend PROPERTY INTERPROCEDURAL_OPTIMIZATION_FINAL TRUE)
+
+if (MSVC)
+	target_compile_options(backend PRIVATE /EHs-c-)
+else()
+	target_compile_options(backend PRIVATE -fno-exceptions)
+endif()

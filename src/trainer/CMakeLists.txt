@@ -19,6 +19,11 @@ set_property(TARGET trainer PROPERTY INTERPROCEDURAL_OPTIMIZATION_FINAL TRUE)
 set_property(TARGET trainer PROPERTY CUDA_ARCHITECTURES native)
 set_property(TARGET trainer PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
+# the trainer uses the STL, which needs exceptions
+if (MSVC)
+	target_compile_options(trainer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
 # Link backend
 add_dependencies(trainer backend)
 
