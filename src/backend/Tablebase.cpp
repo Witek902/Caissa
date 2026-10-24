@@ -1,9 +1,9 @@
 #include "Tablebase.hpp"
 #include "Position.hpp"
 #include "Move.hpp"
+#include "Thread.hpp"
 #include "containers/String.hpp"
 
-#include <mutex>
 #include <stdio.h>
 
 uint32_t g_syzygyProbeLimit = 6;
@@ -16,12 +16,12 @@ uint32_t g_syzygyProbeLimit = 6;
 #endif
 
 #ifdef USE_SYZYGY_TABLEBASES
-static std::mutex g_syzygyMutex;
+static Mutex g_syzygyMutex;
 static String g_syzygyPath;
 #endif // USE_SYZYGY_TABLEBASES
 
 #ifdef USE_GAVIOTA_TABLEBASES
-static std::mutex g_gaviotaMutex;
+static Mutex g_gaviotaMutex;
 static const uint32_t g_gaviotaWdlFraction = 32; // 25% for WDL information
 static size_t g_gaviotaPendingCacheSize = 0;
 #endif // USE_GAVIOTA_TABLEBASES
@@ -30,14 +30,14 @@ void UnloadTablebase()
 {
 #ifdef USE_SYZYGY_TABLEBASES
     {
-        std::unique_lock lock(g_syzygyMutex);
+        ScopedLock lock(g_syzygyMutex);
         tb_free();
     }
 #endif // USE_SYZYGY_TABLEBASES
 
 #ifdef USE_GAVIOTA_TABLEBASES
     {
-        std::unique_lock lock(g_gaviotaMutex);
+        ScopedLock lock(g_gaviotaMutex);
         tbcache_done();
         tb_done();
     }
@@ -48,7 +48,7 @@ void UnloadTablebase()
 
 void LoadSyzygyTablebase(const char* path)
 {
-    std::unique_lock lock(g_syzygyMutex);
+    ScopedLock lock(g_syzygyMutex);
     if (syzygy_tb_init(path))
         printf("info string Syzygy tablebase loaded successfully. Size = %u\n", (uint32_t)TB_LARGEST);
     else
@@ -58,7 +58,7 @@ void LoadSyzygyTablebase(const char* path)
 
 void ReleoadTablebase()
 {
-    std::unique_lock lock(g_syzygyMutex);
+    ScopedLock lock(g_syzygyMutex);
     if (!g_syzygyPath.Empty())
     {
         tb_free();
@@ -102,7 +102,7 @@ bool ProbeSyzygy_Root(const Position& pos, Move& outMove, uint32_t* outDistanceT
 
     uint32_t probeResult = TB_RESULT_FAILED;
     {
-        std::unique_lock lock(g_syzygyMutex);
+        ScopedLock lock(g_syzygyMutex);
 
         probeResult = tb_probe_root(
             pos.Whites().Occupied(),
@@ -231,7 +231,7 @@ bool ProbeSyzygy_WDL(const Position&, int32_t*) { return false; }
 
 void LoadGaviotaTablebase(const char* path)
 {
-    std::unique_lock lock(g_gaviotaMutex);
+    ScopedLock lock(g_gaviotaMutex);
 
     const int32_t verbosity = 0;
 

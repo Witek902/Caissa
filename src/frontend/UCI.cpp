@@ -4,16 +4,14 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
+#include "../backend/Thread.hpp"
 #include "../backend/containers/Sort.hpp"
 
-#include <condition_variable>
 #include <ctype.h>
 #include <inttypes.h>
-#include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <thread>
 
 #ifndef CAISSA_VERSION
 #define CAISSA_VERSION "unknown"
@@ -68,9 +66,9 @@ static const uint32_t c_MaxNumThreads = 1024;
 
 struct UniversalChessInterface::SearchThread
 {
-    std::thread thread;
-    std::mutex mutex;
-    std::condition_variable newSearchConditionVariable;
+    Thread thread;
+    Mutex mutex;
+    ConditionVariable newSearchConditionVariable;
 };
 
 // reads a line from stdin without the line terminator, returns false at the end of input
@@ -99,7 +97,7 @@ static bool ReadLine(String& outLine)
 UniversalChessInterface::UniversalChessInterface()
 {
     mSearchThread = new SearchThread;
-    mSearchThread->thread = std::thread(&UniversalChessInterface::SearchThreadEntryFunc, this);
+    VERIFY(mSearchThread->thread.Start([this]() { SearchThreadEntryFunc(); }));
 
     mGame.Reset(Position(Position::InitPositionFEN));
     mTranspositionTable.Resize(c_DefaultTTSize);
@@ -698,9 +696,9 @@ bool UniversalChessInterface::Command_Go(const CommandArgs& args)
     mSearchCtx->searchParam.showWDL = mOptions.showWDL;
 
     {
-        std::unique_lock<std::mutex> lock(mSearchThread->mutex);
+        ScopedLock lock(mSearchThread->mutex);
         mNewSearchContext = mSearchCtx;
-        mSearchThread->newSearchConditionVariable.notify_one();
+        mSearchThread->newSearchConditionVariable.NotifyOne();
     }
 
     // make sure search thread actually started running before exiting from this function
@@ -718,11 +716,11 @@ bool UniversalChessInterface::Command_Go(const CommandArgs& args)
 void UniversalChessInterface::StopSearchThread()
 {
     {
-        std::unique_lock<std::mutex> lock(mSearchThread->mutex);
+        ScopedLock lock(mSearchThread->mutex);
         mStopSearchThread = true;
-        mSearchThread->newSearchConditionVariable.notify_one();
+        mSearchThread->newSearchConditionVariable.NotifyOne();
     }
-    mSearchThread->thread.join();
+    mSearchThread->thread.Join();
 }
 
 void UniversalChessInterface::SearchThreadEntryFunc()
@@ -733,10 +731,10 @@ void UniversalChessInterface::SearchThreadEntryFunc()
     {
         {
             // wait for a new search or a request to stop the thread
-            std::unique_lock<std::mutex> lock(mSearchThread->mutex);
+            ScopedLock lock(mSearchThread->mutex);
             while (!mNewSearchContext && !mStopSearchThread)
             {
-                mSearchThread->newSearchConditionVariable.wait(lock);
+                mSearchThread->newSearchConditionVariable.Wait(mSearchThread->mutex);
             }
             mNewSearchContext = nullptr;
         }
