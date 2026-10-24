@@ -16,22 +16,23 @@ static_assert(sizeof(PackedNeuralNetwork::Header) % CACHELINE_SIZE == 0, "Networ
 struct NnzIndexTable
 {
     alignas(CACHELINE_SIZE) uint16_t indices[256][8];
-};
 
-static constexpr NnzIndexTable c_nnzIndexTable = []()
-{
-    NnzIndexTable table{};
-    for (uint32_t mask = 0; mask < 256; ++mask)
+    NnzIndexTable()
     {
-        uint32_t count = 0;
-        for (uint32_t bit = 0; bit < 8; ++bit)
+        for (uint32_t mask = 0; mask < 256; ++mask)
         {
-            if (mask & (1u << bit))
-                table.indices[mask][count++] = (uint16_t)bit;
+            uint32_t count = 0;
+            for (uint32_t bit = 0; bit < 8; ++bit)
+            {
+                if (mask & (1u << bit))
+                    indices[mask][count++] = (uint16_t)bit;
+            }
         }
     }
-    return table;
-}();
+};
+
+// filled at startup, so the 4 KB table is not stored in the executable
+static NnzIndexTable s_nnzIndexTable;
 
 // Number of independent accumulator sets in the sparse L1 loop. A fused dot product (VNNI, NEON
 // dotprod) carries its latency through the accumulator, so several groups are accumulated in
@@ -58,7 +59,7 @@ INLINE static int32_t LoadInputGroup(const IntermediateType* input, uint32_t gro
 // Always stores 8 entries; the caller's buffer is sized so the extra ones land in unused slots.
 INLINE static void AppendNnzIndices(uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t mask, __m128i groupIndexBase)
 {
-    const __m128i indices = _mm_load_si128(reinterpret_cast<const __m128i*>(c_nnzIndexTable.indices[mask]));
+    const __m128i indices = _mm_load_si128(reinterpret_cast<const __m128i*>(s_nnzIndexTable.indices[mask]));
     _mm_storeu_si128(reinterpret_cast<__m128i*>(nnzIndices + nnzCount), _mm_add_epi16(indices, groupIndexBase));
     nnzCount += PopCount(mask);
 }
@@ -481,7 +482,7 @@ INLINE static int32_t HiddenLayerL2_LastLayer(const IntermediateType* input, con
 // Always stores 8 entries; the caller's buffer is sized so the extra ones land in unused slots.
 INLINE static void AppendNnzIndices(uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t mask, uint16x8_t groupIndexBase)
 {
-    const uint16x8_t indices = vld1q_u16(c_nnzIndexTable.indices[mask]);
+    const uint16x8_t indices = vld1q_u16(s_nnzIndexTable.indices[mask]);
     vst1q_u16(nnzIndices + nnzCount, vaddq_u16(indices, groupIndexBase));
     nnzCount += PopCount(mask);
 }
