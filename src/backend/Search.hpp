@@ -342,6 +342,7 @@ private:
     using LMRTableType = uint16_t[LMRTableSize][LMRTableSize];
     LMRTableType mMoveReductionTable_Quiets;
     LMRTableType mMoveReductionTable_Captures;
+    int16_t mLmrCaptureVictim[(uint32_t)Piece::King];
 
     INLINE uint16_t GetQuietsDepthReduction(uint32_t depth, uint32_t moveIndex) const
     {

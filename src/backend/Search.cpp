@@ -43,6 +43,8 @@ DEFINE_PARAM(LmrCaptureBad, -192, -2048, 4096);
 DEFINE_PARAM(LmrCaptureCutNode, 1296, -2048, 4096);
 DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
 DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
+DEFINE_PARAM(LmrCaptureVictimBase, 195, 0, 512);
+DEFINE_PARAM(LmrCaptureVictimScale, 123, 0, 256);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
 DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
@@ -263,6 +265,14 @@ void Search::BuildMoveReductionTable()
     BuildMoveReductionTable(mMoveReductionTable_Captures,
         static_cast<float>(LmrScale_Captures) / 1000.0f,
         static_cast<float>(LmrBias_Captures) / 1000.0f);
+
+    // Piece::None (non-capture promotions) gets no adjustment
+    constexpr int32_t victimValues[] = { 0, 100, 300, 300, 500, 900 };
+    mLmrCaptureVictim[0] = 0;
+    for (uint32_t i = 1; i < (uint32_t)Piece::King; ++i)
+    {
+        mLmrCaptureVictim[i] = static_cast<int16_t>(LmrCaptureVictimBase - LmrCaptureVictimScale * victimValues[i] / 100);
+    }
 }
 
 void Search::Clear()
@@ -2106,6 +2116,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             else
             {
                 r = GetCapturesDepthReduction(node->depth, moveIndex);
+
+                // reduce captures of valuable pieces less
+                r += mLmrCaptureVictim[(uint32_t)position.GetCapturedPiece(move)];
 
                 // reduce winning captures less
                 if (moveScore > MoveOrderer::WinningCaptureValue) r -= LmrCaptureWinning;
