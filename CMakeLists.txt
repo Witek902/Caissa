@@ -44,16 +44,6 @@ if (USE_NUMA AND UNIX AND NOT APPLE)
 endif()
 
 
-# enable IPO (interprocedural optimization) if supported
-include(CheckIPOSupported)
-check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)
-if (IPO_SUPPORTED)
-    message(STATUS "IPO supported by this toolchain")
-else()
-    message(STATUS "IPO not supported: ${IPO_ERROR}")
-endif()
-
-
 # set supported configurations
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Final" CACHE STRING "" FORCE)
 
@@ -245,12 +235,11 @@ endif()
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTI_CONFIG)
     foreach(CONFIG_TYPE ${CMAKE_CONFIGURATION_TYPES})
-        file(MAKE_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG_TYPE}")
-        file(COPY_FILE "${NET_SOURCE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG_TYPE}/${DEFAULT_NEURAL_NET_FILE_NAME}" ONLY_IF_DIFFERENT)
+        # file(COPY) compares timestamps, a content comparison of the net takes ~0.1 s per copy
+        file(COPY "${NET_SOURCE}" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG_TYPE}")
     endforeach()
 else()
-    file(MAKE_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-    file(COPY_FILE "${NET_SOURCE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${DEFAULT_NEURAL_NET_FILE_NAME}" ONLY_IF_DIFFERENT)
+    file(COPY "${NET_SOURCE}" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 endif()
 
 add_subdirectory("src")

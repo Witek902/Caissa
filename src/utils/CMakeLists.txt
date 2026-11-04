@@ -1,7 +1,9 @@
 # Optional CUDA support
-find_package(CUDAToolkit QUIET)
+# not FindCUDAToolkit: it searches again for every missing CUDA library on each configure (~3 s on Windows)
+include(CheckLanguage)
+check_language(CUDA)
 
-if (CUDAToolkit_FOUND)
+if (CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
     message(STATUS "CUDA found: enabling CUDA trainer")
 else()
@@ -14,7 +16,7 @@ file(
 )
 
 # Exclude CUDA sources when CUDA is not available
-if (NOT CUDAToolkit_FOUND)
+if (NOT CMAKE_CUDA_COMPILER)
     list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*\\.cu$")
     list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*/cudaTrainer/.*")
     list(FILTER CAISSA_UTILS_SOURCES EXCLUDE REGEX ".*CudaNetworkTrainer\\.cpp$")
@@ -44,9 +46,10 @@ if (NOT MSVC)
 	endif()
 endif()
 
-if (CUDAToolkit_FOUND)
+if (CMAKE_CUDA_COMPILER)
     target_compile_definitions(utils PRIVATE USE_CUDA)
-    target_link_libraries(utils PRIVATE CUDA::cudart)
+    # the CUDA runtime is linked automatically (CUDA_RUNTIME_LIBRARY), host .cpp files only need its headers
+    target_include_directories(utils PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
     set_property(TARGET utils PROPERTY CUDA_ARCHITECTURES native)
     set_target_properties(utils PROPERTIES
         CUDA_STANDARD 20
