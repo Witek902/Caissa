@@ -39,6 +39,9 @@ public:
 
         // skip by half-move counter only above 20, instead of sqrt(hmc / 100) everywhere
         bool hmcSkipFrom20 = false;
+
+        // skip positions with a high half-move counter, which the net cannot see without HMC inputs
+        bool hmcSkip = true;
     };
 
     // initialize the loader with the .dat and .bin files of the given directories (data/trainingData if none)

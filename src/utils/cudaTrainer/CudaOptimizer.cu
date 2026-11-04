@@ -26,6 +26,7 @@ __global__ void AdamUpdateKernel(
     const float* gradients,
     uint32_t inputSize,
     uint32_t outputSize,
+    uint32_t firstWeight,
     uint32_t numWeights,
     float learningRate,
     float weightDecay,
@@ -39,8 +40,8 @@ __global__ void AdamUpdateKernel(
     float biasCorrection2  // 1 / (1 - beta2^t), precomputed on the host
 )
 {
-    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= numWeights) return;
+    const uint32_t idx = firstWeight + blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= firstWeight + numWeights) return;
 
     const bool isBias = IsBiasIndex(idx, inputSize, outputSize);
     const float maxWeightValue = isBias ? maxBiasRange : (idx >= factorizerFirstWeight ? maxFactorizerRange : maxWeightRange);
@@ -83,6 +84,7 @@ void LaunchAdamUpdate(const AdamUpdateParams& p, cudaStream_t stream)
         p.gradients,
         p.inputSize,
         p.outputSize,
+        p.firstWeight,
         p.numWeights,
         p.learningRate,
         p.weightDecay,

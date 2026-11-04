@@ -6,11 +6,17 @@ namespace nn {
 
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 15;
+static constexpr uint32_t CurrentVersion = 16;
 static constexpr uint32_t MagicNumber = 0x43534E4E; // 'CSNN'
 
 static constexpr uint32_t NumKingBuckets = 32;
-static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
+static constexpr uint32_t NumPieceInputs = NumKingBuckets * 12 * 64;
+
+// Half-move counter inputs follow the piece inputs: input NumPieceInputs + b - 1 is active in both
+// perspectives when hmc / HmcBucketSize == b (clamped to NumHmcInputs); no input below HmcBucketSize.
+static constexpr uint32_t HmcBucketSize = 8;
+static constexpr uint32_t NumHmcInputs = 12;
+static constexpr uint32_t NumNetworkInputs = NumPieceInputs + NumHmcInputs;
 static constexpr uint32_t AccumulatorSize = 1536;
 static constexpr uint32_t OutputSize = 1;
 static constexpr uint32_t NumVariants = 8;

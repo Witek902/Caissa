@@ -13,6 +13,7 @@
 #include <iostream>
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -125,6 +126,16 @@ struct Options
     // fine-tune the output subnets only, keeping the feature transformer fixed
     bool freezeFeatureTransformer = false;
 
+    // add the shared factorizer weights to the piece weights; when off the factorizer rows are unused
+    bool useFactorizer = true;
+
+    // train only the half-move counter rows of the feature transformer, everything else stays frozen
+    bool trainOnlyHmcInputs = false;
+
+    // Divide score labels by (hmcUnscale - hmc) / hmcUnscale, undoing the search's 50-move eval damping
+    // (FiftyMoveRuleEvalScale), which the engine applies after the net anyway. 0 = off.
+    float hmcUnscale = 0.0f;
+
     // re-seed output subnet neurons that can no longer learn, see ReviveDeadNeurons
     bool reviveDeadNeurons = false;
 
@@ -169,6 +180,8 @@ public:
             "positions\tlayer\tw_min\tw_max\tw_avg\tw_std\tb_min\tb_max\tb_avg\tb_std");
         OpenTsvFile(m_testPositionsFile, "-test-positions.tsv", append,
             "positions\tindex\teval\tfen");
+        OpenTsvFile(m_hmcFile, "-hmc.tsv", append,
+            "positions\tbucket\tw_min\tw_max\tw_avg\tw_std\tw_abs_avg");
 
         m_packedNet = std::make_unique<nn::PackedNeuralNetwork>();
 
@@ -287,10 +300,18 @@ private:
     std::ofstream m_progressFile;
     std::ofstream m_weightsFile;
     std::ofstream m_testPositionsFile;
+    std::ofstream m_hmcFile;
+
+    // packed (quantized) weights of one half-move counter bucket row
+    struct HmcRowStats
+    {
+        float minWeight, maxWeight, weightAvg, weightStdDev, absWeightAvg;
+    };
 
     struct NetworkDetails
     {
         nn::WeightsStorage::Stats layerStats[std::size(c_layerNames)];
+        HmcRowStats hmcRows[nn::NumHmcInputs];
         int32_t testPositionEvals[std::size(c_testPositions)] = {};
     };
 
@@ -320,6 +341,7 @@ private:
 #endif // USE_PACKED_NET_VALIDATION
     void WriteNetworkDetails(const NetworkDetails& details, uint64_t numPositions);
     void PrintNetworkDetails(const NetworkDetails& details, int indent) const;
+    static std::string FormatHmcRows(const NetworkDetails& details, int indent);
 
     // Forward pass on the float weights, matching what the CUDA trainer optimizes
     float EvalFloatNetwork(const TrainingEntry& entry) const;
@@ -394,12 +416,14 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     uint32_t numBlackFeatures = PositionToFeaturesVector<false>(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
-    outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
-    outEntry.numBlackFeatures = (uint8_t)numBlackFeatures;
+    ASSERT(numWhiteFeatures <= std::size(outEntry.whiteFeatures));
+    outEntry.numFeatures = (uint8_t)numWhiteFeatures;
     for (uint32_t i = 0; i < numWhiteFeatures; ++i)
         outEntry.whiteFeatures[i] = whiteFeatures[i];
     for (uint32_t i = 0; i < numBlackFeatures; ++i)
         outEntry.blackFeatures[i] = blackFeatures[i];
+
+    outEntry.hmcInputsMask = (uint16_t)((1u << GetHmcBucket(pos)) - 1u);
 
     outEntry.variant = GetNetworkVariant(pos);
 }
@@ -471,6 +495,11 @@ void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry&
     const Game::Score gameScore = (Game::Score)entry.wdlScore;
     const Game::Score tbScore = (Game::Score)entry.tbScore;
     float score = InternalEvalToExpectedGameScore(entry.score);
+    if (m_options.hmcUnscale > 0.0f)
+    {
+        const float damping = std::max(m_options.hmcUnscale - (float)pos.GetHalfMoveCount(), 1.0f) / m_options.hmcUnscale;
+        score = EvalToExpectedGameScore((float)entry.score / damping * 0.01f);
+    }
 
     if (gameScore != Game::Score::Unknown)
     {
@@ -593,9 +622,21 @@ static void ParallelFor(const char* debugName, uint32_t arraySize, const threadp
 #ifdef USE_PACKED_NET_VALIDATION
 static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeuralNetwork& net)
 {
+    // the packed net has a single half-move counter input: the highest active training row
+    uint16_t whiteFeatures[std::size(entry.whiteFeatures) + 1];
+    uint16_t blackFeatures[std::size(entry.blackFeatures) + 1];
+    std::copy(entry.whiteFeatures, entry.whiteFeatures + entry.numFeatures, whiteFeatures);
+    std::copy(entry.blackFeatures, entry.blackFeatures + entry.numFeatures, blackFeatures);
+    uint32_t numFeatures = entry.numFeatures;
+    if (entry.hmcInputsMask)
+    {
+        whiteFeatures[numFeatures] = blackFeatures[numFeatures] = HmcBucketToFeatureIndex(std::bit_width(entry.hmcInputsMask));
+        numFeatures++;
+    }
+
     const int32_t packedNetworkOutput = net.Run(
-        entry.whiteFeatures, entry.numWhiteFeatures,
-        entry.blackFeatures, entry.numBlackFeatures,
+        whiteFeatures, numFeatures,
+        blackFeatures, numFeatures,
         entry.variant);
     const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)(nn::OutputScale * nn::WeightScale) * c_nnOutputToCentiPawns / 100.0f;
     return EvalToExpectedGameScore(scaledPackedNetworkOutput);
@@ -630,7 +671,7 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
     for (uint32_t perspective = 0; perspective < 2; ++perspective)
     {
         const uint16_t* features = perspective == 0 ? entry.whiteFeatures : entry.blackFeatures;
-        const uint32_t numFeatures = perspective == 0 ? entry.numWhiteFeatures : entry.numBlackFeatures;
+        const uint32_t numFeatures = entry.numFeatures;
 
         const float* biases = ftWeights.data() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize;
         std::copy(biases, biases + nn::AccumulatorSize, accumulators[perspective]);
@@ -642,12 +683,23 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
             for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
                 accumulators[perspective][i] += weights[i];
 
-#if USE_FACTORIZER
-            const float* factorizer = ftWeights.data() +
-                (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
-            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                accumulators[perspective][i] += factorizer[i];
-#endif // USE_FACTORIZER
+            if (m_options.useFactorizer)
+            {
+                const float* factorizer = ftWeights.data() +
+                    (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    accumulators[perspective][i] += factorizer[i];
+            }
+        }
+
+        for (uint32_t row = 0; row < nn::NumHmcInputs; ++row)
+        {
+            if ((entry.hmcInputsMask >> row) & 1u)
+            {
+                const float* weights = ftWeights.data() + (nn::NumPieceInputs + row) * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    accumulators[perspective][i] += weights[i];
+            }
         }
     }
 
@@ -750,6 +802,36 @@ CudaNetworkTrainer::NetworkDetails CudaNetworkTrainer::CollectNetworkDetails() c
     for (size_t i = 0; i < std::size(layers); ++i)
         details.layerStats[i] = layers[i]->ComputeStats();
 
+    // packed half-move counter rows (sums of the cumulative training rows), in quantized units
+    {
+        const nn::Values& ftWeights = m_featureTransformerWeights->m_variants.front().m_weights;
+        std::vector<float> packedRow(nn::AccumulatorSize, 0.0f);
+        for (uint32_t row = 0; row < nn::NumHmcInputs; ++row)
+        {
+            const float* trainedRow = ftWeights.data() + (nn::NumPieceInputs + row) * nn::AccumulatorSize;
+
+            HmcRowStats& stats = details.hmcRows[row];
+            stats.minWeight = std::numeric_limits<float>::max();
+            stats.maxWeight = std::numeric_limits<float>::lowest();
+            double sum = 0.0, sumSquares = 0.0, sumAbs = 0.0;
+            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+            {
+                packedRow[i] += trainedRow[i];
+                const float w = packedRow[i] * nn::InputLayerWeightQuantizationScale;
+                stats.minWeight = std::min(stats.minWeight, w);
+                stats.maxWeight = std::max(stats.maxWeight, w);
+                sum += w;
+                sumSquares += (double)w * w;
+                sumAbs += std::abs(w);
+            }
+
+            const double avg = sum / nn::AccumulatorSize;
+            stats.weightAvg = (float)avg;
+            stats.weightStdDev = (float)std::sqrt(std::max(sumSquares / nn::AccumulatorSize - avg * avg, 0.0));
+            stats.absWeightAvg = (float)(sumAbs / nn::AccumulatorSize);
+        }
+    }
+
 #ifdef USE_PACKED_NET_VALIDATION
     EvalTestPositions(details.testPositionEvals);
 #endif // USE_PACKED_NET_VALIDATION
@@ -795,6 +877,15 @@ void CudaNetworkTrainer::WriteNetworkDetails(const NetworkDetails& details, uint
     }
     m_weightsFile.flush();
 
+    for (uint32_t row = 0; row < nn::NumHmcInputs; ++row)
+    {
+        const HmcRowStats& stats = details.hmcRows[row];
+        m_hmcFile << numPositions << '\t' << row + 1 << std::setprecision(6)
+            << '\t' << stats.minWeight << '\t' << stats.maxWeight << '\t' << stats.weightAvg << '\t' << stats.weightStdDev
+            << '\t' << stats.absWeightAvg << '\n';
+    }
+    m_hmcFile.flush();
+
 #ifdef USE_PACKED_NET_VALIDATION
     for (size_t i = 0; i < std::size(c_testPositions); ++i)
         m_testPositionsFile << numPositions << '\t' << i << '\t' << details.testPositionEvals[i] << '\t' << c_testPositions[i] << '\n';
@@ -820,11 +911,37 @@ void CudaNetworkTrainer::PrintNetworkDetails(const NetworkDetails& details, int 
         str += buf;
     }
 
+    str += FormatHmcRows(details, indent);
+
 #ifdef USE_PACKED_NET_VALIDATION
     str += FormatTestPositions(details.testPositionEvals, indent);
 #endif // USE_PACKED_NET_VALIDATION
 
     std::cout << str << std::flush;
+}
+
+std::string CudaNetworkTrainer::FormatHmcRows(const NetworkDetails& details, int indent)
+{
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%*s%-7s %7s %7s %8s %7s %7s  (packed half-move counter rows)\n", indent, "",
+        "hmc", "w min", "w max", "w avg", "w std", "|w| avg");
+    std::string str = buf;
+
+    for (uint32_t row = 0; row < nn::NumHmcInputs; ++row)
+    {
+        const HmcRowStats& stats = details.hmcRows[row];
+        const uint32_t firstHmc = (row + 1) * nn::HmcBucketSize;
+        char label[16];
+        if (row + 1 < nn::NumHmcInputs)
+            snprintf(label, sizeof(label), "%u-%u", firstHmc, firstHmc + nn::HmcBucketSize - 1);
+        else
+            snprintf(label, sizeof(label), "%u+", firstHmc);
+        snprintf(buf, sizeof(buf), "%*s%-7s %7.1f %7.1f %8.2f %7.2f %7.2f\n", indent, "", label,
+            stats.minWeight, stats.maxWeight, stats.weightAvg, stats.weightStdDev, stats.absWeightAvg);
+        str += buf;
+    }
+
+    return str;
 }
 
 void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
@@ -868,6 +985,9 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "outputSubnetDecay="          << cOutputSubnetWeightDecay << "\n";
     f << "bucketLeak="                 << m_options.bucketLeak << "\n";
     f << "freezeFeatureTransformer="   << (m_options.freezeFeatureTransformer ? "true" : "false") << "\n";
+    f << "factorizer="                 << (m_options.useFactorizer ? "true" : "false") << "\n";
+    f << "trainOnlyHmcInputs="         << (m_options.trainOnlyHmcInputs ? "true" : "false") << "\n";
+    f << "hmcUnscale="                 << m_options.hmcUnscale << "\n";
     f << "reviveDeadNeurons="          << (m_options.reviveDeadNeurons ? "true" : "false") << "\n";
     f << "warmupIterations="           << cWarmupTime << "\n";
     f << "positionsPerIteration="      << cNumTrainingVectorsPerIteration << "\n";
@@ -884,6 +1004,7 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "decisiveSkip="               << (m_options.loaderOptions.decisiveSkip ? "true" : "false") << "\n";
     f << "pieceCountTarget="           << (m_options.loaderOptions.pieceCountTarget ? "true" : "false") << "\n";
     f << "hmcSkipFrom20="              << (m_options.loaderOptions.hmcSkipFrom20 ? "true" : "false") << "\n";
+    f << "hmcSkip="                    << (m_options.loaderOptions.hmcSkip ? "true" : "false") << "\n";
 
     if (m_options.loaderOptions.pieceCountTarget)
     {
@@ -994,16 +1115,26 @@ bool CudaNetworkTrainer::PackNetwork()
             storedWeights.begin() + (nn::cuda::FeatureTransformerInputs + 1) * nn::AccumulatorSize,
             weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize);
 
-#if USE_FACTORIZER
         // fold the factorizer into every king bucket
-        for (uint32_t feature = 0; feature < nn::NumNetworkInputs; ++feature)
+        if (m_options.useFactorizer)
         {
-            const float* factorizer = storedWeights.data() + (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
-            float* target = weights.data() + feature * nn::AccumulatorSize;
-            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                target[i] += factorizer[i];
+            for (uint32_t feature = 0; feature < nn::NumPieceInputs; ++feature)
+            {
+                const float* factorizer = storedWeights.data() + (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
+                float* target = weights.data() + feature * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    target[i] += factorizer[i];
+            }
         }
-#endif // USE_FACTORIZER
+
+        // the packed row of half-move counter bucket b is the sum of the cumulative training rows 0 ... b-1
+        for (uint32_t row = 1; row < nn::NumHmcInputs; ++row)
+        {
+            const float* prev = weights.data() + (nn::NumPieceInputs + row - 1) * nn::AccumulatorSize;
+            float* target = weights.data() + (nn::NumPieceInputs + row) * nn::AccumulatorSize;
+            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                target[i] += prev[i];
+        }
 
         PackWeights(
             weights,
@@ -1072,7 +1203,6 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
             nn::InputLayerBiasQuantizationScale,
             WeightLayout::InputMajor);
 
-#if USE_FACTORIZER
         // a packed net has the factorizer already folded in: move the biases behind the (zeroed)
         // factorizer rows
         std::copy(
@@ -1083,7 +1213,15 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
             weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize,
             weights.begin() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize,
             0.0f);
-#endif // USE_FACTORIZER
+
+        // cumulative training rows from the packed half-move counter rows, see PackNetwork
+        for (uint32_t row = nn::NumHmcInputs - 1; row > 0; --row)
+        {
+            const float* prev = weights.data() + (nn::NumPieceInputs + row - 1) * nn::AccumulatorSize;
+            float* target = weights.data() + (nn::NumPieceInputs + row) * nn::AccumulatorSize;
+            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                target[i] -= prev[i];
+        }
     }
 
     // output subnets
@@ -1238,12 +1376,25 @@ bool CudaNetworkTrainer::Train()
         std::cout << "Feature transformer frozen" << std::endl;
     }
 
+    m_cudaNetwork.SetFactorizerEnabled(m_options.useFactorizer);
+    std::cout << "Factorizer " << (m_options.useFactorizer ? "on" : "off") << std::endl;
+
+    if (m_options.trainOnlyHmcInputs)
+    {
+        m_cudaNetwork.SetTrainOnlyHmcInputs();
+        std::cout << "Training only the half-move counter inputs" << std::endl;
+    }
+
+    if (m_options.hmcUnscale > 0.0f)
+        std::cout << "Score labels unscaled by the half-move counter damping, scale " << m_options.hmcUnscale << std::endl;
+
     if (m_options.bucketLeak > 0.0f)
         std::cout << "Bucket leak: " << m_options.bucketLeak << std::endl;
 
     std::cout << "Loader: decisiveSkip " << (m_options.loaderOptions.decisiveSkip ? "on" : "off")
         << ", pieceCountTarget " << (m_options.loaderOptions.pieceCountTarget ? "on" : "off")
-        << ", hmcSkipFrom20 " << (m_options.loaderOptions.hmcSkipFrom20 ? "on" : "off") << std::endl;
+        << ", hmcSkipFrom20 " << (m_options.loaderOptions.hmcSkipFrom20 ? "on" : "off")
+        << ", hmcSkip " << (m_options.loaderOptions.hmcSkip ? "on" : "off") << std::endl;
 
     if (!m_dataLoader.Init(m_randomGenerators[0], m_options.loaderOptions, m_options.dataPaths))
     {
@@ -1443,6 +1594,11 @@ bool CudaNetworkTrainer::Train()
         {
             lastDetails = details;
             WriteNetworkDetails(networkDetails, numPositions);
+
+            // the half-move counter rows are the only thing that changes, so show them more often
+            if (m_options.trainOnlyHmcInputs && !saveCheckpoint)
+                std::cout << timeTag << " Half-move counter rows at " << numPositions / 1'000'000'000ull << "B:\n"
+                    << FormatHmcRows(networkDetails, indent) << std::flush;
         }
 
         // keep a packed net and the full training state at every checkpoint interval
@@ -1486,6 +1642,10 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.loaderOptions.pieceCountTarget = true;
         else if (args[i] == "--hmcSkipFrom20")
             options.loaderOptions.hmcSkipFrom20 = true;
+        else if (args[i] == "--noHmcSkip")
+            options.loaderOptions.hmcSkip = false;
+        else if (args[i] == "--trainOnlyHmcInputs")
+            options.trainOnlyHmcInputs = true;
         else if (i + 1 >= args.size())
         {
             std::cerr << "Missing value for option: " << args[i] << std::endl;
@@ -1524,6 +1684,10 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.beta2 = std::stof(args[++i]);
         else if (args[i] == "--ftDecay")
             options.featureTransformerWeightDecay = std::stof(args[++i]);
+        else if (args[i] == "--hmcUnscale")
+            options.hmcUnscale = std::stof(args[++i]);
+        else if (args[i] == "--factorizer" && (args[i + 1] == "on" || args[i + 1] == "off"))
+            options.useFactorizer = args[++i] == "on";
         else
         {
             std::cerr << "Unknown option: " << args[i] << std::endl;
@@ -1534,6 +1698,11 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
     if (options.batchSize == 0 || cNumTrainingVectorsPerIteration % options.batchSize != 0)
     {
         std::cerr << "Batch size must divide " << cNumTrainingVectorsPerIteration << std::endl;
+        return false;
+    }
+    if (options.trainOnlyHmcInputs && options.freezeFeatureTransformer)
+    {
+        std::cerr << "--trainOnlyHmcInputs trains feature transformer rows, it cannot be combined with --freezeFeatureTransformer" << std::endl;
         return false;
     }
     std::cout << "Seed: " << options.seed << std::endl;

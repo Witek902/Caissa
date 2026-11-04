@@ -60,6 +60,10 @@ public:
 
     bool m_updateWeights = true;
 
+    // Only weights [m_firstUpdatedWeight, m_firstUpdatedWeight + m_numUpdatedWeights) are updated
+    uint32_t m_firstUpdatedWeight = 0;
+    uint32_t m_numUpdatedWeights = UINT32_MAX;
+
     // Device buffers
     CudaBuffer<float> m_weights;
     CudaBuffer<float> m_moment1;  // Adam moment 1

@@ -154,5 +154,17 @@ INLINE uint8_t GetNetworkVariant(const Position& pos)
     return static_cast<uint8_t>(Min(numPieces / 4u, nn::NumVariants - 1u));
 }
 
+// 0 means no half-move counter input is active
+INLINE uint32_t GetHmcBucket(const Position& pos)
+{
+    return Min<uint32_t>(pos.GetHalfMoveCount() / nn::HmcBucketSize, nn::NumHmcInputs);
+}
+
+INLINE uint16_t HmcBucketToFeatureIndex(uint32_t hmcBucket)
+{
+    ASSERT(hmcBucket > 0 && hmcBucket <= nn::NumHmcInputs);
+    return static_cast<uint16_t>(nn::NumPieceInputs + hmcBucket - 1);
+}
+
 template<bool IncludePieceFeatures = false>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);

@@ -275,6 +275,7 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         else
         {
             // results close to the 50-move rule depend on the half-move counter, which the net doesn't see
+            if (options.hmcSkip)
             {
                 const float hmcSkipProb = options.hmcSkipFrom20 ?
                     std::clamp(static_cast<float>(outEntry.pos.halfMoveCount - 20) / 80.0f, 0.0f, 1.0f) :

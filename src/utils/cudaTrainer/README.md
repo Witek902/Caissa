@@ -70,8 +70,12 @@ checkpoint, the weight statistics and test position evals.
 - **Quantization-aware training**: weights and biases are fake-quantized on read with the same scales as the
   packed net (`nn::*QuantizationScale` in `backend/PackedNeuralNetwork.hpp`); gradients flow to the float
   master weights.
-- **Input factorizer** (`USE_FACTORIZER`): a shared 768-feature block added to every king bucket during
-  training and folded into the bucket weights when the net is packed.
+- **Input factorizer** (`--factorizer on|off`, default on): a shared 768-feature block added to every king
+  bucket during training and folded into the bucket weights when the net is packed.
+- **Half-move counter inputs**: 12 rows shared by both perspectives, trained with a cumulative encoding (bucket
+  b activates rows 0 ... b-1, `TrainingEntry::hmcInputsMask`) and packed as one row per bucket.
+  `--trainOnlyHmcInputs` freezes everything else and skips its gradients; `--hmcUnscale 234` undoes the
+  search's 50-move damping in the score labels; `--noHmcSkip` keeps high half-move counter positions.
 - **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the
   output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99.
 - **Overlap**: the main stream runs the passes; an aux stream clears the FT gradient buffer during the forward

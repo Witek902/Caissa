@@ -4,6 +4,8 @@
 #include "../backend/Game.hpp"
 #include "../backend/Material.hpp"
 #include "../backend/MovePicker.hpp"
+#include "../backend/NeuralNetworkEvaluator.hpp"
+#include "../backend/Search.hpp"
 #include "../backend/Waitable.hpp"
 #include "../backend/TimeManager.hpp"
 #include "../backend/containers/DynArray.hpp"
@@ -19,6 +21,7 @@
 #include <iomanip>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -3423,6 +3426,106 @@ static void RunContainerTests()
     }
 }
 
+// Incremental accumulator updates must match a full evaluation when the half-move counter input
+// changes: within a bucket, across a bucket edge, on a reset by a capture or pawn move, on null moves,
+// after king bucket changes (cache refresh) and when updating across several plies at once.
+static void RunNetworkHmcInputTests()
+{
+    // random half-move counter rows, so that a missed update changes the output
+    auto net = std::make_unique<nn::PackedNeuralNetwork>(*g_mainNeuralNetwork);
+    std::mt19937 gen(1234);
+    std::uniform_int_distribution<int32_t> weightDist(-40, 40);
+    for (uint32_t i = 0; i < nn::NumHmcInputs * nn::AccumulatorSize; ++i)
+        net->accumulatorWeights[nn::NumPieceInputs * nn::AccumulatorSize + i] = (nn::FirstLayerWeightType)weightDist(gen);
+
+    auto cache = std::make_unique<AccumulatorCache>();
+    cache->Init(net.get());
+
+    constexpr uint32_t maxPlies = 200;
+    std::unique_ptr<NodeInfo[]> stack = std::make_unique<NodeInfo[]>(maxPlies + 1);
+
+    const char* startPositions[] =
+    {
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "r1bq1rk1/pp2bppp/2n1pn2/3p4/2PP4/2N1PN2/PP3PPP/R2QKB1R w KQ - 6 9",
+        "8/5k2/3r4/8/2R5/4K3/8/8 w - - 7 60",
+        "8/5k2/3r4/8/2R5/4K3/8/8 b - - 15 60",
+        "8/2b2k2/8/3N4/8/4K3/6B1/8 w - - 93 120",
+        "4k3/8/8/8/8/8/8/R3K2R w KQ - 99 80",
+    };
+
+    uint32_t numChecked = 0;
+    for (const char* fen : startPositions)
+    {
+        for (uint32_t playout = 0; playout < 20; ++playout)
+        {
+            NodeInfo& root = stack[0];
+            root = NodeInfo{};
+            root.position = Position(fen);
+
+            uint32_t ply = 0;
+            while (ply < maxPlies)
+            {
+                NodeInfo& node = stack[ply];
+
+                // evaluate only some nodes, so that updates also span several plies
+                if (std::uniform_int_distribution<uint32_t>(0, 2)(gen) == 0)
+                {
+                    TEST_EXPECT_EQ(NNEvaluator::Evaluate(*net, node, *cache), NNEvaluator::Evaluate(*net, node.position));
+                    numChecked++;
+                }
+
+                // sometimes continue from an earlier ply, like a search visiting a sibling subtree
+                if (ply > 4 && std::uniform_int_distribution<uint32_t>(0, 9)(gen) == 0)
+                {
+                    ply -= std::uniform_int_distribution<uint32_t>(1, 4)(gen);
+                    continue;
+                }
+
+                NodeInfo& child = stack[ply + 1];
+                child.Clear();
+                child.position = node.position;
+                child.ply = (uint16_t)(ply + 1);
+
+                const bool inCheck = node.position.IsInCheck();
+                if (!inCheck && std::uniform_int_distribution<uint32_t>(0, 9)(gen) == 0)
+                {
+                    child.isNullMove = true;
+                    child.position.DoNullMove();
+                    ply++;
+                    continue;
+                }
+
+                node.position.ComputeThreats(node.threats);
+                MoveList moves;
+                GenerateMoveList(node.position, node.threats.allThreats, moves);
+
+                // mostly quiet piece moves, so that the half-move counter grows across bucket edges
+                std::vector<Move> legalMoves, quietMoves;
+                for (uint32_t i = 0; i < moves.Size(); ++i)
+                {
+                    const Move move = moves.GetMove(i);
+                    if (!node.position.IsMoveLegal(move))
+                        continue;
+                    legalMoves.push_back(move);
+                    if (!move.IsCapture() && move.GetPiece() != Piece::Pawn)
+                        quietMoves.push_back(move);
+                }
+                if (legalMoves.empty())
+                    break;
+
+                const std::vector<Move>& candidates =
+                    (!quietMoves.empty() && std::uniform_int_distribution<uint32_t>(0, 9)(gen) != 0) ? quietMoves : legalMoves;
+                const Move move = candidates[std::uniform_int_distribution<size_t>(0, candidates.size() - 1)(gen)];
+                VERIFY(child.position.DoMove(move, child.nnContext));
+                ply++;
+            }
+        }
+    }
+
+    TEST_EXPECT(numChecked > 1000);
+}
+
 void RunUnitTests()
 {
     RunContainerTests();
@@ -3442,6 +3545,7 @@ void RunUnitTests()
     RunTimeTests();
     RunTimeManagerTests();
     RunEvalTests();
+    RunNetworkHmcInputTests();
     RunPackedPositionTests();
     RunGameTests();
     RunPgnParserTests();

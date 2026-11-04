@@ -72,6 +72,17 @@ public:
         CUDA_CHECK(cudaMemcpy(hostData, m_data, size * sizeof(T), cudaMemcpyDeviceToHost));
     }
 
+    void CopyToHost(T* hostData, size_t offset, size_t size) const
+    {
+        if (offset + size > m_size)
+        {
+            fprintf(stderr, "CudaBuffer::CopyToHost range %zu+%zu exceeds buffer size %zu\n", offset, size, m_size);
+            __debugbreak();
+            exit(1);
+        }
+        CUDA_CHECK(cudaMemcpy(hostData, m_data + offset, size * sizeof(T), cudaMemcpyDeviceToHost));
+    }
+
     void CopyFromDevice(const T* deviceData, size_t size)
     {
         if (size > m_size) Allocate(size);

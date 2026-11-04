@@ -320,16 +320,27 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     return index;
 }
 
+// Piece features of one perspective plus the half-move counter input, which both perspectives share
+static uint32_t PositionToNetworkInputs(const Position& pos, uint16_t* outFeatures, const Color perspective)
+{
+    uint32_t numFeatures = PositionToFeaturesVector(pos, outFeatures, perspective);
+
+    if (const uint32_t hmcBucket = GetHmcBucket(pos))
+        outFeatures[numFeatures++] = HmcBucketToFeatureIndex(hmcBucket);
+
+    return numFeatures;
+}
+
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
 {
-    constexpr uint32_t maxFeatures = 64;
+    constexpr uint32_t maxFeatures = 64 + 1;
 
     uint16_t ourFeatures[maxFeatures];
-    const uint32_t numOurFeatures = PositionToFeaturesVector(pos, ourFeatures, pos.GetSideToMove());
+    const uint32_t numOurFeatures = PositionToNetworkInputs(pos, ourFeatures, pos.GetSideToMove());
     ASSERT(numOurFeatures <= maxFeatures);
 
     uint16_t theirFeatures[maxFeatures];
-    const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, pos.GetSideToMove() ^ 1);
+    const uint32_t numTheirFeatures = PositionToNetworkInputs(pos, theirFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numTheirFeatures <= maxFeatures);
 
     return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
@@ -337,14 +348,14 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
 
 void NNEvaluator::Trace(const nn::PackedNeuralNetwork& network, const Position& pos, NNEvaluationTrace& outTrace)
 {
-    constexpr uint32_t maxFeatures = 64;
+    constexpr uint32_t maxFeatures = 64 + 1;
 
     uint16_t stmFeatures[maxFeatures];
-    const uint32_t numStmFeatures = PositionToFeaturesVector(pos, stmFeatures, pos.GetSideToMove());
+    const uint32_t numStmFeatures = PositionToNetworkInputs(pos, stmFeatures, pos.GetSideToMove());
     ASSERT(numStmFeatures <= maxFeatures);
 
     uint16_t nstmFeatures[maxFeatures];
-    const uint32_t numNstmFeatures = PositionToFeaturesVector(pos, nstmFeatures, pos.GetSideToMove() ^ 1);
+    const uint32_t numNstmFeatures = PositionToNetworkInputs(pos, nstmFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numNstmFeatures <= maxFeatures);
 
     nn::Accumulator stmAccum;
@@ -372,7 +383,8 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
     ASSERT(prevAccumNode != &node);
     ASSERT(node.nnContext.accumDirty[color]);
 
-    constexpr uint32_t maxChangedFeatures = 64;
+    // every square plus the half-move counter input
+    constexpr uint32_t maxChangedFeatures = 64 + 1;
     uint32_t numAddedFeatures = 0;
     uint32_t numRemovedFeatures = 0;
     uint16_t addedFeatures[maxChangedFeatures];
@@ -453,6 +465,17 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
         }
 #endif // VALIDATE_NETWORK_OUTPUT
 
+        // the half-move counter input depends only on the two ends of the path
+        const uint32_t prevHmcBucket = GetHmcBucket(prevAccumNode->position);
+        const uint32_t hmcBucket = GetHmcBucket(node.position);
+        if (hmcBucket != prevHmcBucket)
+        {
+            if (prevHmcBucket)
+                removedFeatures[numRemovedFeatures++] = HmcBucketToFeatureIndex(prevHmcBucket);
+            if (hmcBucket)
+                addedFeatures[numAddedFeatures++] = HmcBucketToFeatureIndex(hmcBucket);
+        }
+
 #ifdef NN_ACCUMULATOR_STATS
         s_NumAccumulatorUpdates++;
 #endif // NN_ACCUMULATOR_STATS
@@ -510,6 +533,18 @@ INLINE static void UpdateAccumulator(const nn::PackedNeuralNetwork& network, con
             network.accumulatorWeights,
             numAddedFeatures, addedFeatures,
             numRemovedFeatures, removedFeatures);
+
+        // the cache holds piece features only
+        if (const uint32_t hmcBucket = GetHmcBucket(node.position))
+        {
+            const uint16_t hmcFeature = HmcBucketToFeatureIndex(hmcBucket);
+            nn::Accumulator::Update(
+                node.accumulatorData[color],
+                node.accumulatorData[color],
+                network.accumulatorWeights,
+                1, &hmcFeature,
+                0, nullptr);
+        }
 
         node.accumulatorPtr[color] = &node.accumulatorData[color];
     }

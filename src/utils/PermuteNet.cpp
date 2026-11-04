@@ -103,8 +103,10 @@ uint64_t CollectSamples(const char* path, const nn::PackedNeuralNetwork& net, ui
             {
                 const Color perspective = (Color)(pos.GetSideToMove() ^ side);
 
-                uint16_t features[64];
-                const uint32_t numFeatures = PositionToFeaturesVector(pos, features, perspective);
+                uint16_t features[64 + 1];
+                uint32_t numFeatures = PositionToFeaturesVector(pos, features, perspective);
+                if (const uint32_t hmcBucket = GetHmcBucket(pos))
+                    features[numFeatures++] = HmcBucketToFeatureIndex(hmcBucket);
 
                 nn::Accumulator accum;
                 accum.Refresh(net.accumulatorWeights, net.accumulatorBiases, numFeatures, features);

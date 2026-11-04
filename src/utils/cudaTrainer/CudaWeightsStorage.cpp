@@ -1,6 +1,7 @@
 #include "CudaWeightsStorage.hpp"
 #include "CudaKernels.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -87,21 +88,24 @@ void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
 
 void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
 {
-    std::vector<float> hostWeightsData(m_totalWeights);
-
-    m_weights.CopyToHost(hostWeightsData.data(), hostWeightsData.size());
+    // After setup only the Adam update range changes on the device; the host keeps the rest from the
+    // copies made while the whole layer was still being updated.
+    const uint32_t first = m_updateWeights ? m_firstUpdatedWeight : 0;
+    const uint32_t end = m_updateWeights ? first + std::min(m_numUpdatedWeights, m_totalWeights - first) : 0;
 
     const uint32_t weightsPerVariant = (m_inputSize + 1) * m_outputSize;
 
     for (uint32_t variant = 0; variant < m_numVariants; ++variant)
     {
-        const uint32_t offset = variant * weightsPerVariant;
-        auto& hostVariant = hostWeights.m_variants[variant];
+        const uint32_t variantBegin = variant * weightsPerVariant;
+        const uint32_t begin = std::max(first, variantBegin);
+        const uint32_t variantEnd = std::min(end, variantBegin + weightsPerVariant);
+        if (begin >= variantEnd)
+            continue;
 
-        hostVariant.m_weights.assign(
-            hostWeightsData.begin() + offset,
-            hostWeightsData.begin() + offset + weightsPerVariant
-        );
+        auto& hostVariant = hostWeights.m_variants[variant];
+        hostVariant.m_weights.resize(weightsPerVariant);
+        m_weights.CopyToHost(hostVariant.m_weights.data() + (begin - variantBegin), begin, variantEnd - begin);
     }
 }
 
@@ -139,7 +143,8 @@ void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, 
     params.gradients = gradients;
     params.inputSize = m_inputSize;
     params.outputSize = m_outputSize;
-    params.numWeights = m_totalWeights;
+    params.firstWeight = m_firstUpdatedWeight;
+    params.numWeights = std::min(m_numUpdatedWeights, m_totalWeights - m_firstUpdatedWeight);
     params.learningRate = learningRate;
     params.weightDecay = m_weightDecay;
     params.maxWeightRange = m_weightsRange;

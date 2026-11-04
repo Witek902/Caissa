@@ -15,7 +15,6 @@ __device__ __forceinline__ float CReLUGate(float activated)
     return (activated > 0.0f && activated < 1.0f) ? 1.0f : 0.0f;
 }
 
-#if USE_FACTORIZER
 // The factorizer weight of a feature is shared by all king buckets, so its gradient is the sum of
 // the bucket gradients of that feature. Computed from the accumulated bucket gradients instead of
 // adding a second atomic per feature to FeatureTransformerGradientsKernel.
@@ -33,7 +32,6 @@ __global__ void FactorizerGradientsKernel(
 
     weightGradients[nn::NumNetworkInputs * accumulatorSize + idx] = sum;
 }
-#endif // USE_FACTORIZER
 
 // Backward pass kernels
 static constexpr uint32_t c_sigmoidDerivativeBlockSize = 256;
@@ -204,6 +202,7 @@ __global__ void FeatureTransformerGradientsKernel(
     float* __restrict__ weightGradients,
     uint32_t batchSize,
     uint32_t inputSize,
+    bool hmcInputsOnly,
     float l1WeightScale, float l1InvWeightScale
 )
 {
@@ -223,6 +222,10 @@ __global__ void FeatureTransformerGradientsKernel(
     if (batchIdx >= batchSize || accumulatorIdx >= accumulatorSize) return;
 
     const TrainingEntry* trainingVector = trainingVectors + batchIdx;
+
+    // only the half-move counter rows train, so positions without them contribute nothing
+    if (hmcInputsOnly && trainingVector->hmcInputsMask == 0) return;
+
     const float* __restrict__ variantWeights = l1Weights + trainingVector->variant * (nn::L1InputSize + 1) * nn::L1Size;
     const uint32_t pairIdx = accumulatorIdx % halfSize;
     const uint32_t partnerIdx = accumulatorIdx < halfSize ? accumulatorIdx + halfSize : accumulatorIdx - halfSize;
@@ -251,9 +254,9 @@ __global__ void FeatureTransformerGradientsKernel(
 
     // Process white features
     const float whitesError = accumulatorError(0);
-    if (whitesError != 0.0f)
+    if (whitesError != 0.0f && !hmcInputsOnly)
     {
-        for (uint32_t i = 0; i < trainingVector->numWhiteFeatures; ++i)
+        for (uint32_t i = 0; i < trainingVector->numFeatures; ++i)
         {
             const uint32_t feature = trainingVector->whiteFeatures[i];
             if (feature >= inputSize) continue;
@@ -264,9 +267,9 @@ __global__ void FeatureTransformerGradientsKernel(
 
     // Process black features
     const float blacksError = accumulatorError(1);
-    if (blacksError != 0.0f)
+    if (blacksError != 0.0f && !hmcInputsOnly)
     {
-        for (uint32_t i = 0; i < trainingVector->numBlackFeatures; ++i)
+        for (uint32_t i = 0; i < trainingVector->numFeatures; ++i)
         {
             const uint32_t feature = trainingVector->blackFeatures[i];
             if (feature >= inputSize) continue;
@@ -275,8 +278,17 @@ __global__ void FeatureTransformerGradientsKernel(
         }
     }
 
+    // half-move counter rows are shared by both perspectives
+    const float hmcError = whitesError + blacksError;
+    if (hmcError != 0.0f)
+    {
+        for (uint32_t mask = trainingVector->hmcInputsMask; mask; mask &= mask - 1)
+            atomicAdd(&weightGradients[(nn::NumPieceInputs + __ffs(mask) - 1) * accumulatorSize + accumulatorIdx], hmcError);
+    }
+
     // bias gradient
-    atomicAdd(&weightGradients[inputSize * accumulatorSize + accumulatorIdx], whitesError + blacksError);
+    if (!hmcInputsOnly)
+        atomicAdd(&weightGradients[inputSize * accumulatorSize + accumulatorIdx], whitesError + blacksError);
 }
 
 void LaunchSigmoidDerivative(CudaBatchData& batch, cudaStream_t stream)
@@ -379,7 +391,7 @@ void LaunchL1Gradients(CudaBatchData& batch, cudaStream_t stream)
     CUDA_CHECK(cudaGetLastError());
 }
 
-void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, cudaStream_t stream)
+void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, bool useFactorizer, bool hmcInputsOnly, cudaStream_t stream)
 {
     {
         const dim3 blockSize(32, c_ftGradientBlockRows);
@@ -395,13 +407,15 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
             batch.featureTransformerGradients.Get(),
             batch.batchSize,
             FeatureTransformerInputs,
+            hmcInputsOnly,
             l1.quant.weightScale,
             l1.quant.invWeightScale
         );
         CUDA_CHECK(cudaGetLastError());
     }
 
-#if USE_FACTORIZER
+    // the factorizer gradients are sums of piece row gradients, which hmcInputsOnly does not compute
+    if (useFactorizer && !hmcInputsOnly)
     {
         const dim3 blockSize(256);
         const dim3 gridSize((FactorizerInputs * nn::AccumulatorSize + blockSize.x - 1) / blockSize.x);
@@ -412,7 +426,6 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
         );
         CUDA_CHECK(cudaGetLastError());
     }
-#endif // USE_FACTORIZER
 }
 
 } // namespace cuda

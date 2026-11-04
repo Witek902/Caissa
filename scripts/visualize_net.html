@@ -71,6 +71,7 @@
     <button data-view="l1">L1 (pairs&rarr;16)</button>
     <button data-view="l2">L2 (16&rarr;32)</button>
     <button data-view="l3">L3 (32&rarr;1)</button>
+    <button data-view="hmc" id="hmcTab" style="display:none">HMC rows</button>
   </div>
   <div class="group" id="bucketGroup">
     <label for="bucket">King bucket</label>
@@ -128,10 +129,11 @@
 <script>
 "use strict";
 
-// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 to 15) ----
+// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 to 16) ----
 const HEADER_SIZE      = 64;
 const NUM_KING_BUCKETS = 32;
-const NUM_INPUTS       = NUM_KING_BUCKETS * 12 * 64; // 24576
+const NUM_PIECE_INPUTS = NUM_KING_BUCKETS * 12 * 64; // 24576
+const HMC_BUCKET_SIZE  = 8;
 const L1_SIZE          = 16;
 const L2_SIZE          = 32;
 const NUM_VARIANTS     = 8;
@@ -142,6 +144,16 @@ const NUM_VARIANTS     = 8;
 let ACC_SIZE   = 1024;
 let PAIR_COUNT = ACC_SIZE / 2;      // pair slots per perspective
 let L1_IN_SIZE = ACC_SIZE;          // L1InputSize
+
+// Version 16 adds half-move counter inputs after the piece inputs: input NUM_PIECE_INPUTS + b - 1
+// is active in both perspectives when hmc / 8 == b (clamped to 12); none below 8.
+let NUM_HMC_INPUTS = 0;
+let NUM_INPUTS     = NUM_PIECE_INPUTS;
+
+function hmcBucketLabel(row) {
+  const lo = (row + 1) * HMC_BUCKET_SIZE;
+  return row + 1 < NUM_HMC_INPUTS ? `${lo}-${lo + HMC_BUCKET_SIZE - 1}` : `${lo}+`;
+}
 
 // Dequantization scales (raw_int / scale = float weight), see PackedNeuralNetwork.hpp
 const PAIRWISE_SCALE = 255 * 255 / 512;   // 127.002, the hidden activation scale
@@ -262,10 +274,13 @@ function parseNet(buffer) {
   const magic = dv.getUint32(0, true);
   const version = dv.getUint32(4, true);
 
-  if (version < 13 || version > 15) {
+  if (version < 13 || version > 16) {
     throw new Error(`Unsupported network version ${version}; this viewer reads the multilayer ` +
-                    `layout of versions 13 to 15.`);
+                    `layout of versions 13 to 16.`);
   }
+
+  NUM_HMC_INPUTS = version >= 16 ? 12 : 0;
+  NUM_INPUTS = NUM_PIECE_INPUTS + NUM_HMC_INPUTS;
 
   const acc = accumulatorSizeFromFile(buffer.byteLength);
   const headerAcc = dv.getUint32(12, true);
@@ -283,10 +298,14 @@ function parseNet(buffer) {
 
   const accI16 = new Int16Array(buffer, ACC_W_OFF, NUM_INPUTS * ACC_SIZE);
 
-  let accMaxAbs = 0;
-  for (let i = 0; i < accI16.length; i++) { const a = Math.abs(accI16[i]); if (a > accMaxAbs) accMaxAbs = a; }
+  // the board view colors piece weights only; half-move counter rows get their own scale
+  const pieceEnd = NUM_PIECE_INPUTS * ACC_SIZE;
+  let accMaxAbs = 0, hmcMaxAbs = 0;
+  for (let i = 0; i < pieceEnd; i++) { const a = Math.abs(accI16[i]); if (a > accMaxAbs) accMaxAbs = a; }
+  for (let i = pieceEnd; i < accI16.length; i++) { const a = Math.abs(accI16[i]); if (a > hmcMaxAbs) hmcMaxAbs = a; }
 
-  const obj = { dv, accI16, magic, version, grouped: version >= 14, accMaxAbs, l1MaxAbs: 1, l2MaxAbs: 1, l3MaxAbs: 1 };
+  const obj = { dv, accI16, magic, version, grouped: version >= 14, accMaxAbs, hmcMaxAbs: hmcMaxAbs || 1,
+                l1MaxAbs: 1, l2MaxAbs: 1, l3MaxAbs: 1 };
   net = obj;
 
   let m1 = 0, m2 = 0, m3 = 0;
@@ -407,6 +426,7 @@ function buildAccumulator(bucket, cols, tone) {
 function buildMatrix(opts) {
   const { numOut, numIn, cellPx, getW, getB, maxAbs, biasMaxAbs, tone,
           rowLabel, colLabel, splitAt, deqW, deqB, inputDesc, outLayer, inLayer } = opts;
+  const rowName = opts.rowName || ((o) => String(o));
   const CELL = cellPx, AXIS = 30, BIAS_GAP = 8, SPLIT_GAP = 6;
   const hasSplit = splitAt != null && splitAt > 0 && splitAt < numIn;
   const colX = (i) => { let x = AXIS + i * CELL; if (hasSplit && i >= splitAt) x += SPLIT_GAP; return x; };
@@ -443,7 +463,7 @@ function buildMatrix(opts) {
                                align: "center", baseline: "bottom", color: "#aab2bd" });
   const rowEvery = numOut > 64 ? 8 : 1;
   for (let o = 0; o < numOut; o += rowEvery)
-    annotations.push({ sx: AXIS - 5, sy: rowY(o) + CELL / 2, text: String(o),
+    annotations.push({ sx: AXIS - 5, sy: rowY(o) + CELL / 2, text: rowName(o),
                        align: "right", baseline: "middle", color: "#8b939d" });
 
   const hitTest = (ox, oy) => {
@@ -466,7 +486,7 @@ function buildMatrix(opts) {
     // otherwise (L3, single output) selects the L2 input neuron under the cursor.
     const select = outLayer ? { layer: outLayer, index: o } : { layer: inLayer, index: i };
     return { select, raw, val: raw / deqW,
-      lines: [[rowLabel, "#" + o], [colLabel, inputDesc ? inputDesc(i) : "#" + i]] };
+      lines: [[rowLabel, opts.rowName ? rowName(o) : "#" + o], [colLabel, inputDesc ? inputDesc(i) : "#" + i]] };
   };
 
   const geometry = {
@@ -526,6 +546,17 @@ function buildL3(variant, tone) {
     rowLabel: "output", colLabel: "L2 in", splitAt: null,
     deqW: Q_L3_W, deqB: Q_L3_B, outLayer: null, inLayer: "l2",
     inputDesc: (i) => "L2 #" + i,
+  });
+}
+// The packed half-move counter rows: one row of accumulator weights per bucket, added to both perspectives
+function buildHmc(tone) {
+  return buildMatrix({
+    numOut: NUM_HMC_INPUTS, numIn: ACC_SIZE, cellPx: 6,
+    getW: (o, i) => accW(NUM_PIECE_INPUTS + o, i), getB: null,
+    maxAbs: net.hmcMaxAbs, tone,
+    rowLabel: "HMC", colLabel: "acc neuron", splitAt: PAIR_COUNT, rowName: hmcBucketLabel,
+    deqW: Q_ACC_W, outLayer: null, inLayer: "acc",
+    inputDesc: (i) => `#${i} (pair partner #${pairPartner(i)})`,
   });
 }
 
@@ -672,10 +703,10 @@ const els = {};
 ["file","tabs","bucket","variant","cols","gain","gainVal","exponent","exponentVal",
  "colorbar","cbMin","cbMax","fit","status","info","legend",
  "bucketGroup","variantGroup","colsGroup","stage","tooltip",
- "traceLayer","traceIdx","traceClear"].forEach(id => els[id] = document.getElementById(id));
+ "traceLayer","traceIdx","traceClear","hmcTab"].forEach(id => els[id] = document.getElementById(id));
 
 const state = { view: "acc", bucket: 0, variant: 0, cols: 8, exponent: 0.45, selection: null };
-const gains = { acc: 0, l1: 0, l2: 0, l3: 0 };   // raw slider values, per view
+const gains = { acc: 0, l1: 0, l2: 0, l3: 0, hmc: 0 };   // raw slider values, per view
 const TRACE_MAX = { acc: ACC_SIZE - 1, l1: L1_SIZE - 1, l2: L2_SIZE - 1 };
 let currentGeometry = null;
 
@@ -691,6 +722,7 @@ function toneFor(view) { return { gain: gainFactor(view), exponent: state.expone
 // Largest raw weight magnitude of the view and the scale that dequantizes it.
 function weightRange(view) {
   if (view === "acc") return { maxAbs: net.accMaxAbs, deq: Q_ACC_W };
+  if (view === "hmc") return { maxAbs: net.hmcMaxAbs, deq: Q_ACC_W };
   if (view === "l1")  return { maxAbs: net.l1MaxAbs, deq: Q_HID_W };
   if (view === "l2")  return { maxAbs: net.l2MaxAbs, deq: Q_HID_W };
   return { maxAbs: net.l3MaxAbs, deq: Q_L3_W };
@@ -720,6 +752,7 @@ function rebuild(refit) {
   if (state.view === "acc")      built = buildAccumulator(state.bucket, state.cols, tone);
   else if (state.view === "l1")  built = buildL1(state.variant, tone);
   else if (state.view === "l2")  built = buildL2(state.variant, tone);
+  else if (state.view === "hmc") built = buildHmc(tone);
   else                           built = buildL3(state.variant, tone);
   currentGeometry = built.geometry;
   vp.setSource(built.canvas, built.hitTest, built.annotations, refit);
@@ -748,7 +781,7 @@ function updateContextUI() {
   const acc = state.view === "acc";
   els.bucketGroup.style.display = acc ? "" : "none";
   els.colsGroup.style.display = acc ? "" : "none";
-  els.variantGroup.style.display = acc ? "none" : "";
+  els.variantGroup.style.display = (acc || state.view === "hmc") ? "none" : "";
   els.gain.value = gains[state.view];
   els.gainVal.textContent = gainFactor(state.view).toFixed(1) + "×";
   els.exponent.value = state.exponent;
@@ -770,6 +803,11 @@ function updateContextUI() {
   } else if (state.view === "l2") {
     els.legend.innerHTML = "<b>L2:</b> rows = 32 outputs, columns = 16 L1 inputs, trailing = bias. " +
       "Pink = selected L1 neuron, cyan = selected L2 neuron.";
+  } else if (state.view === "hmc") {
+    els.legend.innerHTML = "<b>HMC rows:</b> rows = half-move counter buckets (none below " + HMC_BUCKET_SIZE +
+      "), columns = " + ACC_SIZE + " accumulator neurons (left half = neurons 0.." + (PAIR_COUNT - 1) +
+      ", right half = their pair partners). The bucket's row is added to both perspectives' accumulators. " +
+      "Colors use this view's own max|w|. Pink = selected Acc neuron and its partner.";
   } else {
     els.legend.innerHTML = "<b>L3:</b> single output row, 32 L2 inputs, trailing = bias. " +
       "Pink = selected L2 neuron.";
@@ -849,8 +887,14 @@ els.file.addEventListener("change", (e) => {
         `version <b>${net.version}</b>${net.grouped ? " &middot; grouped layout" : ""} &middot; ` +
         `accumulator <b>${ACC_SIZE}</b> &middot; ` +
         `acc max|w| <b>${net.accMaxAbs}</b> &middot; ` +
+        (NUM_HMC_INPUTS ? `HMC inputs <b>${NUM_HMC_INPUTS}</b>, max|w| <b>${net.hmcMaxAbs}</b> &middot; ` : "") +
         `L1/L2/L3 max|w| <b>${net.l1MaxAbs}/${net.l2MaxAbs}/${net.l3MaxAbs}</b> &middot; ` +
         `parsed in ${ms} ms`;
+      els.hmcTab.style.display = NUM_HMC_INPUTS ? "" : "none";
+      if (state.view === "hmc" && !NUM_HMC_INPUTS) {
+        state.view = "acc";
+        [...els.tabs.children].forEach(x => x.classList.toggle("active", x.dataset.view === "acc"));
+      }
       state.selection = null; syncTraceUI();
       rebuild(true);
     } catch (err) {

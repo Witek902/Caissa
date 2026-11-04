@@ -32,6 +32,13 @@ public:
     // subnets train.
     void SetFeatureTransformerFrozen(bool frozen);
 
+    // The factorizer weights are added to the piece weights only when enabled
+    void SetFactorizerEnabled(bool enabled) { m_useFactorizer = enabled; }
+
+    // Only the half-move counter rows of the feature transformer train; everything else is frozen and
+    // gets no gradients
+    void SetTrainOnlyHmcInputs();
+
     // Asynchronously copy a batch's training vectors on a dedicated copy stream. The copy waits
     // for the previous batch's last reader (FeatureTransformerGradientsKernel) so it overlaps the
     // previous batch's Adam updates; Forward waits on it before reading the buffer.
@@ -77,6 +84,9 @@ private:
     CudaWeightsStoragePtr m_l1Weights;
     CudaWeightsStoragePtr m_l2Weights;
     CudaWeightsStoragePtr m_l3Weights;
+
+    bool m_useFactorizer = true;
+    bool m_hmcInputsOnly = false;
 
     // CUDA streams for overlapping operations
     CudaStream m_stream;
