@@ -87,21 +87,17 @@ void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
 
 void CudaWeightsStorage::CopyToHost(nn::WeightsStorage& hostWeights) const
 {
-    std::vector<float> hostWeightsData(m_totalWeights);
-
-    m_weights.CopyToHost(hostWeightsData.data(), hostWeightsData.size());
+    // a frozen layer does not change on the device, the host keeps the copy made before freezing
+    if (!m_updateWeights)
+        return;
 
     const uint32_t weightsPerVariant = (m_inputSize + 1) * m_outputSize;
 
     for (uint32_t variant = 0; variant < m_numVariants; ++variant)
     {
-        const uint32_t offset = variant * weightsPerVariant;
         auto& hostVariant = hostWeights.m_variants[variant];
-
-        hostVariant.m_weights.assign(
-            hostWeightsData.begin() + offset,
-            hostWeightsData.begin() + offset + weightsPerVariant
-        );
+        hostVariant.m_weights.resize(weightsPerVariant);
+        m_weights.CopyToHost(hostVariant.m_weights.data(), variant * weightsPerVariant, weightsPerVariant);
     }
 }
 
