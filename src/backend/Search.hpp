@@ -336,7 +336,7 @@ private:
 
     DynArray<ThreadData*> mThreadData;
 
-    //
+    //---
 
     static constexpr uint32_t LMRTableSize = 64;
     using LMRTableType = uint16_t[LMRTableSize][LMRTableSize];
@@ -352,10 +352,18 @@ private:
         return mMoveReductionTable_Captures[Min(depth, LMRTableSize - 1)][Min(moveIndex, LMRTableSize - 1)];
     }
 
-    //
-
     void BuildMoveReductionTable();
     void BuildMoveReductionTable(LMRTableType& table, float scale, float bias);
+
+    //---
+
+    // eval multiplier (in 1/1024) approaching the 50-move draw, indexed by [pawnless][half-move counter]
+    static constexpr uint32_t FiftyMoveTableSize = 101;
+    int16_t mFiftyMoveEvalScale[2][FiftyMoveTableSize];
+
+    void BuildFiftyMoveEvalScaleTable();
+
+    //---
 
     static void WorkerThreadCallback(Search* search, uint32_t index);
 

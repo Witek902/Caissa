@@ -45,7 +45,11 @@ DEFINE_PARAM(LmrCaptureImproving, -288, -2048, 2048);
 DEFINE_PARAM(LmrCaptureInCheck, -64, -2048, 4096);
 DEFINE_PARAM(LmrTTHighDepth, 208, -2048, 4096);
 
-DEFINE_PARAM(FiftyMoveRuleEvalScale, 234, 120, 600);
+// eval multiplier 1 - linear * x - quadratic * x^2 (in 1/1000), x = half-move counter / 100
+DEFINE_PARAM(FiftyMoveEvalScaleLinear, 221, 0, 1000);
+DEFINE_PARAM(FiftyMoveEvalScaleQuadratic, 713, 0, 1500);
+DEFINE_PARAM(FiftyMoveEvalScalePawnlessLinear, 1000, 0, 1500);
+DEFINE_PARAM(FiftyMoveEvalScalePawnlessQuadratic, 0, 0, 1500);
 
 DEFINE_PARAM(LmrDeeperTreshold, 85, 20, 200);
 
@@ -186,6 +190,7 @@ struct Search::ThreadSync
 Search::Search()
 {
     BuildMoveReductionTable();
+    BuildFiftyMoveEvalScaleTable();
 
     void* threadDataMemory = numa::AllocateOnNode(sizeof(ThreadData), 0);
     mThreadData.PushBack(PLACEMENT_NEW(threadDataMemory) ThreadData());
@@ -263,6 +268,22 @@ void Search::BuildMoveReductionTable()
     BuildMoveReductionTable(mMoveReductionTable_Captures,
         static_cast<float>(LmrScale_Captures) / 1000.0f,
         static_cast<float>(LmrBias_Captures) / 1000.0f);
+}
+
+void Search::BuildFiftyMoveEvalScaleTable()
+{
+    const int32_t linear[2] = { FiftyMoveEvalScaleLinear, FiftyMoveEvalScalePawnlessLinear };
+    const int32_t quadratic[2] = { FiftyMoveEvalScaleQuadratic, FiftyMoveEvalScalePawnlessQuadratic };
+
+    for (uint32_t pawnless = 0; pawnless < 2; ++pawnless)
+    {
+        for (uint32_t hmc = 0; hmc < FiftyMoveTableSize; ++hmc)
+        {
+            const float x = static_cast<float>(hmc) / 100.0f;
+            const float scale = 1.0f - (static_cast<float>(linear[pawnless]) * x + static_cast<float>(quadratic[pawnless]) * x * x) / 1000.0f;
+            mFiftyMoveEvalScale[pawnless][hmc] = static_cast<int16_t>(1024.0f * Clamp(scale, 0.0f, 1.0f) + 0.5f);
+        }
+    }
 }
 
 void Search::Clear()
@@ -432,6 +453,7 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
 
 #ifdef ENABLE_TUNING
     BuildMoveReductionTable();
+    BuildFiftyMoveEvalScaleTable();
 #ifdef ENABLE_NET_L3_TUNING
     ApplyNeuralNetTunables();
 #endif // ENABLE_NET_L3_TUNING
@@ -1193,7 +1215,11 @@ ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node
     }
 
     // scale down when approaching 50-move draw
-    adjustedScore = adjustedScore * (FiftyMoveRuleEvalScale - Max(0, (int32_t)node.position.GetHalfMoveCount())) / FiftyMoveRuleEvalScale;
+    {
+        const bool pawnless = (node.position.Whites().pawns | node.position.Blacks().pawns) == 0;
+        const uint32_t hmc = Min<uint32_t>(node.position.GetHalfMoveCount(), FiftyMoveTableSize - 1);
+        adjustedScore = (adjustedScore * mFiftyMoveEvalScale[pawnless][hmc]) >> 10;
+    }
 
     if (searchParam.evalRandomization > 0)
         adjustedScore += ((uint32_t)node.position.GetHash() ^ searchParam.seed) % (2 * searchParam.evalRandomization + 1) - searchParam.evalRandomization;
