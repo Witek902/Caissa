@@ -605,23 +605,30 @@ static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeura
 }
 #endif // USE_PACKED_NET_VALIDATION
 
-// Forward pass of one dense output-subnet layer on the float weights.
+static float FakeQuantize(float w, float scale)
+{
+    return std::round(w * scale) / scale;
+}
+
+// Forward pass of one dense output-subnet layer on the fake-quantized float weights.
 // Weights are input-major (weights[input * outputSize + output]), biases follow the matrix.
 static void FloatDenseLayer(
     float* output, const float* input, const nn::Values& weights,
-    uint32_t inputSize, uint32_t outputSize, bool applyCReLU)
+    uint32_t inputSize, uint32_t outputSize, bool applyCReLU,
+    float weightScale, float biasScale)
 {
     for (uint32_t o = 0; o < outputSize; ++o)
     {
-        float sum = weights[inputSize * outputSize + o];
+        float sum = FakeQuantize(weights[inputSize * outputSize + o], biasScale);
         for (uint32_t i = 0; i < inputSize; ++i)
-            sum += input[i] * weights[i * outputSize + o];
+            sum += input[i] * FakeQuantize(weights[i * outputSize + o], weightScale);
 
         output[o] = applyCReLU ? std::clamp(sum, 0.0f, 1.0f) : sum;
     }
 }
 
-// Reference forward pass on the float (unquantized) weights the trainer actually optimizes.
+// Reference forward pass on the float weights, fake-quantized like in the CUDA forward pass (the
+// unquantized master weights drift off the grid in directions the quantized net does not see).
 // Comparing it against the packed network on the same positions tells a training problem apart
 // from a packing / quantized-inference problem: only the latter moves the two numbers apart.
 float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
@@ -636,21 +643,21 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
         const uint32_t numFeatures = perspective == 0 ? entry.numWhiteFeatures : entry.numBlackFeatures;
 
         const float* biases = ftWeights.data() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize;
-        std::copy(biases, biases + nn::AccumulatorSize, accumulators[perspective]);
+        for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+            accumulators[perspective][i] = FakeQuantize(biases[i], nn::InputLayerBiasQuantizationScale);
 
         for (uint32_t f = 0; f < numFeatures; ++f)
         {
             const uint32_t feature = features[f];
             const float* weights = ftWeights.data() + feature * nn::AccumulatorSize;
-            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                accumulators[perspective][i] += weights[i];
+            const float* factorizer = ftWeights.data() +
+                (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
 
-            if (m_options.useFactorizer)
+            // bucket and factorizer weight are quantized as a sum, like when they are packed
+            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
             {
-                const float* factorizer = ftWeights.data() +
-                    (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
-                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                    accumulators[perspective][i] += factorizer[i];
+                const float w = m_options.useFactorizer ? weights[i] + factorizer[i] : weights[i];
+                accumulators[perspective][i] += FakeQuantize(w, nn::InputLayerWeightQuantizationScale);
             }
         }
     }
@@ -669,15 +676,18 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
 
     float l2Input[nn::L1Size];
     FloatDenseLayer(l2Input, l1Input, m_l1Weights->m_variants[entry.variant].m_weights,
-        nn::L1InputSize, nn::L1Size, true);
+        nn::L1InputSize, nn::L1Size, true,
+        nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale);
 
     float l3Input[nn::L2Size];
     FloatDenseLayer(l3Input, l2Input, m_l2Weights->m_variants[entry.variant].m_weights,
-        nn::L1Size, nn::L2Size, true);
+        nn::L1Size, nn::L2Size, true,
+        nn::HiddenLayerWeightQuantizationScale, nn::HiddenLayerBiasQuantizationScale);
 
     float output = 0.0f;
     FloatDenseLayer(&output, l3Input, m_l3Weights->m_variants[entry.variant].m_weights,
-        nn::L2Size, 1u, false);
+        nn::L2Size, 1u, false,
+        nn::OutputLayerWeightQuantizationScale, nn::OutputLayerBiasQuantizationScale);
 
     return EvalToExpectedGameScore(output * c_nnOutputToCentiPawns / 100.0f);
 }
