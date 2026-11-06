@@ -15,7 +15,6 @@ __device__ __forceinline__ float CReLUGate(float activated)
     return (activated > 0.0f && activated < 1.0f) ? 1.0f : 0.0f;
 }
 
-#if USE_FACTORIZER
 // The factorizer weight of a feature is shared by all king buckets, so its gradient is the sum of
 // the bucket gradients of that feature. Computed from the accumulated bucket gradients instead of
 // adding a second atomic per feature to FeatureTransformerGradientsKernel.
@@ -33,7 +32,6 @@ __global__ void FactorizerGradientsKernel(
 
     weightGradients[nn::NumNetworkInputs * accumulatorSize + idx] = sum;
 }
-#endif // USE_FACTORIZER
 
 // Backward pass kernels
 static constexpr uint32_t c_sigmoidDerivativeBlockSize = 256;
@@ -379,7 +377,7 @@ void LaunchL1Gradients(CudaBatchData& batch, cudaStream_t stream)
     CUDA_CHECK(cudaGetLastError());
 }
 
-void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, cudaStream_t stream)
+void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, bool useFactorizer, cudaStream_t stream)
 {
     {
         const dim3 blockSize(32, c_ftGradientBlockRows);
@@ -401,7 +399,7 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
         CUDA_CHECK(cudaGetLastError());
     }
 
-#if USE_FACTORIZER
+    if (useFactorizer)
     {
         const dim3 blockSize(256);
         const dim3 gridSize((FactorizerInputs * nn::AccumulatorSize + blockSize.x - 1) / blockSize.x);
@@ -412,7 +410,6 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
         );
         CUDA_CHECK(cudaGetLastError());
     }
-#endif // USE_FACTORIZER
 }
 
 } // namespace cuda

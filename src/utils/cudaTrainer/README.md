@@ -70,7 +70,7 @@ checkpoint, the weight statistics and test position evals.
 - **Quantization-aware training**: weights and biases are fake-quantized on read with the same scales as the
   packed net (`nn::*QuantizationScale` in `backend/PackedNeuralNetwork.hpp`); gradients flow to the float
   master weights.
-- **Input factorizer** (`USE_FACTORIZER`): a shared 768-feature block added to every king bucket during
+- **Input factorizer** (`--factorizer on|off`, default on): a shared 768-feature block added to every king bucket during
   training and folded into the bucket weights when the net is packed.
 - **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the
   output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99.

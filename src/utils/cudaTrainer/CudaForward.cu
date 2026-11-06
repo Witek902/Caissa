@@ -122,6 +122,7 @@ __global__ void SparseBinaryInputKernel(
     uint32_t batchSize,
     uint32_t inputSize,
     uint32_t accumulatorSize,
+    bool useFactorizer,
     float weightScale, float biasScale, float invWeightScale, float invBiasScale
 )
 {
@@ -144,9 +145,8 @@ __global__ void SparseBinaryInputKernel(
             // Effective weight of a feature: the bucket weight plus the shared factorizer weight,
             // fake-quantized as a sum because that is what gets packed.
             float w = weights[feature * accumulatorSize + accumulatorIdx];
-#if USE_FACTORIZER
-            w += weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * accumulatorSize + accumulatorIdx];
-#endif // USE_FACTORIZER
+            if (useFactorizer)
+                w += weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * accumulatorSize + accumulatorIdx];
             sum += FakeQuantize(w, weightScale, invWeightScale);
         }
         return sum;
@@ -168,7 +168,7 @@ __global__ void SparseBinaryInputKernel(
     pairwiseOutputs[batchIdx * accumulatorSize + halfSize + pairIdx] = CReLU(blackLow) * CReLU(blackHigh);
 }
 
-void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, cudaStream_t stream)
+void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool useFactorizer, cudaStream_t stream)
 {
     const dim3 blockSize(32, 16);
     const dim3 gridSize(
@@ -183,6 +183,7 @@ void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, cudaSt
         batch.batchSize,
         FeatureTransformerInputs,
         nn::AccumulatorSize,
+        useFactorizer,
         ft.quant.weightScale,
         ft.quant.biasScale,
         ft.quant.invWeightScale,

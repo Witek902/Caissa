@@ -7,20 +7,14 @@
 #include "../TrainingEntry.hpp"
 #include "../../backend/PackedNeuralNetwork.hpp"
 
-// Input factorizer: a shared 768-feature weight block (king-bucket independent) that is added to the
-// weights of every king bucket during training and folded into them when the net is packed.
-// TODO make it runtime switch instead of compile-time
-#define USE_FACTORIZER 1
-
 namespace nn {
 namespace cuda {
 
+// Input factorizer: a shared 768-feature weight block (king-bucket independent) that is added to the
+// weights of every king bucket during training and folded into them when the net is packed.
+// Its rows always follow the network inputs; when it is disabled they are neither read nor trained.
 static constexpr uint32_t FactorizerInputs = 12 * 64;
-#if USE_FACTORIZER
 static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs + FactorizerInputs;
-#else
-static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs;
-#endif // USE_FACTORIZER
 
 // factorizer weights are clipped so that their sum with the (unclipped) bucket weights stays bounded
 static constexpr float FactorizerWeightRange = 0.99f;
@@ -118,7 +112,7 @@ struct CudaBatchData
 void LaunchAdamUpdate(const AdamUpdateParams& params, cudaStream_t stream);
 
 // Forward pass
-void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, cudaStream_t stream);
+void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool useFactorizer, cudaStream_t stream);
 void LaunchL1Forward(CudaBatchData& batch, const DeviceLayer& l1, cudaStream_t stream);
 void LaunchL2Forward(CudaBatchData& batch, const DeviceLayer& l2, cudaStream_t stream);
 void LaunchL3Forward(CudaBatchData& batch, const DeviceLayer& l3, cudaStream_t stream);
@@ -130,7 +124,7 @@ void LaunchSigmoidDerivative(CudaBatchData& batch, cudaStream_t stream);
 void LaunchL3Backward(CudaBatchData& batch, const DeviceLayer& l3, cudaStream_t stream);
 void LaunchL2Backward(CudaBatchData& batch, const DeviceLayer& l2, cudaStream_t stream);
 void LaunchL1Gradients(CudaBatchData& batch, cudaStream_t stream);
-void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, cudaStream_t stream);
+void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& l1, bool useFactorizer, cudaStream_t stream);
 
 #ifdef __CUDACC__
 

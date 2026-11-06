@@ -82,12 +82,10 @@ void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
     // scaled so that the accumulator of a ~32 feature position lands in the CReLU range
     m_featureTransformerWeights->Init(seed, 0.1f);
 
-#if USE_FACTORIZER
     // the factorizer starts at zero, so the effective weights are just the bucket weights
     CUDA_CHECK(cudaMemset(
         m_featureTransformerWeights->m_weights.Get() + c_numNetworkInputs * c_accumulatorSize,
         0, FactorizerInputs * c_accumulatorSize * sizeof(float)));
-#endif // USE_FACTORIZER
 
     InitRandomOutputSubnetWeights(seed);
 }
@@ -110,10 +108,8 @@ void CudaNeuralNetwork::Init(
     m_featureTransformerWeights = std::make_shared<CudaWeightsStorage>(
         FeatureTransformerInputs, c_accumulatorSize, 1
     );
-#if USE_FACTORIZER
     m_featureTransformerWeights->m_factorizerFirstWeight = c_numNetworkInputs * c_accumulatorSize;
     m_featureTransformerWeights->m_factorizerRange = FactorizerWeightRange;
-#endif // USE_FACTORIZER
 
     m_l1Weights = std::make_shared<CudaWeightsStorage>(c_l1InputSize, c_l1Size, c_numVariants);
     m_l2Weights = std::make_shared<CudaWeightsStorage>(c_l1Size, c_l2Size, c_numVariants);
@@ -307,7 +303,7 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
     // The forward pass reads the training vectors; wait for this batch's copy to complete.
     CUDA_CHECK(cudaStreamWaitEvent(stream, m_copyDoneEvent, 0));
 
-    LaunchSparseBinaryInput(batch, GetDeviceLayer(*m_featureTransformerWeights), stream);
+    LaunchSparseBinaryInput(batch, GetDeviceLayer(*m_featureTransformerWeights), m_useFactorizer, stream);
     LaunchL1Forward(batch, GetDeviceLayer(*m_l1Weights), stream);
     LaunchL2Forward(batch, GetDeviceLayer(*m_l2Weights), stream);
     LaunchL3Forward(batch, GetDeviceLayer(*m_l3Weights), stream);
@@ -335,7 +331,7 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
         // The buffer was cleared on the aux stream (overlapping the forward pass); wait for that
         // clear to complete before accumulating.
         CUDA_CHECK(cudaStreamWaitEvent(stream, m_ftGradClearedEvent, 0));
-        LaunchFeatureTransformerGradients(batch, GetDeviceLayer(*m_l1Weights), stream);
+        LaunchFeatureTransformerGradients(batch, GetDeviceLayer(*m_l1Weights), m_useFactorizer, stream);
     }
 
     // The training-vectors buffer is no longer read after the FT gradient accumulation (the Adam

@@ -125,6 +125,9 @@ struct Options
     // fine-tune the output subnets only, keeping the feature transformer fixed
     bool freezeFeatureTransformer = false;
 
+    // add the shared factorizer weights to the piece weights; when off the factorizer rows are unused
+    bool useFactorizer = true;
+
     // re-seed output subnet neurons that can no longer learn, see ReviveDeadNeurons
     bool reviveDeadNeurons = false;
 
@@ -642,12 +645,13 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
             for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
                 accumulators[perspective][i] += weights[i];
 
-#if USE_FACTORIZER
-            const float* factorizer = ftWeights.data() +
-                (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
-            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                accumulators[perspective][i] += factorizer[i];
-#endif // USE_FACTORIZER
+            if (m_options.useFactorizer)
+            {
+                const float* factorizer = ftWeights.data() +
+                    (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    accumulators[perspective][i] += factorizer[i];
+            }
         }
     }
 
@@ -868,6 +872,7 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "outputSubnetDecay="          << cOutputSubnetWeightDecay << "\n";
     f << "bucketLeak="                 << m_options.bucketLeak << "\n";
     f << "freezeFeatureTransformer="   << (m_options.freezeFeatureTransformer ? "true" : "false") << "\n";
+    f << "factorizer="                 << (m_options.useFactorizer ? "true" : "false") << "\n";
     f << "reviveDeadNeurons="          << (m_options.reviveDeadNeurons ? "true" : "false") << "\n";
     f << "warmupIterations="           << cWarmupTime << "\n";
     f << "positionsPerIteration="      << cNumTrainingVectorsPerIteration << "\n";
@@ -994,16 +999,17 @@ bool CudaNetworkTrainer::PackNetwork()
             storedWeights.begin() + (nn::cuda::FeatureTransformerInputs + 1) * nn::AccumulatorSize,
             weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize);
 
-#if USE_FACTORIZER
         // fold the factorizer into every king bucket
-        for (uint32_t feature = 0; feature < nn::NumNetworkInputs; ++feature)
+        if (m_options.useFactorizer)
         {
-            const float* factorizer = storedWeights.data() + (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
-            float* target = weights.data() + feature * nn::AccumulatorSize;
-            for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
-                target[i] += factorizer[i];
+            for (uint32_t feature = 0; feature < nn::NumNetworkInputs; ++feature)
+            {
+                const float* factorizer = storedWeights.data() + (nn::NumNetworkInputs + feature % nn::cuda::FactorizerInputs) * nn::AccumulatorSize;
+                float* target = weights.data() + feature * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    target[i] += factorizer[i];
+            }
         }
-#endif // USE_FACTORIZER
 
         PackWeights(
             weights,
@@ -1072,7 +1078,6 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
             nn::InputLayerBiasQuantizationScale,
             WeightLayout::InputMajor);
 
-#if USE_FACTORIZER
         // a packed net has the factorizer already folded in: move the biases behind the (zeroed)
         // factorizer rows
         std::copy(
@@ -1083,7 +1088,6 @@ bool CudaNetworkTrainer::UnpackNetwork(const char* path)
             weights.begin() + nn::NumNetworkInputs * nn::AccumulatorSize,
             weights.begin() + nn::cuda::FeatureTransformerInputs * nn::AccumulatorSize,
             0.0f);
-#endif // USE_FACTORIZER
     }
 
     // output subnets
@@ -1237,6 +1241,9 @@ bool CudaNetworkTrainer::Train()
         m_cudaNetwork.SetFeatureTransformerFrozen(true);
         std::cout << "Feature transformer frozen" << std::endl;
     }
+
+    m_cudaNetwork.SetFactorizerEnabled(m_options.useFactorizer);
+    std::cout << "Factorizer " << (m_options.useFactorizer ? "on" : "off") << std::endl;
 
     if (m_options.bucketLeak > 0.0f)
         std::cout << "Bucket leak: " << m_options.bucketLeak << std::endl;
@@ -1524,6 +1531,8 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.beta2 = std::stof(args[++i]);
         else if (args[i] == "--ftDecay")
             options.featureTransformerWeightDecay = std::stof(args[++i]);
+        else if (args[i] == "--factorizer" && (args[i + 1] == "on" || args[i + 1] == "off"))
+            options.useFactorizer = args[++i] == "on";
         else
         {
             std::cerr << "Unknown option: " << args[i] << std::endl;
