@@ -1914,6 +1914,9 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         int32_t moveStatScore = 0;
 
+        // LMR reduction of a quiet move except the gives-check term, which needs the move to be played
+        int32_t quietReduction = 0;
+
         if (move.IsQuiet())
         {
             // compute move stat score using some of history counters
@@ -1924,6 +1927,35 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             if (const auto* h = node->continuationHistories[3]) moveStatScore += (*h)[pieceTo];
 
             quietMoveIndex++;
+
+            if (node->depth >= LateMoveReductionStartDepth && moveIndex >= 1)
+            {
+                quietReduction = GetQuietsDepthReduction(node->depth, moveIndex + 1);
+
+                // reduce non-PV nodes more
+                if constexpr (!isPvNode) quietReduction += LmrQuietNonPv;
+
+                // reduce more if TT move is capture
+                if (ttCapture) quietReduction += LmrQuietTTCapture;
+
+                // reduce good moves less
+                if (moveScore >= MoveOrderer::CounterMoveBonus) quietReduction -= LmrQuietRefutation;
+
+                // reduce less based on move stat score
+                quietReduction -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
+
+                if (node->isCutNode) quietReduction += LmrQuietCutNode;
+
+                // reduce more if eval is not improving
+                if (!isImproving) quietReduction += LmrQuietImproving;
+
+                // reduce low-ply moves less
+                if constexpr (isPvNode)
+                    quietReduction -= LmrScale * node->depth / (1 + node->ply + node->depth);
+
+                // reduce less if TT entry has high depth
+                if (ttEntry.depth >= node->depth) quietReduction -= LmrTTHighDepth;
+            }
         }
 
         if (!isRootNode && bestValue > -KnownWinValue)
@@ -1933,7 +1965,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
             // are pruned more aggressively than early moves.
             int32_t lmrDepth = (int32_t)node->depth;
             if (move.IsQuiet() && node->depth >= LateMoveReductionStartDepth && moveIndex >= 1)
-                lmrDepth = Max(1, (int32_t)node->depth - (int32_t)(GetQuietsDepthReduction(node->depth, moveIndex + 1) + LmrScale / 2) / LmrScale);
+                lmrDepth = Max(1, (int32_t)node->depth - Max(0, (quietReduction + LmrScale / 2) / LmrScale));
 
             if (move.IsQuiet() || move.IsUnderpromotion())
             {
@@ -2081,24 +2113,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         {
             if (move.IsQuiet())
             {
-                r = GetQuietsDepthReduction(node->depth, moveIndex);
-
-                // reduce non-PV nodes more
-                if constexpr (!isPvNode) r += LmrQuietNonPv;
-
-                // reduce more if TT move is capture
-                if (ttCapture) r += LmrQuietTTCapture;
-
-                // reduce good moves less
-                if (moveScore >= MoveOrderer::CounterMoveBonus) r -= LmrQuietRefutation;
-
-                // reduce less based on move stat score
-                r -= (moveStatScore + ReductionStatOffset) / ReductionStatDiv;
-
-                if (node->isCutNode) r += LmrQuietCutNode;
-
-                // reduce more if eval is not improving
-                if (!isImproving) r += LmrQuietImproving;
+                r = quietReduction;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
@@ -2120,14 +2135,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
+
+                // reduce low-ply moves less
+                if constexpr (isPvNode)
+                    r -= LmrScale * node->depth / (1 + node->ply + node->depth);
+
+                // reduce less if TT entry has high depth
+                if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
             }
-
-            // reduce low-ply moves less
-            if constexpr (isPvNode)
-                r -= LmrScale * node->depth / (1 + node->ply + node->depth);
-
-            // reduce less if TT entry has high depth
-            if (ttEntry.depth >= node->depth) r -= LmrTTHighDepth;
 
             // scale down
             r = (r + LmrScale / 2) / LmrScale;
