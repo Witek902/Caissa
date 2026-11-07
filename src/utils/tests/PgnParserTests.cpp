@@ -1,16 +1,11 @@
-#include "PgnParser.hpp"
-#include "../backend/Move.hpp"
+#include "TestCommon.hpp"
+#include "../PgnParser.hpp"
+#include "../../backend/Move.hpp"
 
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << " at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
-
-#define TEST_EXPECT_EQ(a, b) \
-    if ((a) != (b)) { std::cout << "Test failed: " << #a << " == " << #b << " (got " << (a) << " vs " << (b) << ") at " << __FILE__ << ":" << __LINE__ << std::endl; DEBUG_BREAK(); }
 
 static std::vector<Game> ParseAll(const char* pgn)
 {

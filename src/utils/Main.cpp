@@ -5,8 +5,7 @@
 #include <vector>
 #include <string>
 
-extern void RunUnitTests();
-extern bool RunPerformanceTests(const std::vector<std::string>& paths);
+extern void RunUnitTests(const std::vector<std::string>& args);
 extern void SelfPlay(const std::vector<std::string>& args);
 extern void PrepareTrainingData(const std::vector<std::string>& args);
 extern void PlainTextToTrainingData(const std::vector<std::string>& args);
@@ -61,9 +60,7 @@ int main(int argc, const char* argv[])
     args.erase(args.begin());
 
     if (toolName == "unittest")
-        RunUnitTests();
-    else if (toolName == "perftest")
-        RunPerformanceTests(args);
+        RunUnitTests(args);
     else if (toolName == "selfplay")
         SelfPlay(args);
     else if (toolName == "prepareTrainingData")

@@ -1,13 +1,11 @@
-#include "../backend/Position.hpp"
-#include "TrainerCommon.hpp"
-#include "../backend/PositionUtils.hpp"
+#include "TestCommon.hpp"
+#include "../../backend/Position.hpp"
+#include "../TrainerCommon.hpp"
+#include "../../backend/PositionUtils.hpp"
 
 #include <iostream>
 #include <random>
 #include <string>
-
-#define TEST_EXPECT(x) \
-    if (!(x)) { std::cout << "Test failed: " << #x << std::endl; DEBUG_BREAK(); }
 
 void RunPackedPositionTests()
 {
