@@ -40,6 +40,8 @@ ifneq ($(findstring g++, $(CC)),)
 	FLAGS += -fno-peel-loops
 	# without a profile, the blocks GCC guesses as cold (and moves to a separate section) still run often
 	FLAGS += -fno-reorder-blocks-and-partition
+	# small loops stay inline instead of becoming memset/memcpy calls
+	FLAGS += -fno-tree-loop-distribute-patterns
 	PGO_DIR = "pgo"
 	# the counters are inserted when each file is compiled, so the instrumented link may use parallel partitions;
 	# the profile run is single-threaded, so plain counter increments (not the atomic ones -pthread implies) are exact
