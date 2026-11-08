@@ -149,7 +149,7 @@ DEFINE_PARAM(PriorCMHBonusScale, 120, 20, 240);
 DEFINE_PARAM(PriorCMHBonusBias, 100, 0, 200);
 DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
-DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 2, 0, 6);
+DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 3, 0, 6);
 DEFINE_PARAM(ThreadVoteScoreOffset, 10, 0, 30);
 
 INLINE static uint32_t GetLateMovePruningTreshold(uint32_t depth, bool improving)
