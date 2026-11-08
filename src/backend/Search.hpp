@@ -138,10 +138,10 @@ struct NodeInfo
     const nn::Accumulator* accumulatorPtr[2] = { nullptr, nullptr };
 
     uint16_t pvLength = 0;
-    PackedMove pvLine[MaxSearchDepth];
+    PackedMove* pvLine = nullptr;
 
     // accumulators for both perspectives
-    nn::Accumulator accumulatorData[2];
+    nn::Accumulator* accumulatorData = nullptr;
 
     INLINE void Clear()
     {
@@ -327,11 +327,16 @@ private:
         CorrectionHistories* correctionHistories = nullptr;
         // two extra entries so the deepest node can still clear the cutoff counter two plies ahead
         NodeInfo searchStack[MaxSearchDepth + 2];
+        // kept out of NodeInfo, so the search state of nearby plies shares cache lines and pages
+        nn::Accumulator accumulatorStack[MaxSearchDepth + 2][2];
+        PackedMove pvStack[MaxSearchDepth + 2][MaxSearchDepth];
 
         ThreadData();
         ~ThreadData();
         ThreadData(const ThreadData&) = delete;
         ThreadData(ThreadData&&) = delete;
+
+        NodeInfo& ResetRootNode();
     };
 
     DynArray<ThreadData*> mThreadData;

@@ -301,6 +301,8 @@ bool CheckInsufficientMaterial(const Position& pos)
 ScoreType Evaluate(const Position& pos)
 {
     NodeInfo dummyNode = { pos };
+    nn::Accumulator accumulators[2];
+    dummyNode.accumulatorData = accumulators;
 
     AccumulatorCache dummyCache;
     if (g_mainNeuralNetwork)
