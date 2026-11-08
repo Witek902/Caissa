@@ -38,9 +38,11 @@ endif
 ifneq ($(findstring g++, $(CC)),)
 	# no loop peeling (and no tracer with a profile): the code they duplicate slows the build down
 	FLAGS += -fno-peel-loops
+	# without a profile, the blocks GCC guesses as cold (and moves to a separate section) still run often
+	FLAGS += -fno-reorder-blocks-and-partition
 	PGO_DIR = "pgo"
 	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
-	PGO_USE      = -fprofile-use=$(PGO_DIR) -fno-tracer
+	PGO_USE      = -fprofile-use=$(PGO_DIR) -fno-tracer -freorder-blocks-and-partition
 else ifneq ($(findstring clang++, $(CC)),)
 	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
 	PGO_GENERATE = -fprofile-instr-generate
