@@ -1167,7 +1167,7 @@ INLINE static bool OppCanWinMaterial(const Position& position, const Threats& th
 
 INLINE static void AddToCorrHist(int16_t& history, int32_t value)
 {
-    history = static_cast<int16_t>(history + value - history * Abs(value) / CorrHistGravity);
+    history = static_cast<int16_t>(history + value - DivideBy(history * Abs(value), CorrHistGravity));
 }
 
 ScoreType Search::AdjustEvalScore(const ThreadData& thread, const NodeInfo& node, const SearchParam& searchParam) const
@@ -1791,8 +1791,8 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 {
                     const int32_t r =
                         NmpNullMoveDepthReduction +
-                        node->depth / NmpEvalRedDiv +
-                        Min<int32_t>(NmpEvalBetaClamp, int32_t(eval - beta) / NmpEvalDiffDiv) + isImproving;
+                        DivideBy(node->depth, NmpEvalRedDiv) +
+                        Min<int32_t>(NmpEvalBetaClamp, DivideBy(eval - beta, NmpEvalDiffDiv)) + isImproving;
 
                     NodeInfo& childNode = *(node + 1);
                     childNode.Clear();

@@ -120,6 +120,25 @@ template<typename T> constexpr const T& Clamp(const T& x, const T& lo, const T& 
 
 inline int Abs(int a) { return abs(a); }
 
+// x / d (truncating towards zero). GCC compiles some hot NegaMax blocks for size and emits idiv even for constant
+// divisors. For a constant d this is the sequence GCC emits when optimizing for speed: a rounding shift for a power
+// of two, otherwise x * ceil(2^(31+s)/d) >> (31+s) with s = ceil(log2(d)), plus 1 for negative x (exact for any x,
+// since the product is never a multiple of 2^(31+s) when d is not a power of two).
+INLINE int32_t DivideBy(int32_t x, int32_t d)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    if (__builtin_constant_p(d) && d > 1)
+    {
+        if ((d & (d - 1)) == 0)
+            return (x + ((x >> 31) & (d - 1))) >> __builtin_ctz((uint32_t)d);
+        const uint32_t s = 32 - __builtin_clz((uint32_t)d - 1);
+        const int64_t m = (int64_t)(((uint64_t(1) << (31 + s)) + (uint64_t)d - 1) / (uint64_t)d);
+        return (int32_t)(((int64_t)x * m) >> (31 + s)) + (int32_t)((uint32_t)x >> 31);
+    }
+#endif
+    return x / d;
+}
+
 template<typename T> struct RemoveReference { using Type = T; };
 template<typename T> struct RemoveReference<T&> { using Type = T; };
 template<typename T> struct RemoveReference<T&&> { using Type = T; };
