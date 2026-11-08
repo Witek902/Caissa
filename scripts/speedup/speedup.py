@@ -17,6 +17,15 @@ Rounds disturbed by other activity on the machine are detected against the media
 rejected, and rows are colored by how well the result is established: dim while still
 unresolved, green once significant, yellow/red for disturbed rounds and slowdowns.
 
+By default the run stops as soon as a sequential test (like an SPRT) is resolved: a speedup
+of at least --sprt-delta, a slowdown of at least --sprt-delta, or no change that large.
+Peeking at the CI after every round would make a false "confirmed" far more likely than
+the nominal 5%; the sequential test keeps both error rates at --sprt-alpha.
+
+Identical binaries differ by up to ~0.7% depending on the file they run from, most likely
+because of where its pages sit in physical memory, and an older file tends to be slower. So
+every round runs fresh copies of both engines, and the order alternates between rounds.
+
 Usage:
     python speedup.py                       # the two executables next to this script
     python speedup.py new.exe old.exe       # explicit, first one is the new build
@@ -29,6 +38,7 @@ import argparse
 import math
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -148,6 +158,18 @@ def run_bench(engine, depth, high_priority, timeout):
     )
 
 
+def run_bench_fresh_copy(engine, depth, high_priority, timeout):
+    """Run one bench from a new copy of the executable, next to the original (a net file may be there)."""
+    root, ext = os.path.splitext(engine)
+    copy = f"{root}.speedup_tmp{ext}"
+    shutil.copyfile(engine, copy)
+    shutil.copymode(engine, copy)
+    try:
+        return run_bench(copy, depth, high_priority, timeout)
+    finally:
+        os.remove(copy)
+
+
 # ---------------------------------------------------------------------------
 # statistics
 # ---------------------------------------------------------------------------
@@ -216,6 +238,34 @@ MIN_ROBUST_SIGMA = 0.002  # floor, so an unusually tight early cluster cannot ma
                           # ordinary rounds look like outliers
 
 
+def sprt_llrs(samples, delta):
+    """Log-likelihood ratios of 'speedup of delta' and 'slowdown of delta' against 'no change'.
+
+    Gaussian model with the variance estimated from the rounds so far.
+    """
+    var = samples.sigma ** 2
+    if samples.n < 2 or var <= 0.0:
+        return 0.0, 0.0
+    k = samples.n * delta / var
+    return k * (samples.mean - delta / 2), k * (-samples.mean - delta / 2)
+
+
+def sprt_decision(samples, args):
+    """'faster', 'slower', 'neutral' or None while the sequential test is unresolved."""
+    if args.no_sprt or samples.n < args.min_rounds:
+        return None
+    upper = math.log((1 - args.sprt_alpha) / args.sprt_alpha)
+    lower = math.log(args.sprt_alpha / (1 - args.sprt_alpha))
+    faster, slower = sprt_llrs(samples, args.sprt_delta / 100)
+    if faster >= upper:
+        return "faster"
+    if slower >= upper:
+        return "slower"
+    if faster <= lower and slower <= lower:
+        return "neutral"
+    return None
+
+
 def deviation(x, samples):
     """How far x lies from the sample median, in robust sigmas (median absolute deviation).
 
@@ -281,6 +331,17 @@ def parse_args():
     p.add_argument("--outlier-threshold", type=float, default=5.0, metavar="MAD",
                    help="reject rounds deviating more than this many robust sigmas from the "
                         "median ratio; 0 disables rejection (default: 5)")
+    p.add_argument("--sprt-delta", type=float, default=0.3, metavar="PCT",
+                   help="smallest speed difference in percent the early stop resolves "
+                        "(default: 0.3)")
+    p.add_argument("--sprt-alpha", type=float, default=0.05, metavar="P",
+                   help="error rate of each early-stop decision (default: 0.05)")
+    p.add_argument("--min-rounds", type=int, default=5, metavar="N",
+                   help="counted rounds before the early stop may end the run (default: 5)")
+    p.add_argument("--no-sprt", action="store_true",
+                   help="no early stop: run until --rounds or Ctrl+C")
+    p.add_argument("--no-fresh-copies", action="store_true",
+                   help="run the engine files themselves instead of a new copy every round")
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     args = p.parse_args()
 
@@ -310,6 +371,12 @@ def parse_args():
         p.error("--rounds must be >= 0")
     if args.outlier_threshold < 0:
         p.error("--outlier-threshold must be >= 0")
+    if args.sprt_delta <= 0:
+        p.error("--sprt-delta must be > 0")
+    if not 0 < args.sprt_alpha < 0.5:
+        p.error("--sprt-alpha must be in (0, 0.5)")
+    if args.min_rounds < 2:
+        p.error("--min-rounds must be >= 2")
     return args
 
 
@@ -323,6 +390,7 @@ def main():
     args = parse_args()
     init_color(not args.no_color)
     new_engine, old_engine = args.engines
+    bench = run_bench if args.no_fresh_copies else run_bench_fresh_copy
     names = [os.path.basename(e) for e in args.engines]
     conf = args.confidence
 
@@ -330,11 +398,14 @@ def main():
     print(f"old   : {old_engine}")
     print(f"config: depth {args.depth}, warmup {args.warmup} round(s), "
           f"{'high' if not args.no_priority else 'default'} priority, {conf}% CI, "
-          f"outlier cutoff {args.outlier_threshold or 'off'}")
+          f"outlier cutoff {args.outlier_threshold or 'off'}, "
+          + ("no early stop" if args.no_sprt else
+             f"early stop at +/-{args.sprt_delta}% (alpha {args.sprt_alpha}, "
+             f">= {args.min_rounds} rounds)"))
     print()
     print(f"{'round':>5} {names[0][:16]:>18} {names[1][:16]:>18} "
-          f"{'speedup':>9} {'CI':>11} {'noise/run':>10} {'t':>7}")
-    print("-" * 92)
+          f"{'speedup':>9} {'CI':>11} {'noise/run':>10} {'t':>7} {'LLR+':>6} {'LLR-':>6}")
+    print("-" * 106)
 
     new_nps, old_nps, ratio = Samples(), Samples(), Samples()
     ratios = []           # accepted ratio samples, kept for the robust median
@@ -344,13 +415,19 @@ def main():
     node_mismatch_reported = False
     start = time.time()
     rnd = 0
+    decision = None
 
     try:
-        while not args.rounds or (ratio.n < args.rounds and rnd < args.warmup + 2 * args.rounds):
+        while decision is None and (
+                not args.rounds or (ratio.n < args.rounds and rnd < args.warmup + 2 * args.rounds)):
             rnd += 1
             try:
-                n_nodes, n_nps = run_bench(new_engine, args.depth, not args.no_priority, args.timeout)
-                o_nodes, o_nps = run_bench(old_engine, args.depth, not args.no_priority, args.timeout)
+                if rnd % 2:
+                    n_nodes, n_nps = bench(new_engine, args.depth, not args.no_priority, args.timeout)
+                    o_nodes, o_nps = bench(old_engine, args.depth, not args.no_priority, args.timeout)
+                else:
+                    o_nodes, o_nps = bench(old_engine, args.depth, not args.no_priority, args.timeout)
+                    n_nodes, n_nps = bench(new_engine, args.depth, not args.no_priority, args.timeout)
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1
@@ -389,15 +466,18 @@ def main():
 
             margin = ratio.margin(conf)
             t_stat = ratio.mean / ratio.stderr if ratio.stderr > 0 else 0.0
+            llr_faster, llr_slower = sprt_llrs(ratio, args.sprt_delta / 100)
             line = (f"{rnd:>5} {new_nps.mean:>18,.0f} {old_nps.mean:>18,.0f} "
                     f"{100 * ratio.mean:>8.3f}% {100 * margin:>10.3f}% "
-                    f"{100 * ratio.sigma:>9.3f}% {t_stat:>7.2f}")
+                    f"{100 * ratio.sigma:>9.3f}% {t_stat:>7.2f} {llr_faster:>6.2f} {llr_slower:>6.2f}")
             if dev > SUSPICIOUS_DEVIATION:
                 suspicious += 1
                 print(paint(f"{line}   disturbed round? (own ratio {100 * r:+.2f}%, "
                             f"{dev:.1f} MAD, kept)", YELLOW))
             else:
                 print(paint(line, confidence_color(ratio.mean, margin)))
+
+            decision = sprt_decision(ratio, args)
 
     except KeyboardInterrupt:
         print()
@@ -434,6 +514,15 @@ def main():
             verdict += f" (~{needed} rounds needed to resolve an effect this size)"
         verdict = paint(verdict, YELLOW)
     print(f"  verdict     {verdict}")
+    if decision == "faster":
+        print(paint(f"  early stop  speedup of at least {args.sprt_delta}% likely "
+                    f"(sequential test, alpha {args.sprt_alpha})", BRIGHT_GREEN))
+    elif decision == "slower":
+        print(paint(f"  early stop  slowdown of at least {args.sprt_delta}% likely "
+                    f"(sequential test, alpha {args.sprt_alpha})", RED))
+    elif decision == "neutral":
+        print(paint(f"  early stop  no change as large as {args.sprt_delta}% "
+                    f"(sequential test, alpha {args.sprt_alpha})", YELLOW))
 
     if rejected:
         worst = max(rejected, key=lambda e: e[2])
