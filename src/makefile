@@ -41,7 +41,9 @@ ifneq ($(findstring g++, $(CC)),)
 	# without a profile, the blocks GCC guesses as cold (and moves to a separate section) still run often
 	FLAGS += -fno-reorder-blocks-and-partition
 	PGO_DIR = "pgo"
-	PGO_GENERATE = -fprofile-generate=$(PGO_DIR)
+	# the counters are inserted when each file is compiled, so the instrumented link may use parallel partitions;
+	# the profile run is single-threaded, so plain counter increments (not the atomic ones -pthread implies) are exact
+	PGO_GENERATE = -fprofile-generate=$(PGO_DIR) -fprofile-update=single -flto=auto -flto-partition=balanced
 	PGO_USE      = -fprofile-use=$(PGO_DIR) -fno-tracer -freorder-blocks-and-partition
 else ifneq ($(findstring clang++, $(CC)),)
 	PGO_MERGE    = llvm-profdata merge -output=caissa.profdata *.profraw
@@ -49,12 +51,20 @@ else ifneq ($(findstring clang++, $(CC)),)
 	PGO_USE      = -fprofile-instr-use=caissa.profdata
 endif
 
-# set by the pgo target for its two native sub-builds
+# set by the pgo targets for their two sub-builds
 ifeq ($(PGO_STEP),generate)
 	PGOFLAGS = $(PGO_GENERATE)
 else ifeq ($(PGO_STEP),use)
 	PGOFLAGS = $(PGO_USE)
 endif
+
+# the pgo sub-builds compile the objects in parallel even when make was started without -j
+ifdef NUMBER_OF_PROCESSORS
+	NPROC = $(NUMBER_OF_PROCESSORS)
+else
+	NPROC = $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+endif
+PGO_JOBS = $(if $(filter -j%,$(MAKEFLAGS)),,-j$(NPROC))
 
 # Try to detect windows environment by seeing
 # whether the shell filters out " or not.
@@ -114,17 +124,28 @@ else
 	              $(if $(NATIVE_AVX512),$(NATIVE_AVX512FLAGS),$(call has-native,__AVXVNNI__,-DUSE_VNNI))
 endif
 
+# ARCH (set by the fixed-target pgo builds) selects the flags of the object builds, native by default
+ARCHFLAGS_bmi2      = -march=core-avx2 $(BMI2FLAGS)
+ARCHFLAGS_avx2      = -march=core-avx2 $(AVX2FLAGS)
+ARCHFLAGS_avx512    = -march=skylake-avx512 $(AVX512FLAGS)
+ARCHFLAGS_avx512icl = -march=icelake-client $(AVX512ICLFLAGS)
+ifdef ARCH
+	BUILDFLAGS = $(ARCHFLAGS_$(ARCH))
+else
+	BUILDFLAGS = $(NATIVEFLAGS)
+endif
+
 %.o: %.cpp
-	$(CC) $(NATIVEFLAGS) $(PGOFLAGS) -c $< -o $@
+	$(CC) $(BUILDFLAGS) $(PGOFLAGS) -c $< -o $@
 %.o: %.c
-	$(CC) $(NATIVEFLAGS) $(PGOFLAGS) -c $< -o $@
+	$(CC) $(BUILDFLAGS) $(PGOFLAGS) -c $< -o $@
 
 # Evaluate.cpp embeds the net via INCBIN, so it must not be compiled before the download completes
 backend/Evaluate.o: $(EVALFILE)
 
 # for OpenBench
 ob: $(EVALFILE) $(OBJ)
-	$(CC) $(OBJ) $(NATIVEFLAGS) $(PGOFLAGS) -o $(EXE)$(EXT)
+	$(CC) $(OBJ) $(BUILDFLAGS) $(PGOFLAGS) -o $(EXE)$(EXT)
 	$(CLEAN_OBJS)
 
 # download the default net file if not present (needed for embedding via INCBIN)
@@ -160,34 +181,17 @@ neon: $(EVALFILE)
 # native build like ob; phony because the profile directory has the same name
 .PHONY: pgo
 pgo: $(EVALFILE)
-	$(MAKE) ob PGO_STEP=generate
+	$(MAKE) $(PGO_JOBS) ob PGO_STEP=generate
 	$(BENCH)
 	$(PGO_MERGE)
-	$(MAKE) ob PGO_STEP=use
+	$(MAKE) $(PGO_JOBS) ob PGO_STEP=use
 	$(CLEAN)
-bmi2_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
+.PHONY: bmi2_pgo avx2_pgo avx512_pgo avx512icl_pgo
+bmi2_pgo avx2_pgo avx512_pgo avx512icl_pgo: $(EVALFILE)
+	$(MAKE) $(PGO_JOBS) ob ARCH=$(@:_pgo=) PGO_STEP=generate
 	$(BENCH)
 	$(PGO_MERGE)
-	$(CC) $(SRC) -march=core-avx2 $(BMI2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
-	$(CLEAN)
-avx2_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
-	$(BENCH)
-	$(PGO_MERGE)
-	$(CC) $(SRC) -march=core-avx2 $(AVX2FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
-	$(CLEAN)
-avx512_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
-	$(BENCH)
-	$(PGO_MERGE)
-	$(CC) $(SRC) -march=skylake-avx512 $(AVX512FLAGS) -o $(EXE)$(EXT) $(PGO_USE)
-	$(CLEAN)
-avx512icl_pgo: $(EVALFILE)
-	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_GENERATE)
-	$(BENCH)
-	$(PGO_MERGE)
-	$(CC) $(SRC) -march=icelake-client $(AVX512ICLFLAGS) -o $(EXE)$(EXT) $(PGO_USE)
+	$(MAKE) $(PGO_JOBS) ob ARCH=$(@:_pgo=) PGO_STEP=use
 	$(CLEAN)
 
 release:
