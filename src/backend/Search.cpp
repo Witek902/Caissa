@@ -973,8 +973,7 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             const uint16_t singularDepth = depth / 2;
             const ScoreType singularBeta = primaryMoveScore - (ScoreType)scoreTreshold;
 
-            NodeInfo& rootNode = thread.searchStack[0];
-            rootNode = NodeInfo{};
+            NodeInfo& rootNode = thread.ResetRootNode();
             rootNode.position = game.GetPosition();
             rootNode.isInCheck = rootNode.position.IsInCheck();
             rootNode.position.ComputeThreats(rootNode.threats);
@@ -1023,8 +1022,7 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
     const uint32_t maxPvLine = param.searchParam.limits.isInfinite ? UINT32_MAX : Min(param.depth, DefaultMaxPvLineLength);
 
     // TODO root node could be created in Search_Internal
-    NodeInfo& rootNode = thread.searchStack[0];
-    rootNode = NodeInfo{};
+    NodeInfo& rootNode = thread.ResetRootNode();
     rootNode.position = param.position;
     rootNode.isInCheck = param.position.IsInCheck();
     rootNode.position.ComputeThreats(rootNode.threats);
@@ -1103,6 +1101,20 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
 Search::ThreadData::ThreadData()
     : sync(new ThreadSync)
 {
+    for (uint32_t i = 0; i < MaxSearchDepth + 2; ++i)
+    {
+        searchStack[i].accumulatorData = accumulatorStack[i];
+        searchStack[i].pvLine = pvStack[i];
+    }
+}
+
+NodeInfo& Search::ThreadData::ResetRootNode()
+{
+    NodeInfo& rootNode = searchStack[0];
+    rootNode = NodeInfo{};
+    rootNode.accumulatorData = accumulatorStack[0];
+    rootNode.pvLine = pvStack[0];
+    return rootNode;
 }
 
 Search::ThreadData::~ThreadData()
