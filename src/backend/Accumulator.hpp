@@ -263,6 +263,56 @@ struct alignas(CACHELINE_SIZE) Accumulator
 #endif
     }
 
+    // Two independent updates in one tile loop, so the weight loads of both are in flight together.
+    // The adds wrap, so the result does not depend on the order of the features.
+    INLINE static void UpdatePair(const FirstLayerWeightType* weights,
+        Accumulator& targetA, const Accumulator& sourceA,
+        uint32_t numAddedA, const uint16_t* addedA, uint32_t numRemovedA, const uint16_t* removedA,
+        Accumulator& targetB, const Accumulator& sourceB,
+        uint32_t numAddedB, const uint16_t* addedB, uint32_t numRemovedB, const uint16_t* removedB)
+    {
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+        constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+        constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
+        static_assert(numChunks % OptimalRegisterCount == 0);
+        constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
+
+        const auto updateTile = [weights](uint32_t chunkBase, Accumulator& target, const Accumulator& source,
+            uint32_t numAdded, const uint16_t* added, uint32_t numRemoved, const uint16_t* removed) INLINE_LAMBDA
+        {
+            Int16VecType regs[OptimalRegisterCount];
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                regs[i] = Int16VecLoad(source.values + chunkBase + i * registerWidth);
+            for (uint32_t j = 0; j < numRemoved; ++j)
+            {
+                ASSERT(removed[j] < NumNetworkInputs);
+                const FirstLayerWeightType* weightsStart = weights + (chunkBase + removed[j] * AccumulatorSize);
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecSub(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
+            }
+            for (uint32_t j = 0; j < numAdded; ++j)
+            {
+                ASSERT(added[j] < NumNetworkInputs);
+                const FirstLayerWeightType* weightsStart = weights + (chunkBase + added[j] * AccumulatorSize);
+                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                    regs[i] = Int16VecAdd(regs[i], Int16VecLoad(weightsStart + i * registerWidth));
+            }
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                Int16VecStore(target.values + chunkBase + i * registerWidth, regs[i]);
+        };
+
+        for (uint32_t tile = 0; tile < numTiles; ++tile)
+        {
+            const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
+            updateTile(chunkBase, targetA, sourceA, numAddedA, addedA, numRemovedA, removedA);
+            updateTile(chunkBase, targetB, sourceB, numAddedB, addedB, numRemovedB, removedB);
+        }
+#else
+        Update(targetA, sourceA, weights, numAddedA, addedA, numRemovedA, removedA);
+        Update(targetB, sourceB, weights, numAddedB, addedB, numRemovedB, removedB);
+#endif
+    }
+
     INLINE static void Update(Accumulator& target, const Accumulator& source,
         const FirstLayerWeightType* weights,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,

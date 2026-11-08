@@ -584,10 +584,80 @@ INLINE static void RefreshAccumulator(const nn::PackedNeuralNetwork& network, No
     }
 }
 
+template<Color perspective>
+INLINE static void GetPerspectiveKingBucket(const Position& pos, uint32_t& side, uint32_t& bucket)
+{
+    if constexpr (perspective == White)
+        GetKingSideAndBucket(pos.Whites().GetKingSquare(), side, bucket);
+    else
+        GetKingSideAndBucket(pos.Blacks().GetKingSquare().FlippedRank(), side, bucket);
+}
+
+template<Color perspective>
+INLINE static bool SameKingBucket(const Position& a, const Position& b)
+{
+    uint32_t sideA, bucketA, sideB, bucketB;
+    GetPerspectiveKingBucket<perspective>(a, sideA, bucketA);
+    GetPerspectiveKingBucket<perspective>(b, sideB, bucketB);
+    return sideA == sideB && bucketA == bucketB;
+}
+
+// features changed by the node's own move (the node's parent has valid accumulators)
+template<Color perspective>
+INLINE static void GetMoveFeatures(const NodeInfo& node, uint32_t& numAdded, uint16_t* added, uint32_t& numRemoved, uint16_t* removed)
+{
+    const NNEvaluatorContext& nnContext = node.nnContext;
+    for (uint32_t i = 0; i < nnContext.numDirtyPieces; ++i)
+    {
+        const DirtyPiece& dirtyPiece = nnContext.dirtyPieces[i];
+        if (dirtyPiece.toSquare.IsValid())
+            added[numAdded++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.toSquare, node.position);
+        if (dirtyPiece.fromSquare.IsValid())
+            removed[numRemoved++] = (uint16_t)DirtyPieceToFeatureIndex<perspective>(dirtyPiece.piece, dirtyPiece.color, dirtyPiece.fromSquare, node.position);
+    }
+}
+
+// The common case: both accumulators are one move away from the parent's. Both are updated in one pass.
+INLINE static bool UpdateBothFromParent(const nn::PackedNeuralNetwork& network, NodeInfo& node)
+{
+    if (node.ply == 0 || !node.nnContext.accumDirty[White] || !node.nnContext.accumDirty[Black])
+        return false;
+
+    const NodeInfo& parent = *(&node - 1);
+    if (parent.nnContext.accumDirty[White] || parent.nnContext.accumDirty[Black])
+        return false;
+
+    // a king move to another bucket needs a refresh
+    if (!SameKingBucket<White>(parent.position, node.position) || !SameKingBucket<Black>(parent.position, node.position))
+        return false;
+
+    constexpr uint32_t maxChangedFeatures = 2 * MaxNumDirtyPieces;
+    uint32_t numAddedW = 0, numRemovedW = 0, numAddedB = 0, numRemovedB = 0;
+    uint16_t addedW[maxChangedFeatures], removedW[maxChangedFeatures], addedB[maxChangedFeatures], removedB[maxChangedFeatures];
+    GetMoveFeatures<White>(node, numAddedW, addedW, numRemovedW, removedW);
+    GetMoveFeatures<Black>(node, numAddedB, addedB, numRemovedB, removedB);
+
+    if (numAddedW + numRemovedW == 0 || numAddedB + numRemovedB == 0)
+        return false;
+
+    nn::Accumulator::UpdatePair(network.accumulatorWeights,
+        node.accumulatorData[White], *parent.accumulatorPtr[White], numAddedW, addedW, numRemovedW, removedW,
+        node.accumulatorData[Black], *parent.accumulatorPtr[Black], numAddedB, addedB, numRemovedB, removedB);
+
+    node.accumulatorPtr[White] = &node.accumulatorData[White];
+    node.accumulatorPtr[Black] = &node.accumulatorData[Black];
+    node.nnContext.accumDirty[White] = false;
+    node.nnContext.accumDirty[Black] = false;
+    return true;
+}
+
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-    RefreshAccumulator<White>(network, node, cache);
-    RefreshAccumulator<Black>(network, node, cache);
+    if (!UpdateBothFromParent(network, node))
+    {
+        RefreshAccumulator<White>(network, node, cache);
+        RefreshAccumulator<Black>(network, node, cache);
+    }
 
     const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
     const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
@@ -614,6 +684,9 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
 void NNEvaluator::EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-    RefreshAccumulator<White>(network, node, cache);
-    RefreshAccumulator<Black>(network, node, cache);
+    if (!UpdateBothFromParent(network, node))
+    {
+        RefreshAccumulator<White>(network, node, cache);
+        RefreshAccumulator<Black>(network, node, cache);
+    }
 }
