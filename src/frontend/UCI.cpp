@@ -6,6 +6,7 @@
 #include "../backend/TimeManager.hpp"
 #include "../backend/containers/Sort.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <ctype.h>
 #include <inttypes.h>
@@ -128,11 +129,16 @@ void UniversalChessInterface::Loop(int argc, const char* argv[])
         {
             String cmd = argv[i];
 
-            // combine "bench"/"benchmark" with the next argument (depth) if present
+            // combine "bench"/"benchmark" with the next argument (depth) and "parallel" if present
             if ((cmd == "bench" || cmd == "benchmark") && i + 1 < argc && argv[i + 1])
             {
                 cmd.Append(' ');
                 cmd.Append(argv[++i]);
+                if (i + 1 < argc && argv[i + 1] && strcmp(argv[i + 1], "parallel") == 0)
+                {
+                    cmd.Append(' ');
+                    cmd.Append(argv[++i]);
+                }
             }
 
             printf("CommandLine: %s\n", cmd.CStr());
@@ -367,12 +373,17 @@ bool UniversalChessInterface::ExecuteCommand(const char* commandString)
     }
     else if (command == "bench" || command == "benchmark")
     {
+        // "bench [depth] [parallel]": parallel searches the positions on all hardware threads (used for the PGO profile)
         uint32_t depth = 12;
-        if (args.Size() >= 2)
+        bool parallel = false;
+        for (uint32_t i = 1; i < args.Size(); ++i)
         {
-            depth = Max(1u, static_cast<uint32_t>(atoi(args[1])));
+            if (args[i] == "parallel")
+                parallel = true;
+            else
+                depth = Max(1u, static_cast<uint32_t>(atoi(args[i])));
         }
-        Command_Benchmark(depth);
+        Command_Benchmark(depth, parallel);
     }
 #ifdef ENABLE_TUNING
     else if (command == "printparams")
@@ -1447,7 +1458,7 @@ bool UniversalChessInterface::Command_EvalDetailed(const CommandArgs& args)
     return true;
 }
 
-bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
+bool UniversalChessInterface::Command_Benchmark(uint32_t depth, bool parallel)
 {
     const char* testPositions[] =
     {
@@ -1584,18 +1595,21 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
         "rqbnkrnb/pppppppp/8/8/8/8/PPPPPPPP/BRKBNNRQ w GBfa - 0 1",
     };
 
-    Search search;
-    TranspositionTable tt(8 * 1024 * 1024);
+    constexpr uint32_t numPositions = sizeof(testPositions) / sizeof(testPositions[0]);
 
-    uint64_t totalNodes = 0;
-    double totalTime = 0.0;
-
-    for (const char* testPosition : testPositions)
+    struct PositionResult
     {
-        printf("Benchmarking position: %s ...", testPosition);
+        Move move = Move::Invalid();
+        uint64_t nodes = 0;
+        double time = 0.0;
+    };
+    PositionResult results[numPositions];
 
+    // every position starts from a cleared search and TT, so the results do not depend on the order
+    const auto benchPosition = [&](uint32_t index, Search& search, TranspositionTable& tt)
+    {
         Position pos;
-        VERIFY(pos.FromFEN(testPosition));
+        VERIFY(pos.FromFEN(testPositions[index]));
 
         Game game;
         game.Reset(pos);
@@ -1613,17 +1627,63 @@ bool UniversalChessInterface::Command_Benchmark(uint32_t depth)
         SearchResult searchResult;
         search.DoSearch(game, searchParam, searchResult, &stats);
 
-        const TimePoint endTimePoint = TimePoint::GetCurrent();
+        results[index] = { searchResult[0].moves.Front(), stats.nodes, (TimePoint::GetCurrent() - startTimePoint).ToSeconds() };
+    };
 
-        totalNodes += stats.nodes;
-        totalTime += (endTimePoint - startTimePoint).ToSeconds();
-
-        // print best move and stats
+    const auto printResult = [&](uint32_t index)
+    {
+        const PositionResult& result = results[index];
         printf(" Move: %s, Nodes: %" PRId64 ", Time: %.2f MNPS: %.2f\n",
-            searchResult[0].moves.Front().ToString().CStr(),
-            stats.nodes,
-            (endTimePoint - startTimePoint).ToSeconds(),
-            stats.nodes / (endTimePoint - startTimePoint).ToSeconds() / 1000000.0);
+            result.move.ToString().CStr(), result.nodes, result.time, result.nodes / result.time / 1000000.0);
+    };
+
+    uint64_t totalNodes = 0;
+    double totalTime = 0.0;
+
+    if (parallel)
+    {
+        // one search and TT per worker, positions handed out one at a time
+        const uint32_t numWorkers = Min(numPositions, Max(1u, std::thread::hardware_concurrency()));
+        std::atomic<uint32_t> nextPosition = 0;
+        const TimePoint startTimePoint = TimePoint::GetCurrent();
+
+        DynArray<std::thread> workers;
+        for (uint32_t i = 0; i < numWorkers; ++i)
+        {
+            workers.EmplaceBack([&]()
+            {
+                Search search;
+                TranspositionTable tt(8 * 1024 * 1024);
+                for (uint32_t index; (index = nextPosition.fetch_add(1)) < numPositions; )
+                    benchPosition(index, search, tt);
+            });
+        }
+        for (std::thread& worker : workers)
+            worker.join();
+
+        // throughput of the whole run
+        totalTime = (TimePoint::GetCurrent() - startTimePoint).ToSeconds();
+
+        for (uint32_t i = 0; i < numPositions; ++i)
+        {
+            printf("Benchmarking position: %s ...", testPositions[i]);
+            printResult(i);
+            totalNodes += results[i].nodes;
+        }
+    }
+    else
+    {
+        Search search;
+        TranspositionTable tt(8 * 1024 * 1024);
+
+        for (uint32_t i = 0; i < numPositions; ++i)
+        {
+            printf("Benchmarking position: %s ...", testPositions[i]);
+            benchPosition(i, search, tt);
+            printResult(i);
+            totalNodes += results[i].nodes;
+            totalTime += results[i].time;
+        }
     }
 
     printf("%" PRIu64 " nodes %" PRId64 " nps\n", totalNodes, static_cast<int64_t>(totalNodes / totalTime));

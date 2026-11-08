@@ -53,7 +53,7 @@ private:
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
     bool Command_EvalDetailed(const CommandArgs& args);
-    bool Command_Benchmark(uint32_t depth);
+    bool Command_Benchmark(uint32_t depth, bool parallel);
     bool Command_Playout(const CommandArgs& args);
 
     void StopSearchThread();
