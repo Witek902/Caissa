@@ -849,6 +849,24 @@ void Search::Search_Internal(const uint32_t threadID, const uint32_t numPvLines,
             // stop search only at depth 2 and more
             if (depth > 1 && CheckStopCondition(thread, searchContext, true))
             {
+                if (numPvLines == 1 && !pvLine.moves.Empty())
+                {
+                    // a stopped search did not try all root moves, so it can neither prove a loss nor give up a proven win
+                    const ScoreType committedScore = thread.pvLines.Front().score;
+                    const bool givesUpWin = IsMate(committedScore) && committedScore > 0 && pvLine.score < committedScore;
+                    const bool unprovenLoss = IsMate(pvLine.score) && pvLine.score < 0;
+
+                    if (!givesUpWin && !unprovenLoss)
+                    {
+                        if (isMainThread && param.debugLog)
+                        {
+                            const TimePoint searchTime = TimePoint::GetCurrent() - param.limits.startTimePoint;
+                            ReportPV(aspirationWindowSearchParam, pvLine, BoundsType::Exact, searchTime);
+                        }
+                        thread.pvLines.Front() = MoveTemp(pvLine);
+                    }
+                }
+
                 abortSearch = true;
                 break;
             }
@@ -1036,9 +1054,13 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
         rootNode.beta = ScoreType(beta);
 
         pvLine.score = NegaMax<NodeType::Root>(thread, &rootNode, param.searchContext);
-        ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         Move pvMoves[MaxSearchDepth];
         const uint32_t pvLength = SearchUtils::GetPvLine(rootNode, maxPvLine, pvMoves);
+
+        // stopped before any root move finished
+        if (pvLength == 0) break;
+
+        ASSERT(pvLine.score >= -CheckmateValue && pvLine.score <= CheckmateValue);
         pvLine.moves.Assign(pvMoves, pvLength);
 
         BoundsType boundsType = BoundsType::Exact;
@@ -1078,11 +1100,11 @@ PvLine Search::AspirationWindowSearch(ThreadData& thread, const AspirationWindow
             ReportPV(param, pvLine, boundsType, searchTime);
         }
 
-        // don't return line if search was aborted, because the result comes from incomplete search
-        if (!stopSearch)
-        {
+        // a fail-low also takes back a fail-high from an earlier attempt at this depth
+        if (boundsType == BoundsType::UpperBound)
+            finalPvLine.moves.Clear();
+        else
             finalPvLine = MoveTemp(pvLine);
-        }
 
         // stop the search when exact score is found
         if (boundsType == BoundsType::Exact || stopSearch)
@@ -2208,6 +2230,17 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 childNode.isCutNode = false;
 
                 score = -NegaMax<NodeType::PV>(thread, &childNode, ctx);
+            }
+        }
+
+        // a child stopped by the search limit returned a partial score, which must not affect the root result
+        if constexpr (isRootNode)
+        {
+            if (thread.rootDepth > 1 && ctx.searchParam.stopSearch.load(std::memory_order_relaxed))
+            {
+                if (!bestMove.IsValid()) return alpha;
+                searchAborted = true;
+                break;
             }
         }
 
