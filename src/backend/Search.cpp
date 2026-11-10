@@ -140,6 +140,7 @@ DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
 DEFINE_PARAM(TTCutoffMargin, 80, 0, 200);
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
+DEFINE_PARAM(TTCutoffHalfMoveScoreMargin, 25, 0, 200);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
 DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
 DEFINE_PARAM(PriorCMHBonusCap, 1200, 400, 2400);
@@ -1298,7 +1299,8 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         // don't prune in PV nodes, because TT does not contain path information
         if constexpr (!isPvNode)
         {
-            if (position.GetHalfMoveCount() < TTCutoffHalfMoveLimit)
+            // the 50-move rule can hardly change a near-zero score
+            if (position.GetHalfMoveCount() < TTCutoffHalfMoveLimit || Abs(ttScore) < TTCutoffHalfMoveScoreMargin)
             {
                 if (ttEntry.bounds == TTEntry::Bounds::Exact)                           return ttScore;
                 else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  return ttScore;
@@ -1631,7 +1633,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         if constexpr (!isPvNode)
         {
             if (ttEntry.depth >= node->depth + (ttScore >= beta && ttScore < beta + TTCutoffMargin) &&
-                position.GetHalfMoveCount() < TTCutoffHalfMoveLimit)
+                (position.GetHalfMoveCount() < TTCutoffHalfMoveLimit || Abs(ttScore) < TTCutoffHalfMoveScoreMargin))
             {
                 // transposition table cutoff
                 ScoreType ttCutoffValue = InvalidValue;
