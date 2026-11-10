@@ -142,6 +142,7 @@ DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
 DEFINE_PARAM(TTCutoffMargin, 80, 0, 200);
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
+DEFINE_PARAM(TTResearchMargin, 100, 0, 400);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
 DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
 DEFINE_PARAM(PriorCMHBonusCap, 1200, 400, 2400);
@@ -1641,6 +1642,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
                 if (ttCutoffValue != InvalidValue)
                     return ttCutoffValue;
+            }
+            // an upper bound one ply too shallow is still trusted far enough below alpha
+            else if (ttEntry.bounds == TTEntry::Bounds::Upper &&
+                     ttEntry.depth >= node->depth - 1 &&
+                     ttScore + TTResearchMargin <= alpha &&
+                     position.GetHalfMoveCount() < TTCutoffHalfMoveLimit)
+            {
+                return ttScore;
             }
         }
     }
