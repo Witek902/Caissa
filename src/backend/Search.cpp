@@ -2347,10 +2347,12 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     }
 
     // Prior counter-move history update
-    if (!isRootNode && bestValue <= oldAlpha && node->previousMove.IsValid() && node->previousMove.IsQuiet())
+    // a fail-high on the first move means the opponent's last move was refuted at once
+    if (!isRootNode && node->previousMove.IsValid() && node->previousMove.IsQuiet() &&
+        (bestValue <= oldAlpha || (bestValue >= beta && moveIndex == 1)))
     {
         const int32_t bonus = Min<int32_t>(PriorCMHBonusCap, node->depth * PriorCMHBonusScale - PriorCMHBonusBias);
-        thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bonus);
+        thread.moveOrderer.UpdateContinuationHistory(*(node - 1), node->previousMove, bestValue <= oldAlpha ? bonus : -bonus);
     }
 
 #ifdef COLLECT_SEARCH_STATS
