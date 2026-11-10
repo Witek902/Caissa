@@ -1869,6 +1869,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
         }
     }
 
+    // a node already above its window counts as improving for the move loop
+    if (!node->isInCheck && node->staticEval >= beta)
+        isImproving = true;
+
     const PackedMove ttMove = ttEntry.move;
     const bool ttCapture = ttMove.IsValid() && (position.IsCapture(ttMove) || ttMove.GetPromoteTo() != Piece::None);
     const bool ttRecapture = ttCapture && node->previousMove.IsValid() && ttMove.ToSquare() == node->previousMove.ToSquare();
