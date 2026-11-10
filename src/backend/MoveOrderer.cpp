@@ -219,10 +219,23 @@ void MoveOrderer::Clear()
     memset(killerMoves, 0, sizeof(killerMoves));
 }
 
+// squares where the moving piece can be taken by a cheaper piece
+INLINE static Bitboard CheaperPieceThreats(const Threats& threats, const Piece piece)
+{
+    switch (piece)
+    {
+        case Piece::Knight: [[fallthrough]];
+        case Piece::Bishop: return threats.attackedByPawns;
+        case Piece::Rook:   return threats.attackedByMinors;
+        case Piece::Queen:  return threats.attackedByRooks;
+        default:            return 0;
+    }
+}
+
 MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
 {
     ASSERT(move.IsValid());
-    const Bitboard threats = node.threats.allThreats;
+    const Bitboard threats = CheaperPieceThreats(node.threats, move.GetPiece());
     const uint32_t from = move.FromSquare().Index();
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
@@ -293,13 +306,13 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
     const int32_t contBonus = Min<int32_t>(ContBonusOffset + ContBonusLinear * node.depth + ContBonusScoreDiff * scoreDiff / 64, ContBonusLimit);
     const int32_t contMalus = -Min<int32_t>(ContMalusOffset + ContMalusLinear * node.depth + ContMalusScoreDiff * scoreDiff / 64, ContMalusLimit);
 
-    const Bitboard threats = node.threats.allThreats;
     PieceSquareHistory& pawnHist = pawnHistory[color][node.position.GetPawnsHash() % PawnHistorySize];
 
     const auto updateQuietMove = [&](const Move move, const int32_t histDelta, const int32_t contDelta) INLINE_LAMBDA
     {
         const uint32_t from = move.FromSquare().Index();
         const uint32_t to = move.ToSquare().Index();
+        const Bitboard threats = CheaperPieceThreats(node.threats, move.GetPiece());
 
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
         UpdateHistoryCounter(pawnHist[move.PieceTo()], histDelta);
@@ -372,7 +385,6 @@ void MoveOrderer::ScoreMoves(
     const Position& pos = node.position;
 
     const uint32_t color = (uint32_t)pos.GetSideToMove();
-    const Bitboard threats = node.threats.allThreats;
 
     // pawn structure bucket is constant for the whole move list
     const PieceSquareHistory* pawnHist = withQuiets ? &pawnHistory[color][pos.GetPawnsHash() % PawnHistorySize] : nullptr;
@@ -425,6 +437,7 @@ void MoveOrderer::ScoreMoves(
             ASSERT(killerMoves[node.ply] != move);
 
             // history heuristics
+            const Bitboard threats = CheaperPieceThreats(node.threats, move.GetPiece());
             score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
 
             // pawn structure history
