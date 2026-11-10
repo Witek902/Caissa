@@ -142,6 +142,7 @@ DEFINE_PARAM(CorrHistBonusDiv, 4, 1, 8);
 
 DEFINE_PARAM(TTCutoffMargin, 80, 0, 200);
 DEFINE_PARAM(TTCutoffHalfMoveLimit, 80, 60, 99);
+DEFINE_PARAM(TTCutoffBetaWeight, 13, 0, 32);
 DEFINE_PARAM(AlphaImprovementMinDepth, 2, 1, 6);
 DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
 DEFINE_PARAM(PriorCMHBonusCap, 1200, 400, 2400);
@@ -1637,7 +1638,13 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 ScoreType ttCutoffValue = InvalidValue;
                 if (ttEntry.bounds == TTEntry::Bounds::Exact)                           ttCutoffValue = ttScore;
                 else if (ttEntry.bounds == TTEntry::Bounds::Upper && ttScore <= alpha)  ttCutoffValue = ttScore;
-                else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)   ttCutoffValue = ttScore;
+                else if (ttEntry.bounds == TTEntry::Bounds::Lower && ttScore >= beta)
+                {
+                    // a lower bound overstates the score, so pull it towards beta
+                    ttCutoffValue = Abs(ttScore) < KnownWinValue
+                        ? (ScoreType)((ttScore * (64 - TTCutoffBetaWeight) + beta * TTCutoffBetaWeight) / 64)
+                        : ttScore;
+                }
 
                 if (ttCutoffValue != InvalidValue)
                     return ttCutoffValue;
