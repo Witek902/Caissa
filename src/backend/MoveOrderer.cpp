@@ -324,7 +324,7 @@ void MoveOrderer::UpdateCapturesHistory(const NodeInfo& node, const Move* moves,
     int32_t depth = Max<int32_t>(0, node.depth);
 
     // don't update uncertain moves
-    if (numMoves <= 1)
+    if (numMoves <= 2)
     {
         return;
     }
