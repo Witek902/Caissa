@@ -145,6 +145,7 @@ DEFINE_PARAM(QuietHistMaxScoreDiff, 256, 64, 512);
 DEFINE_PARAM(PriorCMHBonusCap, 1200, 400, 2400);
 DEFINE_PARAM(PriorCMHBonusScale, 120, 20, 240);
 DEFINE_PARAM(PriorCMHBonusBias, 100, 0, 200);
+DEFINE_PARAM(PostLmrHistBonus, 1000, 0, 2000);
 DEFINE_PARAM(PvTTMoveMinRootDepth, 8, 4, 16);
 DEFINE_PARAM(RootSingularMaxScore, 1000, 500, 2000);
 DEFINE_PARAM(EnsureAccumulatorUpdatedDepth, 3, 0, 6);
@@ -2216,6 +2217,10 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
             score = -NegaMax<NodeType::NonPV>(thread, &childNode, ctx);
             ASSERT(score >= -CheckmateValue && score <= CheckmateValue);
+
+            // the full-depth search confirms or refutes the fail-high of the reduced search
+            if (r > 0 && move.IsQuiet())
+                thread.moveOrderer.UpdateContinuationHistory(*node, move, score > alpha ? PostLmrHistBonus : -PostLmrHistBonus);
         }
 
         // full search for PV nodes
