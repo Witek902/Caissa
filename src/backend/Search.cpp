@@ -2409,12 +2409,14 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 #endif // COLLECT_SEARCH_STATS
 
         // update correction histories
+        // the search below this node has updated them, so correct the eval again
+        const ScoreType recorrectedEval = node->isInCheck ? InvalidValue : AdjustEvalScore(thread, *node, ctx.searchParam);
         if (!node->isInCheck &&
             (!bestMove.IsValid() || bestMove.IsQuiet() || !position.StaticExchangeEvaluation(bestMove)) &&
-            ((bestValue < correctedEval && bestValue < beta) ||
-             (bestValue > correctedEval && bestMove.IsValid())))
+            ((bestValue < recorrectedEval && bestValue < beta) ||
+             (bestValue > recorrectedEval && bestMove.IsValid())))
         {
-            const int32_t bonus = Clamp<int32_t>((bestValue - correctedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
+            const int32_t bonus = Clamp<int32_t>((bestValue - recorrectedEval) * node->depth / CorrHistBonusDiv, -CorrHistMaxBonus, CorrHistMaxBonus);
             if (bonus != 0)
             {
                 const Color stm = position.GetSideToMove();
