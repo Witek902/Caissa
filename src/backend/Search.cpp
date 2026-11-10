@@ -1759,12 +1759,15 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
     // check how much static evaluation improved between current position and position in previous turn
     // if we were in check in previous turn, use position prior to it
     bool isImproving = false;
+    bool isImprovingAssumed = false;
     if (!node->isInCheck && !node->isNullMove)
     {
         if (node->ply > 1 && (node - 2)->staticEval != InvalidValue)
             isImproving = node->staticEval > (node - 2)->staticEval;
         else if (node->ply > 3 && (node - 4)->staticEval != InvalidValue)
             isImproving = node->staticEval > (node - 4)->staticEval;
+        else
+            isImproving = isImprovingAssumed = true; // no earlier eval to compare against, LMR does not use the assumption
     }
 
     // the opponent's last move cost them more than the tempo it gained
@@ -2136,7 +2139,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r += LmrQuietCutNode;
 
                 // reduce more if eval is not improving
-                if (!isImproving) r += LmrQuietImproving;
+                if (!isImproving || isImprovingAssumed) r += LmrQuietImproving;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrQuietInCheck;
@@ -2154,7 +2157,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
                 if (node->isCutNode) r += LmrCaptureCutNode;
 
                 // reduce more if eval is not improving
-                if (!isImproving) r += LmrCaptureImproving;
+                if (!isImproving || isImprovingAssumed) r += LmrCaptureImproving;
 
                 // reduce less if move is a check
                 if (childNode.isInCheck) r -= LmrCaptureInCheck;
