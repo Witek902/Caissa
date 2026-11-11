@@ -2,17 +2,14 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Game.hpp"
 #include "../backend/Search.hpp"
+#include "../backend/Thread.hpp"
 #include "../backend/containers/DynArray.hpp"
 #include "../backend/containers/FixedString.hpp"
 #include "../backend/containers/Sort.hpp"
 
-#include <chrono>
-#include <condition_variable>
 #include <math.h>
-#include <mutex>
 #include <stdio.h>
 #include <string.h>
-#include <thread>
 
 static constexpr size_t c_transpositionTableSize = 8ull * 1024ull * 1024ull;
 static constexpr uint32_t c_reportIntervalSeconds = 5;
@@ -96,7 +93,7 @@ struct WorkerContext
     TranspositionTable tt{ c_transpositionTableSize };
     Search search;
     SearchParam param{ tt };
-    std::thread thread;
+    Thread thread;
 };
 
 struct PlayoutRunner::Impl
@@ -107,17 +104,17 @@ struct PlayoutRunner::Impl
 
     // owned
     DynArray<WorkerContext*> workers;
-    std::thread reporterThread;
+    Thread reporterThread;
 
     std::atomic<bool> stopRequested = false;
     std::atomic<uint32_t> numActiveWorkers = 0;
     std::atomic<uint64_t> gameCounter = 0;
 
-    std::mutex statsMutex;
+    Mutex statsMutex;
     PlayoutStats stats;
 
-    std::mutex reporterMutex;
-    std::condition_variable reporterCV;
+    Mutex reporterMutex;
+    ConditionVariable reporterCV;
 
     TimePoint startTime;
 
@@ -195,7 +192,7 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
         if (aborted)
             break;
 
-        std::lock_guard<std::mutex> lock(statsMutex);
+        ScopedLock lock(statsMutex);
 
         stats.numGames++;
         stats.totalPlies += numPlies;
@@ -233,14 +230,14 @@ void PlayoutRunner::Impl::WorkerFunc(WorkerContext& ctx)
     }
 
     if (numActiveWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1)
-        reporterCV.notify_all();
+        reporterCV.NotifyAll();
 }
 
 void PlayoutRunner::Impl::PrintReport(bool isFinal)
 {
     PlayoutStats snapshot;
     {
-        std::lock_guard<std::mutex> lock(statsMutex);
+        ScopedLock lock(statsMutex);
         snapshot = stats;
     }
 
@@ -314,12 +311,15 @@ void PlayoutRunner::Impl::ReporterFunc()
     for (;;)
     {
         {
-            std::unique_lock<std::mutex> lock(reporterMutex);
-            reporterCV.wait_for(lock, std::chrono::seconds(c_reportIntervalSeconds), [this]()
+            ScopedLock lock(reporterMutex);
+            const TimePoint deadline = TimePoint::GetCurrent() + TimePoint::FromSeconds(static_cast<float>(c_reportIntervalSeconds));
+            while (!stopRequested.load(std::memory_order_relaxed) &&
+                   numActiveWorkers.load(std::memory_order_relaxed) != 0)
             {
-                return stopRequested.load(std::memory_order_relaxed) ||
-                       numActiveWorkers.load(std::memory_order_relaxed) == 0;
-            });
+                const float remaining = (deadline - TimePoint::GetCurrent()).ToSeconds();
+                if (remaining <= 0.0f || !reporterCV.WaitFor(reporterMutex, static_cast<uint32_t>(remaining * 1000.0f) + 1))
+                    break;
+            }
         }
 
         if (stopRequested.load(std::memory_order_relaxed) ||
@@ -328,7 +328,7 @@ void PlayoutRunner::Impl::ReporterFunc()
 
         uint64_t numGames;
         {
-            std::lock_guard<std::mutex> lock(statsMutex);
+            ScopedLock lock(statsMutex);
             numGames = stats.numGames;
         }
 
@@ -341,8 +341,7 @@ void PlayoutRunner::Impl::ReporterFunc()
 
     for (auto& worker : workers)
     {
-        if (worker->thread.joinable())
-            worker->thread.join();
+        worker->thread.Join();
     }
 
     PrintReport(true);
@@ -370,7 +369,7 @@ bool PlayoutRunner::Start(const Position& rootPosition, uint64_t softNodeLimit, 
         return false;
     }
 
-    const uint32_t numThreads = Max(1u, std::thread::hardware_concurrency());
+    const uint32_t numThreads = Max(1u, Thread::GetNumLogicalProcessors());
 
     mImpl->rootPosition = rootPosition;
     mImpl->softNodeLimit = softNodeLimit;
@@ -384,10 +383,10 @@ bool PlayoutRunner::Start(const Position& rootPosition, uint64_t softNodeLimit, 
 
     for (WorkerContext* ctx : mImpl->workers)
     {
-        ctx->thread = std::thread([this, ctx]() { mImpl->WorkerFunc(*ctx); });
+        VERIFY(ctx->thread.Start([this, ctx]() { mImpl->WorkerFunc(*ctx); }));
     }
 
-    mImpl->reporterThread = std::thread([this]() { mImpl->ReporterFunc(); });
+    VERIFY(mImpl->reporterThread.Start([this]() { mImpl->ReporterFunc(); }));
 
     printf("Playing games from the current position at %llu nodes/move on %u threads", (unsigned long long)softNodeLimit, numThreads);
     if (maxGames > 0)
@@ -406,10 +405,9 @@ void PlayoutRunner::Stop()
     for (auto& worker : mImpl->workers)
         worker->param.stopSearch = true;
 
-    mImpl->reporterCV.notify_all();
+    mImpl->reporterCV.NotifyAll();
 
-    if (mImpl->reporterThread.joinable())
-        mImpl->reporterThread.join();
+    mImpl->reporterThread.Join();
 }
 
 bool PlayoutRunner::IsRunning() const

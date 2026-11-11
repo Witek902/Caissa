@@ -1,12 +1,10 @@
 #include "Waitable.hpp"
-
-#include <condition_variable>
-#include <mutex>
+#include "Thread.hpp"
 
 struct Waitable::Sync
 {
-    std::mutex mutex;
-    std::condition_variable conditionVariable;
+    Mutex mutex;
+    ConditionVariable conditionVariable;
 };
 
 Waitable::Waitable()
@@ -22,10 +20,10 @@ Waitable::~Waitable()
 
 void Waitable::Wait()
 {
-    std::unique_lock<std::mutex> lock(mSync->mutex);
+    ScopedLock lock(mSync->mutex);
     while (!mFinished)
     {
-        mSync->conditionVariable.wait(lock);
+        mSync->conditionVariable.Wait(mSync->mutex);
     }
 }
 
@@ -38,11 +36,11 @@ void Waitable::Reset()
 
 void Waitable::OnFinished()
 {
-    std::unique_lock<std::mutex> lock(mSync->mutex);
+    ScopedLock lock(mSync->mutex);
 
     const bool oldState = mFinished.exchange(true);
     ASSERT(!oldState);
     (void)oldState;
 
-    mSync->conditionVariable.notify_all();
+    mSync->conditionVariable.NotifyAll();
 }

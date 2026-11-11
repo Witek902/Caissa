@@ -1,7 +1,6 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
-
-#include <mutex>
+#include "Thread.hpp"
 
 #ifdef USE_SSE
     #include <immintrin.h>
@@ -13,7 +12,7 @@
 // search-time accumulator statistics collection
 
 static std::atomic<bool> s_collectAccumulatorStats{ false };
-static std::mutex s_statsRegistryMutex;
+static Mutex s_statsRegistryMutex;
 // per-thread statistics buffers, owned here for the lifetime of the process.
 // each buffer is tied to an OS thread (which outlives any individual Search), so collected
 // data persists across transient Search instances (e.g. 'bench') without any retire logic.
@@ -78,7 +77,7 @@ bool NNEvaluator::IsStatsCollectionEnabled()
 
 void NNEvaluator::ResetStatsCollection()
 {
-    std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+    ScopedLock lock(s_statsRegistryMutex);
     for (NNAccumulatorStats* buffer : s_statsRegistry)
         buffer->Reset();
 }
@@ -89,7 +88,7 @@ void NNEvaluator::GetMergedStats(NNAccumulatorStats& outMerged, DynArray<uint64_
     if (outPerThreadPositions)
         outPerThreadPositions->Clear();
 
-    std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+    ScopedLock lock(s_statsRegistryMutex);
     for (NNAccumulatorStats* buffer : s_statsRegistry)
     {
         buffer->Flush(); // fold pending working counters into the masters (safe: called when no search is running)
@@ -104,7 +103,7 @@ void NNEvaluator::PrepareThreadStats()
     if (s_collectAccumulatorStats.load(std::memory_order_relaxed) && !t_statsBuffer)
     {
         t_statsBuffer = new NNAccumulatorStats();
-        std::lock_guard<std::mutex> lock(s_statsRegistryMutex);
+        ScopedLock lock(s_statsRegistryMutex);
         s_statsRegistry.PushBack(t_statsBuffer);
     }
 }

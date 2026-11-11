@@ -14,6 +14,7 @@
 namespace threadpool { class TaskBuilder; }
 
 void RunContainerTests();
+void RunThreadTests();
 void RunBitboardTests();
 void RunBitboardAdvancedTests();
 void RunBitOperationTests();

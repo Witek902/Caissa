@@ -1,11 +1,11 @@
 #include "TranspositionTable.hpp"
 #include "Position.hpp"
+#include "Thread.hpp"
 
 #include "containers/DynArray.hpp"
 
 #include <inttypes.h>
 #include <stdio.h>
-#include <thread>
 
 uint32_t TranspositionTable::NumInitThreads = 1;
 
@@ -95,7 +95,7 @@ TranspositionTable& TranspositionTable::operator = (TranspositionTable&& rhs)
 
 void TranspositionTable::Clear()
 {
-    const uint32_t maxThreads = Max(1u, std::thread::hardware_concurrency() / 2u);
+    const uint32_t maxThreads = Max(1u, Thread::GetNumLogicalProcessors() / 2u);
     const size_t numThreads = Clamp(NumInitThreads, 1u, maxThreads);
 
     if (numClusters * sizeof(TTCluster) <= 256 * 1024 * 1024 || numThreads == 1)
@@ -107,23 +107,22 @@ void TranspositionTable::Clear()
     {
         const size_t numClustersPerThread = numClusters / numThreads;
 
-        DynArray<std::thread> threads;
-        threads.Reserve((uint32_t)numThreads);
+        DynArray<Thread> threads((uint32_t)numThreads);
 
         for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
         {
-            threads.EmplaceBack([this, threadIndex, numClustersPerThread]()
+            VERIFY(threads[(uint32_t)threadIndex].Start([this, threadIndex, numClustersPerThread]()
             {
                 const size_t start = threadIndex * numClustersPerThread;
                 const size_t end = start + numClustersPerThread;
                 const TTCluster emptyCluster{};
                 for (size_t i = start; i < end; ++i) clusters[i] = emptyCluster;
-            });
+            }));
         }
 
-        for (size_t threadIndex = 0; threadIndex < numThreads; ++threadIndex)
+        for (Thread& thread : threads)
         {
-            threads[(uint32_t)threadIndex].join();
+            thread.Join();
         }
     }
 

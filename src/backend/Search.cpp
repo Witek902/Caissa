@@ -5,12 +5,10 @@
 #include "Evaluate.hpp"
 #include "Tablebase.hpp"
 #include "TimeManager.hpp"
+#include "Thread.hpp"
 #include "containers/String.hpp"
 
-#include <condition_variable>
 #include <inttypes.h>
-#include <mutex>
-#include <thread>
 
 // silent warning C4127: conditional expression is constant
 #ifdef _MSC_VER
@@ -166,16 +164,16 @@ INLINE static int32_t GetHistoryPruningTreshold(int32_t depth)
 
 struct Search::ThreadSync
 {
-    std::thread thread;
+    Thread thread;
     std::atomic<bool> stopThread = false;
 
-    std::condition_variable taskFinishedCV;
-    std::mutex taskFinishedMutex;
+    ConditionVariable taskFinishedCV;
+    Mutex taskFinishedMutex;
     bool taskFinished = false;
 
     // search task, set by the main thread under newTaskMutex
-    std::condition_variable newTaskCV;
-    std::mutex newTaskMutex;
+    ConditionVariable newTaskCV;
+    Mutex newTaskMutex;
     bool hasTask = false;
     uint32_t numPvLines = 0;
     const Game* game = nullptr;
@@ -212,19 +210,15 @@ void Search::StopWorkerThreads()
     for (uint32_t i = 1; i < mThreadData.Size(); ++i)
     {
         ThreadSync* sync = mThreadData[i]->sync;
-        std::unique_lock<std::mutex> lock(sync->newTaskMutex);
+        ScopedLock lock(sync->newTaskMutex);
         sync->stopThread = true;
-        sync->newTaskCV.notify_one();
+        sync->newTaskCV.NotifyOne();
     }
 
     // stop worker threads
     for (uint32_t i = 1; i < mThreadData.Size(); ++i)
     {
-        std::thread& thread = mThreadData[i]->sync->thread;
-        if (thread.joinable())
-        {
-            thread.join();
-        }
+        mThreadData[i]->sync->thread.Join();
     }
 
     for (uint32_t i = 1; i < mThreadData.Size(); ++i)
@@ -454,21 +448,21 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
             threadData->correctionHistories = mCorrectionHistories.Get(numaNode);
 
             mThreadData.PushBack(threadData);
-            threadData->sync->thread = std::thread(Search::WorkerThreadCallback, this, i);
+            VERIFY(threadData->sync->thread.Start([this, i]() { WorkerThreadCallback(this, i); }));
         }
 
         ThreadData* threadData = mThreadData[i];
         threadData->stats.Reset();
         {
             ThreadSync* sync = threadData->sync;
-            std::unique_lock<std::mutex> lock(sync->newTaskMutex);
+            ScopedLock lock(sync->newTaskMutex);
             ASSERT(!sync->hasTask);
             sync->hasTask = true;
             sync->numPvLines = numPvLines;
             sync->game = &game;
             sync->param = &param;
             sync->globalStats = &globalStats;
-            sync->newTaskCV.notify_one();
+            sync->newTaskCV.NotifyOne();
         }
     }
         
@@ -479,8 +473,11 @@ void Search::DoSearch(const Game& game, SearchParam& param, SearchResult& outRes
     for (uint32_t i = 1; i < param.numThreads; ++i)
     {
         ThreadSync* sync = mThreadData[i]->sync;
-        std::unique_lock<std::mutex> lock(sync->taskFinishedMutex);
-        sync->taskFinishedCV.wait(lock, [sync]() { return sync->taskFinished; });
+        ScopedLock lock(sync->taskFinishedMutex);
+        while (!sync->taskFinished)
+        {
+            sync->taskFinishedCV.Wait(sync->taskFinishedMutex);
+        }
         sync->taskFinished = false;
     }
 
@@ -639,8 +636,11 @@ void Search::WorkerThreadCallback(Search* search, uint32_t index)
     {
         // wait for task
         {
-            std::unique_lock<std::mutex> lock(sync->newTaskMutex);
-            sync->newTaskCV.wait(lock, [sync]() { return sync->hasTask || sync->stopThread; });
+            ScopedLock lock(sync->newTaskMutex);
+            while (!sync->hasTask && !sync->stopThread)
+            {
+                sync->newTaskCV.Wait(sync->newTaskMutex);
+            }
             if (sync->stopThread) break;
             sync->hasTask = false;
         }
@@ -649,10 +649,10 @@ void Search::WorkerThreadCallback(Search* search, uint32_t index)
 
         // notify main thread
         {
-            std::unique_lock<std::mutex> lock(sync->taskFinishedMutex);
+            ScopedLock lock(sync->taskFinishedMutex);
             ASSERT(!sync->taskFinished);
             sync->taskFinished = true;
-            sync->taskFinishedCV.notify_one();
+            sync->taskFinishedCV.NotifyOne();
         }
     }
 }

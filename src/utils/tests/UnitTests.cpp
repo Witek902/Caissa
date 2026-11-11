@@ -13,6 +13,7 @@ void RunUnitTests(const std::vector<std::string>& args)
     const bool deepPerft = std::find(args.begin(), args.end(), "--deepPerft") != args.end();
 
     RunContainerTests();
+    RunThreadTests();
     RunBitboardTests();
     RunBitboardAdvancedTests();
     RunBitOperationTests();
