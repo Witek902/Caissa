@@ -41,10 +41,10 @@ static bool g_usingEmbeddedNeuralNetwork = false;
 
 #ifdef ENABLE_NET_L3_TUNING
 
-// Last-layer weights and biases of output buckets 1..NumVariants-1 exposed as tunable parameters.
+// Last-layer weights and biases of output buckets 2..NumVariants-1 exposed as tunable parameters.
 // They are copied into the (writable) network at search start, so the evaluation code reads the
-// network exactly as in a regular build. Bucket 0 is skipped: it covers only up to 3 non-king pieces.
-static constexpr uint32_t c_firstTunableVariant = 1;
+// network exactly as in a regular build. Buckets 0 and 1 are skipped: they cover only up to 3 non-king pieces.
+static constexpr uint32_t c_firstTunableVariant = 2;
 static int32_t s_l3WeightShadow[nn::NumVariants][nn::L2Size];
 static int32_t s_l3BiasShadow[nn::NumVariants];
 static nn::PackedNeuralNetwork* g_tunableNeuralNetwork = nullptr;
