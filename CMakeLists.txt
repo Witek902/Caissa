@@ -216,7 +216,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Download neural net to data/neuralNets/ once (shared across all build dirs and configurations)
-set(NET_VERSION "eval-ml-11a-100B-spsa-transplant")
+set(NET_VERSION "eval-ml-14-q16-80B-spsa-transplant")
 set(DEFAULT_NEURAL_NET_FILE_NAME "${NET_VERSION}.pnn")
 set(NET_DOWNLOAD_URL "https://github.com/Witek902/Caissa-Nets/releases/download/${NET_VERSION}/${DEFAULT_NEURAL_NET_FILE_NAME}")
 set(NET_SOURCE "${CMAKE_SOURCE_DIR}/data/neuralNets/${DEFAULT_NEURAL_NET_FILE_NAME}")

@@ -1,7 +1,7 @@
 # CUDA Neural Network Trainer
 
-GPU trainer for Caissa's multilayer NNUE: `(32×768 → 1536) × 2 → pairwise CReLU → 16 → 32 → 1`, with 8 output
-variants selected by piece count. Built into the `utils` executable when CMake finds the CUDA Toolkit
+GPU trainer for Caissa's multilayer NNUE: `(32×768 → 1536) × 2 → pairwise CReLU → 16 → 32 → 1`, with 16 output
+variants selected by piece count and whether any queen is on the board. Built into the `utils` executable when CMake finds the CUDA Toolkit
 (`USE_CUDA` define, `CUDA_ARCHITECTURES native`).
 
 ## Usage
@@ -24,6 +24,7 @@ bin/utils trainCudaNetwork [options]
 | `--seed <n>` | `12345` | Weight initialization seed |
 | `--bucketLeak <p>` | `0` | Probability of training a position on a neighbouring output bucket |
 | `--freezeFeatureTransformer` | off | Train the output subnets only |
+| `--frozenVariants <list>` | none | Comma-separated output variants whose weights stay unchanged; their positions are not used. Requires `--freezeFeatureTransformer` |
 | `--reviveDeadNeurons` | off | Re-seed output subnet neurons that can no longer learn |
 | `--decisiveSkip` | off | Skip positions whose decisive score agrees with the game result, with probability `clamp((\|score\| − 400) / 800, 0, 0.75)` |
 | `--pieceCountTarget` | off | Replace the fixed piece-count skip curve with a target distribution per pair of piece counts |

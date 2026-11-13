@@ -6,14 +6,16 @@ namespace nn {
 
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 15;
+static constexpr uint32_t CurrentVersion = 17;
 static constexpr uint32_t MagicNumber = 0x43534E4E; // 'CSNN'
 
 static constexpr uint32_t NumKingBuckets = 32;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
 static constexpr uint32_t AccumulatorSize = 1536;
 static constexpr uint32_t OutputSize = 1;
-static constexpr uint32_t NumVariants = 8;
+// output subnet variant = piece count bucket * 2 + "any queen on the board"
+static constexpr uint32_t NumPieceCountBuckets = 8;
+static constexpr uint32_t NumVariants = NumPieceCountBuckets * 2;
 
 static constexpr uint8_t KingBucketIndex[64] =
 {

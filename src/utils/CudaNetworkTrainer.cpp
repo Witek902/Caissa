@@ -18,6 +18,7 @@
 #include <memory>
 #include <mutex>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -134,6 +135,10 @@ struct Options
     // probability that a training position picks its bucket as if it had one piece more or one piece
     // less, so positions at a bucket range edge also train the neighbouring subnet
     float bucketLeak = 0.0f;
+
+    // output subnet variants (bit per variant) that keep their weights: positions that would train
+    // them are drawn again, so with the feature transformer frozen they get no gradient at all
+    uint32_t frozenVariantsMask = 0;
 
     // blend of the training targets: 0 = pure game result, 1 = evaluation (decaying toward the
     // game result with move count). The validation set always uses 1.
@@ -310,6 +315,7 @@ private:
     void WriteRunSettings(uint64_t startPositions) const;
 
     void GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak);
+    void GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak);
 
     // deterministic: single-threaded with a dedicated RNG, so the set depends only on the seed
     void GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic = false);
@@ -453,6 +459,14 @@ static void SortBatchByKingBucket(TrainingEntry* entries, uint32_t count)
 
 void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak)
 {
+    do
+    {
+        GenerateTrainingEntryAnyVariant(rng, outEntry, kingBucketMask, lambda, bucketLeak);
+    } while (m_options.frozenVariantsMask & (1u << outEntry.variant));
+}
+
+void CudaNetworkTrainer::GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak)
+{
     Position pos;
     PositionEntry entry;
 
@@ -500,7 +514,8 @@ void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry&
     if (bucketLeak > 0.0f && std::bernoulli_distribution(bucketLeak)(rng))
     {
         const int32_t shiftedPieces = (int32_t)pos.GetNumPiecesExcludingKing() + (std::bernoulli_distribution(0.5)(rng) ? 1 : -1);
-        outEntry.variant = (uint8_t)std::min((uint32_t)std::max(shiftedPieces, 0) / 4u, nn::NumVariants - 1u);
+        const bool anyQueen = (pos.Whites().queens | pos.Blacks().queens) != 0;
+        outEntry.variant = GetNetworkVariant((uint32_t)std::max(shiftedPieces, 0), anyQueen);
     }
 }
 
@@ -881,6 +896,7 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "ftDecay="                    << m_options.featureTransformerWeightDecay << "\n";
     f << "outputSubnetDecay="          << cOutputSubnetWeightDecay << "\n";
     f << "bucketLeak="                 << m_options.bucketLeak << "\n";
+    f << "frozenVariantsMask="         << m_options.frozenVariantsMask << "\n";
     f << "freezeFeatureTransformer="   << (m_options.freezeFeatureTransformer ? "true" : "false") << "\n";
     f << "factorizer="                 << (m_options.useFactorizer ? "true" : "false") << "\n";
     f << "reviveDeadNeurons="          << (m_options.reviveDeadNeurons ? "true" : "false") << "\n";
@@ -1258,6 +1274,15 @@ bool CudaNetworkTrainer::Train()
     if (m_options.bucketLeak > 0.0f)
         std::cout << "Bucket leak: " << m_options.bucketLeak << std::endl;
 
+    if (m_options.frozenVariantsMask != 0)
+    {
+        std::cout << "Frozen output variants:";
+        for (uint32_t v = 0; v < nn::NumVariants; ++v)
+            if (m_options.frozenVariantsMask & (1u << v))
+                std::cout << " " << v;
+        std::cout << std::endl;
+    }
+
     std::cout << "Loader: decisiveSkip " << (m_options.loaderOptions.decisiveSkip ? "on" : "off")
         << ", pieceCountTarget " << (m_options.loaderOptions.pieceCountTarget ? "on" : "off")
         << ", hmcSkipFrom20 " << (m_options.loaderOptions.hmcSkipFrom20 ? "on" : "off") << std::endl;
@@ -1533,6 +1558,21 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             options.trainingLength = std::stoull(args[++i]);
         else if (args[i] == "--bucketLeak")
             options.bucketLeak = std::stof(args[++i]);
+        else if (args[i] == "--frozenVariants")
+        {
+            std::stringstream list(args[++i]);
+            std::string item;
+            while (std::getline(list, item, ','))
+            {
+                const uint32_t variant = (uint32_t)std::stoul(item);
+                if (variant >= nn::NumVariants)
+                {
+                    std::cerr << "Invalid output variant: " << variant << std::endl;
+                    return false;
+                }
+                options.frozenVariantsMask |= 1u << variant;
+            }
+        }
         else if (args[i] == "--batchSize")
             options.batchSize = (uint32_t)std::stoul(args[++i]);
         else if (args[i] == "--beta1")
@@ -1548,6 +1588,19 @@ bool TrainCudaNetwork(const std::vector<std::string>& args)
             std::cerr << "Unknown option: " << args[i] << std::endl;
             return false;
         }
+    }
+
+    // a frozen variant still receives gradients through the feature transformer and dead neuron revival
+    static_assert(nn::NumVariants <= 32, "frozenVariantsMask holds one bit per variant");
+    if (options.frozenVariantsMask != 0 && (!options.freezeFeatureTransformer || options.reviveDeadNeurons))
+    {
+        std::cerr << "--frozenVariants requires --freezeFeatureTransformer and no --reviveDeadNeurons" << std::endl;
+        return false;
+    }
+    if (options.frozenVariantsMask == (uint32_t)((1ull << nn::NumVariants) - 1))
+    {
+        std::cerr << "All output variants are frozen" << std::endl;
+        return false;
     }
 
     if (options.batchSize == 0 || cNumTrainingVectorsPerIteration % options.batchSize != 0)
