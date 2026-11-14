@@ -1028,6 +1028,49 @@ void RunPositionTests()
         TEST_EXPECT(Move::Make(Square_b1, Square_d3, Piece::Queen, Piece::None, true) == pos.MoveFromPacked(PackedMove(Square_b1, Square_d3)));
     }
 
+    // Position::MoveFromPacked for pawns must match the move generator for every from/to/promotion combination
+    {
+        const char* fens[] =
+        {
+            Position::InitPositionFEN,
+            "k7/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1",
+            "rnbqkbnr/pp1ppppp/8/8/2pPP3/8/PPP2PPP/RNBQKBNR b KQkq d3 0 3",
+            "1r2k3/P1P5/8/8/8/8/p1p5/1R2K3 w - - 0 1",
+            "1r2k3/P1P5/8/8/8/8/p1p5/1R2K3 b - - 0 1",
+            "4k3/8/8/8/4p3/8/4P3/4K3 w - - 0 1",
+            "4k3/8/8/8/8/4n3/4P3/4K3 w - - 0 1",
+            "4k3/4p3/8/4P3/8/8/8/4K3 b - - 0 1",
+            "4k3/8/8/pP6/8/8/8/4K3 w - a6 0 1",
+            "4k3/8/8/8/6pP/8/8/4K3 b - h3 0 1",
+        };
+
+        for (const char* fen : fens)
+        {
+            const Position pos(fen);
+
+            MoveList moves;
+            GenerateMoveList(pos, moves);
+
+            pos.GetCurrentSide().pawns.Iterate([&](uint32_t fromIndex)
+            {
+                for (uint32_t toIndex = 0; toIndex < 64; ++toIndex)
+                {
+                    for (uint32_t promoteTo = 0; promoteTo < 16; ++promoteTo)
+                    {
+                        const PackedMove packedMove(Square(fromIndex), Square(toIndex), (Piece)promoteTo);
+
+                        Move expected = Move::Invalid();
+                        for (uint32_t i = 0; i < moves.Size(); ++i)
+                            if (moves.GetMove(i) == packedMove)
+                                expected = moves.GetMove(i);
+
+                        TEST_EXPECT(pos.MoveFromPacked(packedMove) == expected);
+                    }
+                }
+            });
+        }
+    }
+
     // Position::IsCapture
     {
         const Position pos("k7/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1");

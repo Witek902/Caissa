@@ -835,26 +835,37 @@ Move Position::MoveFromPacked(const PackedMove& packedMove) const
     {
         case Piece::Pawn:
         {
-            // TODO generate pawn move directly
-            MoveList moves;
-            if (GetSideToMove() == White)
+            const Square fromSquare = packedMove.FromSquare();
+            const Square toSquare = packedMove.ToSquare();
+            const Piece promoteTo = packedMove.GetPromoteTo();
+            const bool isWhite = GetSideToMove() == White;
+
+            // a promotion piece is required exactly when the pawn reaches the last rank
+            const bool isPromotion = toSquare.Rank() == (isWhite ? 7u : 0u);
+            if (isPromotion ? (promoteTo < Piece::Knight || promoteTo > Piece::Queen) : (promoteTo != Piece::None))
+                break;
+
+            if (Bitboard::GetPawnAttacks(fromSquare, GetSideToMove()) & toSquare.GetBitboard())
             {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, White>(*this, moves);
-                GeneratePawnMoveList<MoveGenerationMode::Quiets, White>(*this, moves);
+                if (isCapture)
+                    return Move::Make(fromSquare, toSquare, Piece::Pawn, promoteTo, true);
+                if (toSquare == GetEnPassantSquare())
+                    return Move::Make(fromSquare, toSquare, Piece::Pawn, Piece::None, true, true);
+                break;
             }
-            else
-            {
-                GeneratePawnMoveList<MoveGenerationMode::Captures, Black>(*this, moves);
-                GeneratePawnMoveList<MoveGenerationMode::Quiets, Black>(*this, moves);
-            }
-            for (uint32_t i = 0; i < moves.Size(); ++i)
-            {
-                const Move move = moves.GetMove(i);
-                if (move == packedMove)
-                {
-                    return move;
-                }
-            }
+
+            if (toSquare.GetBitboard() & occupiedSquares)
+                break;
+
+            const int32_t forward = isWhite ? 8 : -8;
+            if (toSquare.Index() == fromSquare.Index() + forward)
+                return Move::Make(fromSquare, toSquare, Piece::Pawn, promoteTo);
+
+            if (toSquare.Index() == fromSquare.Index() + 2 * forward &&
+                toSquare.Rank() == (isWhite ? 3u : 4u) &&
+                !(Square(uint32_t(fromSquare.Index() + forward)).GetBitboard() & occupiedSquares))
+                return Move::Make(fromSquare, toSquare, Piece::Pawn, Piece::None);
+
             break;
         }
 
