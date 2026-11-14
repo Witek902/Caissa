@@ -1609,6 +1609,26 @@ void RunPositionTests()
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
         }
 
+        // quiet move to an unattacked square
+        {
+            Position pos("7k/7p/8/8/8/8/8/1N4K1 w - - 0 1");
+            const Move move = pos.MoveFromString("b1c3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue));
+        }
+
+        // quiet move to a square attacked by a rook and defended by a pawn: the rook does not capture
+        {
+            Position pos("3r3k/8/8/8/8/1N2P3/8/6K1 w - - 0 1");
+            const Move move = pos.MoveFromString("b3d4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue / 2));
+        }
+
         // knight move to a square attacked by a pawn
         {
             Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP4/4PNP1/PP1B1PBP/RN3RK1 b - - 1 17");
