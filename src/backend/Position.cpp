@@ -769,22 +769,15 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-static const int32_t pawnValue = 100;
-static const int32_t knightValue = 300;
-static const int32_t bishopValue = 300;
-static const int32_t rookValue = 500;
-static const int32_t queenValue = 900;
-static const int32_t kingValue = INT32_MAX;
-
 static const int32_t c_seePieceValues[] =
 {
     0, // none
-    pawnValue,
-    knightValue,
-    bishopValue,
-    rookValue,
-    queenValue,
-    kingValue,
+    PawnValue,
+    KnightValue,
+    BishopValue,
+    RookValue,
+    QueenValue,
+    KingValue,
 };
 
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
@@ -831,6 +824,31 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     if (bishopsAndQueens)   allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
     if (rooksAndQueens)     allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
 
+    // pieces pinned to their own king; a capture along the pin line is not affected, because the occupied
+    // target square on the line is a second blocker, and a slider on the target square is captured first
+    Bitboard pinned[2] = { 0, 0 };
+    Bitboard pinners[2] = { 0, 0 };
+    for (uint32_t color = 0; color < 2; ++color)
+    {
+        const SidePosition& them = mColors[color ^ 1];
+        const Bitboard ourOccupied = color == White ? whiteOccupied : blackOccupied;
+        const Square kingSquare = mColors[color].GetKingSquare();
+        const Bitboard snipers = occupied & ~toSquare.GetBitboard() &
+            ((Bitboard::GetRookAttacks(kingSquare) & (them.rooks | them.queens)) |
+             (Bitboard::GetBishopAttacks(kingSquare) & (them.bishops | them.queens)));
+
+        snipers.Iterate([&](const uint32_t sniperIndex) INLINE_LAMBDA
+        {
+            const Bitboard ray = Bitboard::GetBetween(kingSquare, Square(sniperIndex));
+            const uint64_t blockers = ray & occupied;
+            if (blockers && !(blockers & (blockers - 1)) && (blockers & ourOccupied))
+            {
+                pinned[color] |= blockers;
+                pinners[color] |= Square(sniperIndex).GetBitboard();
+            }
+        });
+    }
+
     Color sideToMove = mSideToMove;
     int32_t result = 1;
 
@@ -840,15 +858,17 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         allAttackers &= occupied;
 
         const SidePosition& side = GetSide(sideToMove);
-        const Bitboard ourAttackers = allAttackers & (sideToMove == White ? whiteOccupied : blackOccupied);
+        Bitboard ourAttackers = allAttackers & (sideToMove == White ? whiteOccupied : blackOccupied);
         const Bitboard theirAttackers = allAttackers & (sideToMove == White ? blackOccupied : whiteOccupied);
+
+        // pinned pieces cannot capture while their pinner is still on the board
+        if (pinners[sideToMove] & occupied)
+            ourAttackers &= ~pinned[sideToMove];
 
         // no more attackers - side to move loses
         if (ourAttackers == 0) break;
 
         result ^= 1;
-
-        // TODO filter out pinned pieces
 
         // find attacking piece
         Piece piece = Piece::Pawn;
