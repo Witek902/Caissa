@@ -186,6 +186,9 @@ void MoveOrderer::NewSearch()
     for (uint32_t i = 0; i < sizeof(quietMoveHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(quietMoveHistory)[i]);
 
+    for (uint32_t i = 0; i < sizeof(pieceToHistory) / sizeof(CounterType); ++i)
+        ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(pieceToHistory)[i]);
+
     for (uint32_t i = 0; i < sizeof(capturesHistory) / sizeof(CounterType); ++i)
         ScaleDownHistoryCounter(reinterpret_cast<CounterType*>(capturesHistory)[i]);
 
@@ -208,6 +211,8 @@ void MoveOrderer::Clear()
     // clear history tables with a value
     ClearHistoryTable(reinterpret_cast<CounterType*>(quietMoveHistory),
         static_cast<CounterType>(QuietMoveHistoryClear), sizeof(quietMoveHistory) / sizeof(CounterType));
+    ClearHistoryTable(reinterpret_cast<CounterType*>(pieceToHistory),
+        static_cast<CounterType>(QuietMoveHistoryClear), sizeof(pieceToHistory) / sizeof(CounterType));
     ClearHistoryTable(reinterpret_cast<CounterType*>(continuationHistory),
         static_cast<CounterType>(ContinuationHistoryClear), sizeof(continuationHistory) / sizeof(CounterType));
     ClearHistoryTable(reinterpret_cast<CounterType*>(capturesHistory),
@@ -227,7 +232,9 @@ MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, cons
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
     ASSERT(to < 64);
-    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
+    return static_cast<CounterType>(((int32_t)quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()] +
+        (int32_t)pieceToHistory[color][move.PieceTo()]) / 2);
 }
 
 Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
@@ -302,6 +309,7 @@ void MoveOrderer::UpdateQuietMovesHistory(const NodeInfo& node, const Move* move
         const uint32_t to = move.ToSquare().Index();
 
         UpdateHistoryCounter(quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()], histDelta);
+        UpdateHistoryCounter(pieceToHistory[color][move.PieceTo()], histDelta);
         UpdateHistoryCounter(pawnHist[move.PieceTo()], histDelta);
 
         UpdateContinuationHistory(node, move, contDelta);
@@ -424,8 +432,9 @@ void MoveOrderer::ScoreMoves(
             // killer moves should be filtered by move picker
             ASSERT(killerMoves[node.ply] != move);
 
-            // history heuristics
-            score += quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+            // history heuristics, the from-to table averaged with the coarser piece-to table
+            score += ((int32_t)quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()] +
+                (int32_t)pieceToHistory[color][pieceTo]) / 2;
 
             // pawn structure history
             score += (*pawnHist)[pieceTo] * PawnHistWeight / 1024;

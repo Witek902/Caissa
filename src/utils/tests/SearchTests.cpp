@@ -167,6 +167,10 @@ void RunSearchTests()
         param.limits.maxDepth = 18;
         param.numPvLines = 1;
 
+        // history and TT entries left by the previous tests can steer the search into repetition draws
+        tt.Clear();
+        search.Clear();
+
         game.Reset(Position("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1"));
         search.DoSearch(game, param, result);
 
