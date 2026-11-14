@@ -366,6 +366,52 @@ void RunPositionTests()
         TEST_EXPECT(moveList.Size() == 20u);
     }
 
+    // pinned pieces
+    {
+        // generates exactly the legal moves; returns the number of moves of the piece on the given square
+        const auto checkPinnedMoves = [](const char* fen, const Bitboard expectedPinned, const Square pieceSquare) -> uint32_t
+        {
+            const Position pos(fen);
+            Threats threats;
+            pos.ComputeThreats(threats);
+            TEST_EXPECT(threats.pinned == expectedPinned);
+
+            MoveList moveList;
+            GenerateMoveList(pos, threats, moveList);
+            TEST_EXPECT(moveList.Size() == pos.GetNumLegalMoves());
+
+            uint32_t pieceMoves = 0;
+            for (uint32_t i = 0; i < moveList.Size(); ++i)
+            {
+                TEST_EXPECT(pos.IsMoveLegal(moveList.GetMove(i)));
+                if (moveList.GetMove(i).FromSquare() == pieceSquare) pieceMoves++;
+            }
+            return pieceMoves;
+        };
+
+        // knight pinned by a rook
+        TEST_EXPECT(0 == checkPinnedMoves("3rk3/8/8/8/8/3N4/4P3/3K4 w - - 0 1", Square(Square_d3).GetBitboard(), Square_d3));
+
+        // knight pinned by a bishop on the long diagonal
+        TEST_EXPECT(0 == checkPinnedMoves("b6k/7p/8/8/8/8/6N1/7K w - - 0 1", Square(Square_g2).GetBitboard(), Square_g2));
+
+        // two pieces between the king and the rook, nothing is pinned
+        TEST_EXPECT(8 == checkPinnedMoves("3rk3/8/8/8/8/3N4/3PP3/3K4 w - - 0 1", 0, Square_d3));
+        TEST_EXPECT(8 == checkPinnedMoves("3rk3/8/8/3P4/8/3N4/4P3/3K4 w - - 0 1", 0, Square_d3));
+
+        // rook pinned on a file moves along it
+        TEST_EXPECT(6 == checkPinnedMoves("3rk3/8/8/8/8/3R4/8/3K4 w - - 0 1", Square(Square_d3).GetBitboard(), Square_d3));
+
+        // pawn pinned on a diagonal can only capture the pinner
+        TEST_EXPECT(1 == checkPinnedMoves("4k3/8/8/8/8/2b5/3P4/4K3 w - - 0 1", Square(Square_d2).GetBitboard(), Square_d2));
+
+        // pawn pinned on a file can push, but not capture
+        TEST_EXPECT(1 == checkPinnedMoves("4r1k1/8/8/8/3p4/4P3/8/4K3 w - - 0 1", Square(Square_e3).GetBitboard(), Square_e3));
+
+        // black queen pinned on a diagonal by a queen
+        TEST_EXPECT(5 == checkPinnedMoves("7k/6q1/8/8/8/8/1Q6/K7 b - - 0 1", Square(Square_g7).GetBitboard(), Square_g7));
+    }
+
     // moves parsing & execution
     {
         // move (invalid)
@@ -1093,7 +1139,7 @@ void RunPositionTests()
         pos.ComputeThreats(node.threats);
 
         MoveList allMoves;
-        GenerateMoveList(pos, node.threats.allThreats, allMoves);
+        GenerateMoveList(pos, node.threats, allMoves);
         moveOrderer->ScoreMoves(node, allMoves);
 
         int32_t moveScore = 0;
@@ -1142,12 +1188,12 @@ void RunPositionTests()
             }
 
             MoveList allMoves;
-            GenerateMoveList(pos, node->threats.allThreats, allMoves);
+            GenerateMoveList(pos, node->threats, allMoves);
             MoveList captureMoves;
-            GenerateMoveList<MoveGenerationMode::Captures>(pos, node->threats.allThreats, captureMoves);
+            GenerateMoveList<MoveGenerationMode::Captures>(pos, node->threats, captureMoves);
 
             const Move ttMoveInPos = pos.MoveFromPacked(ttMove);
-            const bool expectTTMove = ttMoveInPos.IsValid() && (withQuiets || !ttMoveInPos.IsQuiet());
+            const bool expectTTMove = ttMoveInPos.IsValid() && (withQuiets || !ttMoveInPos.IsQuiet()) && IsPseudoLegalMoveSafe(pos, node->threats, ttMoveInPos);
 
             uint32_t timesPicked[MoveList::MaxMoves] = {};
             uint32_t numPicked = 0;
@@ -1208,6 +1254,7 @@ void RunPositionTests()
             "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
             "k2r4/4P3/8/1pP5/8/3p1q2/5PPP/KQ1B1RN1 w - b6 0 1",
             "4k3/8/8/8/1b6/8/3P4/4K2R w K - 0 1",
+            "3rk3/8/8/8/8/3N4/4P3/3K4 w - - 0 1",
         };
 
         for (const char* fen : fens)

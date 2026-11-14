@@ -1333,8 +1333,12 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         startTime = TimePoint::GetCurrent();
     }
 
+    Threats threats;
+    ComputeThreats(threats);
+    const bool isInCheck = threats.allThreats & GetCurrentSideKingSquare();
+
     MoveList moveList;
-    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moveList);
+    GenerateMoveList(*this, threats, moveList);
 
     uint64_t nodes = 0;
     for (uint32_t i = 0; i < moveList.Size(); i++)
@@ -1344,10 +1348,8 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
         ASSERT(move == MoveFromPacked(PackedMove(move)));
 
         Position child = *this;
-        if (!child.DoMove(move))
-        {
+        if (!child.DoGeneratedMove(move, isInCheck))
             continue;
-        }
 
         uint64_t numChildNodes = depth == 1 ? 1 : child.Perft(depth - 1, false);
 

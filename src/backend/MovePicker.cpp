@@ -10,7 +10,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
         {
             m_stage = Stage::GenerateCaptures;
             const Move move = m_position.MoveFromPacked(m_ttMove);
-            if (move.IsValid() && (!move.IsQuiet() || m_generateQuiets))
+            if (move.IsValid() && (!move.IsQuiet() || m_generateQuiets) && IsPseudoLegalMoveSafe(m_position, node.threats, move))
             {
                 outMove = move;
                 outScore = MoveOrderer::TTMoveValue;
@@ -24,7 +24,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             m_stage = Stage::Captures;
             m_killerMove = Move::Invalid();
             m_counterMove = Move::Invalid();
-            GenerateMoveList<MoveGenerationMode::Captures>(m_position, node.threats.allThreats, m_moves);
+            GenerateMoveList<MoveGenerationMode::Captures>(m_position, node.threats, m_moves);
 
             // remove PV and TT moves from generated list
             m_moves.RemoveMove(m_ttMove);
@@ -69,7 +69,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && !move.IsCapture() && IsPseudoLegalMoveSafe(m_position, node.threats, move))
                 {
                     m_killerMove = move;
                     outMove = move;
@@ -87,7 +87,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             if (move.IsValid() && move != m_ttMove && move != m_killerMove)
             {
                 move = m_position.MoveFromPacked(move);
-                if (move.IsValid() && !move.IsCapture())
+                if (move.IsValid() && !move.IsCapture() && IsPseudoLegalMoveSafe(m_position, node.threats, move))
                 {
                     m_counterMove = move;
                     outMove = move;
@@ -107,7 +107,7 @@ bool MovePicker::PickMove(const NodeInfo& node, Move& outMove, int32_t& outScore
             }
 
             m_stage = Stage::PickQuiets;
-            GenerateMoveList<MoveGenerationMode::Quiets>(m_position, node.threats.allThreats, m_moves);
+            GenerateMoveList<MoveGenerationMode::Quiets>(m_position, node.threats, m_moves);
 
             // remove played moves from generated list
             m_moves.RemoveMove(m_ttMove);
