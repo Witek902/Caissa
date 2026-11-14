@@ -1416,7 +1416,7 @@ ScoreType Search::QuiescenceNegaMax(ThreadData& thread, NodeInfo* node, SearchCo
         ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move, childNode.nnContext))
+        if (!childNode.position.DoGeneratedMove(move, childNode.nnContext, node->isInCheck))
             continue;
         moveIndex++;
 
@@ -1511,7 +1511,7 @@ NO_INLINE ScoreType Search::Probcut(ThreadData& thread, NodeInfo* node, SearchCo
         ctx.searchParam.transpositionTable.Prefetch(position.HashAfterMove(move));
 
         childNode.position = position;
-        if (!childNode.position.DoMove(move, childNode.nnContext))
+        if (!childNode.position.DoGeneratedMove(move, childNode.nnContext, node->isInCheck))
             continue;
 
         childNode.depth = 0;
@@ -2088,7 +2088,7 @@ ScoreType Search::NegaMax(ThreadData& thread, NodeInfo* node, SearchContext& ctx
 
         // do the move
         childNode.position = position;
-        if (!childNode.position.DoMove(move, childNode.nnContext))
+        if (!childNode.position.DoGeneratedMove(move, childNode.nnContext, node->isInCheck))
             continue;
         moveIndex++;
 

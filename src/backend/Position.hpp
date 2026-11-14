@@ -98,6 +98,7 @@ struct Threats
     Bitboard attackedByMinors;
     Bitboard attackedByRooks;
     Bitboard allThreats;
+    Bitboard pinned;    // side to move's pieces pinned to its king
 };
 
 // class representing whole board state
@@ -213,6 +214,11 @@ public:
     bool DoMove(const Move& move);
     bool DoMove(const Move& move, NNEvaluatorContext& nnContext);
 
+    // Apply a move from the pin-aware generator or one that passed IsPseudoLegalMoveSafe.
+    // NOTE: Only evasions, en passant and castling can still leave the king in check
+    bool DoGeneratedMove(const Move& move, bool isInCheck);
+    bool DoGeneratedMove(const Move& move, NNEvaluatorContext& nnContext, bool isInCheck);
+
     // apply null move
     bool DoNullMove();
 
@@ -302,6 +308,8 @@ private:
     Square ExtractEnPassantSquareFromMove(const Move& move) const;
 
     void ClearRookCastlingRights(const Square affectedSquare);
+
+    void DoMoveUnchecked(const Move& move, NNEvaluatorContext& nnContext);
 
     // BOARD STATE & FLAGS
 

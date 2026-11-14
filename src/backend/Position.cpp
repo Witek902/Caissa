@@ -453,7 +453,7 @@ void Position::ClearRookCastlingRights(const Square affectedSquare)
     }
 }
 
-bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
+INLINE void Position::DoMoveUnchecked(const Move& move, NNEvaluatorContext& nnContext)
 {
     ASSERT(IsMoveValid(move));  // move must be valid
     ASSERT(IsValid());          // board position must be valid
@@ -572,8 +572,6 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     else
         mHalfMoveCount++;
 
-    const Color prevToMove = mSideToMove;
-
     mSideToMove = mSideToMove ^ 1;
     mHash ^= c_SideToMoveZobristHash;
 
@@ -584,9 +582,31 @@ bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
     ASSERT(ComputeHash() == GetHash());
 
     ASSERT(nnContext.numDirtyPieces > 0 && nnContext.numDirtyPieces <= MaxNumDirtyPieces);
+}
+
+bool Position::DoMove(const Move& move, NNEvaluatorContext& nnContext)
+{
+    DoMoveUnchecked(move, nnContext);
 
     // can't be in check after move
-    return !IsInCheck(prevToMove);
+    return !IsInCheck(mSideToMove ^ 1);
+}
+
+bool Position::DoGeneratedMove(const Move& move, NNEvaluatorContext& nnContext, bool isInCheck)
+{
+    DoMoveUnchecked(move, nnContext);
+
+    if (isInCheck || move.IsEnPassant() || move.IsCastling())
+        return !IsInCheck(mSideToMove ^ 1);
+
+    ASSERT(!IsInCheck(mSideToMove ^ 1));
+    return true;
+}
+
+bool Position::DoGeneratedMove(const Move& move, bool isInCheck)
+{
+    NNEvaluatorContext dummyContext;
+    return DoGeneratedMove(move, dummyContext, isInCheck);
 }
 
 bool Position::DoMove(const Move& move)
@@ -937,10 +957,24 @@ void Position::ComputeThreatsImpl(Threats& outThreats) const
         allThreats |= Bitboard::GenerateQueenAttacks(Square(fromIndex), occupied); });
     allThreats |= Bitboard::GetKingAttacks(opponentSide.GetKingSquare());
 
+    // a piece is pinned when it is the only piece between our king and an opponent's slider
+    const Square kingSquare = currentSide.GetKingSquare();
+    const Bitboard snipers =
+        (Bitboard::GetRookAttacks(kingSquare) & (opponentSide.rooks | opponentSide.queens)) |
+        (Bitboard::GetBishopAttacks(kingSquare) & (opponentSide.bishops | opponentSide.queens));
+    Bitboard pinned = 0;
+    snipers.Iterate([&](uint32_t sniperIndex) INLINE_LAMBDA
+    {
+        const uint64_t blockers = Bitboard::GetBetween(kingSquare, Square(sniperIndex)) & occupied;
+        if (IsPowerOfTwo(blockers))
+            pinned |= blockers & currentSide.Occupied();
+    });
+
     outThreats.attackedByPawns = attackedByPawns;
     outThreats.attackedByMinors = attackedByMinors;
     outThreats.attackedByRooks = attackedByRooks;
     outThreats.allThreats = allThreats;
+    outThreats.pinned = pinned;
 }
 
 template void Position::ComputeThreatsImpl<White>(Threats&) const;
