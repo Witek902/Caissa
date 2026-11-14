@@ -1,5 +1,6 @@
 #include "Position.hpp"
 #include "Material.hpp"
+#include "Math.hpp"
 #include "Evaluate.hpp"
 #include "MoveGen.hpp"
 #include "NeuralNetworkEvaluator.hpp"
@@ -769,22 +770,15 @@ const MaterialKey Position::GetMaterialKey() const
     return key;
 }
 
-static const int32_t pawnValue = 100;
-static const int32_t knightValue = 300;
-static const int32_t bishopValue = 300;
-static const int32_t rookValue = 500;
-static const int32_t queenValue = 900;
-static const int32_t kingValue = INT32_MAX;
-
 static const int32_t c_seePieceValues[] =
 {
     0, // none
-    pawnValue,
-    knightValue,
-    bishopValue,
-    rookValue,
-    queenValue,
-    kingValue,
+    PawnValue,
+    KnightValue,
+    BishopValue,
+    RookValue,
+    QueenValue,
+    KingValue,
 };
 
 bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) const
@@ -831,6 +825,34 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     if (bishopsAndQueens)   allAttackers |= Bitboard::GenerateBishopAttacks(toSquare, occupied) & bishopsAndQueens;
     if (rooksAndQueens)     allAttackers |= Bitboard::GenerateRookAttacks(toSquare, occupied) & rooksAndQueens;
 
+    // pieces pinned to their own king: a capture along the pin line is not affected,
+    // because the occupied target square on the line is a second blocker,
+    // and a slider on the target square is captured first
+    Bitboard pinned[2] = { 0, 0 };
+    Bitboard pinners[2] = { 0, 0 };
+    for (uint32_t color = 0; color < 2; ++color)
+    {
+        const SidePosition& them = mColors[color ^ 1];
+        const Bitboard ourOccupied = color == White ? whiteOccupied : blackOccupied;
+        const Square kingSquare = mColors[color].GetKingSquare();
+
+        const Bitboard sliders = occupied & ~toSquare.GetBitboard() &
+            ((Bitboard::GetRookAttacks(kingSquare) & (them.rooks | them.queens)) |
+             (Bitboard::GetBishopAttacks(kingSquare) & (them.bishops | them.queens)));
+
+        sliders.Iterate([&](const uint32_t sliderIndex) INLINE_LAMBDA
+        {
+            const Bitboard ray = Bitboard::GetBetween(kingSquare, Square(sliderIndex));
+            const uint64_t blockers = ray & occupied;
+            // exactly one piece between the king and the slider, and it is ours
+            if ((blockers & ourOccupied) && IsPowerOfTwo(blockers))
+            {
+                pinned[color] |= blockers;
+                pinners[color] |= Square(sliderIndex).GetBitboard();
+            }
+        });
+    }
+
     Color sideToMove = mSideToMove;
     int32_t result = 1;
 
@@ -840,15 +862,17 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
         allAttackers &= occupied;
 
         const SidePosition& side = GetSide(sideToMove);
-        const Bitboard ourAttackers = allAttackers & (sideToMove == White ? whiteOccupied : blackOccupied);
+        Bitboard ourAttackers = allAttackers & (sideToMove == White ? whiteOccupied : blackOccupied);
         const Bitboard theirAttackers = allAttackers & (sideToMove == White ? blackOccupied : whiteOccupied);
+
+        // pinned pieces cannot capture while their pinner is still on the board
+        if (pinners[sideToMove] & occupied)
+            ourAttackers &= ~pinned[sideToMove];
 
         // no more attackers - side to move loses
         if (ourAttackers == 0) break;
 
         result ^= 1;
-
-        // TODO filter out pinned pieces
 
         // find attacking piece
         Piece piece = Piece::Pawn;

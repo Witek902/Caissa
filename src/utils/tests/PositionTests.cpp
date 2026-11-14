@@ -1315,6 +1315,17 @@ void RunPositionTests()
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
+        }
+
+        // king captures an undefended pawn
+        {
+            Position pos("7k/8/8/8/8/8/6p1/6K1 w - - 0 1");
+            const Move move = pos.MoveFromString("g1g2");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
         }
 
         // promotion
@@ -1330,9 +1341,9 @@ void RunPositionTests()
             Position pos("7k/p7/1p6/8/8/1Q6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -801));
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -800));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -799));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue - 1));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue + 1));
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 0));
         }
 
@@ -1348,7 +1359,7 @@ void RunPositionTests()
 
         // rook trade
         {
-            Position pos("7k/p7/1q6/8/8/1Q6/8/7K w - - 0 1");
+            Position pos("7k/p7/1r6/8/8/1R6/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -1));
@@ -1362,8 +1373,8 @@ void RunPositionTests()
             const Move move = pos.MoveFromString("b3b6");
             TEST_EXPECT(move.IsValid());
             TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 100));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 200));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 2 * KnightValue - RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 2 * KnightValue - RookValue + 1));
         }
 
         // 4 rooks and 4 bishops
@@ -1371,8 +1382,8 @@ void RunPositionTests()
             Position pos("kB2r2b/8/8/1r2p2R/8/8/1B5b/K3R3 w - - 0 1");
             const Move move = pos.MoveFromString("b2e5");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -200));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -199));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - BishopValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - BishopValue + 1));
         }
 
         // 2 rooks battery
@@ -1380,7 +1391,8 @@ void RunPositionTests()
             Position pos("K2R4/3R4/8/8/8/3r2r1/8/7k w - - 0 1");
             const Move move = pos.MoveFromString("d7d3");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, RookValue + 1));
         }
 
         // 2 rooks battery + bishop
@@ -1395,10 +1407,19 @@ void RunPositionTests()
         // 3 rooks battery
         {
             Position pos("K2R4/3R4/3R4/8/8/3r2rr/8/7k w - - 0 1");
-            const Move move = pos.MoveFromString("d7d3");
+            const Move move = pos.MoveFromString("d6d3");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 501));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, RookValue + 1));
+        }
+
+        // queen leads a battery, the rook behind it joins only after the queen has captured
+        {
+            Position pos("3r3k/3r4/8/3p4/8/2N5/3Q4/3R2K1 w - - 0 1");
+            const Move move = pos.MoveFromString("c3d5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue + 2 * RookValue - KnightValue - QueenValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 2 * RookValue - KnightValue - QueenValue + 1));
         }
 
         // complex
@@ -1406,8 +1427,98 @@ void RunPositionTests()
             Position pos("6k1/1pp4p/p1pb4/6q1/3P1pRr/2P4P/PP1Br1P1/5RKN w - - 0 1");
             const Move move = pos.MoveFromString("f1f4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -100));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -99));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - RookValue + BishopValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - RookValue + BishopValue + 1));
+        }
+
+        // defending knight pinned to its king
+        {
+            Position pos("4k3/4n3/8/3p4/8/8/8/3QR1K1 w - - 0 1");
+            const Move move = pos.MoveFromString("d1d5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
+        }
+
+        // defending knight not pinned, a pawn blocks the rook
+        {
+            Position pos("4k3/4n3/8/3pp3/8/8/8/3QR1K1 w - - 0 1");
+            const Move move = pos.MoveFromString("d1d5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue + 1));
+        }
+
+        // defending knight not pinned, a pawn shields the king
+        {
+            Position pos("4k3/4p3/4n3/8/3p4/8/8/3QR1K1 w - - 0 1");
+            const Move move = pos.MoveFromString("d1d4");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue + 1));
+        }
+
+        // defending knight pinned on a diagonal
+        {
+            Position pos("7k/6n1/8/5p2/8/8/8/B4QK1 w - - 0 1");
+            const Move move = pos.MoveFromString("f1f5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
+        }
+
+        // the capturing pawn leaves the pin line, which pins the defending knight
+        {
+            Position pos("4k3/4n3/8/3p4/4P3/8/8/4R1K1 w - - 0 1");
+            const Move move = pos.MoveFromString("e4d5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
+        }
+
+        // own knight pinned, cannot recapture after cxd5
+        {
+            Position pos("7k/8/1bp5/3p4/8/4N3/8/3R2K1 w - - 0 1");
+            const Move move = pos.MoveFromString("d1d5");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - RookValue + 1));
+        }
+
+        // rook on the pin line recaptures, the target square is a second blocker
+        {
+            Position pos("4k3/4r3/4p3/8/8/8/Q7/4R1K1 w - - 0 1");
+            const Move move = pos.MoveFromString("a2e6");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue + RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue - QueenValue + RookValue + 1));
+        }
+
+        // the pinner makes the capture, so the rook is free to recapture
+        {
+            Position pos("4k3/3r4/8/1B6/8/3n4/8/6K1 w - - 0 1");
+            const Move move = pos.MoveFromString("b5d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, KnightValue - BishopValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, KnightValue - BishopValue + 1));
+        }
+
+        // the pin ends when the pinner joins the exchange: Nxd3 exd3 Bxd3 Rxd3
+        {
+            Position pos("4k3/3r4/8/1B6/4p3/3n4/5N2/6K1 w - - 0 1");
+            const Move move = pos.MoveFromString("f2d3");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 0));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
+        }
+
+        // a pinned piece still defends against a king recapture
+        {
+            Position pos("1r2k3/3p4/1N6/8/Q7/8/8/1K6 w - - 0 1");
+            const Move move = pos.MoveFromString("a4d7");
+            TEST_EXPECT(move.IsValid());
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
         }
 
         // pawns and bishops on diagonal
@@ -1415,8 +1526,8 @@ void RunPositionTests()
             Position pos("7k/b7/8/2p5/3P4/4B3/8/7K w - - 0 1");
             const Move move = pos.MoveFromString("d4c5");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 100));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 101));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, PawnValue + 1));
         }
 
         // queen takes rook, then king take the queen
@@ -1424,8 +1535,8 @@ void RunPositionTests()
             Position pos("3rk2r/2Q2p2/p3q2p/1p1p2p1/1B1P1n2/2P2P2/P3bRPP/4R1K1 w - - 0 25");
             const Move move = pos.MoveFromString("c7d8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -400));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -399));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, RookValue - QueenValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, RookValue - QueenValue + 1));
         }
 
         // same as above, but king can't capture the queen because it's protected by a bishop
@@ -1433,8 +1544,8 @@ void RunPositionTests()
             Position pos("3rk2r/2Q2p2/p3q2p/Bp1p2p1/3P1n2/2P2P2/P3bRPP/4R1K1 w - - 0 25");
             const Move move = pos.MoveFromString("c7d8");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, 500));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 501));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, RookValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, RookValue + 1));
         }
 
         // pawn push (losing)
@@ -1442,8 +1553,8 @@ void RunPositionTests()
             Position pos("k7/8/8/5p2/8/6P1/8/K7 w - - 0 1");
             const Move move = pos.MoveFromString("g3g4");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -100));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -99));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -PawnValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -PawnValue + 1));
         }
 
         // pawn push (equal)
@@ -1455,13 +1566,13 @@ void RunPositionTests()
             TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, 1));
         }
 
-        // pawn push (equal)
+        // knight move to a square attacked by a pawn
         {
             Position pos("r2q1rk1/1Q2npp1/p1p1b2p/b2p4/2nP4/4PNP1/PP1B1PBP/RN3RK1 b - - 1 17");
             const Move move = pos.MoveFromString("c4a3");
             TEST_EXPECT(move.IsValid());
-            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -300));
-            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -299));
+            TEST_EXPECT(true == pos.StaticExchangeEvaluation(move, -KnightValue));
+            TEST_EXPECT(false == pos.StaticExchangeEvaluation(move, -KnightValue + 1));
         }
 
         // en passant

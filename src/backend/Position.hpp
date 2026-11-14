@@ -330,3 +330,11 @@ static_assert(sizeof(Position) <= 128, "Invalid position size");
 
 static constexpr uint8_t c_shortCastleMask = (1 << 7);
 static constexpr uint8_t c_longCastleMask = (1 << 0);
+
+// piece values used by the static exchange evaluation
+static constexpr int32_t PawnValue = 100;
+static constexpr int32_t KnightValue = 300;
+static constexpr int32_t BishopValue = 300;
+static constexpr int32_t RookValue = 500;
+static constexpr int32_t QueenValue = 900;
+static constexpr int32_t KingValue = INT32_MAX;
