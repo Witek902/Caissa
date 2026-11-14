@@ -1334,7 +1334,11 @@ uint64_t Position::Perft(uint32_t depth, bool print) const
     }
 
     MoveList moveList;
-    GenerateMoveList(*this, Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare()), moveList);
+    const Bitboard threats = Bitboard::GetKingAttacks(GetOpponentSide().GetKingSquare());
+    if (IsInCheck())
+        GenerateEvasionList(*this, threats, moveList);
+    else
+        GenerateMoveList(*this, threats, moveList);
 
     uint64_t nodes = 0;
     for (uint32_t i = 0; i < moveList.Size(); i++)

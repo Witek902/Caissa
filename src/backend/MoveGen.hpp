@@ -2,6 +2,7 @@
 
 #include "Position.hpp"
 #include "MoveList.hpp"
+#include "Math.hpp"
 
 enum class MoveGenerationMode
 {
@@ -24,8 +25,9 @@ INLINE void GeneratePromotionsMoveList(const Square from, const Square to, MoveL
     }
 }
 
+// targetMask limits the destination squares of all pawn moves except en passant
 template<MoveGenerationMode mode, Color sideToMove>
-INLINE void GeneratePawnMoveList(const Position& pos, MoveList::BatchWriter& writer)
+INLINE void GeneratePawnMoveList(const Position& pos, const Bitboard targetMask, MoveList::BatchWriter& writer)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
     const SidePosition& opponentSide = pos.GetSide(sideToMove ^ 1);
@@ -43,8 +45,9 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList::BatchWriter& wri
     if constexpr (mode == MoveGenerationMode::Quiets)
     {
         constexpr Bitboard doublePushesRank = sideToMove == White ? Bitboard::RankBitboard<3>() : Bitboard::RankBitboard<4>();
-        const Bitboard singlePushes = currentSide.pawns.Shift<pawnDirection>() & emptySquares & ~promotionRank;
-        const Bitboard doublePushes = singlePushes.Shift<pawnDirection>() & (emptySquares & doublePushesRank);
+        const Bitboard allSinglePushes = currentSide.pawns.Shift<pawnDirection>() & emptySquares & ~promotionRank;
+        const Bitboard doublePushes = allSinglePushes.Shift<pawnDirection>() & (emptySquares & doublePushesRank) & targetMask;
+        const Bitboard singlePushes = allSinglePushes & targetMask;
 
         singlePushes.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
         {
@@ -63,8 +66,8 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList::BatchWriter& wri
 
     if constexpr (mode == MoveGenerationMode::Captures)
     {
-        const Bitboard leftCaptures = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & ~promotionRank;
-        const Bitboard rightCaptures = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & ~promotionRank;
+        const Bitboard leftCaptures = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & ~promotionRank & targetMask;
+        const Bitboard rightCaptures = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & ~promotionRank & targetMask;
 
         leftCaptures.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
         {
@@ -105,9 +108,9 @@ INLINE void GeneratePawnMoveList(const Position& pos, MoveList::BatchWriter& wri
     // promotions
     if (beforePromotionRank & currentSide.pawns)
     {
-        const Bitboard promotions = currentSide.pawns.Shift<pawnDirection>() & emptySquares & promotionRank;
-        const Bitboard leftCapturePromotions = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & promotionRank;
-        const Bitboard rightCapturesPromotions = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & promotionRank;
+        const Bitboard promotions = currentSide.pawns.Shift<pawnDirection>() & emptySquares & promotionRank & targetMask;
+        const Bitboard leftCapturePromotions = currentSide.pawns.Shift<pawnDirection>().West() & occupiedByOpponent & promotionRank & targetMask;
+        const Bitboard rightCapturesPromotions = currentSide.pawns.Shift<pawnDirection>().East() & occupiedByOpponent & promotionRank & targetMask;
 
         promotions.Iterate([&](uint32_t targetIndex) INLINE_LAMBDA
         {
@@ -128,7 +131,7 @@ template<MoveGenerationMode mode, Color sideToMove>
 INLINE void GeneratePawnMoveList(const Position& pos, MoveList& outMoveList)
 {
     auto writer = outMoveList.BeginBatch();
-    GeneratePawnMoveList<mode, sideToMove>(pos, writer);
+    GeneratePawnMoveList<mode, sideToMove>(pos, Bitboard::Full(), writer);
     outMoveList.EndBatch(writer);
 }
 
@@ -213,7 +216,7 @@ inline void GenerateCastlingMoveList(const Position& pos, TMoveList<MaxSize>& ou
     outMoveList.EndBatch(writer);
 }
 
-template<MoveGenerationMode mode, Color sideToMove>
+template<MoveGenerationMode mode, Color sideToMove, bool inCheck = false>
 INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, MoveList::BatchWriter& writer)
 {
     const SidePosition& currentSide = pos.GetSide(sideToMove);
@@ -234,13 +237,13 @@ INLINE void GenerateKingMoveList(const Position& pos, const Bitboard threats, Mo
         writer.Push(Move::Make(kingSquare, Square(toIndex), Piece::King, Piece::None, mode == MoveGenerationMode::Captures));
     });
 
-    if constexpr (mode == MoveGenerationMode::Quiets)
+    if constexpr (mode == MoveGenerationMode::Quiets && !inCheck)
     {
         GenerateCastlingMoveList<sideToMove>(pos, writer);
     }
 }
 
-template<MoveGenerationMode mode, Color sideToMove>
+template<MoveGenerationMode mode, Color sideToMove, bool inCheck>
 inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
 {
     constexpr const bool isCapture = mode == MoveGenerationMode::Captures;
@@ -259,7 +262,30 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 
     auto writer = outMoveList.BeginBatch();
 
-    GeneratePawnMoveList<mode, sideToMove>(pos, writer);
+    Bitboard targetMask = Bitboard::Full();
+    if constexpr (inCheck)
+    {
+        const Square kingSquare = currentSide.GetKingSquare();
+        const Bitboard checkers =
+            (Bitboard::GetPawnAttacks(kingSquare, sideToMove) & opponentSide.pawns) |
+            (Bitboard::GetKnightAttacks(kingSquare) & opponentSide.knights) |
+            (Bitboard::GenerateRookAttacks(kingSquare, occupiedSquares) & (opponentSide.rooks | opponentSide.queens)) |
+            (Bitboard::GenerateBishopAttacks(kingSquare, occupiedSquares) & (opponentSide.bishops | opponentSide.queens));
+        ASSERT(checkers);
+
+        if (!IsPowerOfTwo(checkers.value)) // double check: only the king can move
+        {
+            GenerateKingMoveList<mode, sideToMove, true>(pos, threats, writer);
+            outMoveList.EndBatch(writer);
+            return;
+        }
+
+        // other pieces must capture or block the checker
+        targetMask = checkers | Bitboard::GetBetween(kingSquare, Square(FirstBitSet(checkers.value)));
+        filter &= targetMask;
+    }
+
+    GeneratePawnMoveList<mode, sideToMove>(pos, targetMask, writer);
 
     currentSide.knights.Iterate([&](uint32_t fromIndex) INLINE_LAMBDA
     {
@@ -297,7 +323,7 @@ inline void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
         });
     });
 
-    GenerateKingMoveList<mode, sideToMove>(pos, threats, writer);
+    GenerateKingMoveList<mode, sideToMove, inCheck>(pos, threats, writer);
 
     outMoveList.EndBatch(writer);
 }
@@ -307,11 +333,11 @@ INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 {
     if (pos.GetSideToMove() == White)
     {
-        GenerateMoveList<mode, White>(pos, threats, outMoveList);
+        GenerateMoveList<mode, White, false>(pos, threats, outMoveList);
     }
     else
     {
-        GenerateMoveList<mode, Black>(pos, threats, outMoveList);
+        GenerateMoveList<mode, Black, false>(pos, threats, outMoveList);
     }
 }
 
@@ -319,6 +345,27 @@ INLINE void GenerateMoveList(const Position& pos, const Bitboard threats, MoveLi
 {
     GenerateMoveList<MoveGenerationMode::Captures>(pos, threats, outMoveList);
     GenerateMoveList<MoveGenerationMode::Quiets>(pos, threats, outMoveList);
+}
+
+// Side to move must be in check. Skips moves that neither capture nor block the checker,
+// but the moves can still be illegal (pinned pieces, en passant).
+template<MoveGenerationMode mode>
+inline void GenerateEvasionList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+{
+    if (pos.GetSideToMove() == White)
+    {
+        GenerateMoveList<mode, White, true>(pos, threats, outMoveList);
+    }
+    else
+    {
+        GenerateMoveList<mode, Black, true>(pos, threats, outMoveList);
+    }
+}
+
+INLINE void GenerateEvasionList(const Position& pos, const Bitboard threats, MoveList& outMoveList)
+{
+    GenerateEvasionList<MoveGenerationMode::Captures>(pos, threats, outMoveList);
+    GenerateEvasionList<MoveGenerationMode::Quiets>(pos, threats, outMoveList);
 }
 
 INLINE void GenerateMoveList(const Position& pos, MoveList& outMoveList)
