@@ -792,8 +792,8 @@ bool Position::StaticExchangeEvaluation(const Move& move, int32_t treshold) cons
     {
         const Piece capturedPiece = GetCapturedPiece(move);
         balance += c_seePieceValues[(uint32_t)capturedPiece];
-        if (balance < 0) return false;
     }
+    if (balance < 0) return false;
 
     {
         ASSERT(move.GetPiece() == GetCurrentSide().GetPieceAtSquare(fromSquare));
