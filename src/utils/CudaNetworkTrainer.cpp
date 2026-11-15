@@ -181,7 +181,7 @@ public:
 
         m_packedNet = std::make_unique<nn::PackedNeuralNetwork>();
 
-        m_validationSet.resize(cNumTrainingVectorsPerIteration);
+        m_validationSet.resize(cNumValidationVectorsPerIteration);
         m_trainingSet_Read.resize(cNumTrainingVectorsPerIteration);
         m_trainingSet_Write.resize(cNumTrainingVectorsPerIteration);
         m_validationPerThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
@@ -271,7 +271,7 @@ private:
     // training-set RMSE of the last training iteration; written by the training task, read by Validate
     std::atomic<float> m_lastTrainingRmse = 0.0f;
 
-    // positions drawn again because they have more threat features than a training entry holds
+    // positions drawn again because they have more pieces than a training entry holds
     std::atomic<uint64_t> m_numSkippedPositions = 0;
 
     // threat weights out of the int8 range in the last packed net
@@ -439,8 +439,10 @@ static bool PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     ASSERT(numBlackThreatFeatures == numWhiteThreatFeatures);
     UNUSED(numBlackThreatFeatures);
 
-    if (numWhiteFeatures > std::size(outEntry.whiteFeatures) || numWhiteThreatFeatures > MaxTrainingThreatFeatures)
+    static_assert(MaxTrainingThreatFeatures >= 8 * (std::size(TrainingEntry{}.whiteFeatures) - 2), "every position that fits must fit its threats");
+    if (numWhiteFeatures > std::size(outEntry.whiteFeatures))
         return false;
+    ASSERT(numWhiteThreatFeatures <= MaxTrainingThreatFeatures);
 
     outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
     outEntry.numBlackFeatures = (uint8_t)numBlackFeatures;
@@ -1546,7 +1548,7 @@ bool CudaNetworkTrainer::Train()
 
             if (m_numSkippedPositions > 0)
             {
-                snprintf(buf, sizeof(buf), "%*sskipped positions with too many threat features: %llu\n", indent, "", (unsigned long long)m_numSkippedPositions.load());
+                snprintf(buf, sizeof(buf), "%*sskipped positions with more than 32 pieces: %llu\n", indent, "", (unsigned long long)m_numSkippedPositions.load());
                 str += buf;
             }
 #ifdef USE_PACKED_NET_VALIDATION

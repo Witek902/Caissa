@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-// threat features stored per position; the trainer skips positions with more
-static constexpr uint32_t MaxTrainingThreatFeatures = 96;
+// every non-king piece has at most 8 threats, and positions with more than 32 pieces are skipped
+static constexpr uint32_t MaxTrainingThreatFeatures = 8 * 30;
 
 struct TrainingEntry
 {
