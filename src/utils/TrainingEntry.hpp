@@ -6,9 +6,9 @@
 static constexpr uint32_t MaxTrainingThreatFeatures = 8 * 30;
 
 // Threat feature slots per position in a batch's threat feature list (both perspectives). A batch
-// overflows only if its positions average more than 120 threat features; with standard material a
-// position has at most 112.
-static constexpr uint32_t TrainingThreatFeatureBudget = 2 * 120;
+// overflows only if its positions average more than 48 threat features per perspective; training
+// positions average 15.
+static constexpr uint32_t TrainingThreatFeatureBudget = 2 * 48;
 
 struct TrainingEntry
 {

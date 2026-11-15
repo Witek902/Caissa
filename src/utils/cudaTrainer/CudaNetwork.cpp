@@ -80,6 +80,15 @@ CudaNeuralNetwork::~CudaNeuralNetwork()
     }
     cudaEventDestroy(m_snapshotReadyEvent);
     cudaEventDestroy(m_weightsDownloadedEvent);
+
+    for (const nn::WeightsStoragePtr& hostLayer : m_hostLayers)
+    {
+        if (hostLayer)
+        {
+            for (nn::WeightsStorage::Variant& variant : hostLayer->m_variants)
+                cudaHostUnregister(variant.m_weights.data());
+        }
+    }
 }
 
 void CudaNeuralNetwork::BeginIteration(uint32_t slot, CudaBatchData& batch)
@@ -136,9 +145,10 @@ void CudaNeuralNetwork::StartWeightsDownload()
     ASSERT(!m_downloadInFlight);
     m_downloadInFlight = true;
 
-    // FinishWeightsDownload waited for the previous download, so the snapshot and the host buffer are free
+    // FinishWeightsDownload waited for the previous download, so the snapshot is free
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
     size_t offset = 0;
-    for (const CudaWeightsStoragePtr& layer : { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights })
+    for (const CudaWeightsStorage* layer : layers)
     {
         if (layer->m_updateWeights)
         {
@@ -147,47 +157,35 @@ void CudaNeuralNetwork::StartWeightsDownload()
         }
         offset += layer->m_totalWeights;
     }
-    ASSERT(offset == m_weightsSnapshot.Size() && offset == m_downloadedWeights.Size());
+    ASSERT(offset == m_weightsSnapshot.Size());
     CUDA_CHECK(cudaEventRecord(m_snapshotReadyEvent, m_stream.Get()));
 
+    // the host storages are pinned, so these copies do not block the host
     CUDA_CHECK(cudaStreamWaitEvent(m_downloadStream.Get(), m_snapshotReadyEvent, 0));
-    CUDA_CHECK(cudaMemcpyAsync(m_downloadedWeights.Get(), m_weightsSnapshot.Get(), offset * sizeof(float), cudaMemcpyDeviceToHost, m_downloadStream.Get()));
-    CUDA_CHECK(cudaEventRecord(m_weightsDownloadedEvent, m_downloadStream.Get()));
-}
-
-void CudaNeuralNetwork::FinishWeightsDownload(
-    const nn::WeightsStoragePtr& featureTransformerWeights,
-    const nn::WeightsStoragePtr& threatWeights,
-    const nn::WeightsStoragePtr& l1Weights,
-    const nn::WeightsStoragePtr& l2Weights,
-    const nn::WeightsStoragePtr& l3Weights)
-{
-    ASSERT(m_downloadInFlight);
-    CUDA_CHECK(cudaEventSynchronize(m_weightsDownloadedEvent));
-
-    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
-    const nn::WeightsStoragePtr hostLayers[] = { featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights };
-
-    const float* source = m_downloadedWeights.Get();
-    for (size_t i = 0; i < std::size(layers); ++i)
+    offset = 0;
+    for (uint32_t i = 0; i < NumLayers; ++i)
     {
         const CudaWeightsStorage& layer = *layers[i];
         if (layer.m_updateWeights)
         {
             const uint32_t weightsPerVariant = (layer.m_inputSize + 1) * layer.m_outputSize;
-            ASSERT(weightsPerVariant * layer.m_numVariants == layer.m_totalWeights);
-            ASSERT(hostLayers[i]->m_variants.size() == layer.m_numVariants);
             for (uint32_t variant = 0; variant < layer.m_numVariants; ++variant)
             {
-                nn::Values& hostWeights = hostLayers[i]->m_variants[variant].m_weights;
-                hostWeights.resize(weightsPerVariant);
-                memcpy(hostWeights.data(), source + (size_t)variant * weightsPerVariant, weightsPerVariant * sizeof(float));
+                nn::Values& hostWeights = m_hostLayers[i]->m_variants[variant].m_weights;
+                ASSERT(hostWeights.size() == weightsPerVariant);
+                CUDA_CHECK(cudaMemcpyAsync(hostWeights.data(), m_weightsSnapshot.Get() + offset + (size_t)variant * weightsPerVariant,
+                    weightsPerVariant * sizeof(float), cudaMemcpyDeviceToHost, m_downloadStream.Get()));
             }
         }
-        source += layer.m_totalWeights;
+        offset += layer.m_totalWeights;
     }
-    ASSERT(source == m_downloadedWeights.Get() + m_downloadedWeights.Size());
+    CUDA_CHECK(cudaEventRecord(m_weightsDownloadedEvent, m_downloadStream.Get()));
+}
 
+void CudaNeuralNetwork::FinishWeightsDownload()
+{
+    ASSERT(m_downloadInFlight);
+    CUDA_CHECK(cudaEventSynchronize(m_weightsDownloadedEvent));
     m_downloadInFlight = false;
 }
 
@@ -244,13 +242,22 @@ void CudaNeuralNetwork::Init(
     m_l2Weights = std::make_shared<CudaWeightsStorage>(c_l1Size, c_l2Size, c_numVariants);
     m_l3Weights = std::make_shared<CudaWeightsStorage>(c_l2Size, 1, c_numVariants);
 
-    CopyWeightsFromHost(featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights);
-
+    // pinned, so weight downloads into them are asynchronous
+    const nn::WeightsStoragePtr hostLayers[NumLayers] = { featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights };
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
     size_t totalWeights = 0;
-    for (const CudaWeightsStoragePtr& layer : { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights })
-        totalWeights += layer->m_totalWeights;
+    for (uint32_t i = 0; i < NumLayers; ++i)
+    {
+        ASSERT(!m_hostLayers[i]);
+        ASSERT(hostLayers[i]->m_variants.size() == layers[i]->m_numVariants);
+        m_hostLayers[i] = hostLayers[i];
+        for (nn::WeightsStorage::Variant& variant : m_hostLayers[i]->m_variants)
+            CUDA_CHECK(cudaHostRegister(variant.m_weights.data(), variant.m_weights.size() * sizeof(float), cudaHostRegisterDefault));
+        totalWeights += layers[i]->m_totalWeights;
+    }
     m_weightsSnapshot.Allocate(totalWeights);
-    m_downloadedWeights.Allocate(totalWeights);
+
+    CopyWeightsFromHost();
 
     // Quantization-aware training: weights/biases are fake-quantized on read in the forward/backward
     // kernels using the same scales as the final pack step.
@@ -289,18 +296,11 @@ void CudaNeuralNetwork::SetFeatureTransformerFrozen(bool frozen)
     m_threatWeights->m_updateWeights = !frozen;
 }
 
-void CudaNeuralNetwork::CopyWeightsFromHost(
-    const nn::WeightsStoragePtr& featureTransformerWeights,
-    const nn::WeightsStoragePtr& threatWeights,
-    const nn::WeightsStoragePtr& l1Weights,
-    const nn::WeightsStoragePtr& l2Weights,
-    const nn::WeightsStoragePtr& l3Weights)
+void CudaNeuralNetwork::CopyWeightsFromHost()
 {
-    m_featureTransformerWeights->CopyFromHost(*featureTransformerWeights);
-    m_threatWeights->CopyFromHost(*threatWeights);
-    m_l1Weights->CopyFromHost(*l1Weights);
-    m_l2Weights->CopyFromHost(*l2Weights);
-    m_l3Weights->CopyFromHost(*l3Weights);
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
+    for (uint32_t i = 0; i < NumLayers; ++i)
+        layers[i]->CopyFromHost(*m_hostLayers[i]);
 }
 
 bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const
@@ -408,18 +408,11 @@ bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainin
     return true;
 }
 
-void CudaNeuralNetwork::CopyWeightsToHost(
-    const nn::WeightsStoragePtr& featureTransformerWeights,
-    const nn::WeightsStoragePtr& threatWeights,
-    const nn::WeightsStoragePtr& l1Weights,
-    const nn::WeightsStoragePtr& l2Weights,
-    const nn::WeightsStoragePtr& l3Weights) const
+void CudaNeuralNetwork::CopyWeightsToHost() const
 {
-    m_featureTransformerWeights->CopyToHost(*featureTransformerWeights);
-    m_threatWeights->CopyToHost(*threatWeights);
-    m_l1Weights->CopyToHost(*l1Weights);
-    m_l2Weights->CopyToHost(*l2Weights);
-    m_l3Weights->CopyToHost(*l3Weights);
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
+    for (uint32_t i = 0; i < NumLayers; ++i)
+        layers[i]->CopyToHost(*m_hostLayers[i]);
 }
 
 static DeviceLayer GetDeviceLayer(const CudaWeightsStorage& weights)

@@ -3,6 +3,8 @@
 #include "CudaKernels.hpp"
 #include "CudaWeightsStorage.hpp"
 
+#include <array>
+
 namespace nn {
 namespace cuda {
 
@@ -12,6 +14,8 @@ public:
     CudaNeuralNetwork();
     ~CudaNeuralNetwork();
 
+    // The host storages receive every weight download. Their memory is pinned until destruction, so they
+    // must not be reallocated.
     void Init(const nn::WeightsStoragePtr& featureTransformerWeights,
               const nn::WeightsStoragePtr& threatWeights,
               const nn::WeightsStoragePtr& l1Weights,
@@ -46,17 +50,10 @@ public:
     // Make the copied batch the current one; Forward waits for its copy before reading it.
     void SwapTrainingBatch(CudaBatchData& batch);
 
-    // Weight management
-    void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights,
-                             const nn::WeightsStoragePtr& threatWeights,
-                             const nn::WeightsStoragePtr& l1Weights,
-                             const nn::WeightsStoragePtr& l2Weights,
-                             const nn::WeightsStoragePtr& l3Weights);
-    void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights,
-                           const nn::WeightsStoragePtr& threatWeights,
-                           const nn::WeightsStoragePtr& l1Weights,
-                           const nn::WeightsStoragePtr& l2Weights,
-                           const nn::WeightsStoragePtr& l3Weights) const;
+    // Synchronous copies between the device weights and the host storages; frozen layers keep their
+    // host copy
+    void CopyWeightsFromHost();
+    void CopyWeightsToHost() const;
 
     // Full training state: float master weights plus both Adam moments of every layer, the Adam
     // step counters and the training position count. Unlike a packed net this resumes exactly -
@@ -83,15 +80,11 @@ public:
     // waits until the iteration is done; previousSlot holds the finished iteration before it, or UINT32_MAX
     IterationResult FinishIteration(uint32_t slot, uint32_t previousSlot);
 
-    // Asynchronous weight download, at most one at a time: the weights after the queued work are copied
-    // on the GPU, then downloaded on a separate stream while training continues.
+    // Asynchronous weight download into the host storages, at most one at a time: the weights after the
+    // queued work are copied on the GPU, then downloaded on a separate stream while training continues.
+    // The host storages must not be used until FinishWeightsDownload returns.
     void StartWeightsDownload();
-    // waits for the download and copies it into the host storages; frozen layers keep their host copy
-    void FinishWeightsDownload(const nn::WeightsStoragePtr& featureTransformerWeights,
-                               const nn::WeightsStoragePtr& threatWeights,
-                               const nn::WeightsStoragePtr& l1Weights,
-                               const nn::WeightsStoragePtr& l2Weights,
-                               const nn::WeightsStoragePtr& l3Weights);
+    void FinishWeightsDownload();
 
     // waits until all queued work is done
     void Synchronize() const;
@@ -115,6 +108,17 @@ private:
     CudaWeightsStoragePtr m_l1Weights;
     CudaWeightsStoragePtr m_l2Weights;
     CudaWeightsStoragePtr m_l3Weights;
+
+    static constexpr uint32_t NumLayers = 5;
+
+    // device layers in a fixed order: feature transformer, threats, L1, L2, L3
+    std::array<CudaWeightsStorage*, NumLayers> Layers() const
+    {
+        return { m_featureTransformerWeights.get(), m_threatWeights.get(), m_l1Weights.get(), m_l2Weights.get(), m_l3Weights.get() };
+    }
+
+    // host storages, in the order of Layers()
+    nn::WeightsStoragePtr m_hostLayers[NumLayers];
 
     bool m_useFactorizer = true;
 
@@ -145,7 +149,6 @@ private:
     // Weight snapshot (all layers back to back) and its download
     CudaStream m_downloadStream;
     CudaBuffer<float> m_weightsSnapshot;
-    PinnedBuffer<float> m_downloadedWeights;
     cudaEvent_t m_snapshotReadyEvent = nullptr;     // recorded on m_stream after the snapshot copies
     cudaEvent_t m_weightsDownloadedEvent = nullptr; // recorded on m_downloadStream after the download
     bool m_downloadInFlight = false;

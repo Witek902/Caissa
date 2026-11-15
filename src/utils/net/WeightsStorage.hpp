@@ -44,7 +44,8 @@ public:
 
 namespace nn {
 
-using Values = std::vector<float, AlignmentAllocator<float, 32>>;
+// page-aligned, so the CUDA trainer can pin each buffer without two of them sharing a page
+using Values = std::vector<float, AlignmentAllocator<float, 4096>>;
 
 // Host copy of a layer's float weights; the CUDA trainer keeps the optimizer state on the GPU
 struct WeightsStorage

@@ -749,7 +749,7 @@ void CudaNetworkTrainer::SaveCheckpoint(uint64_t numPositions, const std::string
     ASSERT(!m_hostWeightsInUse);
 
     m_cudaNetwork.Synchronize();
-    m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+    m_cudaNetwork.CopyWeightsToHost();
 
     // labelled by the position count reached, matching the eval-<version>-<positions>B convention
     const std::string suffix = "-" + std::to_string(numPositions / 1'000'000'000ull) + "B";
@@ -1449,7 +1449,7 @@ bool CudaNetworkTrainer::Train()
             return false;
 
         m_numTrainingVectorsPassed = m_options.restartSchedule ? 0 : positionsPassed;
-        m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+        m_cudaNetwork.CopyWeightsToHost();
 
         std::cout << "Resuming from checkpoint: " << m_options.resumePath
             << " at " << std::setprecision(4) << positionsPassed / 1.0e9f << "B positions" << std::endl;
@@ -1460,7 +1460,7 @@ bool CudaNetworkTrainer::Train()
     {
         std::cout << "Training from scratch" << std::endl;
         m_cudaNetwork.InitRandomWeights(m_options.seed);
-        m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+        m_cudaNetwork.CopyWeightsToHost();
     }
     else
     {
@@ -1469,13 +1469,13 @@ bool CudaNetworkTrainer::Train()
 
         std::cout << "Starting from net: " << m_options.startNetPath << std::endl;
 
-        m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+        m_cudaNetwork.CopyWeightsFromHost();
     }
 
     if (m_options.reviveDeadNeurons)
     {
         ReviveDeadNeurons();
-        m_cudaNetwork.CopyWeightsFromHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+        m_cudaNetwork.CopyWeightsFromHost();
     }
 
     if (m_options.freezeFeatureTransformer)
@@ -1674,7 +1674,7 @@ bool CudaNetworkTrainer::Train()
                 m_validationStartTime = TimePoint::GetCurrent();
                 ASSERT(!m_hostWeightsInUse);
                 m_hostWeightsInUse = true;
-                m_cudaNetwork.FinishWeightsDownload(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+                m_cudaNetwork.FinishWeightsDownload();
 #ifdef USE_PACKED_NET_VALIDATION
                 PackNetwork();
 #endif // USE_PACKED_NET_VALIDATION
@@ -1834,9 +1834,9 @@ bool CudaNetworkTrainer::Train()
         const uint32_t previousSlot = lastFinishedIteration != SIZE_MAX ? lastFinishedIteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots : UINT32_MAX;
         m_cudaNetwork.FinishIteration(previous->iteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots, previousSlot);
         if (previous->downloadsWeights)
-            m_cudaNetwork.FinishWeightsDownload(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+            m_cudaNetwork.FinishWeightsDownload();
 
-        m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+        m_cudaNetwork.CopyWeightsToHost();
 #ifdef USE_PACKED_NET_VALIDATION
         PackNetwork();
         m_packedNet->SaveToFile(OutputPath(".pnn").c_str());
