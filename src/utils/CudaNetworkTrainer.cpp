@@ -415,8 +415,8 @@ void CudaNetworkTrainer::InitNetwork()
     const uint32_t accumulatorSize = nn::AccumulatorSize;
 
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::cuda::FeatureTransformerInputs, accumulatorSize, 1);
-    m_featureTransformerWeights->m_weightsRange = 6.0f;
-    m_featureTransformerWeights->m_biasRange = 6.0f;
+    m_featureTransformerWeights->m_weightsRange = 5.0f;
+    m_featureTransformerWeights->m_biasRange = 5.0f;
 
     m_threatWeights = std::make_shared<nn::WeightsStorage>(nn::NumThreatInputs, accumulatorSize, 1);
     m_threatWeights->m_weightsRange = nn::cuda::ThreatWeightRange;
@@ -1011,6 +1011,7 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "beta1="                      << m_options.beta1 << "\n";
     f << "beta2="                      << m_options.beta2 << "\n";
     f << "ftDecay="                    << m_options.featureTransformerWeightDecay << "\n";
+    f << "ftWeightRange="              << m_featureTransformerWeights->m_weightsRange << "\n";
     f << "bucketLeak="                 << m_options.bucketLeak << "\n";
     f << "frozenVariantsMask="         << m_options.frozenVariantsMask << "\n";
     f << "freezeFeatureTransformer="   << (m_options.freezeFeatureTransformer ? "true" : "false") << "\n";
@@ -1158,7 +1159,9 @@ void CudaNetworkTrainer::PackNetwork()
             const_cast<nn::FirstLayerWeightType*>(m_packedNet->accumulatorWeights),
             const_cast<nn::FirstLayerBiasType*>(m_packedNet->accumulatorBiases),
             nn::InputLayerWeightQuantizationScale, nn::InputLayerBiasQuantizationScale,
-            m_featureTransformerWeights->m_weightsRange, m_featureTransformerWeights->m_biasRange,
+            // bucket and factorizer weights are clipped separately, so their sum can exceed the bucket range
+            m_featureTransformerWeights->m_weightsRange + (m_options.useFactorizer ? nn::cuda::FactorizerWeightRange : 0.0f),
+            m_featureTransformerWeights->m_biasRange,
             WeightLayout::InputMajor);
     }
 

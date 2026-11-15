@@ -78,7 +78,7 @@ checkpoint, the weight statistics and test position evals.
   its batch's threat feature list, which is uploaded with the batch (96 slots reserved per position, about 3x the
   average).
 - **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the threat
-  weights and the output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99,
+  weights and the output subnet. Feature-transformer weights are clipped to ±5, factorizer weights to ±0.99,
   threat weights to ±127/255.
 - **Overlap**: the main stream runs the passes; an aux stream clears the FT and threat gradient buffers during the forward
   pass, and a copy stream uploads the next batch into a second buffer while the current batch trains (synchronized
