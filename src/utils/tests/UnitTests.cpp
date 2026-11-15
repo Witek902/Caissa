@@ -30,6 +30,7 @@ void RunUnitTests(const std::vector<std::string>& args)
     RunTimeTests();
     RunTimeManagerTests();
     RunEvalTests();
+    RunThreatInputTests();
     RunPackedPositionTests();
     RunGameTests();
     RunPgnParserTests();

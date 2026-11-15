@@ -191,7 +191,6 @@ void AccumulatorCache::Init(const nn::PackedNeuralNetwork* net)
     }
 }
 
-template<bool IncludePieceFeatures>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective)
 {
     uint32_t numFeatures = 0;
@@ -245,40 +244,8 @@ uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, co
     writeKingRelativePieceFeatures(blacks.queens, bitFlipMask);
     writeKingRelativePieceFeatures(blacks.king, bitFlipMask);
 
-    if constexpr (IncludePieceFeatures)
-    {
-        inputOffset = nn::NumKingBuckets * 12 * 64;
-
-        const auto writePieceFeatures = [&](const Bitboard bitboard, const uint32_t bitFlipMask) INLINE_LAMBDA
-        {
-            bitboard.Iterate([&](uint32_t square) INLINE_LAMBDA
-            {
-                outFeatures[numFeatures++] = (uint16_t)(inputOffset + (square ^ bitFlipMask));
-            });
-            inputOffset += 64;
-        };
-        writePieceFeatures(whites.pawns, bitFlipMask);
-        writePieceFeatures(whites.knights, bitFlipMask);
-        writePieceFeatures(whites.bishops, bitFlipMask);
-        writePieceFeatures(whites.rooks, bitFlipMask);
-        writePieceFeatures(whites.queens, bitFlipMask);
-        writePieceFeatures(whites.king, bitFlipMask);
-
-        writePieceFeatures(blacks.pawns, bitFlipMask);
-        writePieceFeatures(blacks.knights, bitFlipMask);
-        writePieceFeatures(blacks.bishops, bitFlipMask);
-        writePieceFeatures(blacks.rooks, bitFlipMask);
-        writePieceFeatures(blacks.queens, bitFlipMask);
-        writePieceFeatures(blacks.king, bitFlipMask);
-
-        ASSERT(inputOffset == nn::NumKingBuckets * 12 * 64 + 12 * 64);
-    }
-
     return numFeatures;
 }
-
-template uint32_t PositionToFeaturesVector<true>(const Position& pos, uint16_t* outFeatures, const Color perspective);
-template uint32_t PositionToFeaturesVector<false>(const Position& pos, uint16_t* outFeatures, const Color perspective);
 
 template<Color perspective>
 INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color pieceColor, Square square, const Position& pos)

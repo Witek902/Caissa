@@ -5,6 +5,7 @@
 #include "../backend/Tablebase.hpp"
 #include "../backend/TimeManager.hpp"
 #include "../backend/Thread.hpp"
+#include "../backend/ThreatInputs.hpp"
 #include "../backend/containers/Sort.hpp"
 
 #include <atomic>
@@ -333,6 +334,10 @@ bool UniversalChessInterface::ExecuteCommand(const char* commandString)
     {
         Command_ScoreMoves();
     }
+    else if (command == "threats" && args.Size() >= 2 && args[1] == "nn")
+    {
+        Command_ThreatFeatures(args);
+    }
     else if (command == "threats")
     {
         Threats threats;
@@ -414,6 +419,9 @@ bool UniversalChessInterface::ExecuteCommand(const char* commandString)
         printf("       'detailed' prints NNUE accumulator stats for the current position,\n");
         printf("       'detailed start' begins gathering stats over a search ('go'); then 'eval detailed' prints aggregated stats\n");
         printf(" * scoremoves - print all legal moves with their move orderer scores\n");
+        printf(" * threats - print squares attacked by the opponent\n");
+        printf(" * threats nn [move] - print NNUE threat features of the current position for both perspectives;\n");
+        printf("       with a move, print the threat changes it makes and check them against full feature sets\n");
         printf(" * ttinfo - print transposition table info\n");
         printf(" * ttprobe - probe transposition table with current position\n");
         printf(" * tbprobe - probe tablebases with current position\n");
@@ -1128,6 +1136,129 @@ bool UniversalChessInterface::Command_ScoreMoves()
 
     moves.Sort();
     PrintMoveList(mGame.GetPosition(), moves);
+
+    return true;
+}
+
+// prints a threat as e.g. "wN f3 -> bP e5"
+static void PrintThreat(const ThreatRecord& record)
+{
+    const auto pieceName = [](const uint8_t code, char* outName)
+    {
+        outName[0] = (code >> 3) == White ? 'w' : 'b';
+        outName[1] = PieceToChar(static_cast<Piece>(code & 7));
+        outName[2] = 0;
+    };
+
+    char attacker[3];
+    char victim[3];
+    pieceName(record.attacker, attacker);
+    pieceName(record.victim, victim);
+    printf("%s %s -> %s %s", attacker, Square((uint32_t)record.from).ToString().CStr(), victim, Square((uint32_t)record.to).ToString().CStr());
+}
+
+static void PrintSortedFeatures(const char* title, uint16_t* features, uint32_t numFeatures)
+{
+    Sort(features, features + numFeatures, [](const uint16_t a, const uint16_t b) { return a < b; });
+    printf("  %s (%u):", title, numFeatures);
+    for (uint32_t i = 0; i < numFeatures; ++i)
+        printf(" %u", (uint32_t)features[i]);
+    printf("\n");
+}
+
+bool UniversalChessInterface::Command_ThreatFeatures(const CommandArgs& args)
+{
+    const Position& pos = mGame.GetPosition();
+
+    if (args.Size() < 3)
+    {
+        ThreatRecord records[nn::MaxThreatRecords];
+        const uint32_t numRecords = GetThreatRecords(pos, records);
+
+        for (Color perspective = 0; perspective < 2; ++perspective)
+        {
+            const ThreatOrientation orientation = GetThreatOrientation(pos, perspective);
+
+            struct Feature
+            {
+                uint32_t index;
+                uint32_t record;
+            };
+
+            Feature features[nn::MaxThreatRecords];
+            uint32_t numFeatures = 0;
+            for (uint32_t i = 0; i < numRecords; ++i)
+            {
+                const uint32_t index = GetThreatFeatureIndex(records[i], orientation);
+                if (index < nn::NumThreatInputs)
+                    features[numFeatures++] = { index, i };
+            }
+            Sort(features, features + numFeatures, [](const Feature& a, const Feature& b) { return a.index < b.index; });
+
+            printf("%s perspective (king %s, %s): %u threat features\n",
+                perspective == White ? "White" : "Black",
+                pos.GetSide(perspective).GetKingSquare().ToString().CStr(),
+                IsThreatMirrored(pos, perspective) ? "mirrored" : "not mirrored",
+                numFeatures);
+
+            for (uint32_t i = 0; i < numFeatures; ++i)
+            {
+                printf("  %5u  ", features[i].index);
+                PrintThreat(records[features[i].record]);
+                printf("\n");
+            }
+        }
+
+        return true;
+    }
+
+    const Move move = pos.MoveFromString(args[2]);
+    Position child = pos;
+    if (!move.IsValid() || !pos.IsMoveValid(move) || !child.DoMove(move))
+    {
+        printf("Invalid move\n");
+        return false;
+    }
+
+    ThreatDeltas deltas;
+    GetThreatDeltas(pos, child, deltas);
+
+    printf("Removed threats (%u):\n", deltas.numRemoved);
+    for (uint32_t i = 0; i < deltas.numRemoved; ++i)
+    {
+        printf("  ");
+        PrintThreat(deltas.removed[i]);
+        printf("\n");
+    }
+
+    printf("Added threats (%u):\n", deltas.numAdded);
+    for (uint32_t i = 0; i < deltas.numAdded; ++i)
+    {
+        printf("  ");
+        PrintThreat(deltas.added[i]);
+        printf("\n");
+    }
+
+    for (Color perspective = 0; perspective < 2; ++perspective)
+    {
+        const char* name = perspective == White ? "White" : "Black";
+
+        if (IsThreatMirrored(pos, perspective) != IsThreatMirrored(child, perspective))
+        {
+            printf("%s perspective: king crosses the d/e line, all threat features are refreshed\n", name);
+            continue;
+        }
+
+        const ThreatOrientation orientation = GetThreatOrientation(child, perspective);
+        uint16_t removed[nn::MaxChangedThreats];
+        uint16_t added[nn::MaxChangedThreats];
+        const uint32_t numRemoved = ThreatRecordsToFeatures(deltas.removed, deltas.numRemoved, orientation, removed);
+        const uint32_t numAdded = ThreatRecordsToFeatures(deltas.added, deltas.numAdded, orientation, added);
+
+        printf("%s perspective: %s\n", name, ValidateThreatDeltas(pos, child, perspective) ? "match" : "MISMATCH");
+        PrintSortedFeatures("removed features", removed, numRemoved);
+        PrintSortedFeatures("added features", added, numAdded);
+    }
 
     return true;
 }

@@ -52,6 +52,7 @@ private:
     bool Command_TranspositionTableProbe();
     bool Command_TablebaseProbe();
     bool Command_ScoreMoves();
+    bool Command_ThreatFeatures(const CommandArgs& args);
     bool Command_EvalDetailed(const CommandArgs& args);
     bool Command_Benchmark(uint32_t depth, bool parallel);
     bool Command_Playout(const CommandArgs& args);

@@ -31,6 +31,7 @@ void RunTranspositionTableTests();
 void RunTimeTests();
 void RunTimeManagerTests();
 void RunEvalTests();
+void RunThreatInputTests();
 void RunPackedPositionTests();
 void RunGameTests();
 void RunPgnParserTests();

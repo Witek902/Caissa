@@ -4,6 +4,7 @@
 #include "PositionHash.hpp"
 #include "Endgame.hpp"
 #include "SearchUtils.hpp"
+#include "ThreatInputs.hpp"
 
 #include <stdio.h>
 
@@ -43,6 +44,7 @@ void InitEngine()
     EnableLargePagesSupport();
     Square::Init();
     InitBitboards();
+    InitThreatInputs();
     InitZobristHash();
     InitEndgame();
     SearchUtils::Init();

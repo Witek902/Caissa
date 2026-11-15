@@ -159,5 +159,4 @@ INLINE uint8_t GetNetworkVariant(const Position& pos)
     return GetNetworkVariant(pos.GetNumPiecesExcludingKing(), (pos.Whites().queens | pos.Blacks().queens) != 0);
 }
 
-template<bool IncludePieceFeatures = false>
 uint32_t PositionToFeaturesVector(const Position& pos, uint16_t* outFeatures, const Color perspective);

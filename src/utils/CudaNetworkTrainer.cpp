@@ -396,11 +396,11 @@ static void PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     constexpr uint32_t maxFeatures = 64;
 
     uint16_t whiteFeatures[maxFeatures];
-    uint32_t numWhiteFeatures = PositionToFeaturesVector<false>(pos, whiteFeatures, pos.GetSideToMove());
+    uint32_t numWhiteFeatures = PositionToFeaturesVector(pos, whiteFeatures, pos.GetSideToMove());
     ASSERT(numWhiteFeatures <= maxFeatures);
 
     uint16_t blackFeatures[maxFeatures];
-    uint32_t numBlackFeatures = PositionToFeaturesVector<false>(pos, blackFeatures, pos.GetSideToMove() ^ 1);
+    uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
     outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
