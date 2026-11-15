@@ -13,7 +13,6 @@ struct CudaWeightsStorage
 {
 public:
     CudaWeightsStorage(uint32_t inputSize, uint32_t outputSize, uint32_t numVariants);
-    ~CudaWeightsStorage();
 
     // Random init: zero-mean normal weights with the given standard deviation, constant biases
     void Init(uint32_t seed, float stdev, float bias = 0.0f);
@@ -64,9 +63,6 @@ public:
     CudaBuffer<float> m_weights;
     CudaBuffer<float> m_moment1;  // Adam moment 1
     CudaBuffer<float> m_moment2;  // Adam moment 2
-
-private:
-    void AllocateBuffers();
 };
 
 using CudaWeightsStoragePtr = std::shared_ptr<CudaWeightsStorage>;

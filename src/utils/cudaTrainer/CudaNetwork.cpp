@@ -229,11 +229,6 @@ void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
     // small, as a position has up to ~60 threat features on top of its piece features
     m_threatWeights->Init(seed + 4, 0.005f);
 
-    InitRandomOutputSubnetWeights(seed);
-}
-
-void CudaNeuralNetwork::InitRandomOutputSubnetWeights(uint32_t seed)
-{
     // He initialization, appropriate for the (clipped) ReLU activations of the output subnet
     m_l1Weights->Init(seed + 1, sqrtf(2.0f / (float)c_l1InputSize));
     m_l2Weights->Init(seed + 2, sqrtf(2.0f / (float)c_l1Size));
@@ -298,7 +293,7 @@ void CudaNeuralNetwork::SetFeatureTransformerWeightDecay(float weightDecay)
 
 void CudaNeuralNetwork::SetAdamBetas(float beta1, float beta2)
 {
-    for (CudaWeightsStorage* weights : { m_featureTransformerWeights.get(), m_threatWeights.get(), m_l1Weights.get(), m_l2Weights.get(), m_l3Weights.get() })
+    for (CudaWeightsStorage* weights : Layers())
     {
         weights->m_beta1 = beta1;
         weights->m_beta2 = beta2;
@@ -320,7 +315,7 @@ void CudaNeuralNetwork::CopyWeightsFromHost()
 
 bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const
 {
-    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
 
     FILE* file = fopen(path, "wb");
     if (!file)
@@ -332,13 +327,13 @@ bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVec
     CheckpointHeader header{};
     header.magic = c_checkpointMagic;
     header.version = c_checkpointVersion;
-    header.numLayers = (uint32_t)std::size(layers);
+    header.numLayers = NumLayers;
     header.numTrainingVectorsPassed = numTrainingVectorsPassed;
 
     bool ok = fwrite(&header, sizeof(header), 1, file) == 1;
 
     std::vector<float> weights, moment1, moment2;
-    for (const CudaWeightsStoragePtr& layer : layers)
+    for (CudaWeightsStorage* layer : layers)
     {
         if (!ok) break;
 
@@ -366,7 +361,7 @@ bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVec
 
 bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainingVectorsPassed)
 {
-    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+    const std::array<CudaWeightsStorage*, NumLayers> layers = Layers();
 
     FILE* file = fopen(path, "rb");
     if (!file)
@@ -379,7 +374,7 @@ bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainin
     if (fread(&header, sizeof(header), 1, file) != 1 ||
         header.magic != c_checkpointMagic ||
         header.version != c_checkpointVersion ||
-        header.numLayers != (uint32_t)std::size(layers))
+        header.numLayers != NumLayers)
     {
         fclose(file);
         std::cerr << "Failed to load checkpoint: " << path << " is not a compatible checkpoint" << std::endl;
@@ -387,7 +382,7 @@ bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainin
     }
 
     std::vector<float> weights, moment1, moment2;
-    for (const CudaWeightsStoragePtr& layer : layers)
+    for (CudaWeightsStorage* layer : layers)
     {
         CheckpointLayerHeader layerHeader{};
         if (fread(&layerHeader, sizeof(layerHeader), 1, file) != 1 ||
@@ -510,10 +505,6 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
 void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* entries, uint32_t numEntries,
     const uint16_t* threatFeatures, uint32_t numThreatFeatures)
 {
-    // a larger batch would reallocate the buffers synchronously
-    TRAINER_CHECK(numEntries <= batch.nextTrainingVectors.Size());
-    TRAINER_CHECK(numThreatFeatures <= batch.nextThreatFeatures.Size());
-
 #ifndef CONFIGURATION_FINAL
     // copies from pageable memory would not be asynchronous
     cudaPointerAttributes attributes;

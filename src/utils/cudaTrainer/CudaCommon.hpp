@@ -32,7 +32,6 @@ class CudaBuffer
 {
 public:
     CudaBuffer() : m_data(nullptr), m_size(0) {}
-    CudaBuffer(size_t size) : m_data(nullptr), m_size(0) { Allocate(size); }
     ~CudaBuffer() { Free(); }
 
     void Allocate(size_t size)
@@ -60,42 +59,20 @@ public:
 
     void CopyFromHost(const T* hostData, size_t size, cudaStream_t stream)
     {
-        if (size > m_size) Allocate(size);
+        TRAINER_CHECK(size <= m_size);
         CUDA_CHECK(cudaMemcpyAsync(m_data, hostData, size * sizeof(T), cudaMemcpyHostToDevice, stream));
     }
 
-    void CopyFromHost(const T* hostData, size_t size)
+    void CopyFromHost(const T* hostData, size_t offset, size_t size)
     {
-        if (size > m_size) Allocate(size);
-        CUDA_CHECK(cudaMemcpy(m_data, hostData, size * sizeof(T), cudaMemcpyHostToDevice));
-    }
-
-    void CopyToHost(T* hostData, size_t size) const
-    {
-        if (size > m_size)
-        {
-            fprintf(stderr, "CudaBuffer::CopyToHost size %zu exceeds buffer size %zu\n", size, m_size);
-            __debugbreak();
-            exit(1);
-        }
-        CUDA_CHECK(cudaMemcpy(hostData, m_data, size * sizeof(T), cudaMemcpyDeviceToHost));
+        TRAINER_CHECK(offset + size <= m_size);
+        CUDA_CHECK(cudaMemcpy(m_data + offset, hostData, size * sizeof(T), cudaMemcpyHostToDevice));
     }
 
     void CopyToHost(T* hostData, size_t offset, size_t size) const
     {
-        if (offset + size > m_size)
-        {
-            fprintf(stderr, "CudaBuffer::CopyToHost range %zu+%zu exceeds buffer size %zu\n", offset, size, m_size);
-            __debugbreak();
-            exit(1);
-        }
+        TRAINER_CHECK(offset + size <= m_size);
         CUDA_CHECK(cudaMemcpy(hostData, m_data + offset, size * sizeof(T), cudaMemcpyDeviceToHost));
-    }
-
-    void CopyFromDevice(const T* deviceData, size_t size)
-    {
-        if (size > m_size) Allocate(size);
-        CUDA_CHECK(cudaMemcpy(m_data, deviceData, size * sizeof(T), cudaMemcpyDeviceToDevice));
     }
 
     void Swap(CudaBuffer& other)
@@ -124,7 +101,6 @@ class PinnedBuffer
 {
 public:
     PinnedBuffer() : m_data(nullptr), m_size(0) {}
-    PinnedBuffer(size_t size) : m_data(nullptr), m_size(0) { Allocate(size); }
     ~PinnedBuffer() { Free(); }
 
     void Allocate(size_t size)

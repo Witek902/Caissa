@@ -19,56 +19,38 @@ __device__ __host__ __forceinline__ bool IsBiasIndex(uint32_t idx, uint32_t inpu
 }
 
 // CUDA kernel for AdamW weight updates (Adam with decoupled weight decay)
-__global__ void AdamUpdateKernel(
-    float* weights,
-    float* moment1,
-    float* moment2,
-    const float* gradients,
-    uint32_t inputSize,
-    uint32_t outputSize,
-    uint32_t numWeights,
-    float learningRate,
-    float weightDecay,
-    float maxWeightRange,
-    float maxBiasRange,
-    uint32_t factorizerFirstWeight,
-    float maxFactorizerRange,
-    float beta1,
-    float beta2,
-    float biasCorrection1, // 1 / (1 - beta1^t), precomputed on the host
-    float biasCorrection2  // 1 / (1 - beta2^t), precomputed on the host
-)
+__global__ void AdamUpdateKernel(const AdamUpdateParams p)
 {
     const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= numWeights) return;
+    if (idx >= p.numWeights) return;
 
-    const bool isBias = IsBiasIndex(idx, inputSize, outputSize);
-    const float maxWeightValue = isBias ? maxBiasRange : (idx >= factorizerFirstWeight ? maxFactorizerRange : maxWeightRange);
+    const bool isBias = IsBiasIndex(idx, p.inputSize, p.outputSize);
+    const float maxWeightValue = isBias ? p.maxBiasRange : (idx >= p.factorizerFirstWeight ? p.maxFactorizerRange : p.maxWeightRange);
 
-    const float grad = static_cast<float>(gradients[idx]);
+    const float grad = p.gradients[idx];
 
     // Update biased first moment estimate
-    const float m1 = moment1[idx] = beta1 * moment1[idx] + (1.0f - beta1) * grad;
+    const float m1 = p.moment1[idx] = p.beta1 * p.moment1[idx] + (1.0f - p.beta1) * grad;
 
     // Update biased second raw moment estimate
-    const float m2 = moment2[idx] = beta2 * moment2[idx] + (1.0f - beta2) * grad * grad;
+    const float m2 = p.moment2[idx] = p.beta2 * p.moment2[idx] + (1.0f - p.beta2) * grad * grad;
 
     // Bias-corrected moment estimates (the correction factors are step-only, precomputed host-side)
-    const float m_hat = m1 * biasCorrection1;
-    const float v_hat = m2 * biasCorrection2;
+    const float m_hat = m1 * p.biasCorrection1;
+    const float v_hat = m2 * p.biasCorrection2;
 
-    const float oldWeight = weights[idx];
+    const float oldWeight = p.weights[idx];
 
     // Compute the update step
-    float delta = learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
+    float delta = p.learningRate * m_hat / (sqrtf(v_hat) + c_epsilon);
 
     // Apply decoupled weight decay only to weights
     if (!isBias)
     {
-        delta += learningRate * weightDecay * oldWeight;
+        delta += p.learningRate * p.weightDecay * oldWeight;
     }
 
-    weights[idx] = clamp(oldWeight - delta, -maxWeightValue, maxWeightValue);
+    p.weights[idx] = clamp(oldWeight - delta, -maxWeightValue, maxWeightValue);
 }
 
 void LaunchAdamUpdate(const AdamUpdateParams& p, cudaStream_t stream)
@@ -76,25 +58,7 @@ void LaunchAdamUpdate(const AdamUpdateParams& p, cudaStream_t stream)
     const dim3 blockSize(256);
     const dim3 gridSize((p.numWeights + blockSize.x - 1) / blockSize.x);
 
-    AdamUpdateKernel<<<gridSize, blockSize, 0, stream>>>(
-        p.weights,
-        p.moment1,
-        p.moment2,
-        p.gradients,
-        p.inputSize,
-        p.outputSize,
-        p.numWeights,
-        p.learningRate,
-        p.weightDecay,
-        p.maxWeightRange,
-        p.maxBiasRange,
-        p.factorizerFirstWeight,
-        p.maxFactorizerRange,
-        p.beta1,
-        p.beta2,
-        p.biasCorrection1,
-        p.biasCorrection2
-    );
+    AdamUpdateKernel<<<gridSize, blockSize, 0, stream>>>(p);
     CUDA_CHECK(cudaGetLastError());
 }
 

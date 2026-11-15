@@ -100,9 +100,6 @@ public:
     static constexpr uint32_t c_l2Size = nn::L2Size;
 
 private:
-    // Random initialization of the output subnets, part of InitRandomWeights
-    void InitRandomOutputSubnetWeights(uint32_t seed);
-
     // CUDA weight storages. The feature transformer and the threat weights have a single variant;
     // each output subnet layer has one per output bucket.
     CudaWeightsStoragePtr m_featureTransformerWeights;

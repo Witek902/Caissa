@@ -2,7 +2,6 @@
 #include "CudaKernels.hpp"
 
 #include <cmath>
-#include <iostream>
 #include <random>
 #include <vector>
 
@@ -15,16 +14,6 @@ CudaWeightsStorage::CudaWeightsStorage(uint32_t inputSize, uint32_t outputSize, 
     , m_numVariants(numVariants)
 {
     m_totalWeights = (inputSize + 1) * outputSize * numVariants; // +1 for biases
-    AllocateBuffers();
-}
-
-CudaWeightsStorage::~CudaWeightsStorage()
-{
-    // Buffers are automatically freed by CudaBuffer destructors
-}
-
-void CudaWeightsStorage::AllocateBuffers()
-{
     m_weights.Allocate(m_totalWeights);
     m_moment1.Allocate(m_totalWeights);
     m_moment2.Allocate(m_totalWeights);
@@ -59,26 +48,19 @@ void CudaWeightsStorage::Init(uint32_t seed, float stdev, float bias)
         }
     }
 
-    m_weights.CopyFromHost(hostWeights.data(), hostWeights.size());
+    m_weights.CopyFromHost(hostWeights.data(), 0, hostWeights.size());
 }
 
 void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
 {
-    std::vector<float> hostWeightsData;
-    hostWeightsData.reserve(m_totalWeights);
-
-    for (const auto& variant : hostWeights.m_variants)
+    const uint32_t weightsPerVariant = (m_inputSize + 1) * m_outputSize;
+    TRAINER_CHECK(hostWeights.m_variants.size() == m_numVariants);
+    for (uint32_t variant = 0; variant < m_numVariants; ++variant)
     {
-        hostWeightsData.insert(hostWeightsData.end(), variant.m_weights.begin(), variant.m_weights.end());
+        const nn::Values& variantWeights = hostWeights.m_variants[variant].m_weights;
+        TRAINER_CHECK(variantWeights.size() == weightsPerVariant);
+        m_weights.CopyFromHost(variantWeights.data(), (size_t)variant * weightsPerVariant, weightsPerVariant);
     }
-
-    if (hostWeightsData.size() != m_totalWeights)
-    {
-        std::cerr << "CudaWeightsStorage::CopyFromHost size mismatch: host " << hostWeightsData.size() << " vs " << m_totalWeights << std::endl;
-        std::exit(1);
-    }
-
-    m_weights.CopyFromHost(hostWeightsData.data(), hostWeightsData.size());
 
     m_weightsRange = hostWeights.m_weightsRange;
     m_biasRange = hostWeights.m_biasRange;
@@ -106,16 +88,16 @@ void CudaWeightsStorage::CopyStateToHost(std::vector<float>& outWeights, std::ve
     outMoment1.resize(m_totalWeights);
     outMoment2.resize(m_totalWeights);
 
-    m_weights.CopyToHost(outWeights.data(), m_totalWeights);
-    m_moment1.CopyToHost(outMoment1.data(), m_totalWeights);
-    m_moment2.CopyToHost(outMoment2.data(), m_totalWeights);
+    m_weights.CopyToHost(outWeights.data(), 0, m_totalWeights);
+    m_moment1.CopyToHost(outMoment1.data(), 0, m_totalWeights);
+    m_moment2.CopyToHost(outMoment2.data(), 0, m_totalWeights);
 }
 
 void CudaWeightsStorage::CopyStateFromHost(const std::vector<float>& weights, const std::vector<float>& moment1, const std::vector<float>& moment2)
 {
-    m_weights.CopyFromHost(weights.data(), m_totalWeights);
-    m_moment1.CopyFromHost(moment1.data(), m_totalWeights);
-    m_moment2.CopyFromHost(moment2.data(), m_totalWeights);
+    m_weights.CopyFromHost(weights.data(), 0, m_totalWeights);
+    m_moment1.CopyFromHost(moment1.data(), 0, m_totalWeights);
+    m_moment2.CopyFromHost(moment2.data(), 0, m_totalWeights);
 }
 
 void CudaWeightsStorage::UpdateAdam(const float* gradients, float learningRate, cudaStream_t stream)
