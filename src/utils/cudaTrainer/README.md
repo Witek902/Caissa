@@ -82,6 +82,10 @@ checkpoint, the weight statistics and test position evals.
 - **Overlap**: the main stream runs the passes; an aux stream clears the FT and threat gradient buffers during the forward
   pass, and a copy stream uploads the next batch into a second buffer while the current batch trains (synchronized
   with events).
+- **Pipelining**: iteration N + 1 is queued before iteration N finishes, while the CPU generates the data for N + 2.
+  Every 8 iterations the weights are copied on the GPU and downloaded on a fourth stream, and the CPU validates them
+  in the background over the following iterations. Only checkpoints (every 10B positions) and the final net wait
+  for the GPU.
 
 ## Source Layout
 

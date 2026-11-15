@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
@@ -43,6 +44,14 @@ static const float cWarmupTime = 50.0f;
 
 // seconds between progress reports
 static constexpr float cReportInterval = 10.0f;
+
+// Validation needs a weight download from the GPU. One download is in flight at a time, and a validation
+// finishes before the next one starts.
+static constexpr size_t cValidationInterval = 8;
+static_assert(cValidationInterval >= 2, "a validation must finish before the next weight download starts");
+
+// the packed net is saved every few validations
+static constexpr uint32_t cPackedNetSaveInterval = 6;
 
 // weight statistics and test position evals are written to files every this many training positions
 static constexpr uint64_t cDetailsInterval = 1'000'000'000ull;
@@ -170,6 +179,9 @@ struct TrainingSet
     std::vector<uint32_t> numBatchThreatFeatures;
     uint32_t batchSize = 0;
 
+    // the queued iteration whose batch uploads read this set, SIZE_MAX if none
+    size_t uploadingIteration = SIZE_MAX;
+
     void Allocate(uint32_t numEntries, uint32_t newBatchSize)
     {
         batchSize = newBatchSize;
@@ -216,7 +228,7 @@ public:
         const bool append = !options.resumePath.empty();
         OpenTsvFile(m_progressFile, "-progress.tsv", append,
             "iteration\tpositions\telapsed_s\tlearning_rate\tlambda\ttrain_rmse\tval_rmse\tval_float_subset_rmse\tval_pnn_subset_rmse"
-            "\ttrain_ms\tgpu_ms\tloader_ms\tvalidation_ms");
+            "\titeration_ms\tgpu_ms\tloader_ms\tvalidation_ms");
         OpenTsvFile(m_weightsFile, "-weights.tsv", append,
             "positions\tlayer\tw_min\tw_max\tw_avg\tw_std\tb_min\tb_max\tb_avg\tb_std");
         OpenTsvFile(m_testPositionsFile, "-test-positions.tsv", append,
@@ -314,11 +326,8 @@ private:
     alignas(CACHELINE_SIZE)
     std::atomic<uint64_t> m_numTrainingVectorsPassed = 0;
 
-    // GPU time of the last training iteration, excluding the concurrent data generation
-    float m_lastIterationGpuTimeMs = 0.0f;
-
-    // training-set RMSE of the last training iteration; written by the training task, read by Validate
-    std::atomic<float> m_lastTrainingRmse = 0.0f;
+    // set while the validation task reads or writes the host weights
+    bool m_hostWeightsInUse = false;
 
     // positions drawn again because they have more pieces than a training entry holds or could not be read
     std::atomic<uint64_t> m_numSkippedPositions = 0;
@@ -333,14 +342,16 @@ private:
     std::vector<bool> m_unreachablePieceInputs;
     std::vector<bool> m_unreachableThreatInputs;
 
-    // wall times of the last iteration's concurrent tasks; the slowest one limits the training speed
-    float m_lastTrainTaskMs = 0.0f;
+    // wall times of the last data generation and validation, which run while the GPU trains
     float m_lastLoaderMs = 0.0f;
     float m_lastValidationMs = 0.0f;
     TimePoint m_validationStartTime;
 
+    uint32_t m_numValidations = 0;
+
 #ifdef USE_PACKED_NET_VALIDATION
-    // validation RMSEs of the last iteration; written by Validate, read after the iteration's tasks finish
+    // results of the last validation; written by the validation task, read after it finishes
+    int32_t m_lastTestPositionEvals[std::size(c_testPositions)] = {};
     float m_lastPackedNetRmse = 0.0f;
     float m_lastPackedNetSubsetRmse = 0.0f;
     float m_lastFloatNetSubsetRmse = 0.0f;
@@ -414,8 +425,12 @@ private:
 
     void ReviveDeadNeurons();
 
-    // CUDA-specific methods
-    void RunCudaTrainingIteration(float learningRate);
+    // Queues a training iteration on the GPU without waiting for it. downloadWeights also queues a download
+    // of the weights after it, for validation.
+    void QueueTrainingIteration(size_t iteration, float learningRate, bool downloadWeights);
+
+    // waits for the GPU, then saves the packed net and the full training state
+    void SaveCheckpoint(uint64_t numPositions, const std::string& timeTag, int indent);
 };
 
 void CudaNetworkTrainer::InitNetwork()
@@ -674,18 +689,34 @@ void CudaNetworkTrainer::GenerateTrainingSet(TrainingSet& outSet, TaskBuilder& b
     }
 }
 
-void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
+void CudaNetworkTrainer::QueueTrainingIteration(size_t iteration, float learningRate, bool downloadWeights)
 {
     const uint32_t batchSize = m_options.batchSize;
     const uint32_t numBatches = cNumTrainingVectorsPerIteration / batchSize;
+    ASSERT(m_trainingSet_Read.NumBatches() == numBatches);
+    ASSERT(m_trainingSet_Read.uploadingIteration == SIZE_MAX);
+    m_trainingSet_Read.uploadingIteration = iteration;
     m_cudaBatchData.batchSize = batchSize;
 
-    m_cudaNetwork.BeginIterationTiming();
-
-    m_cudaBatchData.lossSum.ClearAsync(m_cudaNetwork.GetStream().Get());
+    const uint32_t slot = iteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots;
+    m_cudaNetwork.BeginIteration(slot, m_cudaBatchData);
 
     const auto copyBatch = [this, batchSize](uint32_t batchIndex)
     {
+#ifndef CONFIGURATION_FINAL
+        const uint32_t numThreatFeatures = m_trainingSet_Read.numBatchThreatFeatures[batchIndex];
+        ASSERT(numThreatFeatures <= batchSize * TrainingThreatFeatureBudget);
+        for (uint32_t i = m_trainingSet_Read.BatchBegin(batchIndex); i < m_trainingSet_Read.BatchEnd(batchIndex); ++i)
+        {
+            const TrainingEntry& entry = m_trainingSet_Read.entries[i];
+            ASSERT(entry.variant < nn::NumVariants);
+            ASSERT(entry.numWhiteFeatures == entry.numBlackFeatures && entry.numWhiteFeatures <= std::size(entry.whiteFeatures));
+            ASSERT(entry.numThreatFeatures <= MaxTrainingThreatFeatures);
+            ASSERT(entry.threatFeaturesOffset + 2u * entry.numThreatFeatures <= numThreatFeatures);
+            ASSERT(entry.targetOutput >= 0.0f && entry.targetOutput <= 1.0f);
+        }
+#endif // CONFIGURATION_FINAL
+
         m_cudaNetwork.CopyTrainingBatchAsync(
             m_cudaBatchData,
             m_trainingSet_Read.entries.data() + m_trainingSet_Read.BatchBegin(batchIndex),
@@ -713,18 +744,29 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
             copyBatch(b + 1);
     }
 
-    m_lastIterationGpuTimeMs = m_cudaNetwork.EndIterationTimingMs();
+    m_cudaNetwork.EndIteration(slot, m_cudaBatchData);
 
-    m_cudaNetwork.GetStream().Synchronize();
+    if (downloadWeights)
+        m_cudaNetwork.StartWeightsDownload();
+}
 
-    {
-        float squaredErrorSum = 0.0f;
-        m_cudaBatchData.lossSum.CopyToHost(&squaredErrorSum, 1);
-        m_lastTrainingRmse = sqrtf(squaredErrorSum / (float)(numBatches * batchSize));
-    }
+void CudaNetworkTrainer::SaveCheckpoint(uint64_t numPositions, const std::string& timeTag, int indent)
+{
+    ASSERT(!m_hostWeightsInUse);
 
-    // Copy weights from CUDA to host
+    m_cudaNetwork.Synchronize();
     m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+
+    // labelled by the position count reached, matching the eval-<version>-<positions>B convention
+    const std::string suffix = "-" + std::to_string(numPositions / 1'000'000'000ull) + "B";
+#ifdef USE_PACKED_NET_VALIDATION
+    PackNetwork();
+    m_packedNet->SaveToFile(OutputPath(suffix + ".pnn").c_str());
+#endif // USE_PACKED_NET_VALIDATION
+    m_cudaNetwork.SaveCheckpoint(OutputPath(suffix + ".ckpt").c_str(), numPositions);
+
+    std::cout << timeTag << " Saved checkpoint: " << OutputPath(suffix) << ".{pnn,ckpt}" << std::endl;
+    PrintNetworkDetails(CollectNetworkDetails(), indent);
 }
 
 static void ParallelFor(const char* debugName, uint32_t arraySize, const threadpool::ParallelForTaskFunction& func, uint32_t maxThreads = 0)
@@ -906,7 +948,12 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx)
         m_lastFloatNetSubsetRmse = (float)sqrt(stats.floatErrorSum / cNumFloatReferenceVectors);
 #endif // USE_PACKED_NET_VALIDATION
 
+#ifdef USE_PACKED_NET_VALIDATION
+        EvalTestPositions(m_lastTestPositionEvals);
+#endif // USE_PACKED_NET_VALIDATION
+
         m_lastValidationMs = 1000.0f * (TimePoint::GetCurrent() - m_validationStartTime).ToSeconds();
+        m_hostWeightsInUse = false;
     });
 }
 
@@ -1044,6 +1091,7 @@ void CudaNetworkTrainer::WriteRunSettings(uint64_t startPositions) const
     f << "warmupIterations="           << cWarmupTime << "\n";
     f << "positionsPerIteration="      << cNumTrainingVectorsPerIteration << "\n";
     f << "validationPositions="        << cNumValidationVectorsPerIteration << "\n";
+    f << "validationInterval="         << cValidationInterval << "\n";
     f << "checkpointInterval="         << cCheckpointInterval << "\n";
     f << "\n";
 
@@ -1489,15 +1537,107 @@ bool CudaNetworkTrainer::Train()
 
     const TimePoint startTime = TimePoint::GetCurrent();
 
-    // progress since the last report
+    // Iteration k is queued on the GPU while iteration k - 1 still runs, and the data for k + 1 is generated
+    // meanwhile. Every cValidationInterval iterations the weights are downloaded after an iteration and validated
+    // in the background over the following iterations. Nothing in the loop waits for the GPU or the validation.
+    struct QueuedIteration
+    {
+        size_t iteration;
+        uint64_t numPositions;  // position count once the iteration is done, as in checkpoint names
+        float learningRate;
+        float lambda;
+        bool downloadsWeights;
+    };
+    std::optional<QueuedIteration> previous;
+    size_t lastFinishedIteration = SIZE_MAX;
+
+    struct ProgressSums
+    {
+        uint32_t numIterations = 0;
+        double trainingMseSum = 0.0;
+        double gpuMsSum = 0.0;
+        double periodMsSum = 0.0;
+        double loaderMsSum = 0.0;
+    };
+    ProgressSums reportSums;    // since the last report
+    ProgressSums rowSums;       // since the last progress file row
     TimePoint lastReportTime = startTime;
     uint64_t lastReportPositions = m_numTrainingVectorsPassed;
-    uint32_t numReportIterations = 0;
-    float gpuTimeMsSum = 0.0f;
-    float trainTaskMsSum = 0.0f;
-    float loaderMsSum = 0.0f;
-    float validationMsSum = 0.0f;
-    double trainingMseSum = 0.0;
+
+    // progress file row of the validated iteration, completed when its validation finishes
+    struct PendingRow
+    {
+        size_t iteration;
+        uint64_t numPositions;
+        float elapsedSeconds;
+        float learningRate;
+        float lambda;
+        ProgressSums sums;
+    };
+    std::optional<PendingRow> pendingRow;
+
+    // results of the last finished validation, for the reports
+    struct ValidationResults
+    {
+        float packedNetRmse = 0.0f;
+        float floatNetSubsetRmse = 0.0f;
+        float packedNetSubsetRmse = 0.0f;
+        float validationMs = 0.0f;
+        uint64_t numClippedThreatWeights = 0;
+        int32_t testPositionEvals[std::size(c_testPositions)] = {};
+    };
+    ValidationResults validationResults;
+
+    std::unique_ptr<Waitable> validation;
+
+    const auto finishValidation = [&]()
+    {
+        if (!validation)
+            return;
+
+        validation->Wait();
+        validation.reset();
+        ASSERT(!m_hostWeightsInUse);
+        ASSERT(pendingRow.has_value());
+
+        m_numValidations++;
+        validationResults.validationMs = m_lastValidationMs;
+#ifdef USE_PACKED_NET_VALIDATION
+        ASSERT(std::isfinite(m_lastPackedNetRmse) && std::isfinite(m_lastFloatNetSubsetRmse) && std::isfinite(m_lastPackedNetSubsetRmse));
+        validationResults.packedNetRmse = m_lastPackedNetRmse;
+        validationResults.floatNetSubsetRmse = m_lastFloatNetSubsetRmse;
+        validationResults.packedNetSubsetRmse = m_lastPackedNetSubsetRmse;
+        validationResults.numClippedThreatWeights = m_numClippedThreatWeights;
+        std::copy(std::begin(m_lastTestPositionEvals), std::end(m_lastTestPositionEvals), validationResults.testPositionEvals);
+#endif // USE_PACKED_NET_VALIDATION
+
+        // averaged over the iterations since the previous row
+        const double n = (double)pendingRow->sums.numIterations;
+        ASSERT(n > 0.0);
+        m_progressFile << pendingRow->iteration << '\t' << pendingRow->numPositions << '\t' << std::setprecision(6) << pendingRow->elapsedSeconds
+            << '\t' << pendingRow->learningRate << '\t' << pendingRow->lambda << '\t' << sqrt(pendingRow->sums.trainingMseSum / n)
+#ifdef USE_PACKED_NET_VALIDATION
+            << '\t' << validationResults.packedNetRmse << '\t' << validationResults.floatNetSubsetRmse << '\t' << validationResults.packedNetSubsetRmse
+#else
+            << "\t\t\t"
+#endif // USE_PACKED_NET_VALIDATION
+            << '\t' << pendingRow->sums.periodMsSum / n << '\t' << pendingRow->sums.gpuMsSum / n << '\t' << pendingRow->sums.loaderMsSum / n
+            << '\t' << validationResults.validationMs << '\n';
+
+#ifdef USE_PACKED_NET_VALIDATION
+        if (m_numValidations % cPackedNetSaveInterval == 0)
+            m_packedNet->SaveToFile(OutputPath(".pnn").c_str());
+#endif // USE_PACKED_NET_VALIDATION
+
+        const uint64_t details = pendingRow->numPositions / cDetailsInterval;
+        if (details > lastDetails)
+        {
+            lastDetails = details;
+            WriteNetworkDetails(CollectNetworkDetails(), pendingRow->numPositions);
+        }
+
+        pendingRow.reset();
+    };
 
     for (size_t iteration = 0; iteration < m_options.maxIterations; ++iteration)
     {
@@ -1507,36 +1647,62 @@ bool CudaNetworkTrainer::Train()
         const float learningRate = (g_learningRateScale != 0.0f) ? g_learningRateScale : warmup * GetScheduledLearningRate(m_options, t);
         const float lambda = m_options.startLambda + (m_options.endLambda - m_options.startLambda) * t;
 
-        // validation vectors generation can be done in parallel with training
+        // a checkpoint is the exact state after the last queued iteration, so the GPU finishes it first
+        if (previous && previous->numPositions / cCheckpointInterval > lastCheckpoint)
+        {
+            lastCheckpoint = previous->numPositions / cCheckpointInterval;
+            finishValidation();
+            const std::string timeTag = "[" + FormatDuration((TimePoint::GetCurrent() - startTime).ToSeconds()) + "]";
+            SaveCheckpoint(previous->numPositions, timeTag, (int)timeTag.size() + 1);
+        }
+
+        // skip training in the first iteration, as the data is not ready yet
+        std::optional<QueuedIteration> queued;
+        if (iteration > 0)
+        {
+            queued = QueuedIteration{ iteration, m_numTrainingVectorsPassed + cNumTrainingVectorsPerIteration,
+                learningRate, lambda, iteration % cValidationInterval == 0 };
+
+            // the validation started cValidationInterval - 1 iterations ago has read the previous download
+            if (queued->downloadsWeights)
+                finishValidation();
+
+            QueueTrainingIteration(iteration, learningRate, queued->downloadsWeights);
+        }
+
+        if (previous && previous->downloadsWeights)
+        {
+            ASSERT(!validation);
+            validation = std::make_unique<Waitable>();
+            TaskBuilder taskBuilder{ *validation };
+            taskBuilder.Task("Validate", [this](const TaskContext& ctx)
+            {
+                m_validationStartTime = TimePoint::GetCurrent();
+                ASSERT(!m_hostWeightsInUse);
+                m_hostWeightsInUse = true;
+                m_cudaNetwork.FinishWeightsDownload(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+#ifdef USE_PACKED_NET_VALIDATION
+                PackNetwork();
+#endif // USE_PACKED_NET_VALIDATION
+                Validate(ctx);
+            });
+        }
+
         Waitable waitable;
         {
             TaskBuilder taskBuilder{ waitable };
 
-            // skip training in the first iteration, as the data is not ready yet
-            if (iteration > 0)
+            // the set written here was read by the previous iteration's batch uploads
+            const size_t uploadingIteration = previous ? previous->iteration : SIZE_MAX;
+            taskBuilder.Task("GenerateTrainingSet", [this, kingBucketMask, lambda, uploadingIteration](const TaskContext& ctx)
             {
-                taskBuilder.Task("CudaTrain", [this, learningRate](const TaskContext&)
+                ASSERT(m_trainingSet_Write.uploadingIteration == uploadingIteration);
+                if (uploadingIteration != SIZE_MAX)
                 {
-                    const TimePoint taskStartTime = TimePoint::GetCurrent();
-                    RunCudaTrainingIteration(learningRate);
-                    m_lastTrainTaskMs = 1000.0f * (TimePoint::GetCurrent() - taskStartTime).ToSeconds();
-                });
-            }
+                    m_cudaNetwork.WaitForIterationUploads(uploadingIteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots);
+                    m_trainingSet_Write.uploadingIteration = SIZE_MAX;
+                }
 
-            if (iteration > 1)
-            {
-                taskBuilder.Task("Validate", [this](const TaskContext& ctx)
-                {
-                    m_validationStartTime = TimePoint::GetCurrent();
-#ifdef USE_PACKED_NET_VALIDATION
-                    PackNetwork();
-#endif // USE_PACKED_NET_VALIDATION
-                    Validate(ctx);
-                });
-            }
-
-            taskBuilder.Task("GenerateTrainingSet", [this, kingBucketMask, lambda](const TaskContext& ctx)
-            {
                 const TimePoint taskStartTime = TimePoint::GetCurrent();
                 TaskBuilder taskBuilder{ ctx };
                 GenerateTrainingSet(m_trainingSet_Write, taskBuilder, kingBucketMask, lambda, m_options.bucketLeak);
@@ -1553,39 +1719,46 @@ bool CudaNetworkTrainer::Train()
         std::swap(m_trainingSet_Write, m_trainingSet_Read);
 
         m_numTrainingVectorsPassed += cNumTrainingVectorsPerIteration;
-        const uint64_t numPositions = m_numTrainingVectorsPassed;
 
         const TimePoint now = TimePoint::GetCurrent();
         const float elapsedSeconds = (now - startTime).ToSeconds();
         const std::string timeTag = "[" + FormatDuration(elapsedSeconds) + "]";
         const int indent = (int)timeTag.size() + 1;
 
-        // from the third iteration on, training, data loading and validation all run concurrently
-        if (iteration > 1)
+        if (previous)
         {
-            numReportIterations++;
-            gpuTimeMsSum += m_lastIterationGpuTimeMs;
-            trainTaskMsSum += m_lastTrainTaskMs;
-            loaderMsSum += m_lastLoaderMs;
-            validationMsSum += m_lastValidationMs;
-            trainingMseSum += (double)m_lastTrainingRmse * (double)m_lastTrainingRmse;
+            // the GPU is busy with the iteration queued in this loop
+            const uint32_t slot = previous->iteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots;
+            const uint32_t previousSlot = lastFinishedIteration != SIZE_MAX ? lastFinishedIteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots : UINT32_MAX;
+            const nn::cuda::CudaNeuralNetwork::IterationResult result = m_cudaNetwork.FinishIteration(slot, previousSlot);
+            lastFinishedIteration = previous->iteration;
 
-            m_progressFile << iteration << '\t' << numPositions << '\t' << std::setprecision(6) << elapsedSeconds
-                << '\t' << learningRate << '\t' << lambda << '\t' << m_lastTrainingRmse
-#ifdef USE_PACKED_NET_VALIDATION
-                << '\t' << m_lastPackedNetRmse << '\t' << m_lastFloatNetSubsetRmse << '\t' << m_lastPackedNetSubsetRmse
-#else
-                << "\t\t\t"
-#endif // USE_PACKED_NET_VALIDATION
-                << '\t' << m_lastTrainTaskMs << '\t' << m_lastIterationGpuTimeMs << '\t' << m_lastLoaderMs << '\t' << m_lastValidationMs << '\n';
+            const double trainingMse = result.lossSum / (double)cNumTrainingVectorsPerIteration;
+            ASSERT(std::isfinite(trainingMse));
+            for (ProgressSums* sums : { &reportSums, &rowSums })
+            {
+                sums->numIterations++;
+                sums->trainingMseSum += trainingMse;
+                sums->gpuMsSum += result.gpuMs;
+                sums->periodMsSum += result.periodMs;
+                sums->loaderMsSum += m_lastLoaderMs;
+            }
+
+            if (previous->downloadsWeights)
+            {
+                ASSERT(!pendingRow.has_value());
+                pendingRow = PendingRow{ previous->iteration, previous->numPositions, elapsedSeconds, previous->learningRate, previous->lambda, rowSums };
+                rowSums = ProgressSums();
+            }
         }
 
         const float secondsSinceReport = (now - lastReportTime).ToSeconds();
-        if (secondsSinceReport >= cReportInterval && numReportIterations > 0)
+        if (secondsSinceReport >= cReportInterval && reportSums.numIterations > 0 && m_numValidations > 0)
         {
+            const uint64_t numPositions = previous->numPositions;
             const uint64_t totalPositions = m_options.trainingLength * 1'000'000'000ull;
             const double positionsPerSecond = (double)(numPositions - lastReportPositions) / secondsSinceReport;
-            const auto taskPositionsPerSecond = [&](float msSum) { return msSum > 0.0f ? 1000.0 * numReportIterations * cNumTrainingVectorsPerIteration / msSum : 0.0; };
+            const auto taskPositionsPerSecond = [](double msSum, double count) { return msSum > 0.0 ? 1000.0 * count * cNumTrainingVectorsPerIteration / msSum : 0.0; };
             const std::string eta = numPositions < totalPositions ? FormatDuration((double)(totalPositions - numPositions) / positionsPerSecond) : "done";
 
             char buf[256];
@@ -1593,31 +1766,37 @@ bool CudaNetworkTrainer::Train()
 
             snprintf(buf, sizeof(buf), "%s %.1fB/%lluB (%.1f%%) ETA %s | %.2fM pos/s | loss train %.5f",
                 timeTag.c_str(), numPositions * 1.0e-9, (unsigned long long)m_options.trainingLength, 100.0 * numPositions / totalPositions,
-                eta.c_str(), positionsPerSecond * 1.0e-6, sqrt(trainingMseSum / numReportIterations));
+                eta.c_str(), positionsPerSecond * 1.0e-6, sqrt(reportSums.trainingMseSum / reportSums.numIterations));
             str += buf;
 #ifdef USE_PACKED_NET_VALIDATION
-            snprintf(buf, sizeof(buf), " val %.5f", m_lastPackedNetRmse);
+            snprintf(buf, sizeof(buf), " val %.5f", validationResults.packedNetRmse);
             str += buf;
 #endif // USE_PACKED_NET_VALIDATION
 
-            snprintf(buf, sizeof(buf), "\n%*sLR %.3g lambda %.2f", indent, "", learningRate, lambda);
+            snprintf(buf, sizeof(buf), "\n%*sLR %.3g lambda %.2f", indent, "", previous->learningRate, previous->lambda);
             str += buf;
 #ifdef USE_PACKED_NET_VALIDATION
-            snprintf(buf, sizeof(buf), " | float vs pnn %.5f / %.5f", m_lastFloatNetSubsetRmse, m_lastPackedNetSubsetRmse);
+            snprintf(buf, sizeof(buf), " | float vs pnn %.5f / %.5f", validationResults.floatNetSubsetRmse, validationResults.packedNetSubsetRmse);
             str += buf;
 #endif // USE_PACKED_NET_VALIDATION
-            snprintf(buf, sizeof(buf), " | iteration %zu\n", iteration);
+            snprintf(buf, sizeof(buf), " | iteration %zu\n", previous->iteration);
             str += buf;
 
+            // a validation covers cValidationInterval iterations
+            const double n = (double)reportSums.numIterations;
+            const double gpuMs = reportSums.gpuMsSum / n;
+            const double loaderMs = reportSums.loaderMsSum / n;
+            const double validationMs = validationResults.validationMs / cValidationInterval;
             const char* limit = "training";
-            if (loaderMsSum > trainTaskMsSum && loaderMsSum >= validationMsSum)
+            if (loaderMs > gpuMs && loaderMs >= validationMs)
                 limit = "data loading";
-            else if (validationMsSum > trainTaskMsSum)
+            else if (validationMs > gpuMs)
                 limit = "validation";
 
-            snprintf(buf, sizeof(buf), "%*sspeed M pos/s: GPU %.2f, training %.2f, data loading %.2f, validation %.2f | limited by %s\n", indent, "",
-                taskPositionsPerSecond(gpuTimeMsSum) * 1.0e-6, taskPositionsPerSecond(trainTaskMsSum) * 1.0e-6,
-                taskPositionsPerSecond(loaderMsSum) * 1.0e-6, taskPositionsPerSecond(validationMsSum) * 1.0e-6, limit);
+            snprintf(buf, sizeof(buf), "%*sspeed M pos/s: GPU %.2f, training %.2f (GPU idle %.1f%%), data loading %.2f, validation %.2f | limited by %s\n", indent, "",
+                taskPositionsPerSecond(reportSums.gpuMsSum, n) * 1.0e-6, taskPositionsPerSecond(reportSums.periodMsSum, n) * 1.0e-6,
+                100.0 * std::max(0.0, 1.0 - reportSums.gpuMsSum / reportSums.periodMsSum),
+                taskPositionsPerSecond(reportSums.loaderMsSum, n) * 1.0e-6, taskPositionsPerSecond(validationMs, 1.0) * 1.0e-6, limit);
             str += buf;
 
             if (m_numSkippedPositions > 0)
@@ -1632,17 +1811,13 @@ bool CudaNetworkTrainer::Train()
                 str += buf;
             }
 #ifdef USE_PACKED_NET_VALIDATION
-            if (m_numClippedThreatWeights > 0)
+            if (validationResults.numClippedThreatWeights > 0)
             {
-                snprintf(buf, sizeof(buf), "%*sWARNING: threat weights clipped when packing: %llu\n", indent, "", (unsigned long long)m_numClippedThreatWeights);
+                snprintf(buf, sizeof(buf), "%*sWARNING: threat weights clipped when packing: %llu\n", indent, "", (unsigned long long)validationResults.numClippedThreatWeights);
                 str += buf;
             }
-#endif // USE_PACKED_NET_VALIDATION
 
-#ifdef USE_PACKED_NET_VALIDATION
-            int32_t testPositionEvals[std::size(c_testPositions)];
-            EvalTestPositions(testPositionEvals);
-            str += FormatTestPositions(testPositionEvals, indent);
+            str += FormatTestPositions(validationResults.testPositionEvals, indent);
 #endif // USE_PACKED_NET_VALIDATION
 
             std::cout << str << std::flush;
@@ -1650,52 +1825,31 @@ bool CudaNetworkTrainer::Train()
 
             lastReportTime = now;
             lastReportPositions = numPositions;
-            numReportIterations = 0;
-            gpuTimeMsSum = 0.0f;
-            trainTaskMsSum = 0.0f;
-            loaderMsSum = 0.0f;
-            validationMsSum = 0.0f;
-            trainingMseSum = 0.0;
+            reportSums = ProgressSums();
         }
 
-#ifdef USE_PACKED_NET_VALIDATION
-        if (iteration % 50 == 2)
-        {
-            m_packedNet->SaveToFile(OutputPath(".pnn").c_str());
-        }
-#endif // USE_PACKED_NET_VALIDATION
-
-        const uint64_t details = numPositions / cDetailsInterval;
-        const uint64_t checkpoint = numPositions / cCheckpointInterval;
-        const bool writeDetails = details > lastDetails && iteration > 1;
-        const bool saveCheckpoint = checkpoint > lastCheckpoint;
-
-        NetworkDetails networkDetails{};
-        if (writeDetails || saveCheckpoint)
-            networkDetails = CollectNetworkDetails();
-
-        if (writeDetails)
-        {
-            lastDetails = details;
-            WriteNetworkDetails(networkDetails, numPositions);
-        }
-
-        // keep a packed net and the full training state at every checkpoint interval
-        if (saveCheckpoint)
-        {
-            lastCheckpoint = checkpoint;
-
-            // labelled by the position count reached, matching the eval-<version>-<positions>B convention
-            const std::string suffix = "-" + std::to_string(numPositions / 1'000'000'000ull) + "B";
-#ifdef USE_PACKED_NET_VALIDATION
-            m_packedNet->SaveToFile(OutputPath(suffix + ".pnn").c_str());
-#endif // USE_PACKED_NET_VALIDATION
-            m_cudaNetwork.SaveCheckpoint(OutputPath(suffix + ".ckpt").c_str(), numPositions);
-
-            std::cout << timeTag << " Saved checkpoint: " << OutputPath(suffix) << ".{pnn,ckpt}" << std::endl;
-            PrintNetworkDetails(networkDetails, indent);
-        }
+        previous = queued;
     }
+
+    finishValidation();
+
+    // the last queued iteration, then the final net
+    if (previous)
+    {
+        m_cudaNetwork.Synchronize();
+        const uint32_t previousSlot = lastFinishedIteration != SIZE_MAX ? lastFinishedIteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots : UINT32_MAX;
+        m_cudaNetwork.FinishIteration(previous->iteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots, previousSlot);
+        if (previous->downloadsWeights)
+            m_cudaNetwork.FinishWeightsDownload(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+
+        m_cudaNetwork.CopyWeightsToHost(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
+#ifdef USE_PACKED_NET_VALIDATION
+        PackNetwork();
+        m_packedNet->SaveToFile(OutputPath(".pnn").c_str());
+        std::cout << "Saved final net: " << OutputPath(".pnn") << " (" << std::setprecision(4) << previous->numPositions * 1.0e-9 << "B positions)" << std::endl;
+#endif // USE_PACKED_NET_VALIDATION
+    }
+    m_progressFile.flush();
 
     return true;
 }

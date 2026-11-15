@@ -43,9 +43,17 @@ CudaNeuralNetwork::CudaNeuralNetwork()
     CUDA_CHECK(cudaEventCreateWithFlags(&m_nextTrainConsumedEvent, cudaEventDisableTiming));
     CUDA_CHECK(cudaEventCreateWithFlags(&m_nextCopyDoneEvent, cudaEventDisableTiming));
 
-    // Unlike the synchronization-only events above, these must keep timing enabled.
-    CUDA_CHECK(cudaEventCreate(&m_iterationStartEvent));
-    CUDA_CHECK(cudaEventCreate(&m_iterationEndEvent));
+    // Unlike the synchronization-only events, the iteration markers must keep timing enabled.
+    for (uint32_t slot = 0; slot < NumIterationSlots; ++slot)
+    {
+        CUDA_CHECK(cudaEventCreate(&m_iterationStartEvents[slot]));
+        CUDA_CHECK(cudaEventCreate(&m_iterationEndEvents[slot]));
+        CUDA_CHECK(cudaEventCreateWithFlags(&m_uploadsDoneEvents[slot], cudaEventDisableTiming));
+    }
+    m_iterationLossSums.Allocate(NumIterationSlots);
+
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_snapshotReadyEvent, cudaEventDisableTiming));
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_weightsDownloadedEvent, cudaEventDisableTiming));
 
     // Pre-record so the first iteration's cross-stream waits are already satisfied.
     CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, m_stream.Get()));
@@ -64,23 +72,131 @@ CudaNeuralNetwork::~CudaNeuralNetwork()
     cudaEventDestroy(m_copyDoneEvent);
     cudaEventDestroy(m_nextTrainConsumedEvent);
     cudaEventDestroy(m_nextCopyDoneEvent);
-    cudaEventDestroy(m_iterationStartEvent);
-    cudaEventDestroy(m_iterationEndEvent);
+    for (uint32_t slot = 0; slot < NumIterationSlots; ++slot)
+    {
+        cudaEventDestroy(m_iterationStartEvents[slot]);
+        cudaEventDestroy(m_iterationEndEvents[slot]);
+        cudaEventDestroy(m_uploadsDoneEvents[slot]);
+    }
+    cudaEventDestroy(m_snapshotReadyEvent);
+    cudaEventDestroy(m_weightsDownloadedEvent);
 }
 
-void CudaNeuralNetwork::BeginIterationTiming()
+void CudaNeuralNetwork::BeginIteration(uint32_t slot, CudaBatchData& batch)
 {
-    CUDA_CHECK(cudaEventRecord(m_iterationStartEvent, m_stream.Get()));
+    ASSERT(slot < NumIterationSlots);
+    ASSERT(!m_slotQueued[slot]);
+    m_slotQueued[slot] = true;
+
+    CUDA_CHECK(cudaEventRecord(m_iterationStartEvents[slot], m_stream.Get()));
+    batch.lossSum.ClearAsync(m_stream.Get());
 }
 
-float CudaNeuralNetwork::EndIterationTimingMs()
+void CudaNeuralNetwork::EndIteration(uint32_t slot, CudaBatchData& batch)
 {
-    CUDA_CHECK(cudaEventRecord(m_iterationEndEvent, m_stream.Get()));
-    CUDA_CHECK(cudaEventSynchronize(m_iterationEndEvent));
+    ASSERT(slot < NumIterationSlots);
+    ASSERT(m_slotQueued[slot]);
 
-    float elapsedMs = 0.0f;
-    CUDA_CHECK(cudaEventElapsedTime(&elapsedMs, m_iterationStartEvent, m_iterationEndEvent));
-    return elapsedMs;
+    CUDA_CHECK(cudaMemcpyAsync(m_iterationLossSums.Get() + slot, batch.lossSum.Get(), sizeof(float), cudaMemcpyDeviceToHost, m_stream.Get()));
+    CUDA_CHECK(cudaEventRecord(m_iterationEndEvents[slot], m_stream.Get()));
+
+    // the copy stream holds only batch uploads, so this marks the end of the iteration's uploads
+    CUDA_CHECK(cudaEventRecord(m_uploadsDoneEvents[slot], m_copyStream.Get()));
+}
+
+void CudaNeuralNetwork::WaitForIterationUploads(uint32_t slot) const
+{
+    ASSERT(slot < NumIterationSlots);
+    ASSERT(m_slotQueued[slot]);
+    CUDA_CHECK(cudaEventSynchronize(m_uploadsDoneEvents[slot]));
+}
+
+CudaNeuralNetwork::IterationResult CudaNeuralNetwork::FinishIteration(uint32_t slot, uint32_t previousSlot)
+{
+    ASSERT(slot < NumIterationSlots);
+    ASSERT(m_slotQueued[slot]);
+    ASSERT(previousSlot == UINT32_MAX || (previousSlot < NumIterationSlots && previousSlot != slot && !m_slotQueued[previousSlot]));
+
+    CUDA_CHECK(cudaEventSynchronize(m_iterationEndEvents[slot]));
+
+    IterationResult result;
+    result.lossSum = m_iterationLossSums.Get()[slot];
+    CUDA_CHECK(cudaEventElapsedTime(&result.gpuMs, m_iterationStartEvents[slot], m_iterationEndEvents[slot]));
+    result.periodMs = result.gpuMs;
+    if (previousSlot != UINT32_MAX)
+        CUDA_CHECK(cudaEventElapsedTime(&result.periodMs, m_iterationEndEvents[previousSlot], m_iterationEndEvents[slot]));
+    ASSERT(result.gpuMs >= 0.0f && result.periodMs >= 0.0f);
+
+    m_slotQueued[slot] = false;
+    return result;
+}
+
+void CudaNeuralNetwork::StartWeightsDownload()
+{
+    ASSERT(!m_downloadInFlight);
+    m_downloadInFlight = true;
+
+    // FinishWeightsDownload waited for the previous download, so the snapshot and the host buffer are free
+    size_t offset = 0;
+    for (const CudaWeightsStoragePtr& layer : { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights })
+    {
+        if (layer->m_updateWeights)
+        {
+            CUDA_CHECK(cudaMemcpyAsync(m_weightsSnapshot.Get() + offset, layer->m_weights.Get(),
+                layer->m_totalWeights * sizeof(float), cudaMemcpyDeviceToDevice, m_stream.Get()));
+        }
+        offset += layer->m_totalWeights;
+    }
+    ASSERT(offset == m_weightsSnapshot.Size() && offset == m_downloadedWeights.Size());
+    CUDA_CHECK(cudaEventRecord(m_snapshotReadyEvent, m_stream.Get()));
+
+    CUDA_CHECK(cudaStreamWaitEvent(m_downloadStream.Get(), m_snapshotReadyEvent, 0));
+    CUDA_CHECK(cudaMemcpyAsync(m_downloadedWeights.Get(), m_weightsSnapshot.Get(), offset * sizeof(float), cudaMemcpyDeviceToHost, m_downloadStream.Get()));
+    CUDA_CHECK(cudaEventRecord(m_weightsDownloadedEvent, m_downloadStream.Get()));
+}
+
+void CudaNeuralNetwork::FinishWeightsDownload(
+    const nn::WeightsStoragePtr& featureTransformerWeights,
+    const nn::WeightsStoragePtr& threatWeights,
+    const nn::WeightsStoragePtr& l1Weights,
+    const nn::WeightsStoragePtr& l2Weights,
+    const nn::WeightsStoragePtr& l3Weights)
+{
+    ASSERT(m_downloadInFlight);
+    CUDA_CHECK(cudaEventSynchronize(m_weightsDownloadedEvent));
+
+    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+    const nn::WeightsStoragePtr hostLayers[] = { featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights };
+
+    const float* source = m_downloadedWeights.Get();
+    for (size_t i = 0; i < std::size(layers); ++i)
+    {
+        const CudaWeightsStorage& layer = *layers[i];
+        if (layer.m_updateWeights)
+        {
+            const uint32_t weightsPerVariant = (layer.m_inputSize + 1) * layer.m_outputSize;
+            ASSERT(weightsPerVariant * layer.m_numVariants == layer.m_totalWeights);
+            ASSERT(hostLayers[i]->m_variants.size() == layer.m_numVariants);
+            for (uint32_t variant = 0; variant < layer.m_numVariants; ++variant)
+            {
+                nn::Values& hostWeights = hostLayers[i]->m_variants[variant].m_weights;
+                hostWeights.resize(weightsPerVariant);
+                memcpy(hostWeights.data(), source + (size_t)variant * weightsPerVariant, weightsPerVariant * sizeof(float));
+            }
+        }
+        source += layer.m_totalWeights;
+    }
+    ASSERT(source == m_downloadedWeights.Get() + m_downloadedWeights.Size());
+
+    m_downloadInFlight = false;
+}
+
+void CudaNeuralNetwork::Synchronize() const
+{
+    m_stream.Synchronize();
+    m_auxStream.Synchronize();
+    m_copyStream.Synchronize();
+    m_downloadStream.Synchronize();
 }
 
 void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
@@ -129,6 +245,12 @@ void CudaNeuralNetwork::Init(
     m_l3Weights = std::make_shared<CudaWeightsStorage>(c_l2Size, 1, c_numVariants);
 
     CopyWeightsFromHost(featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights);
+
+    size_t totalWeights = 0;
+    for (const CudaWeightsStoragePtr& layer : { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights })
+        totalWeights += layer->m_totalWeights;
+    m_weightsSnapshot.Allocate(totalWeights);
+    m_downloadedWeights.Allocate(totalWeights);
 
     // Quantization-aware training: weights/biases are fake-quantized on read in the forward/backward
     // kernels using the same scales as the final pack step.
@@ -380,6 +502,17 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
 void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* entries, uint32_t numEntries,
     const uint16_t* threatFeatures, uint32_t numThreatFeatures)
 {
+    // a larger batch would reallocate the buffers synchronously
+    ASSERT(numEntries <= batch.nextTrainingVectors.Size());
+    ASSERT(numThreatFeatures <= batch.nextThreatFeatures.Size());
+
+#ifndef CONFIGURATION_FINAL
+    // copies from pageable memory would not be asynchronous
+    cudaPointerAttributes attributes;
+    ASSERT(cudaPointerGetAttributes(&attributes, entries) == cudaSuccess && attributes.type == cudaMemoryTypeHost);
+    ASSERT(cudaPointerGetAttributes(&attributes, threatFeatures) == cudaSuccess && attributes.type == cudaMemoryTypeHost);
+#endif // CONFIGURATION_FINAL
+
     // The last reader of the other buffers is the batch before the current one, so the copy overlaps
     // the whole current batch.
     CUDA_CHECK(cudaStreamWaitEvent(m_copyStream.Get(), m_nextTrainConsumedEvent, 0));

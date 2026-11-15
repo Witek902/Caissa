@@ -64,11 +64,37 @@ public:
     bool SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const;
     bool LoadCheckpoint(const char* path, uint64_t& outNumTrainingVectorsPassed);
 
-    // GPU-time measurement of a training iteration.
-    void BeginIterationTiming();
-    float EndIterationTimingMs(); // records the end marker and waits for it
+    // Training iterations are queued without waiting for the previous one. A queued iteration keeps its
+    // events and loss in one of NumIterationSlots slots until FinishIteration reads them.
+    static constexpr uint32_t NumIterationSlots = 3;
 
-    const CudaStream& GetStream() const { return m_stream; }
+    struct IterationResult
+    {
+        float lossSum;      // sum of squared output errors over the iteration
+        float gpuMs;        // from the GPU reaching the iteration to its end
+        float periodMs;     // from the end of the previous iteration to the end of this one
+    };
+
+    void BeginIteration(uint32_t slot, CudaBatchData& batch);
+    // after the iteration's last batch has been queued
+    void EndIteration(uint32_t slot, CudaBatchData& batch);
+    // waits until the iteration's batch uploads no longer read host memory
+    void WaitForIterationUploads(uint32_t slot) const;
+    // waits until the iteration is done; previousSlot holds the finished iteration before it, or UINT32_MAX
+    IterationResult FinishIteration(uint32_t slot, uint32_t previousSlot);
+
+    // Asynchronous weight download, at most one at a time: the weights after the queued work are copied
+    // on the GPU, then downloaded on a separate stream while training continues.
+    void StartWeightsDownload();
+    // waits for the download and copies it into the host storages; frozen layers keep their host copy
+    void FinishWeightsDownload(const nn::WeightsStoragePtr& featureTransformerWeights,
+                               const nn::WeightsStoragePtr& threatWeights,
+                               const nn::WeightsStoragePtr& l1Weights,
+                               const nn::WeightsStoragePtr& l2Weights,
+                               const nn::WeightsStoragePtr& l3Weights);
+
+    // waits until all queued work is done
+    void Synchronize() const;
 
     // Network architecture parameters
     static constexpr uint32_t c_accumulatorSize = nn::AccumulatorSize;
@@ -95,7 +121,7 @@ private:
     // CUDA streams for overlapping operations
     CudaStream m_stream;
     CudaStream m_auxStream;  // runs the FT gradient clear concurrently with the forward pass
-    CudaStream m_copyStream; // prefetches the next batch's training vectors during weights update
+    CudaStream m_copyStream; // uploads the next batch while the current one trains
 
     // Events synchronizing the FT and threat gradient buffer clears (m_auxStream) with their use (m_stream).
     cudaEvent_t m_ftGradConsumedEvent = nullptr; // recorded on m_stream after FT and threat Adam read the buffers
@@ -108,9 +134,21 @@ private:
     cudaEvent_t m_nextTrainConsumedEvent = nullptr;
     cudaEvent_t m_nextCopyDoneEvent = nullptr;
 
-    // Timing markers bracketing an iteration's work on the main stream.
-    cudaEvent_t m_iterationStartEvent = nullptr;
-    cudaEvent_t m_iterationEndEvent = nullptr;
+    // Per iteration slot: markers bracketing the iteration on the main stream, the end of its uploads on
+    // the copy stream, and its loss sum downloaded at its end.
+    cudaEvent_t m_iterationStartEvents[NumIterationSlots] = {};
+    cudaEvent_t m_iterationEndEvents[NumIterationSlots] = {};
+    cudaEvent_t m_uploadsDoneEvents[NumIterationSlots] = {};
+    PinnedBuffer<float> m_iterationLossSums;
+    bool m_slotQueued[NumIterationSlots] = {};
+
+    // Weight snapshot (all layers back to back) and its download
+    CudaStream m_downloadStream;
+    CudaBuffer<float> m_weightsSnapshot;
+    PinnedBuffer<float> m_downloadedWeights;
+    cudaEvent_t m_snapshotReadyEvent = nullptr;     // recorded on m_stream after the snapshot copies
+    cudaEvent_t m_weightsDownloadedEvent = nullptr; // recorded on m_downloadStream after the download
+    bool m_downloadInFlight = false;
 };
 
 } // namespace cuda
