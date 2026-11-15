@@ -146,7 +146,7 @@ void TrainingDataLoader::InitPiecePairKeepProb(std::mt19937& gen)
     {
         PositionEntry entry;
         Position pos;
-        if (!FetchNextPosition(gen, entry, pos, UINT64_MAX))
+        if (!FetchNextPosition(gen, entry, pos))
             return;
         counts[entry.pos.occupied.Count() / 2]++;
     }
@@ -192,7 +192,7 @@ uint32_t TrainingDataLoader::SampleInputFileIndex(double u) const
     return low - 1u;
 }
 
-bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
+bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition) const
 {
     std::uniform_real_distribution<double> distr;
     const double u = distr(gen);
@@ -202,10 +202,10 @@ bool TrainingDataLoader::FetchNextPosition(std::mt19937& gen, PositionEntry& out
     if (fileIndex >= mContexts.size())
         return false;
 
-    return mContexts[fileIndex].FetchNextPosition(gen, mOptions, mPiecePairKeepProb, outEntry, outPosition, kingBucketMask);
+    return mContexts[fileIndex].FetchNextPosition(gen, mOptions, mPiecePairKeepProb, outEntry, outPosition);
 }
 
-bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, const Options& options, const PiecePairKeepProb& piecePairKeepProb, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const
+bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, const Options& options, const PiecePairKeepProb& piecePairKeepProb, PositionEntry& outEntry, Position& outPosition) const
 {
     for (;;)
     {
@@ -262,53 +262,39 @@ bool TrainingDataLoader::InputFileContext::FetchNextPosition(std::mt19937& gen, 
         VERIFY(UnpackPosition(outEntry.pos, outPosition, false));
         ASSERT(outPosition.IsValid());
 
-        // filter by king bucket
-        if (kingBucketMask != UINT64_MAX)
+        // results close to the 50-move rule depend on the half-move counter, which the net doesn't see
         {
-            uint32_t whiteKingSide, blackKingSide;
-            uint32_t whiteKingBucket, blackKingBucket;
-            GetKingSideAndBucket(outPosition.Whites().GetKingSquare(), whiteKingSide, whiteKingBucket);
-            GetKingSideAndBucket(outPosition.Blacks().GetKingSquare().FlippedRank(), blackKingSide, blackKingBucket);
-
-            if ((((1ull << whiteKingBucket) & kingBucketMask) == 0ull) && (((1ull << blackKingBucket) & kingBucketMask) == 0ull))
+            const float hmcSkipProb = options.hmcSkipFrom20 ?
+                std::clamp(static_cast<float>(outEntry.pos.halfMoveCount - 20) / 80.0f, 0.0f, 1.0f) :
+                sqrtf(static_cast<float>(outEntry.pos.halfMoveCount) / 100.0f);
+            if (hmcSkipProb > 0.0f && std::bernoulli_distribution(hmcSkipProb)(gen))
                 continue;
         }
-        else
+
+        const int32_t numPieces = outEntry.pos.occupied.Count();
+
+        // skip early moves
+        if (outEntry.pos.moveCount <= 12 && numPieces > 24)
+            continue;
+
+        // skip based on piece count
         {
-            // results close to the 50-move rule depend on the half-move counter, which the net doesn't see
-            {
-                const float hmcSkipProb = options.hmcSkipFrom20 ?
-                    std::clamp(static_cast<float>(outEntry.pos.halfMoveCount - 20) / 80.0f, 0.0f, 1.0f) :
-                    sqrtf(static_cast<float>(outEntry.pos.halfMoveCount) / 100.0f);
-                if (hmcSkipProb > 0.0f && std::bernoulli_distribution(hmcSkipProb)(gen))
-                    continue;
-            }
-
-            const int32_t numPieces = outEntry.pos.occupied.Count();
-
-            // skip early moves
-            if (outEntry.pos.moveCount <= 12 && numPieces > 24)
+            if (numPieces <= 3)
                 continue;
 
-            // skip based on piece count
-            {
-                if (numPieces <= 3)
-                    continue;
+            if (CheckInsufficientMaterial(outPosition))
+                continue;
 
-                if (CheckInsufficientMaterial(outPosition))
-                    continue;
+            // skip recognized endgames
+            int32_t endgameScore = 0;
+            if (EvaluateEndgame(outPosition, endgameScore))
+                continue;
 
-                // skip recognized endgames
-                int32_t endgameScore = 0;
-                if (EvaluateEndgame(outPosition, endgameScore))
-                    continue;
-
-                const float keepProb = options.pieceCountTarget ?
-                    piecePairKeepProb[numPieces / 2] :
-                    1.0f - Sqr(static_cast<float>(numPieces - 22) / 30.0f);
-                if (keepProb < 1.0f && !std::bernoulli_distribution(keepProb)(gen))
-                    continue;
-            }
+            const float keepProb = options.pieceCountTarget ?
+                piecePairKeepProb[numPieces / 2] :
+                1.0f - Sqr(static_cast<float>(numPieces - 22) / 30.0f);
+            if (keepProb < 1.0f && !std::bernoulli_distribution(keepProb)(gen))
+                continue;
         }
 
         return true;

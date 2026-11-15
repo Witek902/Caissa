@@ -28,8 +28,10 @@ public:
     void Forward(CudaBatchData& batch);
     void Backward(CudaBatchData& batch, float learningRate);
 
-    // Set per-layer AdamW weight decay (applied to weights only, not biases).
-    void SetWeightDecay(float featureTransformerDecay, float outputSubnetDecay);
+    // AdamW weight decay of the piece weights (not biases). The threat weights and the output subnets
+    // have none: decay kills output subnet neurons, and a rarely active threat row would shrink between
+    // its updates.
+    void SetFeatureTransformerWeightDecay(float weightDecay);
 
     void SetAdamBetas(float beta1, float beta2);
 

@@ -45,7 +45,7 @@ public:
         const std::vector<std::string>& trainingDataPaths = {});
 
     // sample new position from the training set
-    bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const;
+    bool FetchNextPosition(std::mt19937& gen, PositionEntry& outEntry, Position& outPosition) const;
 
     const std::vector<std::string>& GetDataPaths() const { return mDataPaths; }
     size_t GetNumFiles() const { return mContexts.size(); }
@@ -62,7 +62,7 @@ private:
         uint64_t fileSize = 0;
         float skippingProbability = 0.0f;
 
-        bool FetchNextPosition(std::mt19937& gen, const Options& options, const PiecePairKeepProb& piecePairKeepProb, PositionEntry& outEntry, Position& outPosition, uint64_t kingBucketMask) const;
+        bool FetchNextPosition(std::mt19937& gen, const Options& options, const PiecePairKeepProb& piecePairKeepProb, PositionEntry& outEntry, Position& outPosition) const;
     };
 
     // measure the piece count distribution left by the other filters and set the keep probabilities that turn it into the target distribution

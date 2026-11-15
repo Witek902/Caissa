@@ -254,7 +254,6 @@ void CudaNeuralNetwork::Init(
     m_featureTransformerWeights->m_factorizerFirstWeight = c_numNetworkInputs * c_accumulatorSize;
     m_featureTransformerWeights->m_factorizerRange = FactorizerWeightRange;
 
-    // no weight decay: a rarely active threat row would shrink between its updates
     m_threatWeights = std::make_shared<CudaWeightsStorage>(nn::NumThreatInputs, c_accumulatorSize, 1);
 
     m_l1Weights = std::make_shared<CudaWeightsStorage>(c_l1InputSize, c_l1Size, c_numVariants);
@@ -292,12 +291,9 @@ void CudaNeuralNetwork::Init(
     m_l3Weights->m_biasQuantScale = nn::OutputLayerBiasQuantizationScale;
 }
 
-void CudaNeuralNetwork::SetWeightDecay(float featureTransformerDecay, float outputSubnetDecay)
+void CudaNeuralNetwork::SetFeatureTransformerWeightDecay(float weightDecay)
 {
-    m_featureTransformerWeights->m_weightDecay = featureTransformerDecay;
-    m_l1Weights->m_weightDecay = outputSubnetDecay;
-    m_l2Weights->m_weightDecay = outputSubnetDecay;
-    m_l3Weights->m_weightDecay = outputSubnetDecay;
+    m_featureTransformerWeights->m_weightDecay = weightDecay;
 }
 
 void CudaNeuralNetwork::SetAdamBetas(float beta1, float beta2)
