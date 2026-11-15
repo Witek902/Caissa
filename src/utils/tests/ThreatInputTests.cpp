@@ -155,6 +155,7 @@ static const char* c_testPositions[] =
     "nrkb1qbr/pp1pppp1/5n2/7p/2p5/1N1NPP2/PPPP2PP/1RKB1QBR w HBhb - 0 9",
     "rnkrbbq1/pppppnp1/7p/8/1B1Q1p2/3P1P2/PPP1P1PP/RNKR1B1N w DAda - 2 9",
     "1r2k1r1/pppppppp/8/8/8/8/PPPPPPPP/1R2K1R1 w GBgb - 0 1",
+    "qQqQqQqk/QqQqQqbq/qQqQqQqQ/QqQqQqQq/qQqQqQqQ/QqQqQqQq/qQqQqQBQ/QqQqQqQK w - - 0 1",
 };
 
 // the features of a position and of its color-flipped twin are the same

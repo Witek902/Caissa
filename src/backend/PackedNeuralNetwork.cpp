@@ -848,28 +848,16 @@ int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stm
     return Run(stmAccum, nstmAccum, variant);
 }
 
-// adds the threat weight rows of the features to an accumulator
-static void AddThreatFeatures(Accumulator& accumulator, const ThreatWeightType* weights, const uint16_t* features, uint32_t numFeatures)
-{
-    for (uint32_t j = 0; j < numFeatures; ++j)
-    {
-        ASSERT(features[j] < NumThreatInputs);
-        const ThreatWeightType* row = weights + (size_t)features[j] * AccumulatorSize;
-        for (uint32_t i = 0; i < AccumulatorSize; ++i)
-            accumulator.values[i] = (AccumulatorType)(accumulator.values[i] + row[i]);
-    }
-}
-
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures,
     const uint16_t* stmThreatFeatures, const uint16_t* nstmThreatFeatures, const uint32_t numThreatFeatures, uint32_t variant) const
 {
     Accumulator stmAccum;
     stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
-    AddThreatFeatures(stmAccum, threatWeights, stmThreatFeatures, numThreatFeatures);
+    stmAccum.AddThreatFeatures(threatWeights, numThreatFeatures, stmThreatFeatures);
 
     Accumulator nstmAccum;
     nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
-    AddThreatFeatures(nstmAccum, threatWeights, nstmThreatFeatures, numThreatFeatures);
+    nstmAccum.AddThreatFeatures(threatWeights, numThreatFeatures, nstmThreatFeatures);
 
     return Run(stmAccum, nstmAccum, variant);
 }

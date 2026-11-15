@@ -1,6 +1,7 @@
 #include "NeuralNetworkEvaluator.hpp"
 #include "Search.hpp"
 #include "Thread.hpp"
+#include "ThreatInputs.hpp"
 
 #ifdef USE_SSE
     #include <immintrin.h>
@@ -286,6 +287,20 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     return index;
 }
 
+// adds the threat rows of both perspectives to the piece accumulators
+static void AddThreatInputs(const nn::PackedNeuralNetwork& network, const Position& pos, nn::Accumulator& stmAccum, nn::Accumulator& nstmAccum)
+{
+    ThreatRecord records[nn::MaxThreatRecords];
+    const uint32_t numRecords = GetThreatRecords(pos, records);
+
+    uint16_t features[nn::MaxThreatRecords];
+    uint32_t numFeatures = ThreatRecordsToFeatures(records, numRecords, GetThreatOrientation(pos, pos.GetSideToMove()), features);
+    stmAccum.AddThreatFeatures(network.threatWeights, numFeatures, features);
+
+    numFeatures = ThreatRecordsToFeatures(records, numRecords, GetThreatOrientation(pos, pos.GetSideToMove() ^ 1), features);
+    nstmAccum.AddThreatFeatures(network.threatWeights, numFeatures, features);
+}
+
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
 {
     constexpr uint32_t maxFeatures = 64;
@@ -298,7 +313,16 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Posi
     const uint32_t numTheirFeatures = PositionToFeaturesVector(pos, theirFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numTheirFeatures <= maxFeatures);
 
-    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures, GetNetworkVariant(pos));
+    uint16_t ourThreatFeatures[nn::MaxThreatRecords];
+    const uint32_t numThreatFeatures = PositionToThreatFeatures(pos, pos.GetSideToMove(), ourThreatFeatures);
+
+    uint16_t theirThreatFeatures[nn::MaxThreatRecords];
+    const uint32_t numTheirThreatFeatures = PositionToThreatFeatures(pos, pos.GetSideToMove() ^ 1, theirThreatFeatures);
+    ASSERT(numTheirThreatFeatures == numThreatFeatures);
+    UNUSED(numTheirThreatFeatures);
+
+    return network.Run(ourFeatures, numOurFeatures, theirFeatures, numTheirFeatures,
+        ourThreatFeatures, theirThreatFeatures, numThreatFeatures, GetNetworkVariant(pos));
 }
 
 void NNEvaluator::Trace(const nn::PackedNeuralNetwork& network, const Position& pos, NNEvaluationTrace& outTrace)
@@ -318,6 +342,8 @@ void NNEvaluator::Trace(const nn::PackedNeuralNetwork& network, const Position& 
 
     nn::Accumulator nstmAccum;
     nstmAccum.Refresh(network.accumulatorWeights, network.accumulatorBiases, numNstmFeatures, nstmFeatures);
+
+    AddThreatInputs(network, pos, stmAccum, nstmAccum);
 
     static_assert(sizeof(outTrace.rawAccumulator[0]) == sizeof(stmAccum.values), "accumulator size mismatch");
     memcpy(outTrace.rawAccumulator[0], stmAccum.values, sizeof(stmAccum.values));
@@ -625,8 +651,10 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         RefreshAccumulator<Black>(network, node, cache);
     }
 
-    const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
-    const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
+    nn::Accumulator ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
+    nn::Accumulator theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
+    AddThreatInputs(network, node.position, ourAccumulator, theirAccumulator);
+
     const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
 
 #ifdef VALIDATE_NETWORK_OUTPUT
