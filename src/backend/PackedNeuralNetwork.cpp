@@ -758,27 +758,45 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
         return false;
     }
 
-    if (1 != fread(this, sizeof(PackedNeuralNetwork), 1, file))
+    if (1 != fread(&header, sizeof(Header), 1, file))
     {
         fclose(file);
         fprintf(stderr, "Failed to load neural network: cannot read header\n");
         return false;
     }
 
-    fclose(file);
-
     if (header.magic != MagicNumber)
     {
+        fclose(file);
         fprintf(stderr, "Failed to load neural network: not a network file\n");
         return false;
     }
 
     if (header.version != CurrentVersion)
     {
+        fclose(file);
         fprintf(stderr, "Failed to load neural network: unsupported version %u\n", (uint32_t)header.version);
         return false;
     }
 
+    fseek(file, 0, SEEK_END);
+    const long fileSize = ftell(file);
+    if (fileSize != (long)sizeof(PackedNeuralNetwork))
+    {
+        fclose(file);
+        fprintf(stderr, "Failed to load neural network: file size is %ld bytes, expected %zu\n", fileSize, sizeof(PackedNeuralNetwork));
+        return false;
+    }
+
+    fseek(file, 0, SEEK_SET);
+    if (1 != fread(this, sizeof(PackedNeuralNetwork), 1, file))
+    {
+        fclose(file);
+        fprintf(stderr, "Failed to load neural network: cannot read data\n");
+        return false;
+    }
+
+    fclose(file);
     return true;
 }
 
@@ -826,6 +844,32 @@ int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stm
 
     Accumulator nstmAccum;
     nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
+
+    return Run(stmAccum, nstmAccum, variant);
+}
+
+// adds the threat weight rows of the features to an accumulator
+static void AddThreatFeatures(Accumulator& accumulator, const ThreatWeightType* weights, const uint16_t* features, uint32_t numFeatures)
+{
+    for (uint32_t j = 0; j < numFeatures; ++j)
+    {
+        ASSERT(features[j] < NumThreatInputs);
+        const ThreatWeightType* row = weights + (size_t)features[j] * AccumulatorSize;
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            accumulator.values[i] = (AccumulatorType)(accumulator.values[i] + row[i]);
+    }
+}
+
+int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures,
+    const uint16_t* stmThreatFeatures, const uint16_t* nstmThreatFeatures, const uint32_t numThreatFeatures, uint32_t variant) const
+{
+    Accumulator stmAccum;
+    stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
+    AddThreatFeatures(stmAccum, threatWeights, stmThreatFeatures, numThreatFeatures);
+
+    Accumulator nstmAccum;
+    nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
+    AddThreatFeatures(nstmAccum, threatWeights, nstmThreatFeatures, numThreatFeatures);
 
     return Run(stmAccum, nstmAccum, variant);
 }

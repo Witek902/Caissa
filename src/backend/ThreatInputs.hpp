@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PackedNeuralNetwork.hpp"
 #include "Position.hpp"
 
 // neural net threat inputs: one feature per non-king piece attacking or defending another non-king piece,
@@ -7,8 +8,6 @@
 // Squares and colors are seen from a perspective, the same way as the piece-square inputs.
 
 namespace nn {
-
-static constexpr uint32_t NumThreatInputs = 60144;
 
 // every non-king piece has at most 8 threats (one per ray or knight jump)
 static constexpr uint32_t MaxThreatRecords = 8 * 62;

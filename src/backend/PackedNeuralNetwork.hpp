@@ -6,12 +6,14 @@ namespace nn {
 
 struct Accumulator;
 
-static constexpr uint32_t CurrentVersion = 17;
+static constexpr uint32_t CurrentVersion = 18;
 static constexpr uint32_t MagicNumber = 0x43534E4E; // 'CSNN'
 
 static constexpr uint32_t NumKingBuckets = 32;
 static constexpr uint32_t NumNetworkInputs = NumKingBuckets * 12 * 64;
-static constexpr uint32_t AccumulatorSize = 1536;
+// threat inputs (ThreatInputs.hpp) have their own index space and weight block
+static constexpr uint32_t NumThreatInputs = 60144;
+static constexpr uint32_t AccumulatorSize = 768;
 static constexpr uint32_t OutputSize = 1;
 // output subnet variant = piece count bucket * 2 + "any queen on the board"
 static constexpr uint32_t NumPieceCountBuckets = 8;
@@ -67,6 +69,9 @@ static constexpr float OutputLayerBiasQuantizationScale = WeightScale * OutputSc
 using FirstLayerWeightType = int16_t;
 using FirstLayerBiasType = int16_t;
 
+// same scale as the piece weights, both are summed into one int16 accumulator
+using ThreatWeightType = int8_t;
+
 using HiddenLayerWeightType = int8_t;
 using HiddenLayerBiasType = int32_t;
 
@@ -112,6 +117,7 @@ struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
     Header header;
     FirstLayerWeightType accumulatorWeights[NumNetworkInputs * AccumulatorSize];
     FirstLayerBiasType accumulatorBiases[AccumulatorSize];
+    ThreatWeightType threatWeights[NumThreatInputs * AccumulatorSize];
     OutputSubnetVariant outputSubnetVariants[NumVariants];
 
     PackedNeuralNetwork();
@@ -127,6 +133,10 @@ struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
 
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const;
+
+    // Same, with threat features (both perspectives always have the same number of them)
+    int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures,
+        const uint16_t* stmThreatFeatures, const uint16_t* nstmThreatFeatures, const uint32_t numThreatFeatures, uint32_t variant) const;
 };
 
 } // namespace nn

@@ -58,10 +58,22 @@ namespace nn {
     #define NN_USE_SSE4
 #endif // USE_SSE
 
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+    // registers in one accumulator tile: the most that fit the budget and divide the accumulator evenly
+    constexpr uint32_t GetTileRegisterCount(uint32_t maxRegisters)
+    {
+        constexpr uint32_t numChunks = AccumulatorSize / (VectorRegSize / 16);
+        uint32_t count = maxRegisters;
+        while (numChunks % count != 0)
+            --count;
+        return count;
+    }
+#endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
+
 #if defined(NN_USE_AVX512)
-    constexpr uint32_t OptimalRegisterCount = 16;
+    constexpr uint32_t OptimalRegisterCount = GetTileRegisterCount(16);
 #elif defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
-    constexpr uint32_t OptimalRegisterCount = 8;
+    constexpr uint32_t OptimalRegisterCount = GetTileRegisterCount(8);
 #endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
 
 using AccumulatorType = int16_t;
