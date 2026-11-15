@@ -222,12 +222,16 @@ void MoveOrderer::Clear()
 MoveOrderer::CounterType MoveOrderer::GetHistoryScore(const NodeInfo& node, const Move move) const
 {
     ASSERT(move.IsValid());
+    const uint32_t color = (uint32_t)node.position.GetSideToMove();
     const Bitboard threats = node.threats.allThreats;
+    const uint32_t pieceTo = move.PieceTo();
     const uint32_t from = move.FromSquare().Index();
     const uint32_t to = move.ToSquare().Index();
     ASSERT(from < 64);
     ASSERT(to < 64);
-    return quietMoveHistory[(uint32_t)node.position.GetSideToMove()][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()];
+    return
+        quietMoveHistory[color][threats.IsBitSet(from)][threats.IsBitSet(to)][move.FromTo()] +
+        pawnHistory[color][node.position.GetPawnsHash() % PawnHistorySize][pieceTo] * PawnHistWeight / 1024;
 }
 
 Move MoveOrderer::GetCounterMove(const NodeInfo& node) const
