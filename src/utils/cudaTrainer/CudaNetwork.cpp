@@ -377,18 +377,21 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
     CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, stream));
 }
 
-void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* hostSrc, uint32_t count)
+void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* entries, uint32_t numEntries,
+    const uint16_t* threatFeatures, uint32_t numThreatFeatures)
 {
-    // The last reader of the other buffer is the batch before the current one, so the copy overlaps
+    // The last reader of the other buffers is the batch before the current one, so the copy overlaps
     // the whole current batch.
     CUDA_CHECK(cudaStreamWaitEvent(m_copyStream.Get(), m_nextTrainConsumedEvent, 0));
-    batch.nextTrainingVectors.CopyFromHost(hostSrc, count, m_copyStream.Get());
+    batch.nextTrainingVectors.CopyFromHost(entries, numEntries, m_copyStream.Get());
+    batch.nextThreatFeatures.CopyFromHost(threatFeatures, numThreatFeatures, m_copyStream.Get());
     CUDA_CHECK(cudaEventRecord(m_nextCopyDoneEvent, m_copyStream.Get()));
 }
 
 void CudaNeuralNetwork::SwapTrainingBatch(CudaBatchData& batch)
 {
     batch.trainingVectors.Swap(batch.nextTrainingVectors);
+    batch.threatFeatures.Swap(batch.nextThreatFeatures);
 
     cudaEvent_t event = m_trainConsumedEvent;
     m_trainConsumedEvent = m_nextTrainConsumedEvent;

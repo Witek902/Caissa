@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GameCollection.hpp"
-#include "TrainingEntry.hpp"
 
 #include <array>
 #include <memory>
@@ -17,8 +16,6 @@ struct PositionEntry
     uint8_t wdlScore = 0xFF;
     uint8_t tbScore = 0xFF;
 };
-
-using TrainingDataSet = std::vector<TrainingEntry>;
 
 class TrainingDataLoader
 {

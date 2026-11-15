@@ -196,6 +196,7 @@ static constexpr uint32_t c_ftGradientBlockRows = 16;
 
 __global__ void FeatureTransformerGradientsKernel(
     const TrainingEntry* __restrict__ trainingVectors,
+    const uint16_t* __restrict__ threatFeatures,
     const float* __restrict__ l1PreErrors,  // [batchSize][L1Size]
     const float* __restrict__ l1Weights,    // [numVariants][(L1InputSize + 1) * L1Size]
     const float* __restrict__ accumulators, // [batchSize][2][AccumulatorSize]
@@ -222,6 +223,8 @@ __global__ void FeatureTransformerGradientsKernel(
     if (batchIdx >= batchSize || accumulatorIdx >= accumulatorSize) return;
 
     const TrainingEntry* trainingVector = trainingVectors + batchIdx;
+    const uint16_t* whiteThreatFeatures = threatFeatures + trainingVector->threatFeaturesOffset;
+    const uint16_t* blackThreatFeatures = whiteThreatFeatures + trainingVector->numThreatFeatures;
     const float* __restrict__ variantWeights = l1Weights + trainingVector->variant * (nn::L1InputSize + 1) * nn::L1Size;
     const uint32_t pairIdx = accumulatorIdx % halfSize;
     const uint32_t partnerIdx = accumulatorIdx < halfSize ? accumulatorIdx + halfSize : accumulatorIdx - halfSize;
@@ -261,7 +264,7 @@ __global__ void FeatureTransformerGradientsKernel(
         }
 
         for (uint32_t i = 0; i < trainingVector->numThreatFeatures; ++i)
-            atomicAdd(&threatGradients[trainingVector->whiteThreatFeatures[i] * accumulatorSize + accumulatorIdx], whitesError);
+            atomicAdd(&threatGradients[whiteThreatFeatures[i] * accumulatorSize + accumulatorIdx], whitesError);
     }
 
     // Process black features
@@ -277,7 +280,7 @@ __global__ void FeatureTransformerGradientsKernel(
         }
 
         for (uint32_t i = 0; i < trainingVector->numThreatFeatures; ++i)
-            atomicAdd(&threatGradients[trainingVector->blackThreatFeatures[i] * accumulatorSize + accumulatorIdx], blacksError);
+            atomicAdd(&threatGradients[blackThreatFeatures[i] * accumulatorSize + accumulatorIdx], blacksError);
     }
 
     // bias gradient
@@ -394,6 +397,7 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
 
         FeatureTransformerGradientsKernel<<<gridSize, blockSize, 0, stream>>>(
             batch.trainingVectors.Get(),
+            batch.threatFeatures.Get(),
             batch.l1PreErrors.Get(),
             l1.weights,
             batch.accumulatorBuffer.Get(),

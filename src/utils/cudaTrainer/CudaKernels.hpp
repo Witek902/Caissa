@@ -62,7 +62,9 @@ struct DeviceLayer
 struct CudaBatchData
 {
     CudaBuffer<TrainingEntry> trainingVectors;
+    CudaBuffer<uint16_t> threatFeatures;            // indexed by TrainingEntry::threatFeaturesOffset
     CudaBuffer<TrainingEntry> nextTrainingVectors;  // filled while the current batch trains
+    CudaBuffer<uint16_t> nextThreatFeatures;
     CudaBuffer<float> networkOutputs;      // post-sigmoid output
     CudaBuffer<float> outputErrors;         // dLoss / d(pre-sigmoid output)
     CudaBuffer<float> lossSum;              // sum of squared output errors, accumulated across batches
@@ -94,7 +96,9 @@ struct CudaBatchData
         batchSize = size;
 
         trainingVectors.Allocate(batchSize);
+        threatFeatures.Allocate(batchSize * TrainingThreatFeatureBudget);
         nextTrainingVectors.Allocate(batchSize);
+        nextThreatFeatures.Allocate(batchSize * TrainingThreatFeatureBudget);
         networkOutputs.Allocate(batchSize);
         outputErrors.Allocate(batchSize);
         lossSum.Allocate(1);

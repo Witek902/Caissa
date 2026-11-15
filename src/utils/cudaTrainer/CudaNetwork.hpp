@@ -36,10 +36,12 @@ public:
     // The factorizer weights are added to the piece weights only when enabled
     void SetFactorizerEnabled(bool enabled) { m_useFactorizer = enabled; }
 
-    // Asynchronously copy a batch's training vectors into nextTrainingVectors on a dedicated copy
-    // stream. The copy waits for the last reader of that buffer (FeatureTransformerGradientsKernel of
-    // the batch before the current one), so it overlaps the whole current batch.
-    void CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* hostSrc, uint32_t count);
+    // Asynchronously copy a batch's training vectors and threat features into nextTrainingVectors and
+    // nextThreatFeatures on a dedicated copy stream. The copy waits for the last reader of those buffers
+    // (FeatureTransformerGradientsKernel of the batch before the current one), so it overlaps the whole
+    // current batch.
+    void CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* entries, uint32_t numEntries,
+        const uint16_t* threatFeatures, uint32_t numThreatFeatures);
 
     // Make the copied batch the current one; Forward waits for its copy before reading it.
     void SwapTrainingBatch(CudaBatchData& batch);

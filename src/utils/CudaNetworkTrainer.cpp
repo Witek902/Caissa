@@ -1,5 +1,6 @@
 #include "ThreadPool.hpp"
 #include "TrainerCommon.hpp"
+#include "TrainingEntry.hpp"
 #include "cudaTrainer/CudaNetwork.hpp"
 #include "../backend/Search.hpp"
 #include "../backend/Evaluate.hpp"
@@ -160,6 +161,48 @@ struct Options
     float featureTransformerWeightDecay = 0.0025f; // applied to weights only, not biases
 };
 
+// Training positions split into batches. Each batch owns TrainingThreatFeatureBudget threat feature slots
+// per position, filled from the start, so a batch's threat features are uploaded in one piece.
+struct TrainingSet
+{
+    std::vector<TrainingEntry> entries;
+    std::vector<uint16_t> threatFeatures;
+    std::vector<uint32_t> numBatchThreatFeatures;
+    uint32_t batchSize = 0;
+
+    void Allocate(uint32_t numEntries, uint32_t newBatchSize)
+    {
+        batchSize = newBatchSize;
+        entries.resize(numEntries);
+        numBatchThreatFeatures.resize(NumBatches());
+        threatFeatures.resize((size_t)NumBatches() * batchSize * TrainingThreatFeatureBudget);
+    }
+
+    uint32_t NumBatches() const
+    {
+        return (static_cast<uint32_t>(entries.size()) + batchSize - 1) / batchSize;
+    }
+
+    uint32_t BatchBegin(uint32_t batchIndex) const { return batchIndex * batchSize; }
+    uint32_t BatchEnd(uint32_t batchIndex) const { return std::min(BatchBegin(batchIndex) + batchSize, static_cast<uint32_t>(entries.size())); }
+
+    uint16_t* BatchThreatFeatures(uint32_t batchIndex)
+    {
+        return threatFeatures.data() + (size_t)batchIndex * batchSize * TrainingThreatFeatureBudget;
+    }
+
+    const uint16_t* BatchThreatFeatures(uint32_t batchIndex) const
+    {
+        return threatFeatures.data() + (size_t)batchIndex * batchSize * TrainingThreatFeatureBudget;
+    }
+
+    // white threat features of an entry, followed by the black ones
+    const uint16_t* EntryThreatFeatures(uint32_t index) const
+    {
+        return BatchThreatFeatures(index / batchSize) + entries[index].threatFeaturesOffset;
+    }
+};
+
 class CudaNetworkTrainer
 {
 public:
@@ -181,9 +224,9 @@ public:
 
         m_packedNet = std::make_unique<nn::PackedNeuralNetwork>();
 
-        m_validationSet.resize(cNumValidationVectorsPerIteration);
-        m_trainingSet_Read.resize(cNumTrainingVectorsPerIteration);
-        m_trainingSet_Write.resize(cNumTrainingVectorsPerIteration);
+        m_validationSet.Allocate(cNumValidationVectorsPerIteration, options.batchSize);
+        m_trainingSet_Read.Allocate(cNumTrainingVectorsPerIteration, options.batchSize);
+        m_trainingSet_Write.Allocate(cNumTrainingVectorsPerIteration, options.batchSize);
         m_validationPerThreadData.resize(ThreadPool::GetInstance().GetNumThreads());
 
         for (uint32_t i = 0; i < ThreadPool::GetInstance().GetNumThreads(); ++i)
@@ -205,15 +248,21 @@ public:
         m_deviceName = prop.name;
 
         // Pin the training set buffers so per-batch host->device copies are truly asynchronous.
-        // Both are registered: they are only ever std::swap'd, never reallocated after this point.
-        CUDA_CHECK(cudaHostRegister(m_trainingSet_Read.data(), m_trainingSet_Read.size() * sizeof(TrainingEntry), cudaHostRegisterDefault));
-        CUDA_CHECK(cudaHostRegister(m_trainingSet_Write.data(), m_trainingSet_Write.size() * sizeof(TrainingEntry), cudaHostRegisterDefault));
+        // They are only ever std::swap'd, never reallocated after this point.
+        for (TrainingSet* set : { &m_trainingSet_Read, &m_trainingSet_Write })
+        {
+            CUDA_CHECK(cudaHostRegister(set->entries.data(), set->entries.size() * sizeof(TrainingEntry), cudaHostRegisterDefault));
+            CUDA_CHECK(cudaHostRegister(set->threatFeatures.data(), set->threatFeatures.size() * sizeof(uint16_t), cudaHostRegisterDefault));
+        }
     }
 
     ~CudaNetworkTrainer()
     {
-        cudaHostUnregister(m_trainingSet_Read.data());
-        cudaHostUnregister(m_trainingSet_Write.data());
+        for (TrainingSet* set : { &m_trainingSet_Read, &m_trainingSet_Write })
+        {
+            cudaHostUnregister(set->entries.data());
+            cudaHostUnregister(set->threatFeatures.data());
+        }
     }
 
     void InitNetwork();
@@ -257,9 +306,9 @@ private:
     std::unique_ptr<nn::PackedNeuralNetwork> m_packedNet;
 #endif // USE_PACKED_NET_VALIDATION
 
-    TrainingDataSet m_validationSet; // TODO remove
-    TrainingDataSet m_trainingSet_Write; // training set written to by IO
-    TrainingDataSet m_trainingSet_Read; // training set used by trainer
+    TrainingSet m_validationSet; // TODO remove
+    TrainingSet m_trainingSet_Write; // training set written to by IO
+    TrainingSet m_trainingSet_Read; // training set used by trainer
     std::vector<ValidationPerThreadData> m_validationPerThreadData;
 
     alignas(CACHELINE_SIZE)
@@ -271,8 +320,11 @@ private:
     // training-set RMSE of the last training iteration; written by the training task, read by Validate
     std::atomic<float> m_lastTrainingRmse = 0.0f;
 
-    // positions drawn again because they have more pieces than a training entry holds
+    // positions drawn again because they have more pieces than a training entry holds or could not be read
     std::atomic<uint64_t> m_numSkippedPositions = 0;
+
+    // positions drawn again because their threat features did not fit in the rest of the batch's list
+    std::atomic<uint64_t> m_numThreatListFullPositions = 0;
 
     // threat weights out of the int8 range in the last packed net
     uint64_t m_numClippedThreatWeights = 0;
@@ -326,12 +378,15 @@ private:
     // run settings, so a net can be traced back to the options and data it was trained with
     void WriteRunSettings(uint64_t startPositions) const;
 
-    void GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak);
+    // outThreatFeatures receives the white threat features, then the black ones (2 * MaxTrainingThreatFeatures slots)
+    void GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint16_t* outThreatFeatures, uint64_t kingBucketMask, float lambda, float bucketLeak);
     // false if the position must be drawn again
-    bool GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak);
+    bool GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint16_t* outThreatFeatures, uint64_t kingBucketMask, float lambda, float bucketLeak);
+
+    void GenerateTrainingBatch(std::mt19937& rng, TrainingSet& set, uint32_t batchIndex, uint64_t kingBucketMask, float lambda, float bucketLeak);
 
     // deterministic: single-threaded with a dedicated RNG, so the set depends only on the seed
-    void GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic = false);
+    void GenerateTrainingSet(TrainingSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic = false);
 
     void Validate(const TaskContext& ctx);
 
@@ -344,7 +399,7 @@ private:
     void PrintNetworkDetails(const NetworkDetails& details, int indent) const;
 
     // Forward pass on the float weights, matching what the CUDA trainer optimizes
-    float EvalFloatNetwork(const TrainingEntry& entry) const;
+    float EvalFloatNetwork(const TrainingEntry& entry, const uint16_t* threatFeatures) const;
 
     // "<name>/<name><suffix>", e.g. "eval-86/eval-86-10B.pnn"
     std::string OutputPath(const std::string& suffix) const
@@ -413,8 +468,9 @@ void CudaNetworkTrainer::InitNetwork()
         << std::count(m_unreachableThreatInputs.begin(), m_unreachableThreatInputs.end(), true) << " threat" << std::endl;
 }
 
-// false if the position has more features than a training entry holds
-static bool PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry)
+// False if the position has more pieces than a training entry holds. outThreatFeatures receives the white
+// threat features, then the black ones, and needs 2 * MaxTrainingThreatFeatures slots.
+static bool PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry, uint16_t* outThreatFeatures)
 {
     ASSERT(pos.GetSideToMove() == White);
 
@@ -428,21 +484,19 @@ static bool PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
     uint32_t numBlackFeatures = PositionToFeaturesVector(pos, blackFeatures, pos.GetSideToMove() ^ 1);
     ASSERT(numBlackFeatures == numWhiteFeatures);
 
-    ThreatRecord threats[nn::MaxThreatRecords];
-    const uint32_t numThreats = GetThreatRecords(pos, threats);
-
-    uint16_t whiteThreatFeatures[nn::MaxThreatRecords];
-    const uint32_t numWhiteThreatFeatures = ThreatRecordsToFeatures(threats, numThreats, GetThreatOrientation(pos, pos.GetSideToMove()), whiteThreatFeatures);
-
-    uint16_t blackThreatFeatures[nn::MaxThreatRecords];
-    const uint32_t numBlackThreatFeatures = ThreatRecordsToFeatures(threats, numThreats, GetThreatOrientation(pos, pos.GetSideToMove() ^ 1), blackThreatFeatures);
-    ASSERT(numBlackThreatFeatures == numWhiteThreatFeatures);
-    UNUSED(numBlackThreatFeatures);
-
-    static_assert(MaxTrainingThreatFeatures >= 8 * (std::size(TrainingEntry{}.whiteFeatures) - 2), "every position that fits must fit its threats");
     if (numWhiteFeatures > std::size(outEntry.whiteFeatures))
         return false;
-    ASSERT(numWhiteThreatFeatures <= MaxTrainingThreatFeatures);
+
+    // ThreatRecordsToFeatures writes one slot per threat, at most MaxTrainingThreatFeatures in a position that fits
+    static_assert(MaxTrainingThreatFeatures >= 8 * (std::size(TrainingEntry{}.whiteFeatures) - 2), "every position that fits must fit its threats");
+    ThreatRecord threats[nn::MaxThreatRecords];
+    const uint32_t numThreats = GetThreatRecords(pos, threats);
+    ASSERT(numThreats <= MaxTrainingThreatFeatures);
+
+    const uint32_t numWhiteThreatFeatures = ThreatRecordsToFeatures(threats, numThreats, GetThreatOrientation(pos, pos.GetSideToMove()), outThreatFeatures);
+    const uint32_t numBlackThreatFeatures = ThreatRecordsToFeatures(threats, numThreats, GetThreatOrientation(pos, pos.GetSideToMove() ^ 1), outThreatFeatures + numWhiteThreatFeatures);
+    ASSERT(numBlackThreatFeatures == numWhiteThreatFeatures);
+    UNUSED(numBlackThreatFeatures);
 
     outEntry.numWhiteFeatures = (uint8_t)numWhiteFeatures;
     outEntry.numBlackFeatures = (uint8_t)numBlackFeatures;
@@ -452,12 +506,6 @@ static bool PositionToTrainingEntry(const Position& pos, TrainingEntry& outEntry
         outEntry.blackFeatures[i] = blackFeatures[i];
 
     outEntry.numThreatFeatures = (uint8_t)numWhiteThreatFeatures;
-    for (uint32_t i = 0; i < numWhiteThreatFeatures; ++i)
-    {
-        outEntry.whiteThreatFeatures[i] = whiteThreatFeatures[i];
-        outEntry.blackThreatFeatures[i] = blackThreatFeatures[i];
-    }
-
     outEntry.variant = GetNetworkVariant(pos);
     return true;
 }
@@ -506,25 +554,25 @@ static void SortBatchByKingBucket(TrainingEntry* entries, uint32_t count)
     memcpy(entries, scratch.data(), count * sizeof(TrainingEntry));
 }
 
-void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak)
+void CudaNetworkTrainer::GenerateTrainingEntry(std::mt19937& rng, TrainingEntry& outEntry, uint16_t* outThreatFeatures, uint64_t kingBucketMask, float lambda, float bucketLeak)
 {
     for (;;)
     {
-        if (!GenerateTrainingEntryAnyVariant(rng, outEntry, kingBucketMask, lambda, bucketLeak))
+        if (!GenerateTrainingEntryAnyVariant(rng, outEntry, outThreatFeatures, kingBucketMask, lambda, bucketLeak))
             m_numSkippedPositions++;
         else if (!(m_options.frozenVariantsMask & (1u << outEntry.variant)))
             break;
     }
 }
 
-bool CudaNetworkTrainer::GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint64_t kingBucketMask, float lambda, float bucketLeak)
+bool CudaNetworkTrainer::GenerateTrainingEntryAnyVariant(std::mt19937& rng, TrainingEntry& outEntry, uint16_t* outThreatFeatures, uint64_t kingBucketMask, float lambda, float bucketLeak)
 {
     Position pos;
     PositionEntry entry;
 
-    // a failed read keeps the previous entry
+    // the loader prints the error of a failed read
     if (!m_dataLoader.FetchNextPosition(rng, entry, pos, kingBucketMask))
-        return true;
+        return false;
 
     // flip the board randomly in pawnless positions
     if (pos.Whites().pawns == 0 && pos.Blacks().pawns == 0)
@@ -560,7 +608,7 @@ bool CudaNetworkTrainer::GenerateTrainingEntryAnyVariant(std::mt19937& rng, Trai
         score = std::lerp(wdlScore, score, tbLambda);
     }
 
-    if (!PositionToTrainingEntry(pos, outEntry))
+    if (!PositionToTrainingEntry(pos, outEntry, outThreatFeatures))
         return false;
 
     outEntry.targetOutput = score;
@@ -576,36 +624,54 @@ bool CudaNetworkTrainer::GenerateTrainingEntryAnyVariant(std::mt19937& rng, Trai
     return true;
 }
 
-void CudaNetworkTrainer::GenerateTrainingSet(TrainingDataSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic)
+void CudaNetworkTrainer::GenerateTrainingBatch(std::mt19937& rng, TrainingSet& set, uint32_t batchIndex, uint64_t kingBucketMask, float lambda, float bucketLeak)
+{
+    const uint32_t begin = set.BatchBegin(batchIndex);
+    const uint32_t end = set.BatchEnd(batchIndex);
+    uint16_t* batchThreatFeatures = set.BatchThreatFeatures(batchIndex);
+    const uint32_t capacity = (end - begin) * TrainingThreatFeatureBudget;
+
+    uint16_t threatFeatures[2 * MaxTrainingThreatFeatures];
+    uint32_t numThreatFeatures = 0;
+    for (uint32_t i = begin; i < end; ++i)
+    {
+        TrainingEntry& entry = set.entries[i];
+        for (;;)
+        {
+            GenerateTrainingEntry(rng, entry, threatFeatures, kingBucketMask, lambda, bucketLeak);
+            if (numThreatFeatures + 2u * entry.numThreatFeatures <= capacity)
+                break;
+            m_numThreatListFullPositions++;
+        }
+
+        entry.threatFeaturesOffset = numThreatFeatures;
+        memcpy(batchThreatFeatures + numThreatFeatures, threatFeatures, 2u * entry.numThreatFeatures * sizeof(uint16_t));
+        numThreatFeatures += 2u * entry.numThreatFeatures;
+    }
+    set.numBatchThreatFeatures[batchIndex] = numThreatFeatures;
+
+    // entries keep their threat feature offsets, so only they are reordered
+    SortBatchByKingBucket(set.entries.data() + begin, end - begin);
+}
+
+void CudaNetworkTrainer::GenerateTrainingSet(TrainingSet& outSet, TaskBuilder& builder, uint64_t kingBucketMask, float lambda, float bucketLeak, bool deterministic)
 {
     if (deterministic)
     {
         builder.Task("GenerateSet", [this, &outSet, kingBucketMask, lambda, bucketLeak](const TaskContext&)
         {
-            for (TrainingEntry& entry : outSet)
-                GenerateTrainingEntry(m_deterministicRng, entry, kingBucketMask, lambda, bucketLeak);
+            for (uint32_t batchIndex = 0; batchIndex < outSet.NumBatches(); ++batchIndex)
+                GenerateTrainingBatch(m_deterministicRng, outSet, batchIndex, kingBucketMask, lambda, bucketLeak);
         });
     }
     else
     {
-        builder.ParallelFor("GenerateSet", static_cast<uint32_t>(outSet.size()),
-            [this, &outSet, kingBucketMask, lambda, bucketLeak](const TaskContext& ctx, uint32_t index)
+        builder.ParallelFor("GenerateSet", outSet.NumBatches(),
+            [this, &outSet, kingBucketMask, lambda, bucketLeak](const TaskContext& ctx, uint32_t batchIndex)
         {
-            GenerateTrainingEntry(m_randomGenerators[ctx.threadId], outSet[index], kingBucketMask, lambda, bucketLeak);
+            GenerateTrainingBatch(m_randomGenerators[ctx.threadId], outSet, batchIndex, kingBucketMask, lambda, bucketLeak);
         }, 0);
     }
-
-    builder.Fence();
-
-    const uint32_t batchSize = m_options.batchSize;
-    const uint32_t numBatches = (static_cast<uint32_t>(outSet.size()) + batchSize - 1) / batchSize;
-    builder.ParallelFor("SortSetByKingBucket", numBatches,
-        [&outSet, batchSize](const TaskContext&, uint32_t batchIndex)
-    {
-        const uint32_t begin = batchIndex * batchSize;
-        const uint32_t end = std::min(begin + batchSize, static_cast<uint32_t>(outSet.size()));
-        SortBatchByKingBucket(outSet.data() + begin, end - begin);
-    }, 0);
 }
 
 void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
@@ -618,9 +684,19 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
 
     m_cudaBatchData.lossSum.ClearAsync(m_cudaNetwork.GetStream().Get());
 
+    const auto copyBatch = [this, batchSize](uint32_t batchIndex)
+    {
+        m_cudaNetwork.CopyTrainingBatchAsync(
+            m_cudaBatchData,
+            m_trainingSet_Read.entries.data() + m_trainingSet_Read.BatchBegin(batchIndex),
+            batchSize,
+            m_trainingSet_Read.BatchThreatFeatures(batchIndex),
+            m_trainingSet_Read.numBatchThreatFeatures[batchIndex]);
+    };
+
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
     // stall). Subsequent batches are prefetched while the previous batch trains.
-    m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), batchSize);
+    copyBatch(0);
 
     for (uint32_t b = 0; b < numBatches; ++b)
     {
@@ -634,12 +710,7 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
 
         // Prefetch the next batch's training vectors into the other buffer on the copy stream
         if (b + 1 < numBatches)
-        {
-            m_cudaNetwork.CopyTrainingBatchAsync(
-                m_cudaBatchData,
-                m_trainingSet_Read.data() + (b + 1) * batchSize,
-                batchSize);
-        }
+            copyBatch(b + 1);
     }
 
     m_lastIterationGpuTimeMs = m_cudaNetwork.EndIterationTimingMs();
@@ -667,12 +738,12 @@ static void ParallelFor(const char* debugName, uint32_t arraySize, const threadp
 }
 
 #ifdef USE_PACKED_NET_VALIDATION
-static float EvalPackedNetwork(const TrainingEntry& entry, const nn::PackedNeuralNetwork& net)
+static float EvalPackedNetwork(const TrainingEntry& entry, const uint16_t* threatFeatures, const nn::PackedNeuralNetwork& net)
 {
     const int32_t packedNetworkOutput = net.Run(
         entry.whiteFeatures, entry.numWhiteFeatures,
         entry.blackFeatures, entry.numBlackFeatures,
-        entry.whiteThreatFeatures, entry.blackThreatFeatures, entry.numThreatFeatures,
+        threatFeatures, threatFeatures + entry.numThreatFeatures, entry.numThreatFeatures,
         entry.variant);
     const float scaledPackedNetworkOutput = (float)packedNetworkOutput / (float)(nn::OutputScale * nn::WeightScale) * c_nnOutputToCentiPawns / 100.0f;
     return EvalToExpectedGameScore(scaledPackedNetworkOutput);
@@ -705,7 +776,7 @@ static void FloatDenseLayer(
 // unquantized master weights drift off the grid in directions the quantized net does not see).
 // Comparing it against the packed network on the same positions tells a training problem apart
 // from a packing / quantized-inference problem: only the latter moves the two numbers apart.
-float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
+float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry, const uint16_t* threatFeatures) const
 {
     constexpr uint32_t halfSize = nn::AccumulatorSize / 2;
     const nn::Values& ftWeights = m_featureTransformerWeights->m_variants.front().m_weights;
@@ -736,10 +807,10 @@ float CudaNetworkTrainer::EvalFloatNetwork(const TrainingEntry& entry) const
             }
         }
 
-        const uint16_t* threatFeatures = perspective == 0 ? entry.whiteThreatFeatures : entry.blackThreatFeatures;
+        const uint16_t* perspectiveThreatFeatures = threatFeatures + perspective * entry.numThreatFeatures;
         for (uint32_t f = 0; f < entry.numThreatFeatures; ++f)
         {
-            const float* weights = threatWeights.data() + threatFeatures[f] * nn::AccumulatorSize;
+            const float* weights = threatWeights.data() + perspectiveThreatFeatures[f] * nn::AccumulatorSize;
             for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
                 accumulators[perspective][i] += FakeQuantize(weights[i], nn::InputLayerWeightQuantizationScale);
         }
@@ -788,7 +859,8 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx)
     {
         ValidationPerThreadData& threadData = m_validationPerThreadData[ctx.threadId];
 
-        const TrainingEntry& entry = m_validationSet[i];
+        const TrainingEntry& entry = m_validationSet.entries[i];
+        const uint16_t* threatFeatures = m_validationSet.EntryThreatFeatures(i);
         const float expectedValue = entry.targetOutput;
 
         ValidationStats& stats = threadData.stats;
@@ -798,13 +870,13 @@ void CudaNetworkTrainer::Validate(const TaskContext& ctx)
 #endif // USE_EVAL_VALIDATION
 #ifdef USE_PACKED_NET_VALIDATION
         {
-            const float nnPackedValue = EvalPackedNetwork(entry, *m_packedNet);
+            const float nnPackedValue = EvalPackedNetwork(entry, threatFeatures, *m_packedNet);
             const float error = expectedValue - nnPackedValue;
             stats.nnPackedErrorSum += (double)error * (double)error;
 
             if (i < cNumFloatReferenceVectors)
             {
-                const float floatError = expectedValue - EvalFloatNetwork(entry);
+                const float floatError = expectedValue - EvalFloatNetwork(entry, threatFeatures);
                 stats.nnPackedSubsetErrorSum += (double)error * (double)error;
                 stats.floatErrorSum += (double)floatError * (double)floatError;
             }
@@ -860,8 +932,9 @@ void CudaNetworkTrainer::EvalTestPositions(int32_t* outEvals) const
     for (size_t i = 0; i < std::size(c_testPositions); ++i)
     {
         TrainingEntry entry;
-        VERIFY(PositionToTrainingEntry(Position(c_testPositions[i]), entry));
-        outEvals[i] = ExpectedGameScoreToInternalEval(EvalPackedNetwork(entry, *m_packedNet));
+        uint16_t threatFeatures[2 * MaxTrainingThreatFeatures];
+        VERIFY(PositionToTrainingEntry(Position(c_testPositions[i]), entry, threatFeatures));
+        outEvals[i] = ExpectedGameScoreToInternalEval(EvalPackedNetwork(entry, threatFeatures, *m_packedNet));
     }
 }
 
@@ -1549,7 +1622,13 @@ bool CudaNetworkTrainer::Train()
 
             if (m_numSkippedPositions > 0)
             {
-                snprintf(buf, sizeof(buf), "%*sskipped positions with more than 32 pieces: %llu\n", indent, "", (unsigned long long)m_numSkippedPositions.load());
+                snprintf(buf, sizeof(buf), "%*sskipped positions with more than 32 pieces or failed reads: %llu\n", indent, "", (unsigned long long)m_numSkippedPositions.load());
+                str += buf;
+            }
+
+            if (m_numThreatListFullPositions > 0)
+            {
+                snprintf(buf, sizeof(buf), "%*sWARNING: positions drawn again because a batch's threat feature list was full: %llu\n", indent, "", (unsigned long long)m_numThreatListFullPositions.load());
                 str += buf;
             }
 #ifdef USE_PACKED_NET_VALIDATION

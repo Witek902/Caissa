@@ -74,8 +74,8 @@ checkpoint, the weight statistics and test position evals.
 - **Input factorizer** (`--factorizer on|off`, default on): a shared 768-feature block added to every king bucket during
   training and folded into the bucket weights when the net is packed.
 - **Threat inputs** (`backend/ThreatInputs.hpp`): a separate weight block without a factorizer, packed as int8 at
-  the piece weight scale. Up to 96 threat features per position are stored in a `TrainingEntry`; positions with
-  more are drawn again.
+  the piece weight scale. A `TrainingEntry` holds the piece features and the offset of its threat features in
+  its batch's threat feature list, which is uploaded with the batch (240 slots reserved per position).
 - **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the threat
   weights and the output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99,
   threat weights to ±127/255.
