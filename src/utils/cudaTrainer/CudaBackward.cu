@@ -200,6 +200,7 @@ __global__ void FeatureTransformerGradientsKernel(
     const float* __restrict__ l1Weights,    // [numVariants][(L1InputSize + 1) * L1Size]
     const float* __restrict__ accumulators, // [batchSize][2][AccumulatorSize]
     float* __restrict__ weightGradients,
+    float* __restrict__ threatGradients,
     uint32_t batchSize,
     uint32_t inputSize,
     float l1WeightScale, float l1InvWeightScale
@@ -258,6 +259,9 @@ __global__ void FeatureTransformerGradientsKernel(
 
             atomicAdd(&weightGradients[feature * accumulatorSize + accumulatorIdx], whitesError);
         }
+
+        for (uint32_t i = 0; i < trainingVector->numThreatFeatures; ++i)
+            atomicAdd(&threatGradients[trainingVector->whiteThreatFeatures[i] * accumulatorSize + accumulatorIdx], whitesError);
     }
 
     // Process black features
@@ -271,6 +275,9 @@ __global__ void FeatureTransformerGradientsKernel(
 
             atomicAdd(&weightGradients[feature * accumulatorSize + accumulatorIdx], blacksError);
         }
+
+        for (uint32_t i = 0; i < trainingVector->numThreatFeatures; ++i)
+            atomicAdd(&threatGradients[trainingVector->blackThreatFeatures[i] * accumulatorSize + accumulatorIdx], blacksError);
     }
 
     // bias gradient
@@ -391,6 +398,7 @@ void LaunchFeatureTransformerGradients(CudaBatchData& batch, const DeviceLayer& 
             l1.weights,
             batch.accumulatorBuffer.Get(),
             batch.featureTransformerGradients.Get(),
+            batch.threatGradients.Get(),
             batch.batchSize,
             FeatureTransformerInputs,
             l1.quant.weightScale,

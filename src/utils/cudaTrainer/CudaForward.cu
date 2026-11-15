@@ -117,13 +117,15 @@ __global__ void SigmoidActivationKernel(
 __global__ void SparseBinaryInputKernel(
     const TrainingEntry* __restrict__ trainingVectors,
     const float* __restrict__ weights,
+    const float* __restrict__ threatWeights,
     float* __restrict__ accumulators,
     float* __restrict__ pairwiseOutputs,
     uint32_t batchSize,
     uint32_t inputSize,
     uint32_t accumulatorSize,
     bool useFactorizer,
-    float weightScale, float biasScale, float invWeightScale, float invBiasScale
+    float weightScale, float biasScale, float invWeightScale, float invBiasScale,
+    float threatWeightScale, float threatInvWeightScale
 )
 {
     const uint32_t halfSize = accumulatorSize / 2;
@@ -134,7 +136,7 @@ __global__ void SparseBinaryInputKernel(
     const TrainingEntry* trainingVector = trainingVectors + batchIdx;
 
     // biases are stored right after the weight matrix, and every sum starts from its bias
-    const auto accumulate = [&](uint32_t accumulatorIdx, const uint16_t* features, uint32_t numFeatures)
+    const auto accumulate = [&](uint32_t accumulatorIdx, const uint16_t* features, uint32_t numFeatures, const uint16_t* threatFeatures)
     {
         float sum = FakeQuantize(weights[inputSize * accumulatorSize + accumulatorIdx], biasScale, invBiasScale);
         for (uint32_t i = 0; i < numFeatures; ++i)
@@ -149,18 +151,23 @@ __global__ void SparseBinaryInputKernel(
                 w += weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * accumulatorSize + accumulatorIdx];
             sum += FakeQuantize(w, weightScale, invWeightScale);
         }
+
+        // threat weights are packed one by one, so each is fake-quantized on its own
+        for (uint32_t i = 0; i < trainingVector->numThreatFeatures; ++i)
+            sum += FakeQuantize(threatWeights[threatFeatures[i] * accumulatorSize + accumulatorIdx], threatWeightScale, threatInvWeightScale);
+
         return sum;
     };
 
     const uint32_t whiteBase = 2 * batchIdx * accumulatorSize;
-    const float whiteLow = accumulate(pairIdx, trainingVector->whiteFeatures, trainingVector->numWhiteFeatures);
-    const float whiteHigh = accumulate(pairIdx + halfSize, trainingVector->whiteFeatures, trainingVector->numWhiteFeatures);
+    const float whiteLow = accumulate(pairIdx, trainingVector->whiteFeatures, trainingVector->numWhiteFeatures, trainingVector->whiteThreatFeatures);
+    const float whiteHigh = accumulate(pairIdx + halfSize, trainingVector->whiteFeatures, trainingVector->numWhiteFeatures, trainingVector->whiteThreatFeatures);
     accumulators[whiteBase + pairIdx] = whiteLow;
     accumulators[whiteBase + pairIdx + halfSize] = whiteHigh;
 
     const uint32_t blackBase = whiteBase + accumulatorSize;
-    const float blackLow = accumulate(pairIdx, trainingVector->blackFeatures, trainingVector->numBlackFeatures);
-    const float blackHigh = accumulate(pairIdx + halfSize, trainingVector->blackFeatures, trainingVector->numBlackFeatures);
+    const float blackLow = accumulate(pairIdx, trainingVector->blackFeatures, trainingVector->numBlackFeatures, trainingVector->blackThreatFeatures);
+    const float blackHigh = accumulate(pairIdx + halfSize, trainingVector->blackFeatures, trainingVector->numBlackFeatures, trainingVector->blackThreatFeatures);
     accumulators[blackBase + pairIdx] = blackLow;
     accumulators[blackBase + pairIdx + halfSize] = blackHigh;
 
@@ -168,7 +175,7 @@ __global__ void SparseBinaryInputKernel(
     pairwiseOutputs[batchIdx * accumulatorSize + halfSize + pairIdx] = CReLU(blackLow) * CReLU(blackHigh);
 }
 
-void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool useFactorizer, cudaStream_t stream)
+void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, const DeviceLayer& threats, bool useFactorizer, cudaStream_t stream)
 {
     const dim3 blockSize(32, 16);
     const dim3 gridSize(
@@ -178,6 +185,7 @@ void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool u
     SparseBinaryInputKernel<<<gridSize, blockSize, 0, stream>>>(
         batch.trainingVectors.Get(),
         ft.weights,
+        threats.weights,
         batch.accumulatorBuffer.Get(),
         batch.pairwiseBuffer.Get(),
         batch.batchSize,
@@ -187,7 +195,9 @@ void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool u
         ft.quant.weightScale,
         ft.quant.biasScale,
         ft.quant.invWeightScale,
-        ft.quant.invBiasScale
+        ft.quant.invBiasScale,
+        threats.quant.weightScale,
+        threats.quant.invWeightScale
     );
     CUDA_CHECK(cudaGetLastError());
 }

@@ -10,7 +10,7 @@ namespace cuda {
 namespace {
 
 constexpr uint32_t c_checkpointMagic = 0x43434B50; // 'CCKP'
-constexpr uint32_t c_checkpointVersion = 1;
+constexpr uint32_t c_checkpointVersion = 2;
 
 struct CheckpointHeader
 {
@@ -87,6 +87,9 @@ void CudaNeuralNetwork::InitRandomWeights(uint32_t seed)
         m_featureTransformerWeights->m_weights.Get() + c_numNetworkInputs * c_accumulatorSize,
         0, FactorizerInputs * c_accumulatorSize * sizeof(float)));
 
+    // small, as a position has up to ~60 threat features on top of its piece features
+    m_threatWeights->Init(seed + 4, 0.005f);
+
     InitRandomOutputSubnetWeights(seed);
 }
 
@@ -100,6 +103,7 @@ void CudaNeuralNetwork::InitRandomOutputSubnetWeights(uint32_t seed)
 
 void CudaNeuralNetwork::Init(
     const nn::WeightsStoragePtr& featureTransformerWeights,
+    const nn::WeightsStoragePtr& threatWeights,
     const nn::WeightsStoragePtr& l1Weights,
     const nn::WeightsStoragePtr& l2Weights,
     const nn::WeightsStoragePtr& l3Weights)
@@ -111,16 +115,21 @@ void CudaNeuralNetwork::Init(
     m_featureTransformerWeights->m_factorizerFirstWeight = c_numNetworkInputs * c_accumulatorSize;
     m_featureTransformerWeights->m_factorizerRange = FactorizerWeightRange;
 
+    // no weight decay: a rarely active threat row would shrink between its updates
+    m_threatWeights = std::make_shared<CudaWeightsStorage>(nn::NumThreatInputs, c_accumulatorSize, 1);
+
     m_l1Weights = std::make_shared<CudaWeightsStorage>(c_l1InputSize, c_l1Size, c_numVariants);
     m_l2Weights = std::make_shared<CudaWeightsStorage>(c_l1Size, c_l2Size, c_numVariants);
     m_l3Weights = std::make_shared<CudaWeightsStorage>(c_l2Size, 1, c_numVariants);
 
-    CopyWeightsFromHost(featureTransformerWeights, l1Weights, l2Weights, l3Weights);
+    CopyWeightsFromHost(featureTransformerWeights, threatWeights, l1Weights, l2Weights, l3Weights);
 
     // Quantization-aware training: weights/biases are fake-quantized on read in the forward/backward
     // kernels using the same scales as the final pack step.
     m_featureTransformerWeights->m_weightQuantScale = nn::InputLayerWeightQuantizationScale;
     m_featureTransformerWeights->m_biasQuantScale = nn::InputLayerBiasQuantizationScale;
+    m_threatWeights->m_weightQuantScale = nn::InputLayerWeightQuantizationScale;
+    m_threatWeights->m_biasQuantScale = nn::InputLayerBiasQuantizationScale;
     m_l1Weights->m_weightQuantScale = nn::HiddenLayerWeightQuantizationScale;
     m_l1Weights->m_biasQuantScale = nn::HiddenLayerBiasQuantizationScale;
     m_l2Weights->m_weightQuantScale = nn::HiddenLayerWeightQuantizationScale;
@@ -139,7 +148,7 @@ void CudaNeuralNetwork::SetWeightDecay(float featureTransformerDecay, float outp
 
 void CudaNeuralNetwork::SetAdamBetas(float beta1, float beta2)
 {
-    for (CudaWeightsStorage* weights : { m_featureTransformerWeights.get(), m_l1Weights.get(), m_l2Weights.get(), m_l3Weights.get() })
+    for (CudaWeightsStorage* weights : { m_featureTransformerWeights.get(), m_threatWeights.get(), m_l1Weights.get(), m_l2Weights.get(), m_l3Weights.get() })
     {
         weights->m_beta1 = beta1;
         weights->m_beta2 = beta2;
@@ -149,15 +158,18 @@ void CudaNeuralNetwork::SetAdamBetas(float beta1, float beta2)
 void CudaNeuralNetwork::SetFeatureTransformerFrozen(bool frozen)
 {
     m_featureTransformerWeights->m_updateWeights = !frozen;
+    m_threatWeights->m_updateWeights = !frozen;
 }
 
 void CudaNeuralNetwork::CopyWeightsFromHost(
     const nn::WeightsStoragePtr& featureTransformerWeights,
+    const nn::WeightsStoragePtr& threatWeights,
     const nn::WeightsStoragePtr& l1Weights,
     const nn::WeightsStoragePtr& l2Weights,
     const nn::WeightsStoragePtr& l3Weights)
 {
     m_featureTransformerWeights->CopyFromHost(*featureTransformerWeights);
+    m_threatWeights->CopyFromHost(*threatWeights);
     m_l1Weights->CopyFromHost(*l1Weights);
     m_l2Weights->CopyFromHost(*l2Weights);
     m_l3Weights->CopyFromHost(*l3Weights);
@@ -165,7 +177,7 @@ void CudaNeuralNetwork::CopyWeightsFromHost(
 
 bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVectorsPassed) const
 {
-    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
 
     FILE* file = fopen(path, "wb");
     if (!file)
@@ -211,7 +223,7 @@ bool CudaNeuralNetwork::SaveCheckpoint(const char* path, uint64_t numTrainingVec
 
 bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainingVectorsPassed)
 {
-    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_l1Weights, m_l2Weights, m_l3Weights };
+    const CudaWeightsStoragePtr layers[] = { m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights };
 
     FILE* file = fopen(path, "rb");
     if (!file)
@@ -270,11 +282,13 @@ bool CudaNeuralNetwork::LoadCheckpoint(const char* path, uint64_t& outNumTrainin
 
 void CudaNeuralNetwork::CopyWeightsToHost(
     const nn::WeightsStoragePtr& featureTransformerWeights,
+    const nn::WeightsStoragePtr& threatWeights,
     const nn::WeightsStoragePtr& l1Weights,
     const nn::WeightsStoragePtr& l2Weights,
     const nn::WeightsStoragePtr& l3Weights) const
 {
     m_featureTransformerWeights->CopyToHost(*featureTransformerWeights);
+    m_threatWeights->CopyToHost(*threatWeights);
     m_l1Weights->CopyToHost(*l1Weights);
     m_l2Weights->CopyToHost(*l2Weights);
     m_l3Weights->CopyToHost(*l3Weights);
@@ -293,17 +307,18 @@ void CudaNeuralNetwork::Forward(CudaBatchData& batch)
 {
     const cudaStream_t stream = m_stream.Get();
 
-    // Clear the FT gradient buffer on a separate stream so it overlaps the forward pass.
-    // Wait until the previous iteration's FT Adam finished reading the buffer, clear it, then
+    // Clear the FT and threat gradient buffers on a separate stream so it overlaps the forward pass.
+    // Wait until the previous iteration's Adam updates finished reading the buffers, clear them, then
     // signal completion for the backward FT-gradient accumulation to wait on.
     CUDA_CHECK(cudaStreamWaitEvent(m_auxStream.Get(), m_ftGradConsumedEvent, 0));
     batch.featureTransformerGradients.ClearAsync(m_auxStream.Get());
+    batch.threatGradients.ClearAsync(m_auxStream.Get());
     CUDA_CHECK(cudaEventRecord(m_ftGradClearedEvent, m_auxStream.Get()));
 
     // The forward pass reads the training vectors; wait for this batch's copy to complete.
     CUDA_CHECK(cudaStreamWaitEvent(stream, m_copyDoneEvent, 0));
 
-    LaunchSparseBinaryInput(batch, GetDeviceLayer(*m_featureTransformerWeights), m_useFactorizer, stream);
+    LaunchSparseBinaryInput(batch, GetDeviceLayer(*m_featureTransformerWeights), GetDeviceLayer(*m_threatWeights), m_useFactorizer, stream);
     LaunchL1Forward(batch, GetDeviceLayer(*m_l1Weights), stream);
     LaunchL2Forward(batch, GetDeviceLayer(*m_l2Weights), stream);
     LaunchL3Forward(batch, GetDeviceLayer(*m_l3Weights), stream);
@@ -349,8 +364,9 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
         learningRate,
         stream
     );
+    m_threatWeights->UpdateAdam(batch.threatGradients.Get(), learningRate, stream);
 
-    // Signal that the FT gradient buffer is no longer needed on the main stream, so the next
+    // Signal that the FT and threat gradient buffers are no longer needed on the main stream, so the next
     // iteration's overlapped clear (on the aux stream) may proceed.
     CUDA_CHECK(cudaEventRecord(m_ftGradConsumedEvent, stream));
 }

@@ -19,6 +19,9 @@ static constexpr uint32_t FeatureTransformerInputs = nn::NumNetworkInputs + Fact
 // factorizer weights are clipped so that their sum with the (unclipped) bucket weights stays bounded
 static constexpr float FactorizerWeightRange = 0.99f;
 
+// threat weights are packed as int8 at the piece weight scale
+static constexpr float ThreatWeightRange = 127.0f / nn::InputLayerWeightQuantizationScale;
+
 // Quantization-aware training scales of one layer (a scale of 0 disables fake quantization)
 struct QuantScales
 {
@@ -81,6 +84,7 @@ struct CudaBatchData
     CudaBuffer<float> l2Gradients;
     CudaBuffer<float> l3Gradients;
     CudaBuffer<float> featureTransformerGradients;
+    CudaBuffer<float> threatGradients;
 
     uint32_t batchSize;
 
@@ -106,13 +110,14 @@ struct CudaBatchData
         l2Gradients.Allocate((nn::L1Size + 1) * nn::L2Size * nn::NumVariants);
         l3Gradients.Allocate((nn::L2Size + 1) * 1 * nn::NumVariants);
         featureTransformerGradients.Allocate((FeatureTransformerInputs + 1) * nn::AccumulatorSize);
+        threatGradients.Allocate((nn::NumThreatInputs + 1) * nn::AccumulatorSize);
     }
 };
 
 void LaunchAdamUpdate(const AdamUpdateParams& params, cudaStream_t stream);
 
 // Forward pass
-void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, bool useFactorizer, cudaStream_t stream);
+void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, const DeviceLayer& threats, bool useFactorizer, cudaStream_t stream);
 void LaunchL1Forward(CudaBatchData& batch, const DeviceLayer& l1, cudaStream_t stream);
 void LaunchL2Forward(CudaBatchData& batch, const DeviceLayer& l2, cudaStream_t stream);
 void LaunchL3Forward(CudaBatchData& batch, const DeviceLayer& l3, cudaStream_t stream);

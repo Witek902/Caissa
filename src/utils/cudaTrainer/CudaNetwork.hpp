@@ -13,6 +13,7 @@ public:
     ~CudaNeuralNetwork();
 
     void Init(const nn::WeightsStoragePtr& featureTransformerWeights,
+              const nn::WeightsStoragePtr& threatWeights,
               const nn::WeightsStoragePtr& l1Weights,
               const nn::WeightsStoragePtr& l2Weights,
               const nn::WeightsStoragePtr& l3Weights);
@@ -28,8 +29,8 @@ public:
 
     void SetAdamBetas(float beta1, float beta2);
 
-    // A frozen feature transformer keeps its weights and skips its backward pass, so only the output
-    // subnets train.
+    // A frozen feature transformer (piece and threat weights) keeps its weights and skips its
+    // backward pass, so only the output subnets train.
     void SetFeatureTransformerFrozen(bool frozen);
 
     // The factorizer weights are added to the piece weights only when enabled
@@ -42,10 +43,12 @@ public:
 
     // Weight management
     void CopyWeightsFromHost(const nn::WeightsStoragePtr& featureTransformerWeights,
+                             const nn::WeightsStoragePtr& threatWeights,
                              const nn::WeightsStoragePtr& l1Weights,
                              const nn::WeightsStoragePtr& l2Weights,
                              const nn::WeightsStoragePtr& l3Weights);
     void CopyWeightsToHost(const nn::WeightsStoragePtr& featureTransformerWeights,
+                           const nn::WeightsStoragePtr& threatWeights,
                            const nn::WeightsStoragePtr& l1Weights,
                            const nn::WeightsStoragePtr& l2Weights,
                            const nn::WeightsStoragePtr& l3Weights) const;
@@ -74,9 +77,10 @@ private:
     // Random initialization of the output subnets, part of InitRandomWeights
     void InitRandomOutputSubnetWeights(uint32_t seed);
 
-    // CUDA weight storages. The feature transformer has a single variant; each output subnet
-    // layer has one per output bucket.
+    // CUDA weight storages. The feature transformer and the threat weights have a single variant;
+    // each output subnet layer has one per output bucket.
     CudaWeightsStoragePtr m_featureTransformerWeights;
+    CudaWeightsStoragePtr m_threatWeights;
     CudaWeightsStoragePtr m_l1Weights;
     CudaWeightsStoragePtr m_l2Weights;
     CudaWeightsStoragePtr m_l3Weights;
@@ -88,8 +92,8 @@ private:
     CudaStream m_auxStream;  // runs the FT gradient clear concurrently with the forward pass
     CudaStream m_copyStream; // prefetches the next batch's training vectors during weights update
 
-    // Events synchronizing the FT gradient buffer clear (m_auxStream) with its use (m_stream).
-    cudaEvent_t m_ftGradConsumedEvent = nullptr; // recorded on m_stream after FT Adam reads the buffer
+    // Events synchronizing the FT and threat gradient buffer clears (m_auxStream) with their use (m_stream).
+    cudaEvent_t m_ftGradConsumedEvent = nullptr; // recorded on m_stream after FT and threat Adam read the buffers
     cudaEvent_t m_ftGradClearedEvent = nullptr;  // recorded on m_auxStream after the clear completes
 
     // Events synchronizing the training-vectors copy (m_copyStream) with its use (m_stream).

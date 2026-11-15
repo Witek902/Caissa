@@ -1,6 +1,6 @@
 # CUDA Neural Network Trainer
 
-GPU trainer for Caissa's multilayer NNUE: `(32×768 → 1536) × 2 → pairwise CReLU → 16 → 32 → 1`, with 16 output
+GPU trainer for Caissa's multilayer NNUE: `(32×768 + 60144 threats → 768) × 2 → pairwise CReLU → 16 → 32 → 1`, with 16 output
 variants selected by piece count and whether any queen is on the board. Built into the `utils` executable when CMake finds the CUDA Toolkit
 (`USE_CUDA` define, `CUDA_ARCHITECTURES native`).
 
@@ -73,9 +73,13 @@ checkpoint, the weight statistics and test position evals.
   master weights.
 - **Input factorizer** (`--factorizer on|off`, default on): a shared 768-feature block added to every king bucket during
   training and folded into the bucket weights when the net is packed.
-- **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the
-  output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99.
-- **Overlap**: the main stream runs the passes; an aux stream clears the FT gradient buffer during the forward
+- **Threat inputs** (`backend/ThreatInputs.hpp`): a separate weight block without a factorizer, packed as int8 at
+  the piece weight scale. Up to 96 threat features per position are stored in a `TrainingEntry`; positions with
+  more are drawn again.
+- **AdamW** with decoupled weight decay on weights only: 0.0025 on the feature transformer, none on the threat
+  weights and the output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99,
+  threat weights to ±127/255.
+- **Overlap**: the main stream runs the passes; an aux stream clears the FT and threat gradient buffers during the forward
   pass, and a copy stream uploads the next batch during the Adam updates (synchronized with events).
 
 ## Source Layout
