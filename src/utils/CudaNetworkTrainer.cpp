@@ -657,6 +657,7 @@ void CudaNetworkTrainer::GenerateTrainingBatch(std::mt19937& rng, TrainingSet& s
         memcpy(batchThreatFeatures + numThreatFeatures, threatFeatures, 2u * entry.numThreatFeatures * sizeof(uint16_t));
         numThreatFeatures += 2u * entry.numThreatFeatures;
     }
+    TRAINER_CHECK(numThreatFeatures <= capacity);
     set.numBatchThreatFeatures[batchIndex] = numThreatFeatures;
 
     // entries keep their threat feature offsets, so only they are reordered
@@ -687,8 +688,8 @@ void CudaNetworkTrainer::QueueTrainingIteration(size_t iteration, float learning
 {
     const uint32_t batchSize = m_options.batchSize;
     const uint32_t numBatches = cNumTrainingVectorsPerIteration / batchSize;
-    ASSERT(m_trainingSet_Read.NumBatches() == numBatches);
-    ASSERT(m_trainingSet_Read.uploadingIteration == SIZE_MAX);
+    TRAINER_CHECK(m_trainingSet_Read.NumBatches() == numBatches);
+    TRAINER_CHECK(m_trainingSet_Read.uploadingIteration == SIZE_MAX);
     m_trainingSet_Read.uploadingIteration = iteration;
     m_cudaBatchData.batchSize = batchSize;
 
@@ -697,9 +698,9 @@ void CudaNetworkTrainer::QueueTrainingIteration(size_t iteration, float learning
 
     const auto copyBatch = [this, batchSize](uint32_t batchIndex)
     {
-#ifndef CONFIGURATION_FINAL
         const uint32_t numThreatFeatures = m_trainingSet_Read.numBatchThreatFeatures[batchIndex];
-        ASSERT(numThreatFeatures <= batchSize * TrainingThreatFeatureBudget);
+        TRAINER_CHECK(numThreatFeatures <= batchSize * TrainingThreatFeatureBudget);
+#ifndef CONFIGURATION_FINAL
         for (uint32_t i = m_trainingSet_Read.BatchBegin(batchIndex); i < m_trainingSet_Read.BatchEnd(batchIndex); ++i)
         {
             const TrainingEntry& entry = m_trainingSet_Read.entries[i];
@@ -716,7 +717,7 @@ void CudaNetworkTrainer::QueueTrainingIteration(size_t iteration, float learning
             m_trainingSet_Read.entries.data() + m_trainingSet_Read.BatchBegin(batchIndex),
             batchSize,
             m_trainingSet_Read.BatchThreatFeatures(batchIndex),
-            m_trainingSet_Read.numBatchThreatFeatures[batchIndex]);
+            numThreatFeatures);
     };
 
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
@@ -746,7 +747,7 @@ void CudaNetworkTrainer::QueueTrainingIteration(size_t iteration, float learning
 
 void CudaNetworkTrainer::SaveCheckpoint(uint64_t numPositions, const std::string& timeTag, int indent)
 {
-    ASSERT(!m_hostWeightsInUse);
+    TRAINER_CHECK(!m_hostWeightsInUse);
 
     m_cudaNetwork.Synchronize();
     m_cudaNetwork.CopyWeightsToHost();
@@ -1591,13 +1592,13 @@ bool CudaNetworkTrainer::Train()
 
         validation->Wait();
         validation.reset();
-        ASSERT(!m_hostWeightsInUse);
-        ASSERT(pendingRow.has_value());
+        TRAINER_CHECK(!m_hostWeightsInUse);
+        TRAINER_CHECK(pendingRow.has_value());
 
         m_numValidations++;
         validationResults.validationMs = m_lastValidationMs;
 #ifdef USE_PACKED_NET_VALIDATION
-        ASSERT(std::isfinite(m_lastPackedNetRmse) && std::isfinite(m_lastFloatNetSubsetRmse) && std::isfinite(m_lastPackedNetSubsetRmse));
+        TRAINER_CHECK(std::isfinite(m_lastPackedNetRmse) && std::isfinite(m_lastFloatNetSubsetRmse) && std::isfinite(m_lastPackedNetSubsetRmse));
         validationResults.packedNetRmse = m_lastPackedNetRmse;
         validationResults.floatNetSubsetRmse = m_lastFloatNetSubsetRmse;
         validationResults.packedNetSubsetRmse = m_lastPackedNetSubsetRmse;
@@ -1607,7 +1608,7 @@ bool CudaNetworkTrainer::Train()
 
         // averaged over the iterations since the previous row
         const double n = (double)pendingRow->sums.numIterations;
-        ASSERT(n > 0.0);
+        TRAINER_CHECK(n > 0.0);
         m_progressFile << pendingRow->iteration << '\t' << pendingRow->numPositions << '\t' << std::setprecision(6) << pendingRow->elapsedSeconds
             << '\t' << pendingRow->learningRate << '\t' << pendingRow->lambda << '\t' << sqrt(pendingRow->sums.trainingMseSum / n)
 #ifdef USE_PACKED_NET_VALIDATION
@@ -1666,13 +1667,13 @@ bool CudaNetworkTrainer::Train()
 
         if (previous && previous->downloadsWeights)
         {
-            ASSERT(!validation);
+            TRAINER_CHECK(!validation);
             validation = std::make_unique<Waitable>();
             TaskBuilder taskBuilder{ *validation };
             taskBuilder.Task("Validate", [this](const TaskContext& ctx)
             {
                 m_validationStartTime = TimePoint::GetCurrent();
-                ASSERT(!m_hostWeightsInUse);
+                TRAINER_CHECK(!m_hostWeightsInUse);
                 m_hostWeightsInUse = true;
                 m_cudaNetwork.FinishWeightsDownload();
 #ifdef USE_PACKED_NET_VALIDATION
@@ -1690,7 +1691,7 @@ bool CudaNetworkTrainer::Train()
             const size_t uploadingIteration = previous ? previous->iteration : SIZE_MAX;
             taskBuilder.Task("GenerateTrainingSet", [this, kingBucketMask, lambda, uploadingIteration](const TaskContext& ctx)
             {
-                ASSERT(m_trainingSet_Write.uploadingIteration == uploadingIteration);
+                TRAINER_CHECK(m_trainingSet_Write.uploadingIteration == uploadingIteration);
                 if (uploadingIteration != SIZE_MAX)
                 {
                     m_cudaNetwork.WaitForIterationUploads(uploadingIteration % nn::cuda::CudaNeuralNetwork::NumIterationSlots);
@@ -1728,7 +1729,7 @@ bool CudaNetworkTrainer::Train()
             lastFinishedIteration = previous->iteration;
 
             const double trainingMse = result.lossSum / (double)cNumTrainingVectorsPerIteration;
-            ASSERT(std::isfinite(trainingMse));
+            TRAINER_CHECK(std::isfinite(trainingMse));
             for (ProgressSums* sums : { &reportSums, &rowSums })
             {
                 sums->numIterations++;
@@ -1740,7 +1741,7 @@ bool CudaNetworkTrainer::Train()
 
             if (previous->downloadsWeights)
             {
-                ASSERT(!pendingRow.has_value());
+                TRAINER_CHECK(!pendingRow.has_value());
                 pendingRow = PendingRow{ previous->iteration, previous->numPositions, elapsedSeconds, previous->learningRate, previous->lambda, rowSums };
                 rowSums = ProgressSums();
             }

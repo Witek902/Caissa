@@ -4,8 +4,27 @@
 #include <memory>
 #include <vector>
 
+#if defined(PLATFORM_WINDOWS)
+    #define WIN32_LEAN_AND_MEAN
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif // NOMINMAX
+    #include <Windows.h>
+#endif // PLATFORM_WINDOWS
+
 namespace nn {
 namespace cuda {
+
+void TrainerCheckFailed(const char* expression, const char* file, int line)
+{
+    fprintf(stderr, "Trainer check failed: %s (%s:%d)\n", expression, file, line);
+    fflush(stderr);
+#if defined(PLATFORM_WINDOWS)
+    if (IsDebuggerPresent())
+        DEBUG_BREAK();
+#endif // PLATFORM_WINDOWS
+    abort();
+}
 
 namespace {
 
@@ -93,8 +112,8 @@ CudaNeuralNetwork::~CudaNeuralNetwork()
 
 void CudaNeuralNetwork::BeginIteration(uint32_t slot, CudaBatchData& batch)
 {
-    ASSERT(slot < NumIterationSlots);
-    ASSERT(!m_slotQueued[slot]);
+    TRAINER_CHECK(slot < NumIterationSlots);
+    TRAINER_CHECK(!m_slotQueued[slot]);
     m_slotQueued[slot] = true;
 
     CUDA_CHECK(cudaEventRecord(m_iterationStartEvents[slot], m_stream.Get()));
@@ -103,8 +122,8 @@ void CudaNeuralNetwork::BeginIteration(uint32_t slot, CudaBatchData& batch)
 
 void CudaNeuralNetwork::EndIteration(uint32_t slot, CudaBatchData& batch)
 {
-    ASSERT(slot < NumIterationSlots);
-    ASSERT(m_slotQueued[slot]);
+    TRAINER_CHECK(slot < NumIterationSlots);
+    TRAINER_CHECK(m_slotQueued[slot]);
 
     CUDA_CHECK(cudaMemcpyAsync(m_iterationLossSums.Get() + slot, batch.lossSum.Get(), sizeof(float), cudaMemcpyDeviceToHost, m_stream.Get()));
     CUDA_CHECK(cudaEventRecord(m_iterationEndEvents[slot], m_stream.Get()));
@@ -115,16 +134,16 @@ void CudaNeuralNetwork::EndIteration(uint32_t slot, CudaBatchData& batch)
 
 void CudaNeuralNetwork::WaitForIterationUploads(uint32_t slot) const
 {
-    ASSERT(slot < NumIterationSlots);
-    ASSERT(m_slotQueued[slot]);
+    TRAINER_CHECK(slot < NumIterationSlots);
+    TRAINER_CHECK(m_slotQueued[slot]);
     CUDA_CHECK(cudaEventSynchronize(m_uploadsDoneEvents[slot]));
 }
 
 CudaNeuralNetwork::IterationResult CudaNeuralNetwork::FinishIteration(uint32_t slot, uint32_t previousSlot)
 {
-    ASSERT(slot < NumIterationSlots);
-    ASSERT(m_slotQueued[slot]);
-    ASSERT(previousSlot == UINT32_MAX || (previousSlot < NumIterationSlots && previousSlot != slot && !m_slotQueued[previousSlot]));
+    TRAINER_CHECK(slot < NumIterationSlots);
+    TRAINER_CHECK(m_slotQueued[slot]);
+    TRAINER_CHECK(previousSlot == UINT32_MAX || (previousSlot < NumIterationSlots && previousSlot != slot && !m_slotQueued[previousSlot]));
 
     CUDA_CHECK(cudaEventSynchronize(m_iterationEndEvents[slot]));
 
@@ -134,7 +153,7 @@ CudaNeuralNetwork::IterationResult CudaNeuralNetwork::FinishIteration(uint32_t s
     result.periodMs = result.gpuMs;
     if (previousSlot != UINT32_MAX)
         CUDA_CHECK(cudaEventElapsedTime(&result.periodMs, m_iterationEndEvents[previousSlot], m_iterationEndEvents[slot]));
-    ASSERT(result.gpuMs >= 0.0f && result.periodMs >= 0.0f);
+    TRAINER_CHECK(result.gpuMs >= 0.0f && result.periodMs >= 0.0f);
 
     m_slotQueued[slot] = false;
     return result;
@@ -142,7 +161,7 @@ CudaNeuralNetwork::IterationResult CudaNeuralNetwork::FinishIteration(uint32_t s
 
 void CudaNeuralNetwork::StartWeightsDownload()
 {
-    ASSERT(!m_downloadInFlight);
+    TRAINER_CHECK(!m_downloadInFlight);
     m_downloadInFlight = true;
 
     // FinishWeightsDownload waited for the previous download, so the snapshot is free
@@ -157,7 +176,7 @@ void CudaNeuralNetwork::StartWeightsDownload()
         }
         offset += layer->m_totalWeights;
     }
-    ASSERT(offset == m_weightsSnapshot.Size());
+    TRAINER_CHECK(offset == m_weightsSnapshot.Size());
     CUDA_CHECK(cudaEventRecord(m_snapshotReadyEvent, m_stream.Get()));
 
     // the host storages are pinned, so these copies do not block the host
@@ -172,7 +191,7 @@ void CudaNeuralNetwork::StartWeightsDownload()
             for (uint32_t variant = 0; variant < layer.m_numVariants; ++variant)
             {
                 nn::Values& hostWeights = m_hostLayers[i]->m_variants[variant].m_weights;
-                ASSERT(hostWeights.size() == weightsPerVariant);
+                TRAINER_CHECK(hostWeights.size() == weightsPerVariant);
                 CUDA_CHECK(cudaMemcpyAsync(hostWeights.data(), m_weightsSnapshot.Get() + offset + (size_t)variant * weightsPerVariant,
                     weightsPerVariant * sizeof(float), cudaMemcpyDeviceToHost, m_downloadStream.Get()));
             }
@@ -184,7 +203,7 @@ void CudaNeuralNetwork::StartWeightsDownload()
 
 void CudaNeuralNetwork::FinishWeightsDownload()
 {
-    ASSERT(m_downloadInFlight);
+    TRAINER_CHECK(m_downloadInFlight);
     CUDA_CHECK(cudaEventSynchronize(m_weightsDownloadedEvent));
     m_downloadInFlight = false;
 }
@@ -248,8 +267,8 @@ void CudaNeuralNetwork::Init(
     size_t totalWeights = 0;
     for (uint32_t i = 0; i < NumLayers; ++i)
     {
-        ASSERT(!m_hostLayers[i]);
-        ASSERT(hostLayers[i]->m_variants.size() == layers[i]->m_numVariants);
+        TRAINER_CHECK(!m_hostLayers[i]);
+        TRAINER_CHECK(hostLayers[i]->m_variants.size() == layers[i]->m_numVariants);
         m_hostLayers[i] = hostLayers[i];
         for (nn::WeightsStorage::Variant& variant : m_hostLayers[i]->m_variants)
             CUDA_CHECK(cudaHostRegister(variant.m_weights.data(), variant.m_weights.size() * sizeof(float), cudaHostRegisterDefault));
@@ -496,8 +515,8 @@ void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const Train
     const uint16_t* threatFeatures, uint32_t numThreatFeatures)
 {
     // a larger batch would reallocate the buffers synchronously
-    ASSERT(numEntries <= batch.nextTrainingVectors.Size());
-    ASSERT(numThreatFeatures <= batch.nextThreatFeatures.Size());
+    TRAINER_CHECK(numEntries <= batch.nextTrainingVectors.Size());
+    TRAINER_CHECK(numThreatFeatures <= batch.nextThreatFeatures.Size());
 
 #ifndef CONFIGURATION_FINAL
     // copies from pageable memory would not be asynchronous

@@ -17,6 +17,15 @@
 namespace nn {
 namespace cuda {
 
+// Cheap checks of trainer invariants, active in every build configuration (unlike ASSERT)
+[[noreturn]] void TrainerCheckFailed(const char* expression, const char* file, int line);
+
+#define TRAINER_CHECK(x) \
+    do { \
+        if (!(x)) \
+            nn::cuda::TrainerCheckFailed(#x, __FILE__, __LINE__); \
+    } while(0)
+
 // CUDA memory management utilities
 template<typename T>
 class CudaBuffer
