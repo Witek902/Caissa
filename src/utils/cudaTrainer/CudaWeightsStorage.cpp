@@ -72,7 +72,6 @@ void CudaWeightsStorage::CopyFromHost(const nn::WeightsStorage& hostWeights)
         hostWeightsData.insert(hostWeightsData.end(), variant.m_weights.begin(), variant.m_weights.end());
     }
 
-    // Note: hostWeights.m_weightsMask is not applied in CUDA path; all weights are updated.
     if (hostWeightsData.size() != m_totalWeights)
     {
         std::cerr << "CudaWeightsStorage::CopyFromHost size mismatch: host " << hostWeightsData.size() << " vs " << m_totalWeights << std::endl;

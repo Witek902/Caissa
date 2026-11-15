@@ -438,14 +438,11 @@ void CudaNetworkTrainer::InitNetwork()
     const uint32_t accumulatorSize = nn::AccumulatorSize;
 
     m_featureTransformerWeights = std::make_shared<nn::WeightsStorage>(nn::cuda::FeatureTransformerInputs, accumulatorSize, 1);
-    m_featureTransformerWeights->m_isSparse = true;
     // divide by number of active input features to avoid accumulator overflow
     m_featureTransformerWeights->m_weightsRange = 6.0f; // (float)std::numeric_limits<nn::FirstLayerWeightType>::max() / 16 / nn::InputLayerWeightQuantizationScale;
     m_featureTransformerWeights->m_biasRange = 6.0f; //(float)std::numeric_limits<nn::FirstLayerBiasType>::max() / 16 / nn::InputLayerBiasQuantizationScale;
-    m_featureTransformerWeights->Init(32u, 0.0f);
 
     m_threatWeights = std::make_shared<nn::WeightsStorage>(nn::NumThreatInputs, accumulatorSize, 1);
-    m_threatWeights->m_isSparse = true;
     m_threatWeights->m_weightsRange = nn::cuda::ThreatWeightRange;
     m_threatWeights->m_biasRange = 0.0f; // the bias row is unused
 
@@ -457,17 +454,14 @@ void CudaNetworkTrainer::InitNetwork()
     m_l1Weights = std::make_shared<nn::WeightsStorage>(nn::L1InputSize, nn::L1Size, nn::NumVariants);
     m_l1Weights->m_weightsRange = hiddenWeightRange;
     m_l1Weights->m_biasRange = hiddenBiasRange;
-    m_l1Weights->Init(nn::L1InputSize);
 
     m_l2Weights = std::make_shared<nn::WeightsStorage>(nn::L1Size, nn::L2Size, nn::NumVariants);
     m_l2Weights->m_weightsRange = hiddenWeightRange;
     m_l2Weights->m_biasRange = hiddenBiasRange;
-    m_l2Weights->Init(nn::L1Size);
 
     m_l3Weights = std::make_shared<nn::WeightsStorage>(nn::L2Size, 1, nn::NumVariants);
     m_l3Weights->m_weightsRange = INT16_MAX / nn::OutputLayerWeightQuantizationScale;
     m_l3Weights->m_biasRange = hiddenBiasRange;
-    m_l3Weights->Init(nn::L2Size);
 
     // Initialize CUDA network
     m_cudaNetwork.Init(m_featureTransformerWeights, m_threatWeights, m_l1Weights, m_l2Weights, m_l3Weights);
