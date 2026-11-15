@@ -3,9 +3,12 @@
 #include "../../backend/MoveList.hpp"
 #include "../../backend/NeuralNetworkEvaluator.hpp"
 #include "../../backend/Position.hpp"
+#include "../../backend/Search.hpp"
 #include "../../backend/ThreatInputs.hpp"
 
 #include <algorithm>
+#include <cstring>
+#include <memory>
 #include <random>
 #include <vector>
 
@@ -241,6 +244,130 @@ void TestDeltasInRandomGames()
     }
 }
 
+// random weights, so every input row is different
+std::unique_ptr<nn::PackedNeuralNetwork> CreateRandomNetwork(std::mt19937& gen)
+{
+    std::unique_ptr<nn::PackedNeuralNetwork> net = std::make_unique<nn::PackedNeuralNetwork>();
+    const auto randomInt = [&gen](int32_t range) { return (int32_t)(gen() % (2 * range + 1)) - range; };
+
+    for (auto& w : net->accumulatorWeights) w = (nn::FirstLayerWeightType)randomInt(64);
+    for (auto& b : net->accumulatorBiases) b = (nn::FirstLayerBiasType)randomInt(64);
+    for (auto& w : net->threatWeights) w = (nn::ThreatWeightType)randomInt(127);
+    for (auto& subnet : net->outputSubnetVariants)
+    {
+        for (auto& w : subnet.l1Weights) w = (nn::HiddenLayerWeightType)randomInt(127);
+        for (auto& b : subnet.l1Biases) b = randomInt(10000);
+        for (auto& w : subnet.l2Weights) w = (nn::HiddenLayerWeightType)randomInt(127);
+        for (auto& b : subnet.l2Biases) b = randomInt(10000);
+        for (auto& w : subnet.l3Weights) w = (nn::LastLayerWeightType)randomInt(1000);
+        subnet.l3Bias = randomInt(10000);
+    }
+    return net;
+}
+
+// The search's piece and threat accumulators equal a rebuild after any sequence of moves, null moves,
+// returns to a lower ply and nodes left without evaluation, the way the search uses the node stack.
+void TestIncrementalAccumulators()
+{
+    std::mt19937 gen(4242);
+    const std::unique_ptr<nn::PackedNeuralNetwork> net = CreateRandomNetwork(gen);
+    const std::unique_ptr<AccumulatorCache> cache = std::make_unique<AccumulatorCache>();
+    cache->Init(net.get());
+
+    constexpr uint32_t maxPly = 24;
+    std::vector<NodeInfo> stack(maxPly + 1);
+    std::vector<nn::Accumulator> accumulators((maxPly + 1) * NumNodeAccumulators);
+
+    const auto checkAccumulators = [&](const NodeInfo& node)
+    {
+        for (Color perspective = 0; perspective < 2; ++perspective)
+        {
+            uint16_t features[64];
+            const uint32_t numFeatures = PositionToFeaturesVector(node.position, features, perspective);
+            nn::Accumulator reference;
+            reference.Refresh(net->accumulatorWeights, net->accumulatorBiases, numFeatures, features);
+            TEST_EXPECT(memcmp(reference.values, node.accumulatorPtr[perspective]->values, sizeof(reference.values)) == 0);
+
+            uint16_t threatFeatures[nn::MaxThreatRecords];
+            const uint32_t numThreatFeatures = PositionToThreatFeatures(node.position, perspective, threatFeatures);
+            reference.RefreshThreats(net->threatWeights, numThreatFeatures, threatFeatures);
+            TEST_EXPECT(memcmp(reference.values, node.threatAccumulatorPtr[perspective]->values, sizeof(reference.values)) == 0);
+        }
+    };
+
+    uint32_t numChecks = 0, numNullMoves = 0, numDirtyParents = 0, numMirroredFromRoot = 0;
+
+    for (const char* fen : c_testPositions)
+    {
+        for (uint32_t run = 0; run < 10; ++run)
+        {
+            for (uint32_t i = 0; i <= maxPly; ++i)
+            {
+                stack[i] = NodeInfo{};
+                stack[i].accumulatorData = &accumulators[i * NumNodeAccumulators];
+            }
+            TEST_EXPECT(stack[0].position.FromFEN(fen));
+
+            uint32_t ply = 0;
+            for (uint32_t step = 0; step < 500; ++step)
+            {
+                NodeInfo& node = stack[ply];
+
+                const uint32_t action = gen() % 100;
+                if (action < 50)
+                {
+                    if (ply > 0 && stack[ply - 1].nnContext.threatAccumDirty[White]) numDirtyParents++;
+                    if (IsThreatMirrored(node.position, White) != IsThreatMirrored(stack[0].position, White) ||
+                        IsThreatMirrored(node.position, Black) != IsThreatMirrored(stack[0].position, Black)) numMirroredFromRoot++;
+
+                    if (action < 40)
+                    {
+                        TEST_EXPECT_EQ(NNEvaluator::Evaluate(*net, node, *cache), NNEvaluator::Evaluate(*net, node.position));
+                    }
+                    else
+                    {
+                        NNEvaluator::EnsureAccumulatorUpdated(*net, node, *cache);
+                    }
+                    checkAccumulators(node);
+                    numChecks++;
+                }
+
+                MoveList moves;
+                const uint32_t numLegalMoves = node.position.GetNumLegalMoves(&moves);
+
+                // back to a lower ply, as when the search continues with a sibling of an ancestor
+                if (ply > 0 && (ply == maxPly || numLegalMoves == 0 || gen() % 4 == 0))
+                {
+                    ply -= 1 + gen() % std::min(ply, 3u);
+                    continue;
+                }
+                if (numLegalMoves == 0)
+                    break;
+
+                NodeInfo& child = stack[ply + 1];
+                child.Clear();
+                child.ply = static_cast<uint16_t>(ply + 1);
+                child.position = node.position;
+                if (!node.position.IsInCheck() && gen() % 10 == 0)
+                {
+                    child.position.DoNullMove();
+                    numNullMoves++;
+                }
+                else
+                {
+                    VERIFY(child.position.DoMove(moves.GetMove(gen() % numLegalMoves), child.nnContext));
+                }
+                ply++;
+            }
+        }
+    }
+
+    TEST_EXPECT(numChecks > 10000);
+    TEST_EXPECT(numNullMoves > 1000);
+    TEST_EXPECT(numDirtyParents > 1000);
+    TEST_EXPECT(numMirroredFromRoot > 1000);
+}
+
 // random position the search could evaluate: no pawns on the first or last rank, neither side in check
 bool GenerateEvaluablePosition(std::mt19937& gen, Position& outPos)
 {
@@ -465,5 +592,6 @@ void RunThreatInputTests()
     TestNaiveReference();
     TestDeltasOfAllMoves();
     TestDeltasInRandomGames();
+    TestIncrementalAccumulators();
     TestUnreachableInputs();
 }
