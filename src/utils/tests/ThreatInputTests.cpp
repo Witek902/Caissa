@@ -288,10 +288,17 @@ void TestIncrementalAccumulators()
             reference.Refresh(net->accumulatorWeights, net->accumulatorBiases, numFeatures, features);
             TEST_EXPECT(memcmp(reference.values, node.accumulatorPtr[perspective]->values, sizeof(reference.values)) == 0);
 
+            // plain loop, independent of the engine's threat row kernels
             uint16_t threatFeatures[nn::MaxThreatRecords];
             const uint32_t numThreatFeatures = PositionToThreatFeatures(node.position, perspective, threatFeatures);
-            reference.RefreshThreats(net->threatWeights, numThreatFeatures, threatFeatures);
-            TEST_EXPECT(memcmp(reference.values, node.threatAccumulatorPtr[perspective]->values, sizeof(reference.values)) == 0);
+            int16_t threatReference[nn::AccumulatorSize] = {};
+            for (uint32_t j = 0; j < numThreatFeatures; ++j)
+            {
+                const nn::ThreatWeightType* row = net->threatWeights + (size_t)threatFeatures[j] * nn::AccumulatorSize;
+                for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+                    threatReference[i] = (int16_t)(threatReference[i] + row[i]);
+            }
+            TEST_EXPECT(memcmp(threatReference, node.threatAccumulatorPtr[perspective]->values, sizeof(threatReference)) == 0);
         }
     };
 
