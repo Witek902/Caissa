@@ -89,6 +89,17 @@ public:
         CUDA_CHECK(cudaMemcpy(m_data, deviceData, size * sizeof(T), cudaMemcpyDeviceToDevice));
     }
 
+    void Swap(CudaBuffer& other)
+    {
+        T* const data = m_data;
+        m_data = other.m_data;
+        other.m_data = data;
+
+        const size_t size = m_size;
+        m_size = other.m_size;
+        other.m_size = size;
+    }
+
     T* Get() { return m_data; }
     const T* Get() const { return m_data; }
     size_t Size() const { return m_size; }

@@ -619,19 +619,20 @@ void CudaNetworkTrainer::RunCudaTrainingIteration(float learningRate)
     m_cudaBatchData.lossSum.ClearAsync(m_cudaNetwork.GetStream().Get());
 
     // Prefetch the first batch (this copy cannot overlap anything; it is the only per-iteration
-    // stall). Subsequent batches are prefetched while the previous batch's Adam updates run.
+    // stall). Subsequent batches are prefetched while the previous batch trains.
     m_cudaNetwork.CopyTrainingBatchAsync(m_cudaBatchData, m_trainingSet_Read.data(), batchSize);
 
     for (uint32_t b = 0; b < numBatches; ++b)
     {
+        m_cudaNetwork.SwapTrainingBatch(m_cudaBatchData);
+
         // Forward pass (waits for this batch's copy to complete)
         m_cudaNetwork.Forward(m_cudaBatchData);
 
         // Backward pass
         m_cudaNetwork.Backward(m_cudaBatchData, learningRate);
 
-        // Prefetch the next batch's training vectors on the copy stream. It overlaps this batch's
-        // Adam updates, which no longer read the training-vectors buffer.
+        // Prefetch the next batch's training vectors into the other buffer on the copy stream
         if (b + 1 < numBatches)
         {
             m_cudaNetwork.CopyTrainingBatchAsync(

@@ -80,7 +80,8 @@ checkpoint, the weight statistics and test position evals.
   weights and the output subnet. Feature-transformer weights are clipped to ±6, factorizer weights to ±0.99,
   threat weights to ±127/255.
 - **Overlap**: the main stream runs the passes; an aux stream clears the FT and threat gradient buffers during the forward
-  pass, and a copy stream uploads the next batch during the Adam updates (synchronized with events).
+  pass, and a copy stream uploads the next batch into a second buffer while the current batch trains (synchronized
+  with events).
 
 ## Source Layout
 

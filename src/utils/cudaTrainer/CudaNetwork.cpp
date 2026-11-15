@@ -40,6 +40,8 @@ CudaNeuralNetwork::CudaNeuralNetwork()
     CUDA_CHECK(cudaEventCreateWithFlags(&m_ftGradClearedEvent, cudaEventDisableTiming));
     CUDA_CHECK(cudaEventCreateWithFlags(&m_trainConsumedEvent, cudaEventDisableTiming));
     CUDA_CHECK(cudaEventCreateWithFlags(&m_copyDoneEvent, cudaEventDisableTiming));
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_nextTrainConsumedEvent, cudaEventDisableTiming));
+    CUDA_CHECK(cudaEventCreateWithFlags(&m_nextCopyDoneEvent, cudaEventDisableTiming));
 
     // Unlike the synchronization-only events above, these must keep timing enabled.
     CUDA_CHECK(cudaEventCreate(&m_iterationStartEvent));
@@ -50,6 +52,8 @@ CudaNeuralNetwork::CudaNeuralNetwork()
     CUDA_CHECK(cudaEventRecord(m_ftGradClearedEvent, m_auxStream.Get()));
     CUDA_CHECK(cudaEventRecord(m_trainConsumedEvent, m_stream.Get()));
     CUDA_CHECK(cudaEventRecord(m_copyDoneEvent, m_copyStream.Get()));
+    CUDA_CHECK(cudaEventRecord(m_nextTrainConsumedEvent, m_stream.Get()));
+    CUDA_CHECK(cudaEventRecord(m_nextCopyDoneEvent, m_copyStream.Get()));
 }
 
 CudaNeuralNetwork::~CudaNeuralNetwork()
@@ -58,6 +62,8 @@ CudaNeuralNetwork::~CudaNeuralNetwork()
     cudaEventDestroy(m_ftGradClearedEvent);
     cudaEventDestroy(m_trainConsumedEvent);
     cudaEventDestroy(m_copyDoneEvent);
+    cudaEventDestroy(m_nextTrainConsumedEvent);
+    cudaEventDestroy(m_nextCopyDoneEvent);
     cudaEventDestroy(m_iterationStartEvent);
     cudaEventDestroy(m_iterationEndEvent);
 }
@@ -350,7 +356,7 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
     }
 
     // The training-vectors buffer is no longer read after the FT gradient accumulation (the Adam
-    // updates below don't touch it), so signal that the next batch's copy may overwrite it.
+    // updates below don't touch it), so signal that a later batch's copy may overwrite it.
     CUDA_CHECK(cudaEventRecord(m_trainConsumedEvent, stream));
 
     // Update output subnet weights
@@ -373,12 +379,24 @@ void CudaNeuralNetwork::Backward(CudaBatchData& batch, float learningRate)
 
 void CudaNeuralNetwork::CopyTrainingBatchAsync(CudaBatchData& batch, const TrainingEntry* hostSrc, uint32_t count)
 {
-    // Wait until the previous batch's last reader of the training-vectors buffer
-    // (FeatureTransformerGradientsKernel) has finished, then copy on the dedicated copy stream so
-    // it overlaps the previous batch's Adam updates. Forward waits on m_copyDoneEvent before use.
-    CUDA_CHECK(cudaStreamWaitEvent(m_copyStream.Get(), m_trainConsumedEvent, 0));
-    batch.trainingVectors.CopyFromHost(hostSrc, count, m_copyStream.Get());
-    CUDA_CHECK(cudaEventRecord(m_copyDoneEvent, m_copyStream.Get()));
+    // The last reader of the other buffer is the batch before the current one, so the copy overlaps
+    // the whole current batch.
+    CUDA_CHECK(cudaStreamWaitEvent(m_copyStream.Get(), m_nextTrainConsumedEvent, 0));
+    batch.nextTrainingVectors.CopyFromHost(hostSrc, count, m_copyStream.Get());
+    CUDA_CHECK(cudaEventRecord(m_nextCopyDoneEvent, m_copyStream.Get()));
+}
+
+void CudaNeuralNetwork::SwapTrainingBatch(CudaBatchData& batch)
+{
+    batch.trainingVectors.Swap(batch.nextTrainingVectors);
+
+    cudaEvent_t event = m_trainConsumedEvent;
+    m_trainConsumedEvent = m_nextTrainConsumedEvent;
+    m_nextTrainConsumedEvent = event;
+
+    event = m_copyDoneEvent;
+    m_copyDoneEvent = m_nextCopyDoneEvent;
+    m_nextCopyDoneEvent = event;
 }
 
 } // namespace cuda
