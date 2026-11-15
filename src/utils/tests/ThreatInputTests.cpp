@@ -1,5 +1,7 @@
 #include "TestCommon.hpp"
+#include "../TrainerCommon.hpp"
 #include "../../backend/MoveList.hpp"
+#include "../../backend/NeuralNetworkEvaluator.hpp"
 #include "../../backend/Position.hpp"
 #include "../../backend/ThreatInputs.hpp"
 
@@ -238,6 +240,79 @@ void TestDeltasInRandomGames()
     }
 }
 
+// random position the search could evaluate: no pawns on the first or last rank, neither side in check
+bool GenerateEvaluablePosition(std::mt19937& gen, Position& outPos)
+{
+    static const Piece pieces[] = { Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen };
+    const Bitboard backRanks = Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>();
+
+    Position pos;
+    Bitboard occupied = 0;
+    const auto randomFreeSquare = [&](const Bitboard excluded)
+    {
+        for (;;)
+        {
+            const Square square(static_cast<uint32_t>(gen() % 64));
+            if (!((occupied | excluded) & square))
+                return square;
+        }
+    };
+
+    const Square whiteKing = randomFreeSquare(0);
+    occupied |= whiteKing.GetBitboard();
+    const Square blackKing = randomFreeSquare(Bitboard::GetKingAttacks(whiteKing));
+    occupied |= blackKing.GetBitboard();
+    pos.SetPiece(whiteKing, Piece::King, White);
+    pos.SetPiece(blackKing, Piece::King, Black);
+
+    const uint32_t numPieces = static_cast<uint32_t>(gen() % 31);
+    for (uint32_t i = 0; i < numPieces; ++i)
+    {
+        const Piece piece = pieces[gen() % 5];
+        const Square square = randomFreeSquare(piece == Piece::Pawn ? backRanks : Bitboard(0));
+        occupied |= square.GetBitboard();
+        pos.SetPiece(square, piece, static_cast<Color>(gen() % 2));
+    }
+
+    pos.SetSideToMove(static_cast<Color>(gen() % 2));
+
+    if (!pos.IsValid() || pos.IsInCheck(White) || pos.IsInCheck(Black))
+        return false;
+
+    outPos = pos;
+    return true;
+}
+
+// the inputs zeroed in saved nets are never active in a position the search evaluates
+void TestUnreachableInputs()
+{
+    const std::vector<bool> unreachablePieceInputs = GetUnreachablePieceInputs();
+    const std::vector<bool> unreachableThreatInputs = GetUnreachableThreatInputs();
+
+    std::mt19937 gen(54321);
+    for (uint32_t numPositions = 0; numPositions < 100000; )
+    {
+        Position pos;
+        if (!GenerateEvaluablePosition(gen, pos))
+            continue;
+
+        for (Color perspective = 0; perspective < 2; ++perspective)
+        {
+            uint16_t features[64];
+            const uint32_t numFeatures = PositionToFeaturesVector(pos, features, perspective);
+            for (uint32_t i = 0; i < numFeatures; ++i)
+                TEST_EXPECT(!unreachablePieceInputs[features[i]]);
+
+            uint16_t threatFeatures[nn::MaxThreatRecords];
+            const uint32_t numThreatFeatures = PositionToThreatFeatures(pos, perspective, threatFeatures);
+            for (uint32_t i = 0; i < numThreatFeatures; ++i)
+                TEST_EXPECT(!unreachableThreatInputs[threatFeatures[i]]);
+        }
+
+        numPositions++;
+    }
+}
+
 } // namespace
 
 void RunThreatInputTests()
@@ -247,4 +322,5 @@ void RunThreatInputTests()
     TestSymmetry();
     TestDeltasOfAllMoves();
     TestDeltasInRandomGames();
+    TestUnreachableInputs();
 }

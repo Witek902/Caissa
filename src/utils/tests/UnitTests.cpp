@@ -24,13 +24,13 @@ void RunUnitTests(const std::vector<std::string>& args)
     RunSquareUtilityTests();
     RunPositionTests();
     RunPositionAdvancedTests();
+    RunThreatInputTests();
     RunScoreTests();
     RunMoveListTests();
     RunTranspositionTableTests();
     RunTimeTests();
     RunTimeManagerTests();
     RunEvalTests();
-    RunThreatInputTests();
     RunPackedPositionTests();
     RunGameTests();
     RunPgnParserTests();

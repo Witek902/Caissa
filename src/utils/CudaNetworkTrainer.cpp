@@ -277,6 +277,10 @@ private:
     // threat weights out of the int8 range in the last packed net
     uint64_t m_numClippedThreatWeights = 0;
 
+    // inputs never active in an evaluated position, zeroed in packed nets
+    std::vector<bool> m_unreachablePieceInputs;
+    std::vector<bool> m_unreachableThreatInputs;
+
     // wall times of the last iteration's concurrent tasks; the slowest one limits the training speed
     float m_lastTrainTaskMs = 0.0f;
     float m_lastLoaderMs = 0.0f;
@@ -401,6 +405,12 @@ void CudaNetworkTrainer::InitNetwork()
     // AdamW weight decay (QAT is enabled inside CudaNeuralNetwork::Init).
     m_cudaNetwork.SetWeightDecay(m_options.featureTransformerWeightDecay, cOutputSubnetWeightDecay);
     m_cudaNetwork.SetAdamBetas(m_options.beta1, m_options.beta2);
+
+    m_unreachablePieceInputs = GetUnreachablePieceInputs();
+    m_unreachableThreatInputs = GetUnreachableThreatInputs();
+    std::cout << "Unreachable inputs zeroed in packed nets: "
+        << std::count(m_unreachablePieceInputs.begin(), m_unreachablePieceInputs.end(), true) << " piece, "
+        << std::count(m_unreachableThreatInputs.begin(), m_unreachableThreatInputs.end(), true) << " threat" << std::endl;
 }
 
 // false if the position has more features than a training entry holds
@@ -1115,6 +1125,17 @@ bool CudaNetworkTrainer::PackNetwork()
             m_packedNet->threatWeights[i] = (nn::ThreatWeightType)clampedWeight;
         }
         m_numClippedThreatWeights = numClipped;
+    }
+
+    for (uint32_t input = 0; input < nn::NumNetworkInputs; ++input)
+    {
+        if (m_unreachablePieceInputs[input])
+            std::fill_n(m_packedNet->accumulatorWeights + (size_t)input * nn::AccumulatorSize, nn::AccumulatorSize, (nn::FirstLayerWeightType)0);
+    }
+    for (uint32_t input = 0; input < nn::NumThreatInputs; ++input)
+    {
+        if (m_unreachableThreatInputs[input])
+            std::fill_n(m_packedNet->threatWeights + (size_t)input * nn::AccumulatorSize, nn::AccumulatorSize, (nn::ThreatWeightType)0);
     }
 
     // output subnets: L1/L2 in the grouped layout the sparse inference reads, L3 as a plain row

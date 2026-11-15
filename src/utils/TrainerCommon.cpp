@@ -3,6 +3,7 @@
 #include "../backend/Evaluate.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
+#include "../backend/ThreatInputs.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -474,4 +475,102 @@ void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& 
 
     ASSERT(outPosition.IsValid());
     ASSERT(!outPosition.IsInCheck(Black));
+}
+
+std::vector<bool> GetUnreachablePieceInputs()
+{
+    enum PieceInput : uint32_t
+    {
+        OurPawn, OurKnight, OurBishop, OurRook, OurQueen, OurKing,
+        TheirPawn, TheirKnight, TheirBishop, TheirRook, TheirQueen, TheirKing,
+    };
+
+    std::vector<bool> unreachable(nn::NumNetworkInputs, false);
+
+    const Bitboard backRanks = Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>();
+
+    for (uint32_t bucket = 0; bucket < nn::NumKingBuckets; ++bucket)
+    {
+        // each bucket is a single king square in the perspective's frame (own pawns move up, king on files a-d)
+        const Square king(static_cast<uint8_t>(bucket % 4), static_cast<uint8_t>(bucket / 4));
+        ASSERT(nn::KingBucketIndex[king.Index()] == bucket);
+
+        const Bitboard neighbours = Bitboard::GetKingAttacks(king);
+
+        Bitboard squares[12] = {};
+        for (uint32_t piece = 0; piece < 12; ++piece)
+            squares[piece] = piece == OurKing ? ~king.GetBitboard() : king.GetBitboard();
+
+        squares[OurPawn] |= backRanks;
+
+        // no enemy piece checks the king from an adjacent, knight or pawn square
+        squares[TheirPawn] |= backRanks | Bitboard::GetPawnAttacks(king, White);
+        squares[TheirKnight] |= Bitboard::GetKnightAttacks(king);
+        squares[TheirBishop] |= neighbours & Bitboard::GetBishopAttacks(king);
+        squares[TheirRook] |= neighbours & Bitboard::GetRookAttacks(king);
+        squares[TheirQueen] |= neighbours;
+        squares[TheirKing] |= neighbours;
+
+        for (uint32_t piece = 0; piece < 12; ++piece)
+        {
+            squares[piece].Iterate([&](uint32_t square)
+            {
+                unreachable[bucket * 12 * 64 + piece * 64 + square] = true;
+            });
+        }
+    }
+
+    return unreachable;
+}
+
+std::vector<bool> GetUnreachableThreatInputs()
+{
+    std::vector<bool> unreachable(nn::NumThreatInputs, true);
+
+    const Bitboard backRanks = Bitboard::RankBitboard<0>() | Bitboard::RankBitboard<7>();
+    const ThreatOrientation identity = { 0, 0 };
+
+    // every threat that fits on an empty board, with no pawn on the first or last rank
+    for (Color attackerColor = 0; attackerColor < 2; ++attackerColor)
+    {
+        for (uint32_t a = (uint32_t)Piece::Pawn; a < (uint32_t)Piece::King; ++a)
+        {
+            const Piece attacker = (Piece)a;
+            for (uint32_t from = 0; from < 64; ++from)
+            {
+                const Square fromSquare(from);
+                Bitboard attacks = 0;
+                switch (attacker)
+                {
+                case Piece::Pawn:
+                    if (!(backRanks & fromSquare))
+                        attacks = Bitboard::GetPawnAttacks(fromSquare, attackerColor);
+                    break;
+                case Piece::Knight: attacks = Bitboard::GetKnightAttacks(fromSquare); break;
+                case Piece::Bishop: attacks = Bitboard::GenerateBishopAttacks(fromSquare, 0); break;
+                case Piece::Rook:   attacks = Bitboard::GenerateRookAttacks(fromSquare, 0); break;
+                default:            attacks = Bitboard::GenerateQueenAttacks(fromSquare, 0); break;
+                }
+
+                attacks.Iterate([&](uint32_t to)
+                {
+                    for (Color victimColor = 0; victimColor < 2; ++victimColor)
+                    {
+                        for (uint32_t v = (uint32_t)Piece::Pawn; v < (uint32_t)Piece::King; ++v)
+                        {
+                            if ((Piece)v == Piece::Pawn && (backRanks & Square(to)))
+                                continue;
+
+                            const ThreatRecord record = { ThreatPieceCode(attacker, attackerColor), (uint8_t)from, ThreatPieceCode((Piece)v, victimColor), (uint8_t)to };
+                            const uint32_t index = GetThreatFeatureIndex(record, identity);
+                            if (index < nn::NumThreatInputs)
+                                unreachable[index] = false;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    return unreachable;
 }

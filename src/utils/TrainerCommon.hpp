@@ -87,3 +87,8 @@ private:
 };
 
 void GenerateRandomPosition(std::mt19937& randomGenerator, const RandomPosDesc& desc, Position& outPosition);
+
+// Network inputs that are never active in a position the search evaluates: neither side in check,
+// no pawns on the first or last rank. Their weights are zeroed in saved nets.
+std::vector<bool> GetUnreachablePieceInputs();
+std::vector<bool> GetUnreachableThreatInputs();
