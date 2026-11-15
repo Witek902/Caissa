@@ -38,7 +38,23 @@ int main(int argc, const char* argv[])
     }
 
     InitEngine();
-    TryLoadingDefaultEvalFile();
+
+    // a net from --evalFile replaces the default one
+    std::string evalFile;
+    for (size_t i = 0; i + 1 < args.size(); ++i)
+    {
+        if (args[i] == "--evalFile")
+        {
+            evalFile = args[i + 1];
+            args.erase(args.begin() + i, args.begin() + i + 2);
+            break;
+        }
+    }
+
+    if (evalFile.empty())
+        TryLoadingDefaultEvalFile();
+    else if (!LoadMainNeuralNetwork(evalFile.c_str()))
+        return 1;
 
     // load optional syzygy
     for (size_t i = 0; i < args.size(); ++i)
