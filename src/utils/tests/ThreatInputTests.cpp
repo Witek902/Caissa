@@ -314,6 +314,147 @@ void TestUnreachableInputs()
     }
 }
 
+// Threats found by stepping each ray one square at a time, independent of the bitboard attack code.
+// Records packed as (attacker, from, victim, to), sorted.
+std::vector<uint32_t> GetNaiveThreatRecords(const Position& pos)
+{
+    struct Step { int32_t file, rank; };
+    static const Step knightSteps[] = { { 1, 2 }, { 2, 1 }, { 2, -1 }, { 1, -2 }, { -1, -2 }, { -2, -1 }, { -2, 1 }, { -1, 2 } };
+    static const Step bishopSteps[] = { { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+    static const Step rookSteps[] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+
+    const auto pieceAt = [&pos](const uint32_t square, Piece& outPiece, Color& outColor)
+    {
+        for (Color color = 0; color < 2; ++color)
+        {
+            outPiece = pos.GetSide(color).GetPieceAtSquare(Square(square));
+            outColor = color;
+            if (outPiece != Piece::None)
+                return true;
+        }
+        return false;
+    };
+
+    std::vector<uint32_t> records;
+    for (uint32_t from = 0; from < 64; ++from)
+    {
+        Piece piece;
+        Color color;
+        if (!pieceAt(from, piece, color) || piece == Piece::King)
+            continue;
+
+        const int32_t file = from % 8;
+        const int32_t rank = from / 8;
+
+        // false when the ray stops: off the board or at any piece, kings included
+        const auto visit = [&](const int32_t targetFile, const int32_t targetRank)
+        {
+            if (targetFile < 0 || targetFile > 7 || targetRank < 0 || targetRank > 7)
+                return false;
+            const uint32_t to = targetRank * 8 + targetFile;
+            Piece victim;
+            Color victimColor;
+            if (!pieceAt(to, victim, victimColor))
+                return true;
+            if (IsFeaturePair(piece, victim))
+                records.push_back((uint32_t)ThreatPieceCode(piece, color) << 24 | from << 16 | (uint32_t)ThreatPieceCode(victim, victimColor) << 8 | to);
+            return false;
+        };
+
+        const auto slide = [&](const Step* steps, const uint32_t numSteps)
+        {
+            for (uint32_t i = 0; i < numSteps; ++i)
+                for (int32_t k = 1; visit(file + k * steps[i].file, rank + k * steps[i].rank); ++k) {}
+        };
+
+        switch (piece)
+        {
+        case Piece::Pawn:
+            visit(file - 1, rank + (color == White ? 1 : -1));
+            visit(file + 1, rank + (color == White ? 1 : -1));
+            break;
+        case Piece::Knight:
+            for (const Step& step : knightSteps)
+                visit(file + step.file, rank + step.rank);
+            break;
+        case Piece::Bishop: slide(bishopSteps, 4); break;
+        case Piece::Rook: slide(rookSteps, 4); break;
+        case Piece::Queen: slide(bishopSteps, 4); slide(rookSteps, 4); break;
+        default: break;
+        }
+    }
+
+    std::sort(records.begin(), records.end());
+    return records;
+}
+
+void CheckAgainstNaiveReference(const Position& pos)
+{
+    const std::vector<uint32_t> expected = GetNaiveThreatRecords(pos);
+
+    ThreatRecord records[nn::MaxThreatRecords];
+    const uint32_t numRecords = GetThreatRecords(pos, records);
+    std::vector<uint32_t> actual;
+    for (uint32_t i = 0; i < numRecords; ++i)
+        actual.push_back((uint32_t)records[i].attacker << 24 | (uint32_t)records[i].from << 16 | (uint32_t)records[i].victim << 8 | records[i].to);
+    std::sort(actual.begin(), actual.end());
+    TEST_EXPECT(actual == expected);
+
+    // of two same-type pieces threatening each other only the threat from the higher oriented square is a feature
+    for (Color perspective = 0; perspective < 2; ++perspective)
+    {
+        const uint32_t squareFlip = (perspective == Black ? 56u : 0u) | (pos.GetSide(perspective).GetKingSquare().File() >= 4 ? 7u : 0u);
+        uint32_t expectedFeatures = 0;
+        for (const uint32_t record : expected)
+        {
+            const uint8_t attacker = (uint8_t)(record >> 24);
+            const uint8_t victim = (uint8_t)(record >> 8);
+            const uint32_t from = ((record >> 16) & 0xFF) ^ squareFlip;
+            const uint32_t to = (record & 0xFF) ^ squareFlip;
+            const bool mutual = IsMutualPair((Piece)(attacker & 7), (Color)(attacker >> 3), (Piece)(victim & 7), (Color)(victim >> 3));
+            expectedFeatures += !(mutual && from < to);
+        }
+        TEST_EXPECT_EQ(GetSortedThreatFeatures(pos, perspective).size(), (size_t)expectedFeatures);
+    }
+}
+
+void TestNaiveReference()
+{
+    for (const char* fen : c_testPositions)
+    {
+        Position pos;
+        TEST_EXPECT(pos.FromFEN(fen));
+        CheckAgainstNaiveReference(pos);
+    }
+
+    std::mt19937 gen(777);
+    for (const char* fen : c_testPositions)
+    {
+        for (uint32_t game = 0; game < 5; ++game)
+        {
+            Position pos;
+            TEST_EXPECT(pos.FromFEN(fen));
+            for (uint32_t ply = 0; ply < 200; ++ply)
+            {
+                MoveList moves;
+                if (pos.GetNumLegalMoves(&moves) == 0)
+                    break;
+                VERIFY(pos.DoMove(moves.GetMove(std::uniform_int_distribution<uint32_t>(0, moves.Size() - 1)(gen))));
+                CheckAgainstNaiveReference(pos);
+            }
+        }
+    }
+
+    for (uint32_t numPositions = 0; numPositions < 100000; )
+    {
+        Position pos;
+        if (!GenerateEvaluablePosition(gen, pos))
+            continue;
+        CheckAgainstNaiveReference(pos);
+        numPositions++;
+    }
+}
+
 } // namespace
 
 void RunThreatInputTests()
@@ -321,6 +462,7 @@ void RunThreatInputTests()
     TestFeatureLayout();
     TestGoldenFeatures();
     TestSymmetry();
+    TestNaiveReference();
     TestDeltasOfAllMoves();
     TestDeltasInRandomGames();
     TestUnreachableInputs();
