@@ -89,6 +89,8 @@ struct CudaBatchData
     CudaBuffer<float> featureTransformerGradients;
     CudaBuffer<float> threatGradients;
 
+    CudaBuffer<float> foldedPieceWeights;   // [NumNetworkInputs][AccumulatorSize], bucket + factorizer weights
+
     uint32_t batchSize;
 
     void Allocate(uint32_t size)
@@ -117,6 +119,7 @@ struct CudaBatchData
         l3Gradients.Allocate((nn::L2Size + 1) * 1 * nn::NumVariants);
         featureTransformerGradients.Allocate((FeatureTransformerInputs + 1) * nn::AccumulatorSize);
         threatGradients.Allocate((nn::NumThreatInputs + 1) * nn::AccumulatorSize);
+        foldedPieceWeights.Allocate(nn::NumNetworkInputs * nn::AccumulatorSize);
     }
 };
 

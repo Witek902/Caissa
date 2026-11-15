@@ -72,7 +72,7 @@ checkpoint, the weight statistics and test position evals.
   packed net (`nn::*QuantizationScale` in `backend/PackedNeuralNetwork.hpp`); gradients flow to the float
   master weights.
 - **Input factorizer** (`--factorizer on|off`, default on): a shared 768-feature block added to every king bucket during
-  training and folded into the bucket weights when the net is packed.
+  training. It is folded into the bucket weights once per batch for the forward pass, and when the net is packed.
 - **Threat inputs** (`backend/ThreatInputs.hpp`): a separate weight block without a factorizer, packed as int8 at
   the piece weight scale. A `TrainingEntry` holds the piece features and the offset of its threat features in
   its batch's threat feature list, which is uploaded with the batch (240 slots reserved per position).

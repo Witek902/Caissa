@@ -110,6 +110,20 @@ __global__ void SigmoidActivationKernel(
     outputs[idx] = Sigmoid(inputs[idx]);
 }
 
+// Effective piece weights read by the forward pass: each bucket weight plus the factorizer weight of its
+// piece-square. This sum is what gets fake-quantized and packed.
+__global__ void FoldFactorizerKernel(const float4* __restrict__ weights, float4* __restrict__ foldedWeights)
+{
+    constexpr uint32_t rowSize = nn::AccumulatorSize / 4;
+    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= nn::NumNetworkInputs * rowSize) return;
+
+    const uint32_t feature = idx / rowSize;
+    const float4 w = weights[idx];
+    const float4 f = weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * rowSize + idx % rowSize];
+    foldedWeights[idx] = make_float4(w.x + f.x, w.y + f.y, w.z + f.z, w.w + f.w);
+}
+
 // Sparse binary input accumulation and the pairwise activation of its output. Thread (x, y) owns
 // accumulator neurons x and x + AccumulatorSize / 2 of batch element y, which form one pair, so it
 // writes both accumulator halves and their product for L1. The two perspectives are concatenated,
@@ -117,14 +131,14 @@ __global__ void SigmoidActivationKernel(
 __global__ void SparseBinaryInputKernel(
     const TrainingEntry* __restrict__ trainingVectors,
     const uint16_t* __restrict__ threatFeatures,
-    const float* __restrict__ weights,
+    const float* __restrict__ biases,
+    const float* __restrict__ pieceWeights,
     const float* __restrict__ threatWeights,
     float* __restrict__ accumulators,
     float* __restrict__ pairwiseOutputs,
     uint32_t batchSize,
-    uint32_t inputSize,
+    uint32_t numPieceInputs,
     uint32_t accumulatorSize,
-    bool useFactorizer,
     float weightScale, float biasScale, float invWeightScale, float invBiasScale,
     float threatWeightScale, float threatInvWeightScale
 )
@@ -138,21 +152,15 @@ __global__ void SparseBinaryInputKernel(
     const uint16_t* whiteThreatFeatures = threatFeatures + trainingVector->threatFeaturesOffset;
     const uint16_t* blackThreatFeatures = whiteThreatFeatures + trainingVector->numThreatFeatures;
 
-    // biases are stored right after the weight matrix, and every sum starts from its bias
     const auto accumulate = [&](uint32_t accumulatorIdx, const uint16_t* features, uint32_t numFeatures, const uint16_t* perspectiveThreatFeatures)
     {
-        float sum = FakeQuantize(weights[inputSize * accumulatorSize + accumulatorIdx], biasScale, invBiasScale);
+        float sum = FakeQuantize(biases[accumulatorIdx], biasScale, invBiasScale);
         for (uint32_t i = 0; i < numFeatures; ++i)
         {
             const uint32_t feature = features[i];
-            if (feature >= inputSize) continue;
+            if (feature >= numPieceInputs) continue;
 
-            // Effective weight of a feature: the bucket weight plus the shared factorizer weight,
-            // fake-quantized as a sum because that is what gets packed.
-            float w = weights[feature * accumulatorSize + accumulatorIdx];
-            if (useFactorizer)
-                w += weights[(nn::NumNetworkInputs + feature % FactorizerInputs) * accumulatorSize + accumulatorIdx];
-            sum += FakeQuantize(w, weightScale, invWeightScale);
+            sum += FakeQuantize(pieceWeights[feature * accumulatorSize + accumulatorIdx], weightScale, invWeightScale);
         }
 
         // threat weights are packed one by one, so each is fake-quantized on its own
@@ -180,22 +188,36 @@ __global__ void SparseBinaryInputKernel(
 
 void LaunchSparseBinaryInput(CudaBatchData& batch, const DeviceLayer& ft, const DeviceLayer& threats, bool useFactorizer, cudaStream_t stream)
 {
+    // folding the factorizer once per batch saves the forward pass a second weight read per piece
+    const float* pieceWeights = ft.weights;
+    if (useFactorizer)
+    {
+        constexpr uint32_t numFloat4 = nn::NumNetworkInputs * nn::AccumulatorSize / 4;
+        constexpr uint32_t foldBlockSize = 256;
+        FoldFactorizerKernel<<<(numFloat4 + foldBlockSize - 1) / foldBlockSize, foldBlockSize, 0, stream>>>(
+            reinterpret_cast<const float4*>(ft.weights),
+            reinterpret_cast<float4*>(batch.foldedPieceWeights.Get()));
+        CUDA_CHECK(cudaGetLastError());
+        pieceWeights = batch.foldedPieceWeights.Get();
+    }
+
     const dim3 blockSize(32, 16);
     const dim3 gridSize(
         (nn::AccumulatorSize / 2 + blockSize.x - 1) / blockSize.x,
         (batch.batchSize + blockSize.y - 1) / blockSize.y);
 
+    // biases are stored right after the piece and factorizer weights
     SparseBinaryInputKernel<<<gridSize, blockSize, 0, stream>>>(
         batch.trainingVectors.Get(),
         batch.threatFeatures.Get(),
-        ft.weights,
+        ft.weights + FeatureTransformerInputs * nn::AccumulatorSize,
+        pieceWeights,
         threats.weights,
         batch.accumulatorBuffer.Get(),
         batch.pairwiseBuffer.Get(),
         batch.batchSize,
-        FeatureTransformerInputs,
+        nn::NumNetworkInputs,
         nn::AccumulatorSize,
-        useFactorizer,
         ft.quant.weightScale,
         ft.quant.biasScale,
         ft.quant.invWeightScale,
