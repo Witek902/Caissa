@@ -120,16 +120,21 @@ INLINE static __m512i m512_dpbusd(__m512i sum, __m512i a, __m512i b)
 #endif // NN_USE_VNNI
 }
 
-// Pairwise activation of one accumulator: the two halves are clipped to [0, QA] and multiplied,
+// Pairwise activation of one perspective: the piece and threat accumulators are summed with wrapping
+// int16 adds, the two halves of the sum are clipped to [0, QA] and multiplied,
 // then shifted back into uint8. Output length is AccumulatorSize/2. Also appends the indices of the
 // non-zero 4-byte output groups to the sparse L1 index list.
 INLINE static void FT_PairwiseCReLU(
-    IntermediateType* output, const AccumulatorType* accumulator,
+    IntermediateType* output, const AccumulatorType* accumulator, const AccumulatorType* threats,
     uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t firstGroupIndex)
 {
     constexpr uint32_t halfSize = AccumulatorSize / 2;
     const __m512i zero = _mm512_setzero_si512();
     const __m512i maxActivation = _mm512_set1_epi16(ActivationRangeScaling);
+    const auto loadSum = [accumulator, threats](uint32_t offset) INLINE_LAMBDA
+    {
+        return _mm512_add_epi16(_mm512_load_si512(accumulator + offset), _mm512_load_si512(threats + offset));
+    };
     // the pack interleaves the 128-bit lanes of its two inputs; this permutation restores the order
     const __m512i packOrder = _mm512_setr_epi64(0, 2, 4, 6, 1, 3, 5, 7);
 #if defined(USE_VBMI2)
@@ -141,10 +146,10 @@ INLINE static void FT_PairwiseCReLU(
 
     for (uint32_t i = 0; i < halfSize; i += 64)
     {
-        __m512i a0 = _mm512_load_si512(accumulator + i);
-        __m512i a1 = _mm512_load_si512(accumulator + i + 32);
-        __m512i b0 = _mm512_load_si512(accumulator + halfSize + i);
-        __m512i b1 = _mm512_load_si512(accumulator + halfSize + i + 32);
+        __m512i a0 = loadSum(i);
+        __m512i a1 = loadSum(i + 32);
+        __m512i b0 = loadSum(halfSize + i);
+        __m512i b1 = loadSum(halfSize + i + 32);
 
         // Only the first factor needs the lower clamp: a negative second factor makes the product
         // negative, which the unsigned pack below clips to zero
@@ -224,24 +229,30 @@ INLINE static void HiddenLayerL1(
 
 #else // USE_AVX2
 
-// Pairwise activation of one accumulator: the two halves are clipped to [0, QA] and multiplied,
+// Pairwise activation of one perspective: the piece and threat accumulators are summed with wrapping
+// int16 adds, the two halves of the sum are clipped to [0, QA] and multiplied,
 // then shifted back into uint8. Output length is AccumulatorSize/2. Also appends the indices of the
 // non-zero 4-byte output groups to the sparse L1 index list.
 INLINE static void FT_PairwiseCReLU(
-    IntermediateType* output, const AccumulatorType* accumulator,
+    IntermediateType* output, const AccumulatorType* accumulator, const AccumulatorType* threats,
     uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t firstGroupIndex)
 {
     constexpr uint32_t halfSize = AccumulatorSize / 2;
     const __m256i zero = _mm256_setzero_si256();
     const __m256i maxActivation = _mm256_set1_epi16(ActivationRangeScaling);
+    const auto loadSum = [accumulator, threats](uint32_t offset) INLINE_LAMBDA
+    {
+        return _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + offset)),
+            _mm256_load_si256(reinterpret_cast<const __m256i*>(threats + offset)));
+    };
     __m128i groupIndexBase = _mm_set1_epi16((int16_t)firstGroupIndex);
 
     for (uint32_t i = 0; i < halfSize; i += 32)
     {
-        __m256i a0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + i));
-        __m256i a1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + i + 16));
-        __m256i b0 = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + halfSize + i));
-        __m256i b1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + halfSize + i + 16));
+        __m256i a0 = loadSum(i);
+        __m256i a1 = loadSum(i + 16);
+        __m256i b0 = loadSum(halfSize + i);
+        __m256i b1 = loadSum(halfSize + i + 16);
 
         // Only the first factor needs the lower clamp: a negative second factor makes the product
         // negative, which the unsigned pack below clips to zero
@@ -365,16 +376,22 @@ INLINE static __m128i m128_requantize(__m128i sumLo, __m128i sumHi)
     return _mm_min_epi16(_mm_max_epi16(packed, _mm_setzero_si128()), _mm_set1_epi16(HiddenActivationMax));
 }
 
-// Pairwise activation of one accumulator: the two halves are clipped to [0, QA] and multiplied,
+// Pairwise activation of one perspective: the piece and threat accumulators are summed with wrapping
+// int16 adds, the two halves of the sum are clipped to [0, QA] and multiplied,
 // then shifted back into uint8. Output length is AccumulatorSize/2. Also appends the indices of the
 // non-zero 4-byte output groups to the sparse L1 index list.
 INLINE static void FT_PairwiseCReLU(
-    IntermediateType* output, const AccumulatorType* accumulator,
+    IntermediateType* output, const AccumulatorType* accumulator, const AccumulatorType* threats,
     uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t firstGroupIndex)
 {
     constexpr uint32_t halfSize = AccumulatorSize / 2;
     const __m128i zero = _mm_setzero_si128();
     const __m128i maxActivation = _mm_set1_epi16(ActivationRangeScaling);
+    const auto loadSum = [accumulator, threats](uint32_t offset) INLINE_LAMBDA
+    {
+        return _mm_add_epi16(_mm_load_si128(reinterpret_cast<const __m128i*>(accumulator + offset)),
+            _mm_load_si128(reinterpret_cast<const __m128i*>(threats + offset)));
+    };
     __m128i groupIndexBase = _mm_set1_epi16((int16_t)firstGroupIndex);
 
     // 32 outputs per iteration, so that one 8-bit mask covers the block's 4-byte groups
@@ -383,10 +400,10 @@ INLINE static void FT_PairwiseCReLU(
         uint32_t nnzMask = 0;
         for (uint32_t j = 0; j < 32; j += 16)
         {
-            __m128i a0 = _mm_load_si128(reinterpret_cast<const __m128i*>(accumulator + i + j));
-            __m128i a1 = _mm_load_si128(reinterpret_cast<const __m128i*>(accumulator + i + j + 8));
-            __m128i b0 = _mm_load_si128(reinterpret_cast<const __m128i*>(accumulator + halfSize + i + j));
-            __m128i b1 = _mm_load_si128(reinterpret_cast<const __m128i*>(accumulator + halfSize + i + j + 8));
+            __m128i a0 = loadSum(i + j);
+            __m128i a1 = loadSum(i + j + 8);
+            __m128i b0 = loadSum(halfSize + i + j);
+            __m128i b1 = loadSum(halfSize + i + j + 8);
 
             // Only the first factor needs the lower clamp: a negative second factor makes the
             // product negative, which the unsigned pack below clips to zero
@@ -519,16 +536,21 @@ INLINE static int16x8_t neon_requantize(int32x4_t sumLo, int32x4_t sumHi)
     return vminq_s16(vmaxq_s16(packed, vdupq_n_s16(0)), vdupq_n_s16(HiddenActivationMax));
 }
 
-// Pairwise activation of one accumulator: the two halves are clipped to [0, QA] and multiplied,
+// Pairwise activation of one perspective: the piece and threat accumulators are summed with wrapping
+// int16 adds, the two halves of the sum are clipped to [0, QA] and multiplied,
 // then shifted back into uint8. Output length is AccumulatorSize/2. Also appends the indices of the
 // non-zero 4-byte output groups to the sparse L1 index list.
 INLINE static void FT_PairwiseCReLU(
-    IntermediateType* output, const AccumulatorType* accumulator,
+    IntermediateType* output, const AccumulatorType* accumulator, const AccumulatorType* threats,
     uint16_t* nnzIndices, uint32_t& nnzCount, uint32_t firstGroupIndex)
 {
     constexpr uint32_t halfSize = AccumulatorSize / 2;
     const int16x8_t zero = vdupq_n_s16(0);
     const int16x8_t maxActivation = vdupq_n_s16(ActivationRangeScaling);
+    const auto loadSum = [accumulator, threats](uint32_t offset) INLINE_LAMBDA
+    {
+        return vaddq_s16(vld1q_s16(accumulator + offset), vld1q_s16(threats + offset));
+    };
     uint16x8_t groupIndexBase = vdupq_n_u16((uint16_t)firstGroupIndex);
 
     // 32 outputs per iteration, so that one 8-bit mask covers the block's 4-byte groups
@@ -537,10 +559,10 @@ INLINE static void FT_PairwiseCReLU(
         uint32_t nnzMask = 0;
         for (uint32_t j = 0; j < 32; j += 16)
         {
-            int16x8_t a0 = vld1q_s16(accumulator + i + j);
-            int16x8_t a1 = vld1q_s16(accumulator + i + j + 8);
-            int16x8_t b0 = vld1q_s16(accumulator + halfSize + i + j);
-            int16x8_t b1 = vld1q_s16(accumulator + halfSize + i + j + 8);
+            int16x8_t a0 = loadSum(i + j);
+            int16x8_t a1 = loadSum(i + j + 8);
+            int16x8_t b0 = loadSum(halfSize + i + j);
+            int16x8_t b1 = loadSum(halfSize + i + j + 8);
 
             // Only the first factor needs the lower clamp: a negative second factor makes the
             // product negative, which the unsigned narrowing below clips to zero
@@ -655,16 +677,19 @@ INLINE static int32_t HiddenLayerL2_LastLayer(const IntermediateType* input, con
 
 #else // no SIMD support
 
-// Pairwise activation of one accumulator: the two halves are clipped to [0, QA] and multiplied,
+// Pairwise activation of one perspective: the piece and threat accumulators are summed with wrapping
+// int16 adds, the two halves of the sum are clipped to [0, QA] and multiplied,
 // then shifted back into uint8. Output length is AccumulatorSize/2.
-INLINE static void FT_PairwiseCReLU(IntermediateType* output, const AccumulatorType* accumulator)
+INLINE static void FT_PairwiseCReLU(IntermediateType* output, const AccumulatorType* accumulator, const AccumulatorType* threats)
 {
     constexpr uint32_t halfSize = AccumulatorSize / 2;
 
     for (uint32_t i = 0; i < halfSize; ++i)
     {
-        const int32_t a = Clamp<int32_t>(accumulator[i], 0, ActivationRangeScaling);
-        const int32_t b = Clamp<int32_t>(accumulator[i + halfSize], 0, ActivationRangeScaling);
+        const AccumulatorType sumA = (AccumulatorType)(accumulator[i] + threats[i]);
+        const AccumulatorType sumB = (AccumulatorType)(accumulator[i + halfSize] + threats[i + halfSize]);
+        const int32_t a = Clamp<int32_t>(sumA, 0, ActivationRangeScaling);
+        const int32_t b = Clamp<int32_t>(sumB, 0, ActivationRangeScaling);
         output[i] = (IntermediateType)((a * b) >> PairwiseShift);
     }
 }
@@ -800,7 +825,8 @@ bool PackedNeuralNetwork::LoadFromFile(const char* filePath)
     return true;
 }
 
-int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const
+int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator& stmThreatAccum,
+    const Accumulator& nstmAccum, const Accumulator& nstmThreatAccum, uint32_t variant) const
 {
     ASSERT(variant < NumVariants);
     const OutputSubnetVariant& subnet = outputSubnetVariants[variant];
@@ -816,16 +842,16 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator&
     // the buffer needs no slack.
     alignas(16) uint16_t nnzIndices[L1InputSize / 4];
     uint32_t nnzCount = 0;
-    FT_PairwiseCReLU(l1Input, stmAccum.values, nnzIndices, nnzCount, 0);
-    FT_PairwiseCReLU(l1Input + AccumulatorSize / 2, nstmAccum.values, nnzIndices, nnzCount, AccumulatorSize / 2 / 4);
+    FT_PairwiseCReLU(l1Input, stmAccum.values, stmThreatAccum.values, nnzIndices, nnzCount, 0);
+    FT_PairwiseCReLU(l1Input + AccumulatorSize / 2, nstmAccum.values, nstmThreatAccum.values, nnzIndices, nnzCount, AccumulatorSize / 2 / 4);
 
     HiddenLayerL1(l2Input, l1Input, subnet.l1Weights, subnet.l1Biases, nnzIndices, nnzCount);
     return HiddenLayerL2_LastLayer(l2Input, subnet);
 
 #else // no SIMD support
 
-    FT_PairwiseCReLU(l1Input, stmAccum.values);
-    FT_PairwiseCReLU(l1Input + AccumulatorSize / 2, nstmAccum.values);
+    FT_PairwiseCReLU(l1Input, stmAccum.values, stmThreatAccum.values);
+    FT_PairwiseCReLU(l1Input + AccumulatorSize / 2, nstmAccum.values, nstmThreatAccum.values);
 
     HiddenLayer<L1InputSize, L1Size>(l2Input, l1Input, subnet.l1Weights, subnet.l1Biases);
 
@@ -839,13 +865,7 @@ int32_t PackedNeuralNetwork::Run(const Accumulator& stmAccum, const Accumulator&
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const
 {
-    Accumulator stmAccum;
-    stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
-
-    Accumulator nstmAccum;
-    nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
-
-    return Run(stmAccum, nstmAccum, variant);
+    return Run(stmFeatures, stmNumFeatures, nstmFeatures, nstmNumFeatures, nullptr, nullptr, 0, variant);
 }
 
 int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures,
@@ -853,13 +873,17 @@ int32_t PackedNeuralNetwork::Run(const uint16_t* stmFeatures, const uint32_t stm
 {
     Accumulator stmAccum;
     stmAccum.Refresh(accumulatorWeights, accumulatorBiases, stmNumFeatures, stmFeatures);
-    stmAccum.AddThreatFeatures(threatWeights, numThreatFeatures, stmThreatFeatures);
 
     Accumulator nstmAccum;
     nstmAccum.Refresh(accumulatorWeights, accumulatorBiases, nstmNumFeatures, nstmFeatures);
-    nstmAccum.AddThreatFeatures(threatWeights, numThreatFeatures, nstmThreatFeatures);
 
-    return Run(stmAccum, nstmAccum, variant);
+    Accumulator stmThreatAccum;
+    stmThreatAccum.RefreshThreats(threatWeights, numThreatFeatures, stmThreatFeatures);
+
+    Accumulator nstmThreatAccum;
+    nstmThreatAccum.RefreshThreats(threatWeights, numThreatFeatures, nstmThreatFeatures);
+
+    return Run(stmAccum, stmThreatAccum, nstmAccum, nstmThreatAccum, variant);
 }
 
 } // namespace nn

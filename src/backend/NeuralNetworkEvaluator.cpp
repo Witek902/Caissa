@@ -287,18 +287,25 @@ INLINE static uint32_t DirtyPieceToFeatureIndex(const Piece piece, const Color p
     return index;
 }
 
-// adds the threat rows of both perspectives to the piece accumulators
-static void AddThreatInputs(const nn::PackedNeuralNetwork& network, const Position& pos, nn::Accumulator& stmAccum, nn::Accumulator& nstmAccum)
+// threat accumulators of both perspectives from scratch
+static void RefreshThreatInputs(const nn::PackedNeuralNetwork& network, const Position& pos, nn::Accumulator& stmThreatAccum, nn::Accumulator& nstmThreatAccum)
 {
     ThreatRecord records[nn::MaxThreatRecords];
     const uint32_t numRecords = GetThreatRecords(pos, records);
 
     uint16_t features[nn::MaxThreatRecords];
     uint32_t numFeatures = ThreatRecordsToFeatures(records, numRecords, GetThreatOrientation(pos, pos.GetSideToMove()), features);
-    stmAccum.AddThreatFeatures(network.threatWeights, numFeatures, features);
+    stmThreatAccum.RefreshThreats(network.threatWeights, numFeatures, features);
 
     numFeatures = ThreatRecordsToFeatures(records, numRecords, GetThreatOrientation(pos, pos.GetSideToMove() ^ 1), features);
-    nstmAccum.AddThreatFeatures(network.threatWeights, numFeatures, features);
+    nstmThreatAccum.RefreshThreats(network.threatWeights, numFeatures, features);
+}
+
+// the int16 sum the activation sees
+static void SumAccumulators(const nn::Accumulator& accum, const nn::Accumulator& threatAccum, nn::Accumulator& outSum)
+{
+    for (uint32_t i = 0; i < nn::AccumulatorSize; ++i)
+        outSum.values[i] = (nn::AccumulatorType)(accum.values[i] + threatAccum.values[i]);
 }
 
 int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, const Position& pos)
@@ -343,15 +350,20 @@ void NNEvaluator::Trace(const nn::PackedNeuralNetwork& network, const Position& 
     nn::Accumulator nstmAccum;
     nstmAccum.Refresh(network.accumulatorWeights, network.accumulatorBiases, numNstmFeatures, nstmFeatures);
 
-    AddThreatInputs(network, pos, stmAccum, nstmAccum);
+    nn::Accumulator stmThreatAccum, nstmThreatAccum;
+    RefreshThreatInputs(network, pos, stmThreatAccum, nstmThreatAccum);
 
-    static_assert(sizeof(outTrace.rawAccumulator[0]) == sizeof(stmAccum.values), "accumulator size mismatch");
-    memcpy(outTrace.rawAccumulator[0], stmAccum.values, sizeof(stmAccum.values));
-    memcpy(outTrace.rawAccumulator[1], nstmAccum.values, sizeof(nstmAccum.values));
+    nn::Accumulator stmSum, nstmSum;
+    SumAccumulators(stmAccum, stmThreatAccum, stmSum);
+    SumAccumulators(nstmAccum, nstmThreatAccum, nstmSum);
+
+    static_assert(sizeof(outTrace.rawAccumulator[0]) == sizeof(stmSum.values), "accumulator size mismatch");
+    memcpy(outTrace.rawAccumulator[0], stmSum.values, sizeof(stmSum.values));
+    memcpy(outTrace.rawAccumulator[1], nstmSum.values, sizeof(nstmSum.values));
 
     // run the last layer for every output bucket variant
     for (uint32_t v = 0; v < nn::NumVariants; ++v)
-        outTrace.bucketOutput[v] = network.Run(stmAccum, nstmAccum, v);
+        outTrace.bucketOutput[v] = network.Run(stmAccum, stmThreatAccum, nstmAccum, nstmThreatAccum, v);
 
     outTrace.selectedVariant = GetNetworkVariant(pos);
 }
@@ -651,11 +663,12 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
         RefreshAccumulator<Black>(network, node, cache);
     }
 
-    nn::Accumulator ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
-    nn::Accumulator theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
-    AddThreatInputs(network, node.position, ourAccumulator, theirAccumulator);
+    const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
+    const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
+    nn::Accumulator ourThreatAccumulator, theirThreatAccumulator;
+    RefreshThreatInputs(network, node.position, ourThreatAccumulator, theirThreatAccumulator);
 
-    const int32_t nnOutput = network.Run(ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+    const int32_t nnOutput = network.Run(ourAccumulator, ourThreatAccumulator, theirAccumulator, theirThreatAccumulator, GetNetworkVariant(node.position));
 
 #ifdef VALIDATE_NETWORK_OUTPUT
     {
@@ -670,7 +683,12 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
     {
         // the buffer is allocated at search start, so collection enabled during a search starts with the next one
         if (t_statsBuffer)
-            CollectAccumulatorStats(*t_statsBuffer, ourAccumulator, theirAccumulator, GetNetworkVariant(node.position));
+        {
+            nn::Accumulator ourSum, theirSum;
+            SumAccumulators(ourAccumulator, ourThreatAccumulator, ourSum);
+            SumAccumulators(theirAccumulator, theirThreatAccumulator, theirSum);
+            CollectAccumulatorStats(*t_statsBuffer, ourSum, theirSum, GetNetworkVariant(node.position));
+        }
     }
 
     return nnOutput;

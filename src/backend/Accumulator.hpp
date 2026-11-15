@@ -341,9 +341,11 @@ struct alignas(CACHELINE_SIZE) Accumulator
         UpdateImpl<true>(target, &extraTarget, source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
     }
 
-    // adds the threat weight rows of the features
-    INLINE void AddThreatFeatures(const ThreatWeightType* weights, uint32_t numFeatures, const uint16_t* features)
+    // sum of the threat weight rows of the features (threat accumulators have no bias)
+    INLINE void RefreshThreats(const ThreatWeightType* weights, uint32_t numFeatures, const uint16_t* features)
     {
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            values[i] = 0;
         for (uint32_t j = 0; j < numFeatures; ++j)
         {
             ASSERT(features[j] < NumThreatInputs);

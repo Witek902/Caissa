@@ -128,8 +128,9 @@ struct alignas(CACHELINE_SIZE) PackedNeuralNetwork
     // save to file
     bool SaveToFile(const char* filePath) const;
 
-    // Calculate neural network output based on incrementally updated accumulators
-    int32_t Run(const Accumulator& stmAccum, const Accumulator& nstmAccum, uint32_t variant) const;
+    // Calculate neural network output based on incrementally updated piece and threat accumulators
+    int32_t Run(const Accumulator& stmAccum, const Accumulator& stmThreatAccum,
+        const Accumulator& nstmAccum, const Accumulator& nstmThreatAccum, uint32_t variant) const;
 
     // Calculate neural network output based on input
     int32_t Run(const uint16_t* stmFeatures, const uint32_t stmNumFeatures, const uint16_t* nstmFeatures, const uint32_t nstmNumFeatures, uint32_t variant) const;
