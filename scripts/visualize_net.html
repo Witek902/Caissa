@@ -68,6 +68,8 @@
   </div>
   <div class="tabs" id="tabs">
     <button data-view="acc" class="active">Accumulator</button>
+    <button data-view="thr" hidden>Threats (type)</button>
+    <button data-view="thrn" hidden>Threats (neuron)</button>
     <button data-view="l1">L1 (pairs&rarr;16)</button>
     <button data-view="l2">L2 (16&rarr;32)</button>
     <button data-view="l3">L3 (32&rarr;1)</button>
@@ -75,6 +77,14 @@
   <div class="group" id="bucketGroup">
     <label for="bucket">King bucket</label>
     <select id="bucket"></select>
+  </div>
+  <div class="group" id="threatTypeGroup">
+    <label for="threatType">Threat</label>
+    <select id="threatType"></select>
+  </div>
+  <div class="group" id="neuronGroup">
+    <label for="neuron">Neuron</label>
+    <input type="number" id="neuron" min="0" step="1" value="0" style="width:72px" />
   </div>
   <div class="group" id="variantGroup">
     <label for="variant">Output bucket</label>
@@ -128,20 +138,32 @@
 <script>
 "use strict";
 
-// ---- Architecture constants (must match PackedNeuralNetwork.hpp, versions 13 to 15) ----
-const HEADER_SIZE      = 64;
-const NUM_KING_BUCKETS = 32;
-const NUM_INPUTS       = NUM_KING_BUCKETS * 12 * 64; // 24576
-const L1_SIZE          = 16;
-const L2_SIZE          = 32;
-const NUM_VARIANTS     = 8;
+// ---- Architecture constants (must match PackedNeuralNetwork.hpp and ThreatInputs.cpp) ----
+const HEADER_SIZE       = 64;
+const NUM_KING_BUCKETS  = 32;
+const NUM_INPUTS        = NUM_KING_BUCKETS * 12 * 64; // 24576
+const NUM_THREAT_INPUTS = 60144;
+const L1_SIZE           = 16;
+const L2_SIZE           = 32;
+
+// Output subnet count and threat input count of each supported version. Version 17 splits every
+// piece count bucket by "any queen on the board", version 18 adds the threat inputs.
+const VERSION_LAYOUTS = {
+  13: { variants: 8,  threats: 0 },
+  14: { variants: 8,  threats: 0 },
+  15: { variants: 8,  threats: 0 },
+  17: { variants: 16, threats: 0 },
+  18: { variants: 16, threats: NUM_THREAT_INPUTS },
+};
 
 // The accumulator width (AccumulatorSize) differs between nets and is set from the loaded file.
 // The two halves of each accumulator are clipped and multiplied together, so one perspective
 // contributes ACC_SIZE/2 pair slots and both perspectives together are ACC_SIZE wide.
-let ACC_SIZE   = 1024;
-let PAIR_COUNT = ACC_SIZE / 2;      // pair slots per perspective
-let L1_IN_SIZE = ACC_SIZE;          // L1InputSize
+let ACC_SIZE     = 1024;
+let PAIR_COUNT   = ACC_SIZE / 2;    // pair slots per perspective
+let L1_IN_SIZE   = ACC_SIZE;        // L1InputSize
+let NUM_VARIANTS = 8;
+let NUM_THREATS  = 0;               // threat inputs in the file
 
 // Dequantization scales (raw_int / scale = float weight), see PackedNeuralNetwork.hpp
 const PAIRWISE_SCALE = 255 * 255 / 512;   // 127.002, the hidden activation scale
@@ -160,20 +182,23 @@ const HL_IN  = "#ff45c8";   // input-neuron (column) highlight
 // ---- Parsed network ----
 let net = null;
 
-// ---- Byte offsets (all but the first two depend on the accumulator width) ----
+// ---- Byte offsets (all but the first two depend on the layout of the loaded net) ----
 const ACC_W_OFF = HEADER_SIZE;      // int16[NUM_INPUTS*ACC_SIZE]
 const L1_W_OFF = 0;                 // int8[L1_IN*L1]  see hiddenWeightIndex
-let ACC_B_OFF, VARIANTS_OFF, VARIANT_STRIDE, L1_B_OFF, L2_W_OFF, L2_B_OFF, L3_W_OFF, L3_B_OFF;
+let ACC_B_OFF, THR_W_OFF, VARIANTS_OFF, VARIANT_STRIDE, L1_B_OFF, L2_W_OFF, L2_B_OFF, L3_W_OFF, L3_B_OFF;
 
 // Every struct in the file is aligned to 64 bytes (CACHELINE_SIZE).
 function alignTo64(x) { return Math.ceil(x / 64) * 64; }
 
-function setAccumulatorSize(acc) {
+function setLayout(acc, variants, threats) {
   ACC_SIZE = acc;
   PAIR_COUNT = acc / 2;
   L1_IN_SIZE = acc;
+  NUM_VARIANTS = variants;
+  NUM_THREATS = threats;
   ACC_B_OFF = ACC_W_OFF + 2 * NUM_INPUTS * acc;                // int16[ACC_SIZE]
-  VARIANTS_OFF = alignTo64(ACC_B_OFF + 2 * acc);               // OutputSubnetVariant[8]
+  THR_W_OFF = ACC_B_OFF + 2 * acc;                             // int8[NUM_THREATS*ACC_SIZE]
+  VARIANTS_OFF = alignTo64(THR_W_OFF + threats * acc);         // OutputSubnetVariant[NUM_VARIANTS]
   L1_B_OFF = L1_IN_SIZE * L1_SIZE;                              // int32[16]
   L2_W_OFF = L1_B_OFF + 4 * L1_SIZE;                            // int8[16*32]  see hiddenWeightIndex
   L2_B_OFF = L2_W_OFF + L1_SIZE * L2_SIZE;                      // int32[32]
@@ -181,13 +206,13 @@ function setAccumulatorSize(acc) {
   L3_B_OFF = L3_W_OFF + 2 * L2_SIZE;                            // int32
   VARIANT_STRIDE = alignTo64(L3_B_OFF + 4 + 4 * 15);            // sizeof(OutputSubnetVariant)
 }
-setAccumulatorSize(ACC_SIZE);
+setLayout(ACC_SIZE, NUM_VARIANTS, NUM_THREATS);
 
-// The trainer writes zero layer sizes into the header, so the width comes from the file size:
-// every accumulator neuron adds its FT weights and bias plus one L1 column per output subnet.
-function accumulatorSizeFromFile(byteLength) {
-  const fixedBytes = HEADER_SIZE + NUM_VARIANTS * (4 * L1_SIZE + L1_SIZE * L2_SIZE + 4 * L2_SIZE + 2 * L2_SIZE + 4 + 4 * 15);
-  const bytesPerNeuron = 2 * NUM_INPUTS + 2 + NUM_VARIANTS * L1_SIZE;
+// The trainer writes zero layer sizes into the header, so the width comes from the file size: every
+// accumulator neuron adds its piece and threat weights and bias plus one L1 column per output subnet.
+function accumulatorSizeFromFile(byteLength, variants, threats) {
+  const fixedBytes = HEADER_SIZE + variants * (4 * L1_SIZE + L1_SIZE * L2_SIZE + 4 * L2_SIZE + 2 * L2_SIZE + 4 + 4 * 15);
+  const bytesPerNeuron = 2 * NUM_INPUTS + 2 + threats + variants * L1_SIZE;
   const acc = (byteLength - fixedBytes) / bytesPerNeuron;
   return Number.isInteger(acc) && acc > 0 && acc % 32 === 0 ? acc : 0;
 }
@@ -213,6 +238,118 @@ function l3B(v)              { return net.dv.getInt32(variantBase(v) + L3_B_OFF,
 // Accumulator neuron n is multiplied by its partner and drives one L1 column per perspective.
 function pairSlotOf(n)  { return n % PAIR_COUNT; }
 function pairPartner(n) { return n < PAIR_COUNT ? n + PAIR_COUNT : n - PAIR_COUNT; }
+
+function neuronLines(n) {
+  return [["neuron", "#" + n], ["pair partner", "#" + pairPartner(n)], ["feeds L1 input", "#" + pairSlotOf(n)]];
+}
+
+function squareName(sq) { return FILES[sq & 7] + ((sq >> 3) + 1); }
+
+// ---- Threat features (ThreatInputs.cpp) ----
+// Threat pieces 0-9 = wP wN wB wR wQ bP bN bB bR bQ. Like the piece inputs, colors and squares are
+// seen from the accumulator's perspective: white is its side, its pawns attack towards rank 8.
+const THREAT_PIECE_LABELS = ["wP","wN","wB","wR","wQ","bP","bN","bB","bR","bQ"];
+
+// slot of each victim type (P N B R Q) inside an attacker type's block, -1 if the pair is not a feature
+const VICTIM_SLOT = [
+  [0, 1, -1, 2, -1],   // pawn
+  [0, 1,  2, 3,  4],   // knight
+  [0, 1,  2, 3, -1],   // bishop
+  [0, 1,  2, 3, -1],   // rook
+  [0, 1,  2, 3,  4],   // queen
+];
+const NUM_VICTIM_SLOTS = [3, 5, 4, 4, 5];
+
+// THREAT_TARGETS[piece][from] = squares the piece attacks on an empty board, ascending; the threat onto
+// the k-th of them is feature block.base + THREAT_FROM_OFFSET[piece][from] + k
+const THREAT_TARGETS = [], THREAT_FROM_OFFSET = [];
+// (attacker, victim) blocks in file order, and THREAT_BLOCK_INDEX[attacker][victim] = index or -1
+const THREAT_BLOCKS = [], THREAT_BLOCK_INDEX = [];
+
+function emptyBoardAttacks(type, color, from) {
+  const f = from & 7, r = from >> 3, out = [];
+  const add = (df, dr) => {
+    const ff = f + df, rr = r + dr;
+    if (ff < 0 || ff > 7 || rr < 0 || rr > 7) return false;
+    out.push(rr * 8 + ff);
+    return true;
+  };
+  const ray = (df, dr) => { for (let i = 1; add(df * i, dr * i); i++); };
+  if (type === 0) {
+    // pawns never stand on the first or the last rank
+    if (r === 0 || r === 7) return out;
+    const dr = color === 0 ? 1 : -1;
+    add(-1, dr); add(1, dr);
+  } else if (type === 1) {
+    for (const [df, dr] of [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]) add(df, dr);
+  } else {
+    if (type !== 3) { ray(1, 1); ray(1, -1); ray(-1, 1); ray(-1, -1); }
+    if (type !== 2) { ray(1, 0); ray(-1, 0); ray(0, 1); ray(0, -1); }
+  }
+  return out.sort((a, b) => a - b);
+}
+
+(function initThreatTables() {
+  let blockStart = 0;
+  for (let ac = 0; ac < 2; ac++) {
+    for (let at = 0; at < 5; at++) {
+      const a = ac * 5 + at;
+      THREAT_TARGETS[a] = []; THREAT_FROM_OFFSET[a] = [];
+      let numPairs = 0;
+      for (let sq = 0; sq < 64; sq++) {
+        THREAT_TARGETS[a][sq] = emptyBoardAttacks(at, ac, sq);
+        THREAT_FROM_OFFSET[a][sq] = numPairs;
+        numPairs += THREAT_TARGETS[a][sq].length;
+      }
+      THREAT_BLOCK_INDEX[a] = new Array(10).fill(-1);
+      for (let vc = 0; vc < 2; vc++) {
+        for (let vt = 0; vt < 5; vt++) {
+          const slot = VICTIM_SLOT[at][vt];
+          if (slot < 0) continue;
+          // pieces of the same type threaten each other both ways (except a pawn defending a pawn),
+          // so only the threat from the higher square is a feature
+          const mutual = at === vt && (ac !== vc || at !== 0);
+          THREAT_BLOCK_INDEX[a][vc * 5 + vt] = THREAT_BLOCKS.length;
+          THREAT_BLOCKS.push({ attacker: a, victim: vc * 5 + vt, mutual,
+                               base: blockStart + (vc * NUM_VICTIM_SLOTS[at] + slot) * numPairs });
+        }
+      }
+      blockStart += 2 * NUM_VICTIM_SLOTS[at] * numPairs;
+    }
+  }
+  if (blockStart !== NUM_THREAT_INPUTS) throw new Error(`threat tables have ${blockStart} features`);
+})();
+
+// Feature of the threat onto the k-th target, or -1 when the slot is unused: the threat back is the
+// feature, or the threat cannot occur (a pawn on the first or last rank). The trainer zeroes those rows.
+function threatFeature(block, from, k) {
+  const to = THREAT_TARGETS[block.attacker][from][k];
+  if (block.mutual && from < to) return -1;
+  if (block.victim % 5 === 0 && ((to >> 3) === 0 || (to >> 3) === 7)) return -1;
+  return block.base + THREAT_FROM_OFFSET[block.attacker][from] + k;
+}
+
+// Features of each block with their victim square and the victim's offset from the attacker
+// (off = (dy + 7) * 15 + dx + 7), and how many features share each square and each offset.
+const OFFSETS = 15 * 15;
+for (const block of THREAT_BLOCKS) {
+  const features = [], to = [], off = [];
+  block.victimCount = new Uint16Array(64);
+  block.offsetCount = new Uint16Array(OFFSETS);
+  for (let from = 0; from < 64; from++) {
+    const targets = THREAT_TARGETS[block.attacker][from];
+    for (let k = 0; k < targets.length; k++) {
+      const feature = threatFeature(block, from, k);
+      if (feature < 0) continue;
+      const t = targets[k], o = ((t >> 3) - (from >> 3) + 7) * 15 + (t & 7) - (from & 7) + 7;
+      features.push(feature); to.push(t); off.push(o);
+      block.victimCount[t]++; block.offsetCount[o]++;
+    }
+  }
+  block.features = Int32Array.from(features);
+  block.to = Uint8Array.from(to);
+  block.off = Uint8Array.from(off);
+}
 
 // ---- Color mapping: blue (neg) -> black (0) -> red (pos) ----
 // Both ramps have equal CIE L* at equal |w|, and L* is linear in the mapped magnitude.
@@ -262,18 +399,19 @@ function parseNet(buffer) {
   const magic = dv.getUint32(0, true);
   const version = dv.getUint32(4, true);
 
-  if (version < 13 || version > 15) {
+  const layout = VERSION_LAYOUTS[version];
+  if (!layout) {
     throw new Error(`Unsupported network version ${version}; this viewer reads the multilayer ` +
-                    `layout of versions 13 to 15.`);
+                    `layout of versions 13 to 15, 17 and 18.`);
   }
 
-  const acc = accumulatorSizeFromFile(buffer.byteLength);
+  const acc = accumulatorSizeFromFile(buffer.byteLength, layout.variants, layout.threats);
   const headerAcc = dv.getUint32(12, true);
   if (acc === 0 || (headerAcc !== 0 && headerAcc !== acc)) {
-    throw new Error(`File size ${buffer.byteLength} bytes does not match a multilayer net` +
+    throw new Error(`File size ${buffer.byteLength} bytes does not match a version ${version} net` +
                     (headerAcc !== 0 ? ` with accumulator size ${headerAcc}.` : "."));
   }
-  setAccumulatorSize(acc);
+  setLayout(acc, layout.variants, layout.threats);
   TRACE_MAX.acc = ACC_SIZE - 1;
 
   const needed = VARIANTS_OFF + NUM_VARIANTS * VARIANT_STRIDE;
@@ -283,11 +421,17 @@ function parseNet(buffer) {
 
   const accI16 = new Int16Array(buffer, ACC_W_OFF, NUM_INPUTS * ACC_SIZE);
 
-  let accMaxAbs = 0;
-  for (let i = 0; i < accI16.length; i++) { const a = Math.abs(accI16[i]); if (a > accMaxAbs) accMaxAbs = a; }
+  const thrI8 = NUM_THREATS ? new Int8Array(buffer, THR_W_OFF, NUM_THREATS * ACC_SIZE) : null;
 
-  const obj = { dv, accI16, magic, version, grouped: version >= 14, accMaxAbs, l1MaxAbs: 1, l2MaxAbs: 1, l3MaxAbs: 1 };
+  let accMaxAbs = 0, thrMaxAbs = 0;
+  for (let i = 0; i < accI16.length; i++) { const a = Math.abs(accI16[i]); if (a > accMaxAbs) accMaxAbs = a; }
+  if (thrI8)
+    for (let i = 0; i < thrI8.length; i++) { const a = Math.abs(thrI8[i]); if (a > thrMaxAbs) thrMaxAbs = a; }
+
+  const obj = { dv, accI16, thrI8, magic, version, grouped: version >= 14, accMaxAbs, thrMaxAbs: thrMaxAbs || 1,
+                thrMeanScale: 1, l1MaxAbs: 1, l2MaxAbs: 1, l3MaxAbs: 1 };
   net = obj;
+  if (thrI8) obj.thrMeanScale = threatMeanScale();
 
   let m1 = 0, m2 = 0, m3 = 0;
   for (let v = 0; v < NUM_VARIANTS; v++) {
@@ -309,48 +453,44 @@ function parseNet(buffer) {
 //   - hitTest(x,y): tooltip info + a `select` unit for click-to-trace
 // =====================================================================
 
-// --- Accumulator board view ---
-function buildAccumulator(bucket, cols, tone) {
-  const SQ = 4, BOARD = 8 * SQ, GAP = 1, COLOR_GAP = 4, LABEL_H = 11, PAD_X = 8;
-  const boardOffX = (pt) => pt * (BOARD + GAP) + (pt >= 6 ? COLOR_GAP : 0);
-  const STRIP_W = boardOffX(11) + BOARD;
-  const CELL_W = STRIP_W + PAD_X;
-  const CELL_H = LABEL_H + BOARD + 4;
-  // Partners are stacked so a pair can be compared at a glance: pair slot k puts neuron k on top
-  // and neuron k+PAIR_COUNT directly underneath, and pair groups are separated by a small gap.
-  const PAIR_GAP = 6;
-  const PAIR_H = 2 * CELL_H + PAIR_GAP;
-  const pairRows = Math.ceil(PAIR_COUNT / cols);
-  const W = cols * CELL_W, H = pairRows * PAIR_H;
-
-  const cellPos = (n) => {
-    const k = n % PAIR_COUNT;
-    const col = k % cols, prow = (k - col) / cols;
-    return { col, x: col * CELL_W, y: prow * PAIR_H + (n < PAIR_COUNT ? 0 : CELL_H) };
-  };
-
+// Offscreen canvas with an RGBA buffer filled with the background color
+function createPixelCanvas(W, H) {
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
   const img = ctx.createImageData(W, H);
   const data = img.data;
   for (let i = 0; i < data.length; i += 4) { data[i] = 13; data[i + 1] = 15; data[i + 2] = 18; data[i + 3] = 255; }
+  return { cv, ctx, img, data };
+}
 
-  const maxAbs = net.accMaxAbs;
-  for (let n = 0; n < ACC_SIZE; n++) {
-    const { x: cellX, y: cellY } = cellPos(n);
-    const top = cellY + LABEL_H;
-    for (let pt = 0; pt < 12; pt++) {
-      const bx = cellX + PAD_X + boardOffX(pt);
-      const inputBase = bucket * 768 + pt * 64;
-      for (let sq = 0; sq < 64; sq++) {
-        const file = sq & 7, rank = sq >> 3;
-        const c = colorFor(accW(inputBase + sq, n), maxAbs, tone);
-        fillBlock(data, W, bx + file * SQ, top + (7 - rank) * SQ, SQ, SQ, c[0], c[1], c[2]);
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
+// Grid with one labeled strip of stripW x stripH pixels per accumulator neuron. Partners are stacked
+// so a pair can be compared at a glance: pair slot k puts neuron k on top and neuron k+PAIR_COUNT
+// directly underneath, and pair groups are separated by a small gap.
+function neuronGrid(cols, stripW, stripH) {
+  const LABEL_H = 11, PAD_X = 8, PAIR_GAP = 6;
+  const CELL_W = stripW + PAD_X, CELL_H = LABEL_H + stripH + 4;
+  const PAIR_H = 2 * CELL_H + PAIR_GAP;
+  const pairRows = Math.ceil(PAIR_COUNT / cols);
+
+  const cellPos = (n) => {
+    const k = n % PAIR_COUNT;
+    const col = k % cols, prow = (k - col) / cols;
+    return { x: col * CELL_W, y: prow * PAIR_H + (n < PAIR_COUNT ? 0 : CELL_H) };
+  };
+  const stripPos = (n) => { const { x, y } = cellPos(n); return { x: x + PAD_X, y: y + LABEL_H }; };
+
+  // neuron under the point, and the point relative to the top-left corner of its strip
+  const hit = (ox, oy) => {
+    const col = Math.floor(ox / CELL_W), prow = Math.floor(oy / PAIR_H);
+    if (col < 0 || col >= cols || prow < 0 || prow >= pairRows) return null;
+    const withinPair = oy - prow * PAIR_H;
+    if (withinPair >= 2 * CELL_H) return null;   // the gap separating pair groups
+    const half = withinPair < CELL_H ? 0 : 1;
+    const k = prow * cols + col;
+    if (k >= PAIR_COUNT) return null;
+    return { n: k + half * PAIR_COUNT, lx: ox - col * CELL_W - PAD_X, ly: withinPair - half * CELL_H - LABEL_H };
+  };
 
   const annotations = [];
   for (let n = 0; n < ACC_SIZE; n++) {
@@ -363,35 +503,6 @@ function buildAccumulator(bucket, cols, tone) {
     const { x, y } = cellPos(n);
     return { x: x + 1, y: y + 1, w: CELL_W - 2, h: CELL_H - 2 };
   };
-
-  const hitTest = (ox, oy) => {
-    const col = Math.floor(ox / CELL_W), prow = Math.floor(oy / PAIR_H);
-    if (col < 0 || col >= cols || prow < 0 || prow >= pairRows) return null;
-    const withinPair = oy - prow * PAIR_H;
-    if (withinPair >= 2 * CELL_H) return null;   // the gap separating pair groups
-    const half = withinPair < CELL_H ? 0 : 1;
-    const k = prow * cols + col;
-    if (k >= PAIR_COUNT) return null;
-    const n = k + half * PAIR_COUNT;
-    const select = { layer: "acc", index: n };
-    const pairLines = [["pair partner", "#" + pairPartner(n)], ["feeds L1 input", "#" + pairSlotOf(n)]];
-    const lx = ox - col * CELL_W - PAD_X, ly = withinPair - half * CELL_H - LABEL_H;
-    if (ly < 0 || ly >= BOARD) return { select, lines: [["neuron", "#" + n], ...pairLines], raw: 0, val: 0, noVal: true };
-    for (let pt = 0; pt < 12; pt++) {
-      const within = lx - boardOffX(pt);
-      if (within >= 0 && within < BOARD) {
-        const file = Math.floor(within / SQ), rank = 7 - Math.floor(ly / SQ);
-        const sq = rank * 8 + file;
-        const raw = accW(bucket * 768 + pt * 64 + sq, n);
-        return { select, raw, val: raw / Q_ACC_W,
-          lines: [["neuron", "#" + n], ...pairLines,
-                  ["feature", `${PIECE_LABELS[pt]} ${FILES[file]}${rank + 1}`],
-                  ["king bucket", bucket]] };
-      }
-    }
-    return { select, lines: [["neuron", "#" + n], ...pairLines], raw: 0, val: 0, noVal: true };
-  };
-
   const geometry = {
     highlightsFor: (sel) => {
       if (!(sel && sel.layer === "acc" && sel.index >= 0 && sel.index < ACC_SIZE)) return [];
@@ -400,7 +511,208 @@ function buildAccumulator(bucket, cols, tone) {
               { ...cellRect(pairPartner(sel.index)), color: HL_IN }];
     },
   };
-  return { canvas: cv, hitTest, annotations, geometry };
+  return { W: cols * CELL_W, H: pairRows * PAIR_H, stripPos, hit, annotations, geometry };
+}
+
+// --- Accumulator board view ---
+function buildAccumulator(bucket, cols, tone) {
+  const SQ = 4, BOARD = 8 * SQ, GAP = 1, COLOR_GAP = 4;
+  const boardOffX = (pt) => pt * (BOARD + GAP) + (pt >= 6 ? COLOR_GAP : 0);
+  const grid = neuronGrid(cols, boardOffX(11) + BOARD, BOARD);
+  const { cv, ctx, img, data } = createPixelCanvas(grid.W, grid.H);
+
+  const maxAbs = net.accMaxAbs;
+  for (let n = 0; n < ACC_SIZE; n++) {
+    const { x: stripX, y: stripY } = grid.stripPos(n);
+    for (let pt = 0; pt < 12; pt++) {
+      const bx = stripX + boardOffX(pt);
+      const inputBase = bucket * 768 + pt * 64;
+      for (let sq = 0; sq < 64; sq++) {
+        const file = sq & 7, rank = sq >> 3;
+        const c = colorFor(accW(inputBase + sq, n), maxAbs, tone);
+        fillBlock(data, grid.W, bx + file * SQ, stripY + (7 - rank) * SQ, SQ, SQ, c[0], c[1], c[2]);
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const hitTest = (ox, oy) => {
+    const h = grid.hit(ox, oy);
+    if (!h) return null;
+    const n = h.n;
+    const select = { layer: "acc", index: n };
+    if (h.ly >= 0 && h.ly < BOARD) {
+      for (let pt = 0; pt < 12; pt++) {
+        const within = h.lx - boardOffX(pt);
+        if (within >= 0 && within < BOARD) {
+          const file = Math.floor(within / SQ), rank = 7 - Math.floor(h.ly / SQ);
+          const sq = rank * 8 + file;
+          const raw = accW(bucket * 768 + pt * 64 + sq, n);
+          return { select, raw, val: raw / Q_ACC_W,
+            lines: [...neuronLines(n),
+                    ["feature", `${PIECE_LABELS[pt]} ${FILES[file]}${rank + 1}`],
+                    ["king bucket", bucket]] };
+        }
+      }
+    }
+    return { select, lines: neuronLines(n), raw: 0, val: 0, noVal: true };
+  };
+  return { canvas: cv, hitTest, annotations: grid.annotations, geometry: grid.geometry };
+}
+
+// --- Threat views ---
+// Single threat weights are too many to read, so the views show means: per (attacker, victim) block, the
+// mean weight by the victim's square and by the victim's offset from the attacker.
+const THR_FROM = [104, 92, 44];   // the attacker in the middle of the offset star
+const THR_NONE = [58, 62, 70];    // victim square without a feature
+
+// Mean weights of neuron n in a block by victim square and by offset, NaN where there is no feature
+function threatMeans(block, n) {
+  const victim = new Float32Array(64), offset = new Float32Array(OFFSETS);
+  const w8 = net.thrI8;
+  for (let i = 0; i < block.features.length; i++) {
+    const w = w8[block.features[i] * ACC_SIZE + n];
+    victim[block.to[i]] += w;
+    offset[block.off[i]] += w;
+  }
+  for (let s = 0; s < 64; s++) victim[s] = block.victimCount[s] ? victim[s] / block.victimCount[s] : NaN;
+  for (let o = 0; o < OFFSETS; o++) offset[o] = block.offsetCount[o] ? offset[o] / block.offsetCount[o] : NaN;
+  return { victim, offset };
+}
+
+// Color scale of the threat views: 99th percentile of |mean| over all neurons and blocks, so that the
+// means of a few rare single features do not darken everything else
+function threatMeanScale() {
+  const STEPS = 10, hist = new Uint32Array(128 * STEPS + 1);
+  const sumV = new Float32Array(64 * ACC_SIZE), sumO = new Float32Array(OFFSETS * ACC_SIZE);
+  const w8 = net.thrI8;
+  let total = 0;
+  const addMeans = (sums, counts) => {
+    for (let g = 0; g < counts.length; g++) {
+      if (!counts[g]) continue;
+      for (let n = 0; n < ACC_SIZE; n++) hist[Math.round(Math.abs(sums[g * ACC_SIZE + n]) / counts[g] * STEPS)]++;
+      total += ACC_SIZE;
+    }
+  };
+  for (const b of THREAT_BLOCKS) {
+    sumV.fill(0); sumO.fill(0);
+    for (let i = 0; i < b.features.length; i++) {
+      const row = b.features[i] * ACC_SIZE, v = b.to[i] * ACC_SIZE, o = b.off[i] * ACC_SIZE;
+      for (let n = 0; n < ACC_SIZE; n++) { const w = w8[row + n]; sumV[v + n] += w; sumO[o + n] += w; }
+    }
+    addMeans(sumV, b.victimCount);
+    addMeans(sumO, b.offsetCount);
+  }
+  let count = 0;
+  for (let i = 0; i < hist.length; i++) {
+    count += hist[i];
+    if (count >= 0.99 * total) return Math.max(i, 1) / STEPS;
+  }
+  return 127;
+}
+
+// One block: the victim square board (rank 8 on top) next to the offset star (attacker in the middle)
+function threatCellLayout(sq, os, gap) {
+  const boardW = 8 * sq, starW = 15 * os, h = Math.max(boardW, starW);
+  return { sq, os, boardX: 0, boardY: (h - boardW) >> 1, starX: boardW + gap, starY: (h - starW) >> 1,
+           w: boardW + gap + starW, h };
+}
+
+function paintThreatCell(data, W, x0, y0, L, means, tone) {
+  const scale = net.thrMeanScale;
+  for (let s = 0; s < 64; s++) {
+    const m = means.victim[s];
+    const c = Number.isNaN(m) ? THR_NONE : colorFor(m, scale, tone);
+    fillBlock(data, W, x0 + L.boardX + (s & 7) * L.sq, y0 + L.boardY + (7 - (s >> 3)) * L.sq, L.sq, L.sq, c[0], c[1], c[2]);
+  }
+  for (let o = 0; o < OFFSETS; o++) {
+    const m = means.offset[o];
+    if (Number.isNaN(m)) continue;
+    const c = colorFor(m, scale, tone);
+    fillBlock(data, W, x0 + L.starX + (o % 15) * L.os, y0 + L.starY + (14 - Math.floor(o / 15)) * L.os, L.os, L.os, c[0], c[1], c[2]);
+  }
+  fillBlock(data, W, x0 + L.starX + 7 * L.os, y0 + L.starY + 7 * L.os, L.os, L.os, ...THR_FROM);
+}
+
+// tooltip for the point (lx, ly) relative to the top-left corner of a block
+function threatCellHit(n, block, L, means, lx, ly) {
+  const select = { layer: "acc", index: n };
+  const lines = [...neuronLines(n), ["threat", `${THREAT_PIECE_LABELS[block.attacker]} → ${THREAT_PIECE_LABELS[block.victim]}`]];
+  const none = (extra) => ({ select, lines: [...lines, ...extra], raw: 0, val: 0, noVal: true });
+  const mean = (m, count, extra) => Number.isNaN(m) ? none([...extra, ["features", "none"]]) :
+    { select, lines: [...lines, ...extra, ["features", count]], raw: m, val: m / Q_ACC_W, mean: true };
+
+  const bx = lx - L.boardX, by = ly - L.boardY;
+  if (bx >= 0 && bx < 8 * L.sq && by >= 0 && by < 8 * L.sq) {
+    const s = (7 - Math.floor(by / L.sq)) * 8 + Math.floor(bx / L.sq);
+    return mean(means.victim[s], block.victimCount[s], [["victim square", squareName(s)]]);
+  }
+  const sx = Math.floor((lx - L.starX) / L.os), sy = 14 - Math.floor((ly - L.starY) / L.os);
+  if (sx < 0 || sx > 14 || sy < 0 || sy > 14) return none([]);
+  const o = sy * 15 + sx, ddx = sx - 7, ddy = sy - 7;
+  if (ddx === 0 && ddy === 0) return none([["offset", "the attacker"]]);
+  if (Number.isNaN(means.offset[o])) return none([]);
+  const steps = (d, unit) => `${d > 0 ? "+" : ""}${d} ${unit}${Math.abs(d) === 1 ? "" : "s"}`;
+  return mean(means.offset[o], block.offsetCount[o], [["victim offset", `${steps(ddx, "file")}, ${steps(ddy, "rank")}`]]);
+}
+
+// One block for all neurons
+function buildThreatsByType(blockIndex, cols, tone) {
+  const block = THREAT_BLOCKS[blockIndex];
+  const L = threatCellLayout(4, 2, 4);
+  const grid = neuronGrid(cols, L.w, L.h);
+  const { cv, ctx, img, data } = createPixelCanvas(grid.W, grid.H);
+  const means = [];
+  for (let n = 0; n < ACC_SIZE; n++) {
+    means[n] = threatMeans(block, n);
+    const { x, y } = grid.stripPos(n);
+    paintThreatCell(data, grid.W, x, y, L, means[n], tone);
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const hitTest = (ox, oy) => {
+    const h = grid.hit(ox, oy);
+    return h ? threatCellHit(h.n, block, L, means[h.n], h.lx, h.ly) : null;
+  };
+  return { canvas: cv, hitTest, annotations: grid.annotations, geometry: grid.geometry };
+}
+
+// All blocks of one neuron: rows = attacker, columns = victim
+function buildThreatsByNeuron(n, tone) {
+  const L = threatCellLayout(6, 4, 4);
+  const AXIS = 30, GAP = 12, COLOR_GAP = 16;
+  const colX = (i) => AXIS + i * (L.w + GAP) + (i >= 5 ? COLOR_GAP : 0);
+  const rowY = (i) => AXIS + i * (L.h + GAP) + (i >= 5 ? COLOR_GAP : 0);
+  const W = colX(9) + L.w + 2, H = rowY(9) + L.h + 2;
+  const { cv, ctx, img, data } = createPixelCanvas(W, H);
+  const means = THREAT_BLOCKS.map((block) => threatMeans(block, n));
+  THREAT_BLOCKS.forEach((block, b) => paintThreatCell(data, W, colX(block.victim), rowY(block.attacker), L, means[b], tone));
+  ctx.putImageData(img, 0, 0);
+
+  const annotations = [{ sx: 4, sy: 4, text: "#" + n, align: "left", baseline: "top", color: "#aab2bd" }];
+  for (let i = 0; i < 10; i++) {
+    annotations.push({ sx: colX(i) + L.w / 2, sy: AXIS - 6, text: "victim " + THREAT_PIECE_LABELS[i],
+                       align: "center", baseline: "bottom", color: "#8b939d" });
+    annotations.push({ sx: AXIS - 6, sy: rowY(i) + L.h / 2, text: THREAT_PIECE_LABELS[i],
+                       align: "right", baseline: "middle", color: "#8b939d" });
+    for (let j = 0; j < 10; j++)
+      if (THREAT_BLOCK_INDEX[i][j] < 0)
+        annotations.push({ sx: colX(j) + L.w / 2, sy: rowY(i) + L.h / 2, text: "no feature",
+                           align: "center", baseline: "middle", color: "#4a515b" });
+  }
+
+  const indexAt = (p, start, size) => {
+    for (let i = 0; i < 10; i++) if (p >= start(i) && p < start(i) + size) return i;
+    return -1;
+  };
+  const hitTest = (ox, oy) => {
+    const a = indexAt(oy, rowY, L.h), v = indexAt(ox, colX, L.w);
+    if (a < 0 || v < 0) return null;
+    const b = THREAT_BLOCK_INDEX[a][v];
+    if (b < 0) return null;
+    return threatCellHit(n, THREAT_BLOCKS[b], L, means[b], ox - colX(v), oy - rowY(a));
+  };
+  return { canvas: cv, hitTest, annotations, geometry: { highlightsFor: () => [] } };
 }
 
 // --- Generic matrix view (L1 / L2 / L3) ---
@@ -650,7 +962,9 @@ class Viewport {
     let html = info.lines.map(([k, v]) => `<span class="k">${k}:</span> <span class="v">${v}</span>`).join("<br>");
     if (!info.noVal) {
       const cls = info.raw > 0 ? "pos" : (info.raw < 0 ? "neg" : "");
-      html += `<br><span class="k">raw int:</span> <span class="${cls}">${info.raw}</span>`;
+      html += info.mean
+        ? `<br><span class="k">mean raw:</span> <span class="${cls}">${info.raw.toFixed(1)}</span>`
+        : `<br><span class="k">raw int:</span> <span class="${cls}">${info.raw}</span>`;
       html += `<br><span class="k">float:</span> <span class="${cls}">${info.val.toFixed(5)}</span>`;
     }
     this.tip.innerHTML = html;
@@ -669,13 +983,14 @@ class Viewport {
 //  UI wiring
 // =====================================================================
 const els = {};
-["file","tabs","bucket","variant","cols","gain","gainVal","exponent","exponentVal",
+["file","tabs","bucket","variant","threatType","neuron","cols","gain","gainVal","exponent","exponentVal",
  "colorbar","cbMin","cbMax","fit","status","info","legend",
- "bucketGroup","variantGroup","colsGroup","stage","tooltip",
+ "bucketGroup","variantGroup","threatTypeGroup","neuronGroup","colsGroup","stage","tooltip",
  "traceLayer","traceIdx","traceClear"].forEach(id => els[id] = document.getElementById(id));
 
-const state = { view: "acc", bucket: 0, variant: 0, cols: 8, exponent: 0.45, selection: null };
-const gains = { acc: 0, l1: 0, l2: 0, l3: 0 };   // raw slider values, per view
+const state = { view: "acc", bucket: 0, variant: 0, threatBlock: 0, neuron: 0, exponent: 0.45, selection: null };
+const columns = { acc: 8, thr: 24 };   // per view, the threat strips are much narrower
+const gains = { acc: 0, thr: 0, thrn: 0, l1: 0, l2: 0, l3: 0 };   // raw slider values, per view
 const TRACE_MAX = { acc: ACC_SIZE - 1, l1: L1_SIZE - 1, l2: L2_SIZE - 1 };
 let currentGeometry = null;
 
@@ -683,7 +998,24 @@ const vp = new Viewport(els.stage, els.tooltip);
 vp.onSelect = (sel) => setSelection(sel);
 
 for (let i = 0; i < NUM_KING_BUCKETS; i++) els.bucket.add(new Option("king bucket " + i, i));
-for (let i = 0; i < NUM_VARIANTS; i++) els.variant.add(new Option("output bucket " + i, i));
+THREAT_BLOCKS.forEach((b, i) =>
+  els.threatType.add(new Option(`${THREAT_PIECE_LABELS[b.attacker]} → ${THREAT_PIECE_LABELS[b.victim]}`, i)));
+
+// The variant is the piece count bucket min(pieces / 4, 7), kings excluded; with 16 variants
+// it is doubled and the odd variants are for positions with a queen on the board.
+function fillVariantOptions() {
+  els.variant.length = 0;
+  const queens = NUM_VARIANTS > 8;
+  for (let v = 0; v < NUM_VARIANTS; v++) {
+    const b = queens ? v >> 1 : v;
+    const pieces = b === 7 ? "28+" : `${4 * b}-${4 * b + 3}`;
+    const queen = queens ? (v & 1 ? ", queens" : ", no queens") : "";
+    els.variant.add(new Option(`output bucket ${v} (${pieces} pieces${queen})`, v));
+  }
+  state.variant = Math.min(state.variant, NUM_VARIANTS - 1);
+  els.variant.value = state.variant;
+}
+fillVariantOptions();
 
 function gainFactor(view) { return Math.pow(10, gains[view] / 100); }
 function toneFor(view) { return { gain: gainFactor(view), exponent: state.exponent }; }
@@ -691,6 +1023,7 @@ function toneFor(view) { return { gain: gainFactor(view), exponent: state.expone
 // Largest raw weight magnitude of the view and the scale that dequantizes it.
 function weightRange(view) {
   if (view === "acc") return { maxAbs: net.accMaxAbs, deq: Q_ACC_W };
+  if (view === "thr" || view === "thrn") return { maxAbs: net.thrMeanScale, deq: Q_ACC_W };
   if (view === "l1")  return { maxAbs: net.l1MaxAbs, deq: Q_HID_W };
   if (view === "l2")  return { maxAbs: net.l2MaxAbs, deq: Q_HID_W };
   return { maxAbs: net.l3MaxAbs, deq: Q_L3_W };
@@ -717,8 +1050,10 @@ function rebuild(refit) {
   if (!net) return;
   const tone = toneFor(state.view);
   let built;
-  if (state.view === "acc")      built = buildAccumulator(state.bucket, state.cols, tone);
-  else if (state.view === "l1")  built = buildL1(state.variant, tone);
+  if (state.view === "acc")       built = buildAccumulator(state.bucket, columns.acc, tone);
+  else if (state.view === "thr")  built = buildThreatsByType(state.threatBlock, columns.thr, tone);
+  else if (state.view === "thrn") built = buildThreatsByNeuron(state.neuron, tone);
+  else if (state.view === "l1")   built = buildL1(state.variant, tone);
   else if (state.view === "l2")  built = buildL2(state.variant, tone);
   else                           built = buildL3(state.variant, tone);
   currentGeometry = built.geometry;
@@ -734,6 +1069,12 @@ function applyHighlights() {
 function setSelection(sel) {
   state.selection = sel;
   syncTraceUI();
+  // the neuron view follows the traced accumulator neuron
+  if (sel && sel.layer === "acc" && sel.index !== state.neuron) {
+    state.neuron = sel.index;
+    els.neuron.value = sel.index;
+    if (state.view === "thrn") { rebuild(false); return; }
+  }
   applyHighlights();   // overlay-only update, no pixel rebuild
 }
 
@@ -745,10 +1086,13 @@ function syncTraceUI() {
 }
 
 function updateContextUI() {
-  const acc = state.view === "acc";
+  const view = state.view, acc = view === "acc";
   els.bucketGroup.style.display = acc ? "" : "none";
-  els.colsGroup.style.display = acc ? "" : "none";
-  els.variantGroup.style.display = acc ? "none" : "";
+  els.colsGroup.style.display = acc || view === "thr" ? "" : "none";
+  els.threatTypeGroup.style.display = view === "thr" ? "" : "none";
+  els.neuronGroup.style.display = view === "thrn" ? "" : "none";
+  els.variantGroup.style.display = ["l1", "l2", "l3"].includes(view) ? "" : "none";
+  if (columns[view]) els.cols.value = columns[view];
   els.gain.value = gains[state.view];
   els.gainVal.textContent = gainFactor(state.view).toFixed(1) + "×";
   els.exponent.value = state.exponent;
@@ -762,6 +1106,17 @@ function updateContextUI() {
       "Click a neuron: <span style='color:" + HL_OUT + "'>cyan</span> = selected, " +
       "<span style='color:" + HL_IN + "'>pink</span> = the neuron it is multiplied by. " +
       "The L1 tab then highlights the pair slot they feed.";
+  } else if (view === "thr" || view === "thrn") {
+    const layout = view === "thr"
+      ? "each strip = one accumulator neuron for the selected attacker &rarr; victim pair, stacked in pairs like " +
+        "the Accumulator tab. "
+      : `<b>neuron #${state.neuron}</b> (pair partner #${pairPartner(state.neuron)}): rows = attacker, ` +
+        "columns = victim. Set the neuron here, with Trace, or by clicking a neuron in another tab. ";
+    els.legend.innerHTML = "<b>threats:</b> " + layout + "Board = mean weight of the threats by the square of " +
+      "the attacked piece (grey = no feature). Star = mean weight by where the victim is relative to the " +
+      "attacker (gold, in the middle). Colors and squares are seen from the perspective, like the piece " +
+      "inputs: w = its side, its king on files a&ndash;d. The color scale ends at the 99th percentile " +
+      "of all such means.";
   } else if (state.view === "l1") {
     els.legend.innerHTML = "<b>L1:</b> rows = 16 outputs, columns = " + L1_IN_SIZE + " pairwise inputs " +
       "(left = STM pairs, right = NSTM pairs), trailing = bias. Column k is " +
@@ -799,9 +1154,15 @@ els.tabs.addEventListener("click", (e) => {
 });
 els.bucket.addEventListener("change", () => { state.bucket = +els.bucket.value; rebuild(false); });
 els.variant.addEventListener("change", () => { state.variant = +els.variant.value; rebuild(false); });
+els.threatType.addEventListener("change", () => { state.threatBlock = +els.threatType.value; rebuild(false); });
+els.neuron.addEventListener("change", () => {
+  const idx = Math.max(0, Math.min(ACC_SIZE - 1, +els.neuron.value || 0));
+  els.neuron.value = idx;
+  setSelection({ layer: "acc", index: idx });
+});
 els.cols.addEventListener("change", () => {
-  state.cols = Math.max(1, Math.min(64, +els.cols.value || 8));
-  els.cols.value = state.cols; rebuild(true);
+  columns[state.view] = Math.max(1, Math.min(64, +els.cols.value || 8));
+  els.cols.value = columns[state.view]; rebuild(true);
 });
 els.gain.addEventListener("input", () => {
   gains[state.view] = +els.gain.value;
@@ -848,9 +1209,18 @@ els.file.addEventListener("change", (e) => {
         `magic <b>${/^[\x20-\x7e]+$/.test(magicStr) ? magicStr : net.magic}</b> &middot; ` +
         `version <b>${net.version}</b>${net.grouped ? " &middot; grouped layout" : ""} &middot; ` +
         `accumulator <b>${ACC_SIZE}</b> &middot; ` +
+        `output buckets <b>${NUM_VARIANTS}</b> &middot; ` +
         `acc max|w| <b>${net.accMaxAbs}</b> &middot; ` +
+        (net.thrI8 ? `threat max|w| <b>${net.thrMaxAbs}</b> &middot; ` : "") +
         `L1/L2/L3 max|w| <b>${net.l1MaxAbs}/${net.l2MaxAbs}/${net.l3MaxAbs}</b> &middot; ` +
         `parsed in ${ms} ms`;
+      fillVariantOptions();
+      state.neuron = 0; els.neuron.value = 0; els.neuron.max = ACC_SIZE - 1;
+      for (const b of els.tabs.children) {
+        b.hidden = !net.thrI8 && (b.dataset.view === "thr" || b.dataset.view === "thrn");
+        if (b.hidden && b.dataset.view === state.view) state.view = "acc";
+      }
+      for (const b of els.tabs.children) b.classList.toggle("active", b.dataset.view === state.view);
       state.selection = null; syncTraceUI();
       rebuild(true);
     } catch (err) {
