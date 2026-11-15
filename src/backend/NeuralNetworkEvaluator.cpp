@@ -10,6 +10,9 @@
 // enable validation of NN output (check if incremental updates work correctly)
 //#define VALIDATE_NETWORK_OUTPUT
 
+// enable validation of every threat accumulator update against a rebuild
+//#define VALIDATE_THREAT_INPUTS
+
 // search-time accumulator statistics collection
 
 static std::atomic<bool> s_collectAccumulatorStats{ false };
@@ -162,16 +165,28 @@ static void CollectAccumulatorStats(NNAccumulatorStats& stats, const nn::Accumul
 
 static std::atomic<uint64_t> s_NumAccumulatorUpdates = 0;
 static std::atomic<uint64_t> s_NumAccumulatorRefreshes = 0;
+static std::atomic<uint64_t> s_NumThreatUpdatedPlies = 0;
+static std::atomic<uint64_t> s_NumThreatWalks = 0;
+static std::atomic<uint64_t> s_NumThreatRefreshes = 0;
 
 void NNEvaluator::GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes)
 {
     outNumUpdates = s_NumAccumulatorUpdates;
     outNumRefreshes = s_NumAccumulatorRefreshes;
 }
+void NNEvaluator::GetThreatStats(uint64_t& outNumUpdatedPlies, uint64_t& outNumWalks, uint64_t& outNumRefreshes)
+{
+    outNumUpdatedPlies = s_NumThreatUpdatedPlies;
+    outNumWalks = s_NumThreatWalks;
+    outNumRefreshes = s_NumThreatRefreshes;
+}
 void NNEvaluator::ResetStats()
 {
     s_NumAccumulatorUpdates = 0;
     s_NumAccumulatorRefreshes = 0;
+    s_NumThreatUpdatedPlies = 0;
+    s_NumThreatWalks = 0;
+    s_NumThreatRefreshes = 0;
 }
 
 #endif // NN_ACCUMULATOR_STATS
@@ -655,18 +670,149 @@ INLINE static bool UpdateBothFromParent(const nn::PackedNeuralNetwork& network, 
     return true;
 }
 
-int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
+#ifdef VALIDATE_THREAT_INPUTS
+static void ValidateThreatAccumulator(const nn::PackedNeuralNetwork& network, const NodeInfo& node, const Color perspective)
+{
+    uint16_t features[nn::MaxThreatRecords];
+    const uint32_t numFeatures = PositionToThreatFeatures(node.position, perspective, features);
+    nn::Accumulator reference;
+    reference.RefreshThreats(network.threatWeights, numFeatures, features);
+    ASSERT(memcmp(reference.values, node.threatAccumulatorPtr[perspective]->values, sizeof(reference.values)) == 0);
+}
+#endif // VALIDATE_THREAT_INPUTS
+
+// Threat accumulators of both perspectives. Each perspective walks back to the closest node with a computed
+// threat accumulator and applies the threat changes of every ply from there, filling the plies in between
+// for their siblings; the changes of a ply are found once for both perspectives. The walk ends with a
+// rebuild at the root or at a node where the perspective's king is on the other side of the d/e line,
+// because there every feature has the other orientation.
+static void UpdateThreatAccumulators(const nn::PackedNeuralNetwork& network, NodeInfo& node)
+{
+    const bool dirty[2] = { node.nnContext.threatAccumDirty[White], node.nnContext.threatAccumDirty[Black] };
+    if (!dirty[White] && !dirty[Black])
+        return;
+
+    // first node to update incrementally, nullptr when the accumulator is rebuilt
+    NodeInfo* firstNode[2] = { nullptr, nullptr };
+    for (Color c = 0; c < 2; ++c)
+    {
+        if (!dirty[c])
+            continue;
+
+        const bool mirrored = IsThreatMirrored(node.position, c);
+        for (NodeInfo* nodePtr = &node; IsThreatMirrored(nodePtr->position, c) == mirrored; --nodePtr)
+        {
+            if (!nodePtr->nnContext.threatAccumDirty[c])
+            {
+                firstNode[c] = nodePtr + 1;
+                break;
+            }
+            if (nodePtr->ply == 0)
+                break;
+        }
+    }
+
+    const ThreatOrientation orientations[2] = { GetThreatOrientation(node.position, White), GetThreatOrientation(node.position, Black) };
+
+    NodeInfo* walkStart = &node + 1;
+    for (Color c = 0; c < 2; ++c)
+    {
+        if (firstNode[c] && firstNode[c] < walkStart)
+            walkStart = firstNode[c];
+#ifdef NN_ACCUMULATOR_STATS
+        if (firstNode[c])
+            s_NumThreatWalks++;
+#endif // NN_ACCUMULATOR_STATS
+    }
+
+    for (NodeInfo* nodePtr = walkStart; nodePtr <= &node; ++nodePtr)
+    {
+        const NodeInfo& parent = *(nodePtr - 1);
+        ThreatDeltas deltas;
+        GetThreatDeltas(parent.position, nodePtr->position, deltas);
+
+        for (Color c = 0; c < 2; ++c)
+        {
+            if (!firstNode[c] || nodePtr < firstNode[c])
+                continue;
+
+            ASSERT(nodePtr->nnContext.threatAccumDirty[c]);
+            ASSERT(!parent.nnContext.threatAccumDirty[c]);
+
+            uint16_t addedFeatures[nn::MaxChangedThreats];
+            uint16_t removedFeatures[nn::MaxChangedThreats];
+            const uint32_t numAdded = ThreatRecordsToFeatures(deltas.added, deltas.numAdded, orientations[c], addedFeatures);
+            const uint32_t numRemoved = ThreatRecordsToFeatures(deltas.removed, deltas.numRemoved, orientations[c], removedFeatures);
+
+            if (numAdded == 0 && numRemoved == 0)
+            {
+                nodePtr->threatAccumulatorPtr[c] = parent.threatAccumulatorPtr[c];
+            }
+            else
+            {
+                nn::Accumulator& target = nodePtr->accumulatorData[2 + c];
+                nn::Accumulator::UpdateThreats(target, *parent.threatAccumulatorPtr[c], network.threatWeights,
+                    numAdded, addedFeatures, numRemoved, removedFeatures);
+                nodePtr->threatAccumulatorPtr[c] = &target;
+            }
+            nodePtr->nnContext.threatAccumDirty[c] = false;
+
+#ifdef NN_ACCUMULATOR_STATS
+            s_NumThreatUpdatedPlies++;
+#endif // NN_ACCUMULATOR_STATS
+#ifdef VALIDATE_THREAT_INPUTS
+            ValidateThreatAccumulator(network, *nodePtr, c);
+#endif // VALIDATE_THREAT_INPUTS
+        }
+    }
+
+    const bool rebuild[2] = { dirty[White] && !firstNode[White], dirty[Black] && !firstNode[Black] };
+    if (rebuild[White] || rebuild[Black])
+    {
+        ThreatRecord records[nn::MaxThreatRecords];
+        const uint32_t numRecords = GetThreatRecords(node.position, records);
+
+        for (Color c = 0; c < 2; ++c)
+        {
+            if (!rebuild[c])
+                continue;
+
+            uint16_t features[nn::MaxThreatRecords];
+            const uint32_t numFeatures = ThreatRecordsToFeatures(records, numRecords, orientations[c], features);
+            nn::Accumulator& target = node.accumulatorData[2 + c];
+            target.RefreshThreats(network.threatWeights, numFeatures, features);
+            node.threatAccumulatorPtr[c] = &target;
+            node.nnContext.threatAccumDirty[c] = false;
+
+#ifdef NN_ACCUMULATOR_STATS
+            s_NumThreatRefreshes++;
+#endif // NN_ACCUMULATOR_STATS
+#ifdef VALIDATE_THREAT_INPUTS
+            ValidateThreatAccumulator(network, node, c);
+#endif // VALIDATE_THREAT_INPUTS
+        }
+    }
+}
+
+static void UpdateAccumulators(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
     if (!UpdateBothFromParent(network, node))
     {
         RefreshAccumulator<White>(network, node, cache);
         RefreshAccumulator<Black>(network, node, cache);
     }
+    UpdateThreatAccumulators(network, node);
+}
 
-    const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove()];
-    const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[(uint32_t)node.position.GetSideToMove() ^ 1u];
-    nn::Accumulator ourThreatAccumulator, theirThreatAccumulator;
-    RefreshThreatInputs(network, node.position, ourThreatAccumulator, theirThreatAccumulator);
+int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
+{
+    UpdateAccumulators(network, node, cache);
+
+    const Color stm = node.position.GetSideToMove();
+    const nn::Accumulator& ourAccumulator = *node.accumulatorPtr[stm];
+    const nn::Accumulator& theirAccumulator = *node.accumulatorPtr[stm ^ 1];
+    const nn::Accumulator& ourThreatAccumulator = *node.threatAccumulatorPtr[stm];
+    const nn::Accumulator& theirThreatAccumulator = *node.threatAccumulatorPtr[stm ^ 1];
 
     const int32_t nnOutput = network.Run(ourAccumulator, ourThreatAccumulator, theirAccumulator, theirThreatAccumulator, GetNetworkVariant(node.position));
 
@@ -696,9 +842,5 @@ int32_t NNEvaluator::Evaluate(const nn::PackedNeuralNetwork& network, NodeInfo& 
 
 void NNEvaluator::EnsureAccumulatorUpdated(const nn::PackedNeuralNetwork& network, NodeInfo& node, AccumulatorCache& cache)
 {
-    if (!UpdateBothFromParent(network, node))
-    {
-        RefreshAccumulator<White>(network, node, cache);
-        RefreshAccumulator<Black>(network, node, cache);
-    }
+    UpdateAccumulators(network, node, cache);
 }

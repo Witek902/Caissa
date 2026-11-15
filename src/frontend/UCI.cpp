@@ -774,6 +774,11 @@ static void PrintNNEvaluatorStats()
     NNEvaluator::GetStats(numUpdates, numRefreshes);
     printf("NN accumulator updates: %" PRIu64 "\n", numUpdates);
     printf("NN accumulator refreshes: %" PRIu64 "\n", numRefreshes);
+
+    uint64_t numThreatPlies = 0, numThreatWalks = 0, numThreatRefreshes = 0;
+    NNEvaluator::GetThreatStats(numThreatPlies, numThreatWalks, numThreatRefreshes);
+    printf("NN threat accumulator plies updated: %" PRIu64 " in %" PRIu64 " walks\n", numThreatPlies, numThreatWalks);
+    printf("NN threat accumulator rebuilds: %" PRIu64 "\n", numThreatRefreshes);
 }
 #endif // NN_ACCUMULATOR_STATS
 

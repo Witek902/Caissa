@@ -17,10 +17,17 @@ struct DirtyPiece
 // promotion with capture
 static constexpr uint32_t MaxNumDirtyPieces = 3;
 
+// accumulators stored per search node: piece accumulators of both perspectives, then threat accumulators
+static constexpr uint32_t NumNodeAccumulators = 4;
+
 struct NNEvaluatorContext
 {
     // indicates which accumulator is dirty
     bool accumDirty[2];
+
+    // Indicates which threat accumulator is dirty. Separate from the piece flags: the piece update marks
+    // intermediate plies as computed, which says nothing about their threat accumulators.
+    bool threatAccumDirty[2];
 
     // added and removed pieces information
     uint8_t numDirtyPieces;
@@ -35,6 +42,8 @@ struct NNEvaluatorContext
     {
         accumDirty[0] = true;
         accumDirty[1] = true;
+        threatAccumDirty[0] = true;
+        threatAccumDirty[1] = true;
         numDirtyPieces = 0;
     }
 };
@@ -126,6 +135,8 @@ public:
 
 #ifdef NN_ACCUMULATOR_STATS
     static void GetStats(uint64_t& outNumUpdates, uint64_t& outNumRefreshes);
+    // threat accumulators: plies updated incrementally, walks back to a computed ancestor, rebuilds (per perspective)
+    static void GetThreatStats(uint64_t& outNumUpdatedPlies, uint64_t& outNumWalks, uint64_t& outNumRefreshes);
     static void ResetStats();
 #endif // NN_ACCUMULATOR_STATS
 };

@@ -301,7 +301,7 @@ bool CheckInsufficientMaterial(const Position& pos)
 ScoreType Evaluate(const Position& pos)
 {
     NodeInfo dummyNode = { pos };
-    nn::Accumulator accumulators[2];
+    nn::Accumulator accumulators[NumNodeAccumulators];
     dummyNode.accumulatorData = accumulators;
 
     AccumulatorCache dummyCache;

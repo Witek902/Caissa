@@ -354,6 +354,29 @@ struct alignas(CACHELINE_SIZE) Accumulator
                 values[i] = (AccumulatorType)(values[i] + row[i]);
         }
     }
+
+    INLINE static void UpdateThreats(Accumulator& target, const Accumulator& source, const ThreatWeightType* weights,
+        uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+        uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
+    {
+        ASSERT(&target != &source);
+        for (uint32_t i = 0; i < AccumulatorSize; ++i)
+            target.values[i] = source.values[i];
+        for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+        {
+            ASSERT(removedFeatures[j] < NumThreatInputs);
+            const ThreatWeightType* row = weights + (size_t)removedFeatures[j] * AccumulatorSize;
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+                target.values[i] = (AccumulatorType)(target.values[i] - row[i]);
+        }
+        for (uint32_t j = 0; j < numAddedFeatures; ++j)
+        {
+            ASSERT(addedFeatures[j] < NumThreatInputs);
+            const ThreatWeightType* row = weights + (size_t)addedFeatures[j] * AccumulatorSize;
+            for (uint32_t i = 0; i < AccumulatorSize; ++i)
+                target.values[i] = (AccumulatorType)(target.values[i] + row[i]);
+        }
+    }
 };
 
 } // namespace nn
