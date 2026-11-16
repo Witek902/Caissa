@@ -317,6 +317,24 @@ uint32_t ThreatRecordsToFeatures(const ThreatRecord* records, uint32_t numRecord
     return numFeatures;
 }
 
+void ThreatRecordsToFeatures(const ThreatRecord* records, uint32_t numRecords, const ThreatOrientation orientations[2],
+    uint16_t* outWhiteFeatures, uint16_t* outBlackFeatures, uint32_t outNumFeatures[2])
+{
+    uint32_t numWhite = 0;
+    uint32_t numBlack = 0;
+    for (uint32_t i = 0; i < numRecords; ++i)
+    {
+        const uint32_t whiteIndex = GetThreatFeatureIndex(records[i], orientations[White]);
+        const uint32_t blackIndex = GetThreatFeatureIndex(records[i], orientations[Black]);
+        outWhiteFeatures[numWhite] = (uint16_t)whiteIndex;
+        outBlackFeatures[numBlack] = (uint16_t)blackIndex;
+        numWhite += whiteIndex < nn::NumThreatInputs;
+        numBlack += blackIndex < nn::NumThreatInputs;
+    }
+    outNumFeatures[White] = numWhite;
+    outNumFeatures[Black] = numBlack;
+}
+
 uint32_t GetThreatRecords(const Position& pos, ThreatRecord* outRecords)
 {
     const Bitboard occupied = pos.Occupied();

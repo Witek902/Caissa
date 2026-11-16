@@ -78,6 +78,10 @@ uint32_t GetThreatFeatureIndex(const ThreatRecord& record, const ThreatOrientati
 // feature indices of the threats that are features; outFeatures must have room for numRecords entries
 uint32_t ThreatRecordsToFeatures(const ThreatRecord* records, uint32_t numRecords, const ThreatOrientation orientation, uint16_t* outFeatures);
 
+// the same for both perspectives in one pass over the records; orientations and outputs are indexed by color
+void ThreatRecordsToFeatures(const ThreatRecord* records, uint32_t numRecords, const ThreatOrientation orientations[2],
+    uint16_t* outWhiteFeatures, uint16_t* outBlackFeatures, uint32_t outNumFeatures[2]);
+
 // threat features of a position; outFeatures must have room for MaxThreatRecords entries
 uint32_t PositionToThreatFeatures(const Position& pos, const Color perspective, uint16_t* outFeatures);
 

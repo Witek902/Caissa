@@ -355,8 +355,50 @@ struct alignas(CACHELINE_SIZE) Accumulator
         UpdateImpl<true>(target, &extraTarget, source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
     }
 
-    // Threat rows subtracted and added in register tiles, the int8 weights widened on load. Without a source
-    // the accumulator starts from zero (threat accumulators have no bias).
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+    static constexpr uint32_t ThreatTileWidth = OptimalRegisterCount * (VectorRegSize / (8 * sizeof(AccumulatorType)));
+    static_assert(AccumulatorSize % ThreatTileWidth == 0);
+
+    // One register tile of a threat update, the int8 weights widened on load. Without a source the tile
+    // starts from zero (threat accumulators have no bias).
+    template<bool FromSource>
+    INLINE static void UpdateThreatTile(uint32_t chunkBase, Accumulator& target, const Accumulator* source, const ThreatWeightType* weights,
+        uint32_t numAddedFeatures, const uint16_t* addedFeatures,
+        uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
+    {
+        constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
+
+        Int16VecType regs[OptimalRegisterCount];
+        for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+        {
+            if constexpr (FromSource)
+                regs[i] = Int16VecLoad(source->values + chunkBase + i * registerWidth);
+            else
+                regs[i] = Int16VecZero();
+        }
+
+        for (uint32_t j = 0; j < numRemovedFeatures; ++j)
+        {
+            ASSERT(removedFeatures[j] < NumThreatInputs);
+            const ThreatWeightType* row = weights + ((size_t)removedFeatures[j] * AccumulatorSize + chunkBase);
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                regs[i] = Int16VecSub(regs[i], Int8VecLoadWiden(row + i * registerWidth));
+        }
+
+        for (uint32_t j = 0; j < numAddedFeatures; ++j)
+        {
+            ASSERT(addedFeatures[j] < NumThreatInputs);
+            const ThreatWeightType* row = weights + ((size_t)addedFeatures[j] * AccumulatorSize + chunkBase);
+            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+                regs[i] = Int16VecAdd(regs[i], Int8VecLoadWiden(row + i * registerWidth));
+        }
+
+        for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
+            Int16VecStore(target.values + chunkBase + i * registerWidth, regs[i]);
+    }
+#endif // NN_USE_AVX512 || NN_USE_AVX2 || NN_USE_SSE2 || NN_USE_ARM_NEON
+
+    // Threat rows subtracted and added in register tiles. Without a source the accumulator starts from zero.
     template<bool FromSource>
     INLINE static void UpdateThreatsImpl(Accumulator& target, const Accumulator* source, const ThreatWeightType* weights,
         uint32_t numAddedFeatures, const uint16_t* addedFeatures,
@@ -366,44 +408,9 @@ struct alignas(CACHELINE_SIZE) Accumulator
 
 #if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
 
-        constexpr uint32_t registerWidth = VectorRegSize / (8 * sizeof(AccumulatorType));
-        constexpr uint32_t numChunks = AccumulatorSize / registerWidth;
-        static_assert(numChunks % OptimalRegisterCount == 0);
-        constexpr uint32_t numTiles = numChunks / OptimalRegisterCount;
         ASSERT((size_t)weights % 64 == 0);
-
-        Int16VecType regs[OptimalRegisterCount];
-        for (uint32_t tile = 0; tile < numTiles; ++tile)
-        {
-            const uint32_t chunkBase = tile * OptimalRegisterCount * registerWidth;
-
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-            {
-                if constexpr (FromSource)
-                    regs[i] = Int16VecLoad(source->values + chunkBase + i * registerWidth);
-                else
-                    regs[i] = Int16VecZero();
-            }
-
-            for (uint32_t j = 0; j < numRemovedFeatures; ++j)
-            {
-                ASSERT(removedFeatures[j] < NumThreatInputs);
-                const ThreatWeightType* row = weights + ((size_t)removedFeatures[j] * AccumulatorSize + chunkBase);
-                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-                    regs[i] = Int16VecSub(regs[i], Int8VecLoadWiden(row + i * registerWidth));
-            }
-
-            for (uint32_t j = 0; j < numAddedFeatures; ++j)
-            {
-                ASSERT(addedFeatures[j] < NumThreatInputs);
-                const ThreatWeightType* row = weights + ((size_t)addedFeatures[j] * AccumulatorSize + chunkBase);
-                for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-                    regs[i] = Int16VecAdd(regs[i], Int8VecLoadWiden(row + i * registerWidth));
-            }
-
-            for (uint32_t i = 0; i < OptimalRegisterCount; ++i)
-                Int16VecStore(target.values + chunkBase + i * registerWidth, regs[i]);
-        }
+        for (uint32_t chunkBase = 0; chunkBase < AccumulatorSize; chunkBase += ThreatTileWidth)
+            UpdateThreatTile<FromSource>(chunkBase, target, source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
 
 #else // no SIMD support
 
@@ -443,6 +450,26 @@ struct alignas(CACHELINE_SIZE) Accumulator
         uint32_t numRemovedFeatures, const uint16_t* removedFeatures)
     {
         UpdateThreatsImpl<true>(target, &source, weights, numAddedFeatures, addedFeatures, numRemovedFeatures, removedFeatures);
+    }
+
+    // Two independent threat updates in one tile loop, so the row loads of both are in flight together.
+    INLINE static void UpdateThreatsPair(const ThreatWeightType* weights,
+        Accumulator& targetA, const Accumulator& sourceA,
+        uint32_t numAddedA, const uint16_t* addedA, uint32_t numRemovedA, const uint16_t* removedA,
+        Accumulator& targetB, const Accumulator& sourceB,
+        uint32_t numAddedB, const uint16_t* addedB, uint32_t numRemovedB, const uint16_t* removedB)
+    {
+#if defined(NN_USE_AVX512) || defined(NN_USE_AVX2) || defined(NN_USE_SSE2) || defined(NN_USE_ARM_NEON)
+        ASSERT((size_t)weights % 64 == 0);
+        for (uint32_t chunkBase = 0; chunkBase < AccumulatorSize; chunkBase += ThreatTileWidth)
+        {
+            UpdateThreatTile<true>(chunkBase, targetA, &sourceA, weights, numAddedA, addedA, numRemovedA, removedA);
+            UpdateThreatTile<true>(chunkBase, targetB, &sourceB, weights, numAddedB, addedB, numRemovedB, removedB);
+        }
+#else
+        UpdateThreats(targetA, sourceA, weights, numAddedA, addedA, numRemovedA, removedA);
+        UpdateThreats(targetB, sourceB, weights, numAddedB, addedB, numRemovedB, removedB);
+#endif
     }
 };
 

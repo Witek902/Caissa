@@ -731,30 +731,58 @@ static void UpdateThreatAccumulators(const nn::PackedNeuralNetwork& network, Nod
         ThreatDeltas deltas;
         GetThreatDeltas(parent.position, nodePtr->position, deltas);
 
+        const bool update[2] = { firstNode[White] && nodePtr >= firstNode[White], firstNode[Black] && nodePtr >= firstNode[Black] };
+
+        uint16_t addedFeatures[2][nn::MaxChangedThreats];
+        uint16_t removedFeatures[2][nn::MaxChangedThreats];
+        uint32_t numAdded[2] = { 0, 0 };
+        uint32_t numRemoved[2] = { 0, 0 };
+        if (update[White] && update[Black])
+        {
+            ThreatRecordsToFeatures(deltas.added, deltas.numAdded, orientations, addedFeatures[White], addedFeatures[Black], numAdded);
+            ThreatRecordsToFeatures(deltas.removed, deltas.numRemoved, orientations, removedFeatures[White], removedFeatures[Black], numRemoved);
+        }
+        else
+        {
+            const Color c = update[White] ? White : Black;
+            numAdded[c] = ThreatRecordsToFeatures(deltas.added, deltas.numAdded, orientations[c], addedFeatures[c]);
+            numRemoved[c] = ThreatRecordsToFeatures(deltas.removed, deltas.numRemoved, orientations[c], removedFeatures[c]);
+        }
+
+        // a perspective without changed features shares its parent's accumulator
+        bool changed[2];
         for (Color c = 0; c < 2; ++c)
         {
-            if (!firstNode[c] || nodePtr < firstNode[c])
+            changed[c] = update[c] && (numAdded[c] != 0 || numRemoved[c] != 0);
+            if (update[c])
+                nodePtr->threatAccumulatorPtr[c] = changed[c] ? &nodePtr->accumulatorData[2 + c] : parent.threatAccumulatorPtr[c];
+        }
+
+        if (changed[White] && changed[Black])
+        {
+            nn::Accumulator::UpdateThreatsPair(network.threatWeights,
+                nodePtr->accumulatorData[2 + White], *parent.threatAccumulatorPtr[White],
+                numAdded[White], addedFeatures[White], numRemoved[White], removedFeatures[White],
+                nodePtr->accumulatorData[2 + Black], *parent.threatAccumulatorPtr[Black],
+                numAdded[Black], addedFeatures[Black], numRemoved[Black], removedFeatures[Black]);
+        }
+        else
+        {
+            for (Color c = 0; c < 2; ++c)
+            {
+                if (changed[c])
+                    nn::Accumulator::UpdateThreats(nodePtr->accumulatorData[2 + c], *parent.threatAccumulatorPtr[c], network.threatWeights,
+                        numAdded[c], addedFeatures[c], numRemoved[c], removedFeatures[c]);
+            }
+        }
+
+        for (Color c = 0; c < 2; ++c)
+        {
+            if (!update[c])
                 continue;
 
             ASSERT(nodePtr->nnContext.threatAccumDirty[c]);
             ASSERT(!parent.nnContext.threatAccumDirty[c]);
-
-            uint16_t addedFeatures[nn::MaxChangedThreats];
-            uint16_t removedFeatures[nn::MaxChangedThreats];
-            const uint32_t numAdded = ThreatRecordsToFeatures(deltas.added, deltas.numAdded, orientations[c], addedFeatures);
-            const uint32_t numRemoved = ThreatRecordsToFeatures(deltas.removed, deltas.numRemoved, orientations[c], removedFeatures);
-
-            if (numAdded == 0 && numRemoved == 0)
-            {
-                nodePtr->threatAccumulatorPtr[c] = parent.threatAccumulatorPtr[c];
-            }
-            else
-            {
-                nn::Accumulator& target = nodePtr->accumulatorData[2 + c];
-                nn::Accumulator::UpdateThreats(target, *parent.threatAccumulatorPtr[c], network.threatWeights,
-                    numAdded, addedFeatures, numRemoved, removedFeatures);
-                nodePtr->threatAccumulatorPtr[c] = &target;
-            }
             nodePtr->nnContext.threatAccumDirty[c] = false;
 
 #ifdef NN_ACCUMULATOR_STATS
