@@ -1,6 +1,7 @@
 #include "TrainerCommon.hpp"
 #include "../backend/Endgame.hpp"
 #include "../backend/NeuralNetworkEvaluator.hpp"
+#include "../backend/ThreatInputs.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -47,15 +48,18 @@ bool IsEvaluatedAtRuntime(const Position& pos)
     return true;
 }
 
-void AppendSample(SampleRows& rows, const nn::Accumulator& accum)
+// the piece and threat accumulators are summed in int16, like the engine does before the activation
+void AppendSample(SampleRows& rows, const nn::Accumulator& pieces, const nn::Accumulator& threats)
 {
     const size_t base = rows.size();
     rows.resize(base + RowWords, 0ull);
 
     for (uint32_t k = 0; k < PairCount; ++k)
     {
-        const int32_t a = std::clamp<int32_t>(accum.values[k], 0, nn::ActivationRangeScaling);
-        const int32_t b = std::clamp<int32_t>(accum.values[k + PairCount], 0, nn::ActivationRangeScaling);
+        const nn::AccumulatorType sumA = (nn::AccumulatorType)(pieces.values[k] + threats.values[k]);
+        const nn::AccumulatorType sumB = (nn::AccumulatorType)(pieces.values[k + PairCount] + threats.values[k + PairCount]);
+        const int32_t a = std::clamp<int32_t>(sumA, 0, nn::ActivationRangeScaling);
+        const int32_t b = std::clamp<int32_t>(sumB, 0, nn::ActivationRangeScaling);
         if (((a * b) >> nn::PairwiseShift) != 0)
         {
             rows[base + k / 64] |= 1ull << (k % 64);
@@ -106,9 +110,14 @@ uint64_t CollectSamples(const char* path, const nn::PackedNeuralNetwork& net, ui
                 uint16_t features[64];
                 const uint32_t numFeatures = PositionToFeaturesVector(pos, features, perspective);
 
-                nn::Accumulator accum;
-                accum.Refresh(net.accumulatorWeights, net.accumulatorBiases, numFeatures, features);
-                AppendSample(rows, accum);
+                uint16_t threatFeatures[nn::MaxThreatRecords];
+                const uint32_t numThreatFeatures = PositionToThreatFeatures(pos, perspective, threatFeatures);
+
+                nn::Accumulator pieces;
+                pieces.Refresh(net.accumulatorWeights, net.accumulatorBiases, numFeatures, features);
+                nn::Accumulator threats;
+                threats.RefreshThreats(net.threatWeights, numThreatFeatures, threatFeatures);
+                AppendSample(rows, pieces, threats);
             }
         }
 
@@ -263,6 +272,18 @@ void ApplyPermutation(const nn::PackedNeuralNetwork& src, nn::PackedNeuralNetwor
         }
     }
 
+    for (uint32_t feature = 0; feature < nn::NumThreatInputs; ++feature)
+    {
+        const nn::ThreatWeightType* srcRow = src.threatWeights + (size_t)feature * nn::AccumulatorSize;
+        nn::ThreatWeightType* dstRow = dst.threatWeights + (size_t)feature * nn::AccumulatorSize;
+
+        for (uint32_t i = 0; i < PairCount; ++i)
+        {
+            dstRow[i] = srcRow[perm[i]];
+            dstRow[i + PairCount] = srcRow[perm[i] + PairCount];
+        }
+    }
+
     for (uint32_t i = 0; i < PairCount; ++i)
     {
         dst.accumulatorBiases[i] = src.accumulatorBiases[perm[i]];
@@ -319,9 +340,14 @@ bool VerifyIdentical(const char* path, const nn::PackedNeuralNetwork& a, const n
             const uint32_t numNstm = PositionToFeaturesVector(pos, nstmFeatures, stm ^ 1);
             const uint32_t variant = GetNetworkVariant(pos);
 
+            uint16_t stmThreatFeatures[nn::MaxThreatRecords];
+            uint16_t nstmThreatFeatures[nn::MaxThreatRecords];
+            const uint32_t numThreats = PositionToThreatFeatures(pos, stm, stmThreatFeatures);
+            VERIFY(PositionToThreatFeatures(pos, stm ^ 1, nstmThreatFeatures) == numThreats);
+
             numChecked++;
-            if (a.Run(stmFeatures, numStm, nstmFeatures, numNstm, variant) !=
-                b.Run(stmFeatures, numStm, nstmFeatures, numNstm, variant))
+            if (a.Run(stmFeatures, numStm, nstmFeatures, numNstm, stmThreatFeatures, nstmThreatFeatures, numThreats, variant) !=
+                b.Run(stmFeatures, numStm, nstmFeatures, numNstm, stmThreatFeatures, nstmThreatFeatures, numThreats, variant))
             {
                 numMismatches++;
             }
