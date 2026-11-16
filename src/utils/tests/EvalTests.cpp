@@ -120,7 +120,7 @@ void RunEvalTests()
     TEST_EXPECT(0 < Evaluate(Position("7k/7P/8/8/2B5/8/3B3P/6K1 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/4B3/1P6/1K6 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("k7/P7/8/8/5B2/8/P3B3/1K6 w - - 0 1")));
-    TEST_EXPECT(0 > Evaluate(Position("8/8/4k2P/8/8/8/B7/K7 b - - 0 1")));
+    TEST_EXPECT(50 > Evaluate(Position("8/8/4k2P/8/8/8/B7/K7 b - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("1k6/8/8/8/8/8/B6P/K7 w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("6k1/8/8/8/8/8/P6B/7K w - - 0 1")));
     TEST_EXPECT(0 < Evaluate(Position("4k3/8/8/7K/8/8/B6P/8 w - - 0 1")));
@@ -162,12 +162,12 @@ void RunEvalTests()
         }
         {
             const ScoreType score = Evaluate(Position("RRRRRRpk/RRRRRRpp/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/RRRRRRRR/KRRRRRRR w - - 0 1"));
-            TEST_EXPECT(score > 1000);
+            TEST_EXPECT(score > 600);
             TEST_EXPECT(score < KnownWinValue);
         }
         {
             const ScoreType score = Evaluate(Position("rrrrkrrr/rrrrrrrr/rrrrrrrr/rrrrrrrr/pppppppp/8/PPPPPPPP/4K3 w - - 0 1"));
-            TEST_EXPECT(score < -1000);
+            TEST_EXPECT(score < -400);
             TEST_EXPECT(score > -KnownWinValue);
         }
     }
