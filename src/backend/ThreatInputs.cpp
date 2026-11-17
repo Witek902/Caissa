@@ -75,28 +75,78 @@ INLINE Bitboard GetPieceAttacks(const Piece piece, const Color color, const Squa
     }
 }
 
-INLINE uint8_t GetPieceCodeAt(const Position& pos, const Square square)
+constexpr uint32_t PieceBit(const Piece piece)
 {
-    const Color color = (pos.Whites().Occupied() & square) ? White : Black;
-    const Piece piece = pos.GetSide(color).GetPieceAtSquare(square);
-    ASSERT(piece != Piece::None);
-    return ThreatPieceCode(piece, color);
+    return 1u << (uint32_t)piece;
 }
 
-// squares of the pieces each attacker type has features against
-void GetVictimMasks(const Position& pos, Bitboard outMasks[NumPieceTypes])
+// true if the victim types with a slot for the attacker are exactly the given set of piece bits
+constexpr bool HasVictimTypes(const Piece attacker, const uint32_t victimTypes)
 {
-    for (uint32_t attacker = 0; attacker < NumPieceTypes; ++attacker)
+    for (uint32_t victim = 0; victim < NumPieceTypes; ++victim)
     {
-        Bitboard mask = 0;
-        for (uint32_t victim = (uint32_t)Piece::Pawn; victim < (uint32_t)Piece::King; ++victim)
-        {
-            if (c_victimSlot[attacker][victim] >= 0)
-                mask |= pos.Whites().GetPieceBitBoard((Piece)victim) | pos.Blacks().GetPieceBitBoard((Piece)victim);
-        }
-        outMasks[attacker] = mask;
+        if ((c_victimSlot[(uint32_t)attacker][victim] >= 0) != (((victimTypes >> victim) & 1) != 0))
+            return false;
     }
+    return true;
 }
+
+static constexpr uint32_t c_nonKingTypes = PieceBit(Piece::Pawn) | PieceBit(Piece::Knight) | PieceBit(Piece::Bishop) | PieceBit(Piece::Rook) | PieceBit(Piece::Queen);
+
+// the victim masks of ThreatBoards follow c_victimSlot
+static_assert(HasVictimTypes(Piece::None, 0));
+static_assert(HasVictimTypes(Piece::Pawn, PieceBit(Piece::Pawn) | PieceBit(Piece::Knight) | PieceBit(Piece::Rook)));
+static_assert(HasVictimTypes(Piece::Knight, c_nonKingTypes));
+static_assert(HasVictimTypes(Piece::Bishop, c_nonKingTypes & ~PieceBit(Piece::Queen)));
+static_assert(HasVictimTypes(Piece::Rook, c_nonKingTypes & ~PieceBit(Piece::Queen)));
+static_assert(HasVictimTypes(Piece::Queen, c_nonKingTypes));
+static_assert(HasVictimTypes(Piece::King, 0));
+
+// Bitboards of a position computed once for all threat lookups. Records are written through uint8_t, which
+// may alias the position, so reading the position directly would reload its bitboards after every record.
+struct ThreatBoards
+{
+    Bitboard occupied;
+    Bitboard nonKings;
+
+    // squares of the pieces each attacker type has features against
+    Bitboard victimMasks[NumPieceTypes];
+
+    // bits of ThreatPieceCode of the piece on each square: bits 0-2 the piece type, bit 3 the color
+    uint64_t codePlanes[4];
+
+    explicit ThreatBoards(const Position& pos)
+    {
+        const SidePosition& whites = pos.Whites();
+        const SidePosition& blacks = pos.Blacks();
+
+        occupied = pos.Occupied();
+        nonKings = whites.OccupiedExcludingKing() | blacks.OccupiedExcludingKing();
+
+        const Bitboard nonQueens = nonKings & ~(whites.queens | blacks.queens);
+        victimMasks[(uint32_t)Piece::None] = 0;
+        victimMasks[(uint32_t)Piece::Pawn] = whites.pawns | blacks.pawns | whites.knights | blacks.knights | whites.rooks | blacks.rooks;
+        victimMasks[(uint32_t)Piece::Knight] = nonKings;
+        victimMasks[(uint32_t)Piece::Bishop] = nonQueens;
+        victimMasks[(uint32_t)Piece::Rook] = nonQueens;
+        victimMasks[(uint32_t)Piece::Queen] = nonKings;
+        victimMasks[(uint32_t)Piece::King] = 0;
+
+        codePlanes[0] = whites.pawns | whites.bishops | whites.queens | blacks.pawns | blacks.bishops | blacks.queens;
+        codePlanes[1] = whites.knights | whites.bishops | whites.king | blacks.knights | blacks.bishops | blacks.king;
+        codePlanes[2] = whites.rooks | whites.queens | whites.king | blacks.rooks | blacks.queens | blacks.king;
+        codePlanes[3] = blacks.Occupied();
+    }
+
+    INLINE uint8_t CodeAt(const Square square) const
+    {
+        const uint32_t s = square.Index();
+        const uint8_t code = (uint8_t)(((codePlanes[0] >> s) & 1) | (((codePlanes[1] >> s) & 1) << 1) |
+            (((codePlanes[2] >> s) & 1) << 2) | (((codePlanes[3] >> s) & 1) << 3));
+        ASSERT(CodeToPiece(code) != Piece::None);
+        return code;
+    }
+};
 
 // non-king pieces attacking the square that have a feature against the victim type
 Bitboard GetThreatAttackers(const Position& pos, const Square square, const Bitboard occupied, const Piece victim)
@@ -129,38 +179,34 @@ INLINE void AppendThreat(ThreatRecord* records, uint32_t& numRecords, const uint
 }
 
 // threats with the attacker on a changed square, and threats onto a changed square from an unchanged one
-void AppendChangedSquareThreats(const Position& pos, const Bitboard changed, ThreatRecord* records, uint32_t& numRecords)
+void AppendChangedSquareThreats(const Position& pos, const ThreatBoards& boards, const Bitboard changed, ThreatRecord* records, uint32_t& numRecords)
 {
-    const Bitboard occupied = pos.Occupied();
-    const Bitboard nonKings = pos.Whites().OccupiedExcludingKing() | pos.Blacks().OccupiedExcludingKing();
-
-    Bitboard victimMasks[NumPieceTypes];
-    GetVictimMasks(pos, victimMasks);
-
-    (changed & nonKings).Iterate([&](const Square square) INLINE_LAMBDA
+    (changed & boards.nonKings).Iterate([&](const Square square) INLINE_LAMBDA
     {
-        const uint8_t code = GetPieceCodeAt(pos, square);
+        const uint8_t code = boards.CodeAt(square);
         const Piece piece = CodeToPiece(code);
 
-        const Bitboard targets = GetPieceAttacks(piece, CodeToColor(code), square, occupied) & victimMasks[(uint32_t)piece];
+        const Bitboard targets = GetPieceAttacks(piece, CodeToColor(code), square, boards.occupied) & boards.victimMasks[(uint32_t)piece];
         targets.Iterate([&](const Square to) INLINE_LAMBDA
         {
-            AppendThreat(records, numRecords, code, square, GetPieceCodeAt(pos, to), to);
+            AppendThreat(records, numRecords, code, square, boards.CodeAt(to), to);
         });
 
-        const Bitboard attackers = GetThreatAttackers(pos, square, occupied, piece) & ~changed;
+        const Bitboard attackers = GetThreatAttackers(pos, square, boards.occupied, piece) & ~changed;
         attackers.Iterate([&](const Square from) INLINE_LAMBDA
         {
-            AppendThreat(records, numRecords, GetPieceCodeAt(pos, from), from, code, square);
+            AppendThreat(records, numRecords, boards.CodeAt(from), from, code, square);
         });
     });
 }
 
-// Threats between pieces on unchanged squares change only for sliders whose ray passes a changed square.
-void AppendSliderThreatChanges(const Position& before, const Position& after, const Bitboard changed, ThreatDeltas& deltas)
+// Threats between pieces on unchanged squares change only for sliders whose ray passes a square whose
+// occupancy changed; a square occupied in both positions stops the ray in both.
+void AppendSliderThreatChanges(const Position& after, const ThreatBoards& boardsBefore, const ThreatBoards& boardsAfter,
+    const Bitboard changed, ThreatDeltas& deltas)
 {
-    const Bitboard occupiedBefore = before.Occupied();
-    const Bitboard occupiedAfter = after.Occupied();
+    const Bitboard occupiedBefore = boardsBefore.occupied;
+    const Bitboard occupiedAfter = boardsAfter.occupied;
 
     // unchanged squares hold the same pieces in both positions
     const SidePosition& whites = after.Whites();
@@ -170,7 +216,7 @@ void AppendSliderThreatChanges(const Position& before, const Position& after, co
     const Bitboard bishopLike = ((whites.bishops | blacks.bishops) & ~changed) | queens;
 
     Bitboard sliders = 0;
-    changed.Iterate([&](const Square square) INLINE_LAMBDA
+    (occupiedBefore ^ occupiedAfter).Iterate([&](const Square square) INLINE_LAMBDA
     {
         sliders |= (Bitboard::GenerateRookAttacks(square, occupiedBefore) | Bitboard::GenerateRookAttacks(square, occupiedAfter)) & rookLike;
         sliders |= (Bitboard::GenerateBishopAttacks(square, occupiedBefore) | Bitboard::GenerateBishopAttacks(square, occupiedAfter)) & bishopLike;
@@ -179,27 +225,24 @@ void AppendSliderThreatChanges(const Position& before, const Position& after, co
     if (!sliders)
         return;
 
-    Bitboard victimMasks[NumPieceTypes];
-    GetVictimMasks(after, victimMasks);
-
     sliders.Iterate([&](const Square from) INLINE_LAMBDA
     {
-        const uint8_t code = GetPieceCodeAt(after, from);
+        const uint8_t code = boardsAfter.CodeAt(from);
         const Piece piece = CodeToPiece(code);
         const Color color = CodeToColor(code);
-        const Bitboard victims = victimMasks[(uint32_t)piece] & ~changed;
+        const Bitboard victims = boardsAfter.victimMasks[(uint32_t)piece] & ~changed;
 
         const Bitboard targetsBefore = GetPieceAttacks(piece, color, from, occupiedBefore) & victims;
         const Bitboard targetsAfter = GetPieceAttacks(piece, color, from, occupiedAfter) & victims;
 
         (targetsBefore & ~targetsAfter).Iterate([&](const Square to) INLINE_LAMBDA
         {
-            AppendThreat(deltas.removed, deltas.numRemoved, code, from, GetPieceCodeAt(after, to), to);
+            AppendThreat(deltas.removed, deltas.numRemoved, code, from, boardsAfter.CodeAt(to), to);
         });
 
         (targetsAfter & ~targetsBefore).Iterate([&](const Square to) INLINE_LAMBDA
         {
-            AppendThreat(deltas.added, deltas.numAdded, code, from, GetPieceCodeAt(after, to), to);
+            AppendThreat(deltas.added, deltas.numAdded, code, from, boardsAfter.CodeAt(to), to);
         });
     });
 }
@@ -337,10 +380,7 @@ void ThreatRecordsToFeatures(const ThreatRecord* records, uint32_t numRecords, c
 
 uint32_t GetThreatRecords(const Position& pos, ThreatRecord* outRecords)
 {
-    const Bitboard occupied = pos.Occupied();
-
-    Bitboard victimMasks[NumPieceTypes];
-    GetVictimMasks(pos, victimMasks);
+    const ThreatBoards boards(pos);
 
     uint32_t numRecords = 0;
     for (Color color = 0; color < 2; ++color)
@@ -353,11 +393,11 @@ uint32_t GetThreatRecords(const Position& pos, ThreatRecord* outRecords)
 
             side.GetPieceBitBoard(piece).Iterate([&](const Square from) INLINE_LAMBDA
             {
-                const Bitboard targets = GetPieceAttacks(piece, color, from, occupied) & victimMasks[p];
+                const Bitboard targets = GetPieceAttacks(piece, color, from, boards.occupied) & boards.victimMasks[p];
                 targets.Iterate([&](const Square to) INLINE_LAMBDA
                 {
                     ASSERT(numRecords < nn::MaxThreatRecords);
-                    outRecords[numRecords++] = { attackerCode, from.Index(), GetPieceCodeAt(pos, to), to.Index() };
+                    outRecords[numRecords++] = { attackerCode, from.Index(), boards.CodeAt(to), to.Index() };
                 });
             });
         }
@@ -370,22 +410,21 @@ void GetThreatDeltas(const Position& before, const Position& after, ThreatDeltas
     outDeltas.numAdded = 0;
     outDeltas.numRemoved = 0;
 
+    const ThreatBoards boardsBefore(before);
+    const ThreatBoards boardsAfter(after);
+
+    // squares whose piece code differs
     Bitboard changed = 0;
-    for (Color color = 0; color < 2; ++color)
-    {
-        for (uint32_t p = (uint32_t)Piece::Pawn; p <= (uint32_t)Piece::King; ++p)
-        {
-            changed |= before.GetSide(color).GetPieceBitBoard((Piece)p) ^ after.GetSide(color).GetPieceBitBoard((Piece)p);
-        }
-    }
+    for (uint32_t i = 0; i < 4; ++i)
+        changed |= boardsBefore.codePlanes[i] ^ boardsAfter.codePlanes[i];
     ASSERT(changed.Count() <= 4);
 
     if (!changed)
         return;
 
-    AppendChangedSquareThreats(before, changed, outDeltas.removed, outDeltas.numRemoved);
-    AppendChangedSquareThreats(after, changed, outDeltas.added, outDeltas.numAdded);
-    AppendSliderThreatChanges(before, after, changed, outDeltas);
+    AppendChangedSquareThreats(before, boardsBefore, changed, outDeltas.removed, outDeltas.numRemoved);
+    AppendChangedSquareThreats(after, boardsAfter, changed, outDeltas.added, outDeltas.numAdded);
+    AppendSliderThreatChanges(after, boardsBefore, boardsAfter, changed, outDeltas);
 }
 
 uint32_t PositionToThreatFeatures(const Position& pos, const Color perspective, uint16_t* outFeatures)
