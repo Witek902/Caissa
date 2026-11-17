@@ -96,7 +96,7 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 - **Features**: absolute piece coordinates with horizontal symmetry
 - **Feature Transformer**: 1536 neurons per perspective, int16 weights, incrementally updated
 - **Pairwise Activation**: the two halves of each accumulator are clipped and multiplied together, giving 768 values per perspective
-- **Output Network**: `1536 → 16 → 32 → 1`, int8 weights and clipped ReLU in the hidden layers; 8 variants of the whole output network, selected by piece count
+- **Output Network**: `1536 → 16 → 32 → 1`, int8 weights and clipped ReLU in the hidden layers; 16 variants of the whole output network, selected by piece count and queen presence
 - **Sparse Inference** — the first hidden layer skips all-zero input groups; accumulator neurons are reordered (`utils permuteNet`) so that more groups are zero
 - **Vectorized Code** — hand-written SIMD for AVX-512 (with optional VNNI and VBMI2), AVX2 (with optional VNNI), SSE4 and ARM NEON, plus a scalar fallback
 
@@ -276,6 +276,30 @@ Caissa has been written **from the ground up** since early 2021:
   - Generates games with fixed nodes/depth
   - Custom binary format for efficient storage
   - Uses Stefan Pohl's [UHO books](https://www.sp-cc.de/downloads--links.htm) or DFRC openings
+
+Since mid-2026 much of the development is AI-assisted; see [AI Assistance](#ai-assistance).
+
+---
+
+## AI Assistance
+
+Since June 2026 **most** commits to Caissa have been written with the help of AI, mainly [Claude Code](https://claude.com/claude-code). Individual commits are often not even marked as AI-assisted.
+
+**Written mostly by AI:**
+- The CUDA network trainer and its features (multi-stage training, factoriser, optimizer and throughput optimization work)
+- The multilayer NNUE inference and the threat-input work
+- Debugging, analysis and data tools in `utils`, scripts and many unit tests
+- Refactors and cleanups, bug fixes and many commit messages
+
+**Still the author's own:**
+- The search algorithm: `Search.cpp` is in the same form as before 2026, with some AI-assisted patches on top
+- The engine's design and the choice of every idea that gets tried, whether the author's own, from other engines or proposed by the AI
+- Review of every change and the decision what gets tested and merged
+
+**How changes are verified:**
+- Every functional change is tested with SPRT on [OpenBench](https://github.com/AndyGrant/OpenBench) before it is merged. Most tested ideas (over 80%) fail there and are dropped
+- Every change must build cleanly and pass `utils unittest` and `caissa bench`, speedups are measured with `scripts/speedup/speedup.py`
+- Ideas from other engines are reimplemented, not copied. Many new original ideas have been created with the help of AI
 
 ---
 
