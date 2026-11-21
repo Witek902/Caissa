@@ -81,7 +81,7 @@ The project has three CMake targets:
 - `Tuning.cpp/.hpp` – `DEFINE_PARAM` macro for exposing search params to UCI (requires `ENABLE_TUNING` build flag)
 
 ### Neural network (runtime)
-Architecture: `(32×768 → 1536) × 2 → pairwise CReLU → 16 → 32 → 1` (dual-perspective, one accumulator per king side, 32 king buckets, 768 = 12 piece types × 64 squares). The output subnet has 8 variants selected by piece count. Network files use the `.pnn` extension.
+Architecture: `(32×768 + 60144 threats → 768) × 2 → pairwise CReLU → 16 → 32 → 1` (dual-perspective, one accumulator per king side, 32 king buckets, 768 = 12 piece types × 64 squares). Threat features (`ThreatInputs.cpp`) have int8 weights in a separate threat accumulator per perspective, added before the activation. The output subnet has 16 variants selected by piece count and queen presence. Network files use the `.pnn` extension.
 
 ### utils – subcommands (invoked as `bin/utils <command>`)
 `unittest`, `perftest`, `selfplay`, `prepareTrainingData`, `plainTextToTrainingData`, `dumpGames`, `testNetwork`, `trainNetwork`, `trainCudaNetwork` (CUDA only), `validateEndgame`, `generateEndgamePositions`, `generateRandomPositions`, `analyzeGames`

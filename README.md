@@ -90,13 +90,14 @@ Caissa consistently ranks among the top chess engines on major rating lists:
 
 ### Architecture
 
-`(32×768 → 1536) × 2 → 16 → 32 → 1` — dual-perspective feature transformer (one accumulator per king side),
-32 king buckets, 768 features per perspective (12 piece types × 64 squares), followed by a small multilayer output network.
+`(32×768 + 60144 threats → 768) × 2 → 16 → 32 → 1` — dual-perspective feature transformer (one accumulator per king side),
+32 king buckets, 768 piece features per perspective (12 piece types × 64 squares) plus 60,144 threat features, followed by a small multilayer output network.
 
 - **Features**: absolute piece coordinates with horizontal symmetry
-- **Feature Transformer**: 1536 neurons per perspective, int16 weights, incrementally updated
-- **Pairwise Activation**: the two halves of each accumulator are clipped and multiplied together, giving 768 values per perspective
-- **Output Network**: `1536 → 16 → 32 → 1`, int8 weights and clipped ReLU in the hidden layers; 16 variants of the whole output network, selected by piece count and queen presence
+- **Threat Inputs**: one feature per non-king piece attacking or defending another non-king piece, indexed by both pieces and both squares; int8 weights summed into a separate threat accumulator per perspective, updated incrementally from the threats each move changes
+- **Feature Transformer**: 768 neurons per perspective, int16 piece weights, incrementally updated; the threat accumulator is added before the activation
+- **Pairwise Activation**: the two halves of each accumulator are clipped and multiplied together, giving 384 values per perspective
+- **Output Network**: `768 → 16 → 32 → 1`, int8 weights and clipped ReLU in the hidden layers; 16 variants of the whole output network, selected by piece count and queen presence
 - **Sparse Inference** — the first hidden layer skips all-zero input groups; accumulator neurons are reordered (`utils permuteNet`) so that more groups are zero
 - **Vectorized Code** — hand-written SIMD for AVX-512 (with optional VNNI and VBMI2), AVX2 (with optional VNNI), SSE4 and ARM NEON, plus a scalar fallback
 
