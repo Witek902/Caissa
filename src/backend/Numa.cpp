@@ -68,6 +68,8 @@ void FreeOnNode(void* ptr, size_t size)
 #include "containers/DynArray.hpp"
 
 #include <numa.h> // libnuma
+#include <pthread.h>
+#include <sched.h>
 
 namespace numa {
 
@@ -119,7 +121,7 @@ bool PinCurrentThreadToNumaNode(uint32_t node)
     if (!g_numaAvailable)
         return false;
 
-    if (node >= s_sets.size())
+    if (node >= s_sets.Size())
         return false;
 
     const cpu_set_t& set = s_sets[node];

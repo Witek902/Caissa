@@ -15,6 +15,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
+    # libnuma enables the USE_LIBNUMA code path
+    - name: Install libnuma
+      run: sudo apt-get update && sudo apt-get install -y libnuma-dev
+
     - name: Configure CMake
       working-directory: ${{github.workspace}}
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.configs}} -DTARGET_ARCH=${{matrix.architectures}}

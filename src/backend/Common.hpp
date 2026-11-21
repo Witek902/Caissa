@@ -28,7 +28,7 @@
     #define VERIFY(x) do { if (!(x)) [[unlikely]] { if (AssertionFailed(#x, __FILE__, __LINE__)) DEBUG_BREAK(); abort(); } } while (0)
 #else
     #define ASSERT(x) do { } while (0)
-    #define VERIFY(x) (x)
+    #define VERIFY(x) (void)(x)
 #endif
 
 #define CACHELINE_SIZE 64u

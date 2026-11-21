@@ -35,6 +35,12 @@ else
 	LIBS += -lpthread
 endif
 
+# NUMA-aware thread pinning and allocation on Linux, needs libnuma-dev: make <target> NUMA=1
+ifeq ($(NUMA),1)
+	FLAGS += -DUSE_LIBNUMA
+	LIBS += -lnuma
+endif
+
 ifneq ($(findstring g++, $(CC)),)
 	# no loop peeling (and no tracer with a profile): the code they duplicate slows the build down
 	FLAGS += -fno-peel-loops
